@@ -9,7 +9,10 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_let_parallel_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(let ((x 1) (y 2)) (+ x y))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(let ((x 1) (y 2)) (+ x y))"#,
+        expect_test::expect![[r#""OK 3""#]],
+    );
     assert_ok_eq("3", &o, &n);
 }
 
@@ -17,14 +20,20 @@ fn oracle_let_parallel_binding() {
 fn oracle_let_shadowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Inner let shadows outer, outer preserved after inner ends
-    let (o, n) = eval_oracle_and_neovm(r#"(let ((x 1)) (let ((x 2)) x) x)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(let ((x 1)) (let ((x 2)) x) x)"#,
+        expect_test::expect![[r#""OK 1""#]],
+    );
     assert_ok_eq("1", &o, &n);
 }
 
 #[test]
 fn oracle_let_nil_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(let ((x nil)) x)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(let ((x nil)) x)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -34,7 +43,10 @@ fn oracle_let_nil_binding() {
 fn oracle_let_star_sequential() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // let* allows later bindings to reference earlier ones
-    let (o, n) = eval_oracle_and_neovm(r#"(let* ((x 1) (y (+ x 10))) y)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(let* ((x 1) (y (+ x 10))) y)"#,
+        expect_test::expect![[r#""OK 11""#]],
+    );
     assert_ok_eq("11", &o, &n);
 }
 
@@ -42,7 +54,10 @@ fn oracle_let_star_sequential() {
 fn oracle_let_vs_let_star_parallel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // In let, bindings are parallel — y can't see x
-    let (o, n) = eval_oracle_and_neovm(r#"(let ((x 1)) (let ((x 10) (y x)) y))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(let ((x 1)) (let ((x 10) (y x)) y))"#,
+        expect_test::expect![[r#""OK 1""#]],
+    );
     // y gets outer x (1), not inner x (10)
     assert_ok_eq("1", &o, &n);
 }
@@ -52,14 +67,20 @@ fn oracle_let_vs_let_star_parallel() {
 #[test]
 fn oracle_setq_multiple_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(progn (setq a 1 b 2 c 3) (list a b c))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(progn (setq a 1 b 2 c 3) (list a b c))"#,
+        expect_test::expect![[r#""OK (1 2 3)""#]],
+    );
     assert_ok_eq("(1 2 3)", &o, &n);
 }
 
 #[test]
 fn oracle_setq_returns_last_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(setq zz 42)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(setq zz 42)"#,
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &o, &n);
 }
 
@@ -69,15 +90,20 @@ fn oracle_setq_returns_last_value() {
 fn oracle_defvar_no_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // defvar does not override an existing value
-    let (o, n) =
-        eval_oracle_and_neovm(r#"(progn (setq dv-test 100) (defvar dv-test 200) dv-test)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(progn (setq dv-test 100) (defvar dv-test 200) dv-test)"#,
+        expect_test::expect![[r#""OK 100""#]],
+    );
     assert_ok_eq("100", &o, &n);
 }
 
 #[test]
 fn oracle_defvar_initializes_unbound() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(progn (defvar dv-test-new 42) dv-test-new)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(progn (defvar dv-test-new 42) dv-test-new)"#,
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &o, &n);
 }
 
@@ -86,6 +112,9 @@ fn oracle_defvar_initializes_unbound() {
 #[test]
 fn oracle_defconst_sets_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(progn (defconst dc-test 42) dc-test)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(progn (defconst dc-test 42) dc-test)"#,
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &o, &n);
 }

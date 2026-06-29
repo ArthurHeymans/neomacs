@@ -9,7 +9,10 @@ fn oracle_prop_modify_syntax_entry_cons_pair_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((st (make-syntax-table))) (modify-syntax-entry '(?a . ?z) \"w\" st) (list (aref st ?a) (aref st ?m) (aref st ?z) (aref st ?A)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2) (2) (2) (2))""#]],
+    );
 }
 
 #[test]
@@ -17,14 +20,20 @@ fn oracle_prop_modify_syntax_entry_digit_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((st (make-syntax-table))) (modify-syntax-entry '(?0 . ?9) \".\" st) (list (aref st ?0) (aref st ?5) (aref st ?9)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1) (1) (1))""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_modify_syntax_entry_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(modify-syntax-entry 1 \"w\")");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(modify-syntax-entry 1 \"w\")",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
@@ -33,5 +42,8 @@ fn oracle_prop_make_syntax_table_inherits_standard_entries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((st (make-syntax-table))) (list (aref st ?A) (aref st ?0) (aref st ?\\n)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2) (2) (0))""#]],
+    );
 }

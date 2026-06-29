@@ -59,7 +59,12 @@ Returns (serialized deserialized equal-p)."
           (mapcar #'test--sexp-roundtrip test-data)))
       ;; Cleanup
       (fmakunbound 'test--sexp-roundtrip))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"42\" 42 t) (\"-999\" -999 t) (\"3.14159\" 3.14159 t) (\"\\\"hello world\\\"\" \"hello world\" t) (\"\\\"string with \\\\\\\"quotes\\\\\\\" and \\\\\\\\backslash\\\"\" \"string with \\\"quotes\\\" and \\\\backslash\" t) (\"\\\"multi\nline\nstring\\\"\" \"multi\nline\nstring\" t) (\"some-symbol\" some-symbol t) (\":a-keyword\" :a-keyword t) (\"nil\" nil t) (\"t\" t t) (\"(1 2 3)\" (1 2 3) t) (\"(a (b (c d)) e)\" (a (b (c d)) e) t) (\"((key1 . \\\"val1\\\") (key2 . \\\"val2\\\") (key3 . 42))\" ((key1 . \"val1\") (key2 . \"val2\") (key3 . 42)) t) (\"[1 2 3]\" [1 2 3] t) (\"[a \\\"b\\\" 3 :d]\" [a \"b\" 3 :d] t) (\"(head . tail)\" (head . tail) t) (\"((name . \\\"Alice\\\") (scores . [95 87 92]) (address (city . \\\"Springfield\\\") (zip . \\\"62701\\\")))\" ((name . \"Alice\") (scores . [95 87 92]) (address (city . \"Springfield\") (zip . \"62701\"))) t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +130,12 @@ fn oracle_prop_serialization_json_like_format() {
             (test--json-serialize '(1 2 3)))))
       ;; Cleanup
       (fmakunbound 'test--json-serialize))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"{\\\"name\\\":\\\"Alice\\\",\\\"age\\\":30,\\\"active\\\":true,\\\"tags\\\":[\\\"lisp\\\",\\\"emacs\\\",\\\"coding\\\"],\\\"address\\\":{\\\"city\\\":\\\"Springfield\\\",\\\"zip\\\":\\\"62701\\\"}}\" \"{\\\"items\\\":[1,2,3],\\\"empty\\\":null,\\\"nested\\\":{\\\"a\\\":{\\\"b\\\":42}}}\" \"{\\\"matrix\\\":[[1,2,3],[4,5,6],[7,8,9]]}\" \"null\" \"true\" \"42\" \"\\\"hello\\\"\" \"[1,2,3]\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +234,12 @@ fn oracle_prop_serialization_csv_format() {
       (fmakunbound 'test--csv-serialize-row)
       (fmakunbound 'test--csv-serialize-table)
       (fmakunbound 'test--csv-parse-row))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Name,City,Quote,Amount\nAlice,New York,\\\"She said \\\"\\\"hello\\\"\\\"\\\",1000\nBob,\\\"San Francisco, CA\\\",plain,2500\nCharlie,Boston,\\\"has,comma\\\",300\nDiana,London,,0\" ((\"Name\" \"City\" \"Quote\" \"Amount\") (\"Alice\" \"New York\" \"She said \\\"hello\\\"\" \"1000\") (\"Bob\" \"San Francisco, CA\" \"plain\" \"2500\") (\"Charlie\" \"Boston\" \"has,comma\" \"300\") (\"Diana\" \"London\" \"\" \"0\")) (t t t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -326,7 +341,12 @@ Ignores comments (lines starting with ;) and blank lines."
       ;; Cleanup
       (fmakunbound 'test--ini-serialize)
       (fmakunbound 'test--ini-parse))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"[database]\nhost = localhost\nport = 5432\nname = mydb\nuser = admin\n\n[server]\nbind = 0.0.0.0\nport = 8080\nworkers = 4\ndebug = false\n\n[logging]\nlevel = info\nfile = /var/log/app.log\nrotate = daily\n\" ((\"database\" (\"host\" . \"localhost\") (\"port\" . \"5432\") (\"name\" . \"mydb\") (\"user\" . \"admin\")) (\"server\" (\"bind\" . \"0.0.0.0\") (\"port\" . \"8080\") (\"workers\" . \"4\") (\"debug\" . \"false\")) (\"logging\" (\"level\" . \"info\") (\"file\" . \"/var/log/app.log\") (\"rotate\" . \"daily\"))) t t ((\"main\" (\"key1\" . \"val1\") (\"key2\" . \"val2\"))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -440,7 +460,12 @@ Returns list of unpacked values."
       (fmakunbound 'test--unpack-u32-be)
       (fmakunbound 'test--pack-record)
       (fmakunbound 'test--unpack-record))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (42 1234 123456 14 (255 1024 70000 0 65535 1) t 0 0 0 255 65535)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -511,5 +536,10 @@ fn oracle_prop_serialization_tagged_plist_format() {
       ;; Cleanup
       (fmakunbound 'test--tagged-serialize)
       (fmakunbound 'test--tagged-deserialize))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((42 (:int 42) 42 t) (\"hello\" (:str \"hello\") \"hello\" t) (t (:bool t) t t) (nil (:bool nil) nil t) (3.14 (:float 3.14) 3.14 t) ((1 2 3) (:list ((:int 1) (:int 2) (:int 3))) (1 2 3) t) (((name . \"Alice\") (age . 30) (active . t)) (:map ((name :str \"Alice\") (age :int 30) (active :bool t))) ((name . \"Alice\") (age . 30) (active . t)) t) (((nested (deep . \"value\")) (list-field 10 20 30)) (:map ((nested :map ((deep :str \"value\"))) (list-field :list ((:int 10) (:int 20) (:int 30))))) ((nested (deep . \"value\")) (list-field 10 20 30)) t))""#
+        ]],
+    );
 }

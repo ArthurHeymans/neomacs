@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_p9_syntax_textprop_parse_and_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -22,13 +22,16 @@ fn div_p9_syntax_textprop_parse_and_indent() {
         (nth 3 (parse-partial-sexp 1 20))
         (progn (indent-region (point-min) (point-max)) (buffer-string))))
 "##,
+        expect_test::expect![[
+            r#""OK (2 nil \"(defun foo ()\n  (let ((x (bar 1 2)))\n    x))\n\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_p9_overlay_mod_hooks_textprop_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (with-temp-buffer
@@ -45,13 +48,16 @@ fn div_p9_overlay_mod_hooks_textprop_delete() {
             (overlay-end o)
             (nreverse log)))))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"abcghij\" 2 3 (face bold)) nil 2 5 ((mod nil 4 7) (mod t 4 4)))""#
+        ]],
     );
 }
 
 #[test]
 fn div_p9_nested_catch_condition_unwind_dolist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((result nil))
   (catch 'outer
@@ -65,13 +71,14 @@ fn div_p9_nested_catch_condition_unwind_dolist() {
       (error (push 'caught-error result))))
   (nreverse result))
 "##,
+        expect_test::expect![[r#""OK (0 1 2 cleanup)""#]],
     );
 }
 
 #[test]
 fn div_p9_narrow_marker_overlay_textprop_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (generate-new-buffer " *probe-combo-n*")))
   (unwind-protect
@@ -91,13 +98,16 @@ fn div_p9_narrow_marker_overlay_textprop_substring() {
                 (text-properties-at (point-min)))))
     (kill-buffer b1)))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"CDEFG\" 0 1 (category cat-a)) \"CDEFG\" 5 t 3 7 (category cat-a))""#
+        ]],
     );
 }
 
 #[test]
 fn div_p9_process_buffer_undo_fontification_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (generate-new-buffer " *probe-combo-p*")))
   (unwind-protect
@@ -119,5 +129,6 @@ fn div_p9_process_buffer_undo_fontification_combo() {
               (buffer-string)))
     (kill-buffer buf)))
 "##,
+        expect_test::expect![[r#""OK (\"before output\n\" t t \"Undo\" \"before \")""#]],
     )
 }

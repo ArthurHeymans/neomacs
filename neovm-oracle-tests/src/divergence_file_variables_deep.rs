@@ -7,13 +7,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_file_local_variables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'hack-local-variables)
   (fboundp 'hack-local-variables-filter)
   (boundp 'enable-local-variables)
   (boundp 'safe-local-variable-values)
   (fboundp 'safe-local-variable-p))"#,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -21,12 +22,13 @@ fn divergence_file_local_variables() {
 fn divergence_dir_locals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'dir-locals-set-directory-class)
   (fboundp 'dir-locals-set-class-variables)
   (fboundp 'dir-locals-find-file)
   (featurep 'files))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -34,11 +36,12 @@ fn divergence_dir_locals() {
 fn divergence_file_handlers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'file-name-handler-alist)
   (listp file-name-handler-alist)
   (fboundp 'find-file-name-handler))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -46,7 +49,7 @@ fn divergence_file_handlers() {
 fn divergence_file_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'file-attributes)
   (fboundp 'file-attributes-lessp)
@@ -54,6 +57,7 @@ fn divergence_file_attributes() {
   (fboundp 'file-exists-p)
   (fboundp 'file-readable-p)
   (fboundp 'file-writable-p))"#,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
@@ -61,13 +65,14 @@ fn divergence_file_attributes() {
 fn divergence_file_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'expand-file-name)
   (fboundp 'abbreviate-file-name)
   (fboundp 'file-name-directory)
   (fboundp 'file-name-nondirectory)
   (fboundp 'file-name-sans-versions))"#,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -75,13 +80,14 @@ fn divergence_file_expand() {
 fn divergence_path_names() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'directory-file-name)
   (fboundp 'file-name-as-directory)
   (fboundp 'file-relative-name)
   (fboundp 'file-name-absolute-p)
   (= (length (file-name-split "/foo/bar/baz")) 4)) "#,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -89,12 +95,13 @@ fn divergence_path_names() {
 fn divergence_directory_listing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'directory-files)
   (fboundp 'directory-files-and-attributes)
   (fboundp 'file-expand-wildcards)
   (fboundp 'file-all-completions))"#,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     );
 }
 
@@ -102,7 +109,7 @@ fn divergence_directory_listing() {
 fn divergence_make_dir() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'make-directory)
   (fboundp 'make-nearby-directory)
@@ -110,6 +117,7 @@ fn divergence_make_dir() {
   (fboundp 'copy-directory)
   (fboundp 'rename-file)
   (fboundp 'copy-file))"#,
+        expect_test::expect![[r#""OK (t nil t t t t)""#]],
     );
 }
 
@@ -117,12 +125,13 @@ fn divergence_make_dir() {
 fn divergence_file_symlink() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'make-symbolic-link)
   (fboundp 'file-symlink-p)
   (fboundp 'file-truename)
   (fboundp 'file-chase-links))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -130,12 +139,13 @@ fn divergence_file_symlink() {
 fn divergence_temp_files() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'make-temp-file)
   (fboundp 'make-temp-name)
   (fboundp 'temporary-file-directory)
   (stringp (temporary-file-directory))
   (fboundp 'small-temporary-file-directory))"#,
+        expect_test::expect![[r#""OK (t t t t nil)""#]],
     );
 }

@@ -17,5 +17,10 @@ fn oracle_get_load_suffixes_skips_compressed_module_representations() {
   (get-load-suffixes))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\".so\" \".so.br\" \".elc\" \".elc.gz\" \".elc.br\" \".el\" \".el.gz\" \".el.br\")""#
+        ]],
+    );
 }

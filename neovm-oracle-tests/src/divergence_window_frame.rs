@@ -13,7 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_wf_frame_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (frame-live-p (selected-frame))
       (framep (selected-frame))
@@ -21,13 +21,14 @@ fn div_wf_frame_basics() {
       (eq (car (frame-list)) (selected-frame))
       (eq (selected-frame) (terminal-frame (frame-terminal))))
 "##,
+        expect_test::expect![[r#""ERR (void-function terminal-frame)""#]],
     );
 }
 
 #[test]
 fn div_wf_frame_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (frame-width)
       (frame-height)
@@ -36,13 +37,14 @@ fn div_wf_frame_dimensions() {
       (frame-pixel-width)
       (frame-pixel-height))
 "##,
+        expect_test::expect![[r#""OK (80 25 1 1 80 25)""#]],
     );
 }
 
 #[test]
 fn div_wf_frame_parameters_common() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (frame-parameter nil 'name)
       (frame-parameter nil 'width)
@@ -64,6 +66,9 @@ fn div_wf_frame_parameters_common() {
       (frame-parameter nil 'background-mode)
       (frame-parameter nil 'display-type))
 "##,
+        expect_test::expect![[
+            r#""OK (\"F1\" 80 25 \"unspecified-fg\" \"unspecified-bg\" \"white\" nil nil \"tty\" t 1 nil nil t nil nil nil dark mono)""#
+        ]],
     );
 }
 
@@ -72,7 +77,7 @@ fn div_wf_frame_parameters_common() {
 #[test]
 fn div_wf_window_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (window-live-p (selected-window))
       (windowp (selected-window))
@@ -81,13 +86,14 @@ fn div_wf_window_basics() {
       (window-minibuffer-p (selected-window))
       (window-valid-p (selected-window)))
 "##,
+        expect_test::expect![[r#""OK (t t t t nil t)""#]],
     );
 }
 
 #[test]
 fn div_wf_window_tree_and_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (car (window-tree))
       (count-windows)
@@ -95,26 +101,28 @@ fn div_wf_window_tree_and_count() {
       (length (window-list nil nil))
       (length (window-list nil 'nomini (frame-first-window))))
 "##,
+        expect_test::expect![[r#""OK (#<window 1 on *scratch*> 1 1 1 1)""#]],
     );
 }
 
 #[test]
 fn div_wf_window_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (window-edges (selected-window))
       (window-inside-edges (selected-window))
       (window-pixel-edges (selected-window))
       (window-inside-pixel-edges (selected-window)))
 "##,
+        expect_test::expect![[r#""OK ((0 0 80 24) (0 0 80 23) (0 0 80 24) (0 0 80 23))""#]],
     );
 }
 
 #[test]
 fn div_wf_window_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (window-total-height (selected-window))
       (window-total-width (selected-window))
@@ -122,13 +130,14 @@ fn div_wf_window_size() {
       (window-body-width (selected-window))
       (window-mode-line-height (selected-window)))
 "##,
+        expect_test::expect![[r#""OK (24 80 23 80 1)""#]],
     );
 }
 
 #[test]
 fn div_wf_window_parent_child_sibling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((w (selected-window))
        (parent (window-parent w)))
@@ -138,13 +147,14 @@ fn div_wf_window_parent_child_sibling() {
         (eq (frame-root-window) parent)
         (windowp (frame-root-window))))
 "##,
+        expect_test::expect![[r#""OK (nil #<window 2 on  *Minibuf-0*> nil nil t)""#]],
     );
 }
 
 #[test]
 fn div_wf_split_window_vertical() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (let ((w (split-window nil nil 'below)))
@@ -154,13 +164,14 @@ fn div_wf_split_window_vertical() {
             (count-windows)))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (t t nil 2)""#]],
     );
 }
 
 #[test]
 fn div_wf_split_window_horizontal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (let ((w (split-window nil nil 'right)))
@@ -170,13 +181,14 @@ fn div_wf_split_window_horizontal() {
             (count-windows)))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (t nil #<window 1 on *scratch*> 3)""#]],
     );
 }
 
 #[test]
 fn div_wf_split_then_delete_other_windows() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (progn
@@ -187,6 +199,7 @@ fn div_wf_split_then_delete_other_windows() {
         (list n1 (count-windows))))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (5 1)""#]],
     );
 }
 
@@ -195,7 +208,7 @@ fn div_wf_split_then_delete_other_windows() {
 #[test]
 fn div_wf_window_buffer_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *wf-test*")))
   (set-window-buffer (selected-window) buf t)
@@ -203,30 +216,33 @@ fn div_wf_window_buffer_roundtrip() {
         (buffer-name (window-buffer (selected-window))))
   (kill-buffer buf))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
 #[test]
 fn div_wf_get_buffer_window_lru_mru() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (windowp (get-lru-window))
       (windowp (get-mru-window))
       (windowp (get-buffer-window (current-buffer))))
 "##,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
 #[test]
 fn div_wf_walk_windows_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((n 0))
   (walk-windows (lambda (w) (setq n (1+ n))) 'nomini))
   n)
 "##,
+        expect_test::expect![[r#""ERR (void-variable n)""#]],
     );
 }
 
@@ -235,7 +251,7 @@ fn div_wf_walk_windows_count() {
 #[test]
 fn div_wf_window_parameters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
   (set-window-parameter w 'wf-param 'hello)
@@ -243,19 +259,21 @@ fn div_wf_window_parameters() {
         (window-parameter w 'nonexistent)
         (window-parameters w)))
 "##,
+        expect_test::expect![[r#""OK (hello nil ((wf-param . hello)))""#]],
     );
 }
 
 #[test]
 fn div_wf_window_dedicated() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
   (set-window-dedicated-p w t)
   (list (window-dedicated-p w)
         (progn (set-window-dedicated-p w nil) (window-dedicated-p w))))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
@@ -264,7 +282,7 @@ fn div_wf_window_dedicated() {
 #[test]
 fn div_wf_window_configuration_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (let ((cfg (current-window-configuration)))
@@ -274,13 +292,14 @@ fn div_wf_window_configuration_roundtrip() {
         (list (window-configuration-p cfg) n1 (count-windows))))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (t 2 1)""#]],
     );
 }
 
 #[test]
 fn div_wf_save_window_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (save-window-excursion
@@ -289,6 +308,7 @@ fn div_wf_save_window_excursion() {
       (count-windows))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK 3""#]],
     );
 }
 
@@ -297,20 +317,21 @@ fn div_wf_save_window_excursion() {
 #[test]
 fn div_wf_terminal_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((term (frame-terminal (selected-frame))))
   (list (terminal-live-p term)
         (terminalp term)
         (eq (terminal-name term) (terminal-name term))))
 "##,
+        expect_test::expect![[r#""ERR (void-function terminalp)""#]],
     );
 }
 
 #[test]
 fn div_wf_make_frame_in_batch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (let ((n-before (length (frame-list))))
@@ -318,13 +339,14 @@ fn div_wf_make_frame_in_batch() {
         (list n-before (length (frame-list)) (frame-live-p f))))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf_window_start_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-current-buffer (get-buffer-create " *wf-wstart*")
   (insert "line one\nline two\nline three\n")
@@ -332,26 +354,28 @@ fn div_wf_window_start_end() {
   (list (window-start (selected-window))
         (window-end (selected-window))))
 "##,
+        expect_test::expect![[r#""OK (1 30)""#]],
     );
 }
 
 #[test]
 fn div_wf_frame_first_and_root_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (windowp (frame-first-window))
       (windowp (frame-root-window))
       (eq (frame-first-window) (frame-first-window (selected-frame)))
       (eq (frame-selected-window) (selected-window)))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_wf_balance_windows() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (progn
@@ -363,5 +387,6 @@ fn div_wf_balance_windows() {
             (window-total-width (selected-window))))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (3 12 40)""#]],
     );
 }

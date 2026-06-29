@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx346_hash_table_eq_eql_equal_with_edge_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s1 "hello")
        (s2 (copy-sequence "hello"))
@@ -22,13 +22,14 @@ fn div_cx346_hash_table_eq_eql_equal_with_edge_types() {
    (let ((ht (make-hash-table :test 'eql)))   (puthash n1 :v ht) (gethash n2 ht))
    (let ((ht (make-hash-table :test 'eq)))    (puthash sym1 :v ht) (gethash sym2 ht))))
 "##,
+        expect_test::expect![[r#""OK (nil nil :v nil :v :v)""#]],
     )
 }
 
 #[test]
 fn div_cx346_hash_table_weakness_all_kinds_after_gc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (results)
   (dolist (w '(key value key-and-value key-or-value))
@@ -39,13 +40,16 @@ fn div_cx346_hash_table_weakness_all_kinds_after_gc() {
         (push (list w before (hash-table-count ht)) results))))
   (nreverse results))
 "##,
+        expect_test::expect![[
+            r#""OK ((key 5 0) (value 5 0) (key-and-value 5 0) (key-or-value 5 0))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx346_hash_table_maphash_remhash_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal))
       (collected nil))
@@ -56,13 +60,16 @@ fn div_cx346_hash_table_maphash_remhash_sort() {
   (list (hash-table-count ht)
         (sort collected (lambda (a b) (< (car a) (car b))))))
 "##,
+        expect_test::expect![[
+            r#""OK (8 ((0 . 0) (1 . 1) (2 . 4) (4 . 16) (5 . 25) (6 . 36) (8 . 64) (9 . 81)))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx346_hash_table_copy_independence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
   (puthash :a 1 ht)
@@ -73,13 +80,14 @@ fn div_cx346_hash_table_copy_independence() {
           (gethash :c ht :missing) (gethash :c ht2)
           (eq ht ht2))))
 "##,
+        expect_test::expect![[r#""OK (2 3 :missing 3 nil)""#]],
     )
 }
 
 #[test]
 fn div_cx346_sxhash_equal_consistency_across_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s1 "hello") (s2 (copy-sequence "hello"))
        (v1 [1 2 3]) (v2 (copy-sequence [1 2 3]))
@@ -91,13 +99,14 @@ fn div_cx346_sxhash_equal_consistency_across_types() {
         (integerp (sxhash-eql 1.5))
         (= (sxhash-eql 1) (sxhash-eql 1.0))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t nil)""#]],
     )
 }
 
 #[test]
 fn div_cx346_hash_table_resize_threshold_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal :size 16 :rehash-size 2.0 :rehash-threshold 0.7)))
   (dotimes (i 30) (puthash i (* i 10) ht))
@@ -105,13 +114,14 @@ fn div_cx346_hash_table_resize_threshold_query() {
         (hash-table-rehash-size ht) (hash-table-rehash-threshold ht)
         (hash-table-test ht) (hash-table-weakness ht)))
 "##,
+        expect_test::expect![[r#""OK (64 30 1.5 0.8125 equal nil)""#]],
     )
 }
 
 #[test]
 fn div_cx346_obarray_intern_unintern_reuse_slot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ob (make-obarray 31)))
   (intern "alpha" ob)
@@ -125,13 +135,14 @@ fn div_cx346_obarray_intern_unintern_reuse_slot() {
             (intern-soft "alpha" ob) (intern-soft "beta" ob)
             (intern-soft "delta" ob)))))
 "##,
+        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
     )
 }
 
 #[test]
 fn div_cx346_hash_table_clrhash_preserves_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
   (dotimes (i 20) (puthash i (* i i) ht))
@@ -141,13 +152,14 @@ fn div_cx346_hash_table_clrhash_preserves_size() {
     (list before-count before-size
           (hash-table-count ht) (hash-table-size ht))))
 "##,
+        expect_test::expect![[r#""OK (20 24 0 24)""#]],
     )
 }
 
 #[test]
 fn div_cx346_hash_table_custom_test_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((ht (make-hash-table :test (lambda (a b) (eq (car-safe a) (car-safe b)))
@@ -161,13 +173,14 @@ fn div_cx346_hash_table_custom_test_function() {
             (gethash '(:b) ht)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     )
 }
 
 #[test]
 fn div_cx346_hash_table_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
   (dotimes (i 5) (puthash (cons i :key) (* i i) ht))
@@ -195,5 +208,6 @@ fn div_cx346_hash_table_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     )
 }

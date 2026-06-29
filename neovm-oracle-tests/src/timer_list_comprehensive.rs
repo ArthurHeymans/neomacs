@@ -41,7 +41,10 @@ fn oracle_prop_time_add_subtract_arithmetic() {
      ;; time-add with negative float
      (let ((r (float-time (time-add 100.0 -30.0))))
        (and (>= r 69.99) (<= r 70.01))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (30.0 70.0 t 42.0 0.0 t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +73,10 @@ fn oracle_prop_time_less_p_comparisons() {
    (time-less-p '(0 1 0 0) '(0 1 0 1))
    ;; Large values
    (time-less-p '(1000 0 0 0) '(1001 0 0 0))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil nil t nil nil t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +105,10 @@ fn oracle_prop_time_equal_p_representations() {
    ;; Integer representation
    (time-equal-p 100 100)
    (time-equal-p 100 200)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t nil t t t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +148,12 @@ fn oracle_prop_time_format_time_string_specifiers() {
      (format-time-string "%z" fixed-time t)
      ;; Literal percent
      (format-time-string "%%" fixed-time t))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"2000\" \"01\" \"15\" \"10\" \"30\" \"45\" \"2000-01-15 10:30:45\" \"Sat\" \"Saturday\" \"Jan\" \"January\" \"+0000\" \"%\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +187,10 @@ fn oracle_prop_time_decode_encode_roundtrip() {
      (let* ((y2k (encode-time '(0 0 0 1 1 2000 nil nil t)))
             (d (decode-time y2k t)))
        (list (nth 3 d) (nth 4 d) (nth 5 d) (nth 6 d))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 0 12 25 6 2020 4 t (1 1 2000 6))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +221,10 @@ fn oracle_prop_time_convert_representations() {
    (time-convert 0 'integer)
    ;; Large value
    (time-convert 1000000 'integer)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 100 42 t t 0 1000000)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -229,7 +249,7 @@ fn oracle_prop_time_current_time_string_format() {
      (not (null (string-match "Jul" str)))
      ;; Contains time
      (not (null (string-match "09:15:30" str))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +280,10 @@ fn oracle_prop_time_float_time_arithmetic() {
      (and (> r 3.13) (< r 3.15)))
    ;; Negative time
    (< (float-time (time-subtract '(0 10 0 0) '(0 20 0 0))) 0)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0.0 100.0 42.0 t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +317,12 @@ fn oracle_prop_time_format_composite_specifiers() {
      (format-time-string "%Y%t%m%n%d" t1 t)
      ;; Century
      (format-time-string "%C" t1 t))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"08\" \"AM\" \"064\" \"10\" \"09\" \"Sun Mar  5 08:05:03 2023\" \"03/05/23\" \"08:05:03\" \"2023\t03\n05\" \"20\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -328,5 +356,8 @@ fn oracle_prop_time_encode_time_edge_cases() {
    (let* ((t1 (encode-time '(0 0 0 1 1 2038 nil nil t)))
           (d (decode-time t1 t)))
      (nth 5 d))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0.0 (59 59 23) (29 2 2000) (1 3 2001) (30 1) 2038)""#]],
+    );
 }

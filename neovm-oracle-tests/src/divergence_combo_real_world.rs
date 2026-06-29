@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_json_like_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"{\\\"name\\\": \\\"Alice\\\", \\\"scores\\\": [95, 87, 92], \\\"active\\\": true}\")
   (goto-char 1)
@@ -20,6 +20,9 @@ fn divergence_json_like_parsing() {
             (member \"scores\" all)
             (member \"active\" all)
             (= (length all) 4))))) ",
+        expect_test::expect![[
+            r#""{\"name\": \"Alice\", \"scores\": [95, 87, 92], \"active\": true}OK ((\"name\" \"Alice\" \"scores\" \"active\") (\"name\" \"Alice\" \"scores\" \"active\") (\"scores\" \"active\") (\"active\") t)""#
+        ]],
     );
 }
 
@@ -27,7 +30,7 @@ fn divergence_json_like_parsing() {
 fn divergence_csv_processing_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"name,age,city\\nAlice,30,NYC\\nBob,25,LA\\nCarol,35,Chicago\")
   (goto-char 1)
@@ -43,6 +46,9 @@ fn divergence_csv_processing_edit() {
             (length (nreverse rows))
             (split-string header \",\" t)
             (= (length (split-string header \",\" t)) 3))))) ",
+        expect_test::expect![[
+            r#""name,age,city\nAlice,30,NYC\nBob,25,LA\nCarol,35,ChicagoOK (\"name,age,city\" 3 (\"name\" \"age\" \"city\") t)""#
+        ]],
     );
 }
 
@@ -50,7 +56,7 @@ fn divergence_csv_processing_edit() {
 fn divergence_refactor_rename_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"function oldName() { return oldName.helper(); }\")
   (goto-char 1)
@@ -61,6 +67,9 @@ fn divergence_refactor_rename_in_buffer() {
     (list count (buffer-string)
           (string= (buffer-string)
                    \"function newName() { return newName.helper(); }\")))) ",
+        expect_test::expect![[
+            r#""function newName() { return newName.helper(); }OK (2 \"function newName() { return newName.helper(); }\" t)""#
+        ]],
     );
 }
 
@@ -68,7 +77,7 @@ fn divergence_refactor_rename_in_buffer() {
 fn divergence_org_like_heading_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"* Heading 1\\nSome text\\n** Heading 2\\nMore text\\n* Heading 3\\nFinal text\")
   (goto-char 1)
@@ -80,6 +89,9 @@ fn divergence_org_like_heading_navigation() {
     (list (nreverse headings)
           (nreverse levels)
           (equal (nreverse levels) '(1 2 1))))) ",
+        expect_test::expect![[
+            r#""* Heading 1\nSome text\n** Heading 2\nMore text\n* Heading 3\nFinal textOK ((\"* \" \"** \" \"* \") (1 2 1) nil)""#
+        ]],
     );
 }
 
@@ -87,7 +99,7 @@ fn divergence_org_like_heading_navigation() {
 fn duplication_code_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"def foo():\\n  return 42\\ndef bar():\\n  return 42\\ndef baz():\\n  return 99\")
   (goto-char 1)
@@ -102,6 +114,9 @@ fn duplication_code_detection() {
           (length dupes)
           (>= (length dupes) 1)
           (hash-table-count seen)))) ",
+        expect_test::expect![[
+            r#""def foo():\n  return 42\ndef bar():\n  return 42\ndef baz():\n  return 99OK (6 1 t 5)""#
+        ]],
     );
 }
 
@@ -109,7 +124,7 @@ fn duplication_code_detection() {
 fn divergence_template_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((template \"Hello {{name}}, your order #{{id}} is {{status}}.\")
         (bindings '((name . \"Alice\") (id . \"12345\") (status . \"shipped\"))))
   (let ((result template))
@@ -119,6 +134,7 @@ fn divergence_template_expansion() {
                     (cdr b) result)))
     (list result
           (string= result \"Hello Alice, your order #12345 is shipped.\")))) ",
+        expect_test::expect![[r#""OK (\"Hello Alice, your order #12345 is shipped.\" t)""#]],
     );
 }
 
@@ -126,7 +142,7 @@ fn divergence_template_expansion() {
 fn divergence_log_analysis_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"[ERROR] 2024-01-15 Connection failed\\n\")
   (insert \"[INFO] 2024-01-15 Retry succeeded\\n\")
@@ -141,6 +157,9 @@ fn divergence_log_analysis_pattern() {
             ((string= (match-string 1) \"INFO\") (cl-incf infos))))
     (list errors warnings infos
           (= errors 2) (= warnings 1) (= infos 2)))) ",
+        expect_test::expect![[
+            r#""[ERROR] 2024-01-15 Connection failed\n[INFO] 2024-01-15 Retry succeeded\n[WARN] 2024-01-15 Slow response\n[ERROR] 2024-01-16 Timeout\n[INFO] 2024-01-16 All clearOK (2 1 2 t t t)""#
+        ]],
     );
 }
 
@@ -148,7 +167,7 @@ fn divergence_log_analysis_pattern() {
 fn divergence_extract_and_restructure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"firstName: John\\nlastName: Doe\\nage: 30\\ncity: NYC\")
   (goto-char 1)
@@ -161,6 +180,9 @@ fn divergence_extract_and_restructure() {
           (gethash \"city\" data)
           (hash-table-count data)
           (= (hash-table-count data) 4)))) ",
+        expect_test::expect![[
+            r#""firstName: John\nlastName: Doe\nage: 30\ncity: NYCOK (\"John\" \"Doe\" \"30\" \"NYC\" 4 t)""#
+        ]],
     );
 }
 
@@ -168,7 +190,7 @@ fn divergence_extract_and_restructure() {
 fn divergence_whitespace_normalization() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"  hello   world   \\n\\n   foo  bar  \\n  baz  \")
   (let ((result
@@ -178,6 +200,9 @@ fn divergence_whitespace_normalization() {
     (list result
           (not (string-match \"  \" result))
           (string= (substring result 0 1) \"h\")))) ",
+        expect_test::expect![[
+            r#""  hello   world   \n\n   foo  bar  \n  baz  OK (\"hello world \n\n foo bar \n baz\" t t)""#
+        ]],
     );
 }
 
@@ -185,7 +210,7 @@ fn divergence_whitespace_normalization() {
 fn divergence_code_comment_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (setq comment-start \"// \")
   (setq comment-end \"\")
@@ -197,5 +222,8 @@ fn divergence_code_comment_toggle() {
           (buffer-string)
           (string-match \"//\" commented)
           (not (string-match \"//\" (buffer-string)))))) ",
+        expect_test::expect![[
+            r#""line1\nline2\nline3OK (\"// line1\n// line2\n// line3\" \"line1\nline2\nline3\" 0 t)""#
+        ]],
     );
 }

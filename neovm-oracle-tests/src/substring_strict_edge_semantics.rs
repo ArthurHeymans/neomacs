@@ -11,28 +11,40 @@ use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_substring_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "hello" 1 3)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "hello" 1 3)"#,
+        expect_test::expect![[r#""OK \"el\"""#]],
+    );
     assert_ok_eq("\"el\"", &o, &n);
 }
 
 #[test]
 fn oracle_substring_from_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "hello" 0 2)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "hello" 0 2)"#,
+        expect_test::expect![[r#""OK \"he\"""#]],
+    );
     assert_ok_eq("\"he\"", &o, &n);
 }
 
 #[test]
 fn oracle_substring_omit_to() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "hello" 2)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "hello" 2)"#,
+        expect_test::expect![[r#""OK \"llo\"""#]],
+    );
     assert_ok_eq("\"llo\"", &o, &n);
 }
 
 #[test]
 fn oracle_substring_nil_to_means_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "hello" 2 nil)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "hello" 2 nil)"#,
+        expect_test::expect![[r#""OK \"llo\"""#]],
+    );
     assert_ok_eq("\"llo\"", &o, &n);
 }
 
@@ -40,7 +52,10 @@ fn oracle_substring_nil_to_means_end() {
 fn oracle_substring_negative_from() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // -1 = last char, -2 = second to last, etc.
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "hello" -2)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "hello" -2)"#,
+        expect_test::expect![[r#""OK \"lo\"""#]],
+    );
     assert_ok_eq("\"lo\"", &o, &n);
 }
 
@@ -48,48 +63,69 @@ fn oracle_substring_negative_from() {
 fn oracle_substring_negative_to() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // -1 = last char position (exclusive end)
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "hello" 0 -1)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "hello" 0 -1)"#,
+        expect_test::expect![[r#""OK \"hell\"""#]],
+    );
     assert_ok_eq("\"hell\"", &o, &n);
 }
 
 #[test]
 fn oracle_substring_both_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "hello" -3 -1)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "hello" -3 -1)"#,
+        expect_test::expect![[r#""OK \"ll\"""#]],
+    );
     assert_ok_eq("\"ll\"", &o, &n);
 }
 
 #[test]
 fn oracle_substring_from_equals_to_returns_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "hello" 2 2)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "hello" 2 2)"#,
+        expect_test::expect![[r#""OK \"\"""#]],
+    );
     assert_ok_eq("\"\"", &o, &n);
 }
 
 #[test]
 fn oracle_substring_from_equals_length_returns_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "abc" 3 3)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "abc" 3 3)"#,
+        expect_test::expect![[r#""OK \"\"""#]],
+    );
     assert_ok_eq("\"\"", &o, &n);
 }
 
 #[test]
 fn oracle_substring_from_greater_than_to_is_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "abc" 2 1)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "abc" 2 1)"#,
+        expect_test::expect![[r#""ERR (args-out-of-range \"abc\" 2 1)""#]],
+    );
     assert_err_kind(&o, &n, "args-out-of-range");
 }
 
 #[test]
 fn oracle_substring_from_negative_out_of_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "abc" -10)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "abc" -10)"#,
+        expect_test::expect![[r#""ERR (args-out-of-range \"abc\" -10 nil)""#]],
+    );
     assert_err_kind(&o, &n, "args-out-of-range");
 }
 
 #[test]
 fn oracle_substring_wrong_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(substring 42 0)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring 42 0)"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument arrayp 42)""#]],
+    );
     assert_err_kind(&o, &n, "wrong-type-argument");
 }

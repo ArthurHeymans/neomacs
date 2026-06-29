@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx183_advice_remove_restores_original() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (defun neo-cx183-target (x) (push (list :primary x) calls) (* x 2))
@@ -21,13 +21,14 @@ fn div_cx183_advice_remove_restores_original() {
       (let ((after-remove (neo-cx183-target 5)))
         (list with-advice after-remove (nreverse calls))))))
 "##,
+        expect_test::expect![[r#""OK (10 10 ((:before 5) (:primary 5) (:primary 5)))""#]],
     );
 }
 
 #[test]
 fn div_cx183_advice_filter_args_then_primary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (defun neo-cx183-fa (&rest args) (push (list :primary args) calls) (apply #'+ args))
@@ -38,13 +39,14 @@ fn div_cx183_advice_filter_args_then_primary() {
     (advice-remove 'neo-cx183-fa 'fa-adv)
     (list r (nreverse calls))))
 "##,
+        expect_test::expect![[r#""OK (60 ((:primary (10 20 30))))""#]],
     );
 }
 
 #[test]
 fn div_cx183_advice_filter_return_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (defun neo-cx183-fr () (push :primary calls) 100)
@@ -55,13 +57,14 @@ fn div_cx183_advice_filter_return_modify() {
     (advice-remove 'neo-cx183-fr 'fr-adv)
     (list r (nreverse calls))))
 "##,
+        expect_test::expect![[r#""OK (200 (:primary (:filtered 100)))""#]],
     );
 }
 
 #[test]
 fn div_cx183_advice_around_calls_next() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (defun neo-cx183-ar (x) (push (list :primary x) calls) (* x 3))
@@ -76,13 +79,14 @@ fn div_cx183_advice_around_calls_next() {
     (advice-remove 'neo-cx183-ar 'ar-adv)
     (list r (nreverse calls))))
 "##,
+        expect_test::expect![[r#""OK (21 ((:around-enter 7) (:primary 7) (:around-exit 21)))""#]],
     );
 }
 
 #[test]
 fn div_cx183_advice_override_completely() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (defun neo-cx183-ov (x) (push :orig calls) (* x 2))
@@ -93,13 +97,14 @@ fn div_cx183_advice_override_completely() {
     (advice-remove 'neo-cx183-ov 'ov-adv)
     (list r (nreverse calls))))
 "##,
+        expect_test::expect![[r#""OK (500 (:override))""#]],
     );
 }
 
 #[test]
 fn div_cx183_advice_before_after_combined_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (defun neo-cx183-combo (x) (push (list :primary x) calls) x)
@@ -116,26 +121,30 @@ fn div_cx183_advice_before_after_combined_order() {
       (advice-remove 'neo-cx183-combo n))
     (list r (nreverse calls))))
 "##,
+        expect_test::expect![[
+            r#""OK (99 ((:before-2 99) (:before-1 99) (:primary 99) (:after-1 99) (:after-2 99)))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx183_advice_member_p_named() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (defun neo-cx183-mp () :ok)
 (advice-add 'neo-cx183-mp :before (lambda () :a) '((name . my-advice)))
 (list (advice--p (advice-member-p 'my-advice 'neo-cx183-mp))
       (advice--p (advice-member-p 'missing 'neo-cx183-mp)))
 "##,
+        expect_test::expect![[r#""OK ((advice oclosure) nil)""#]],
     );
 }
 
 #[test]
 fn div_cx183_advice_mapc_iterate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (defun neo-cx183-mc () :ok)
 (advice-add 'neo-cx183-mc :before (lambda () :a) '((name . adv-a)))
@@ -146,13 +155,14 @@ fn div_cx183_advice_mapc_iterate() {
                'neo-cx183-mc)
   (sort names #'symbol<))
 "##,
+        expect_test::expect![[r#""ERR (void-function symbol<)""#]],
     );
 }
 
 #[test]
 fn div_cx183_advice_on_subr_builtin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let (calls)
@@ -164,13 +174,14 @@ fn div_cx183_advice_on_subr_builtin() {
         (list r (length calls) (car '(4 5 6)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (1 1 4)""#]],
     );
 }
 
 #[test]
 fn div_cx183_advice_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (defun neo-cx183-mega (x) (push (list :primary x) calls) (* x 2))
@@ -203,5 +214,6 @@ fn div_cx183_advice_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

@@ -13,7 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_utf8_compose_string_find_composition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((s (copy-sequence "café")))
   (compose-string s 0 (length s) "")
@@ -21,13 +21,16 @@ fn div_utf8_compose_string_find_composition() {
         (text-properties-at 0 s)
         (find-composition 0 nil s t)))
 "#,
+        expect_test::expect![[
+            r#""OK (#(\"café\" 0 4 (composition (0 4 []))) (composition (0 4 [])) (0 4 [] t nil 0))""#
+        ]],
     );
 }
 
 #[test]
 fn div_utf8_decompose_region_after_compose() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (condition-case err
     (with-temp-buffer
@@ -37,6 +40,7 @@ fn div_utf8_decompose_region_after_compose() {
       (list (find-composition 1 nil nil t) (buffer-string)))
   (error (cons (car err) 'errored)))
 "#,
+        expect_test::expect![[r#""OK (nil \"abc\")""#]],
     );
 }
 
@@ -45,24 +49,26 @@ fn div_utf8_decompose_region_after_compose() {
 #[test]
 fn div_utf8_current_bidi_paragraph_direction_ltr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "café 世界 hello")
   (current-bidi-paragraph-direction))
 "#,
+        expect_test::expect![[r#""OK left-to-right""#]],
     );
 }
 
 #[test]
 fn div_utf8_current_bidi_paragraph_direction_rtl() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "שלום עולם")
   (current-bidi-paragraph-direction))
 "#,
+        expect_test::expect![[r#""OK right-to-left""#]],
     );
 }
 
@@ -71,7 +77,7 @@ fn div_utf8_current_bidi_paragraph_direction_rtl() {
 #[test]
 fn div_utf8_read_multibyte_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (read "café")
       (symbolp (read "café"))
@@ -79,6 +85,7 @@ fn div_utf8_read_multibyte_symbol() {
       (eq (read "café") (intern "café"))
       (read " 世界"))
 "#,
+        expect_test::expect![[r#""OK (café t \"λ\" t 世界)""#]],
     );
 }
 
@@ -87,7 +94,7 @@ fn div_utf8_read_multibyte_symbol() {
 #[test]
 fn div_utf8_modify_syntax_entry_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((st (copy-syntax-table (standard-syntax-table))))
   (modify-syntax-entry ?é "_" st)
@@ -97,6 +104,7 @@ fn div_utf8_modify_syntax_entry_multibyte() {
           (char-syntax ?\x3042)
           (char-syntax ?a))))
 "#,
+        expect_test::expect![[r#""OK (95 119 119)""#]],
     );
 }
 
@@ -105,11 +113,14 @@ fn div_utf8_modify_syntax_entry_multibyte() {
 #[test]
 fn div_utf8_prin1_vector_alist_with_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (prin1-to-string ["café" "世界" ?é])
       (prin1-to-string '(("café" . "世界") ("λ" . "λλ")))
       (length (prin1-to-string ["café" "世界"])))
 "#,
+        expect_test::expect![[
+            r#""OK (\"[\\\"café\\\" \\\"世界\\\" 233]\" \"((\\\"café\\\" . \\\"世界\\\") (\\\"λ\\\" . \\\"λλ\\\"))\" 13)""#
+        ]],
     );
 }

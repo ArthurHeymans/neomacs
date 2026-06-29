@@ -15,17 +15,32 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_
 fn oracle_prop_make_vector_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(make-vector 5 0)");
-    assert_oracle_parity("(make-vector 3 nil)");
-    assert_oracle_parity("(make-vector 0 42)");
-    assert_oracle_parity("(make-vector 4 'hello)");
+    crate::common::assert_oracle_parity_expect(
+        "(make-vector 5 0)",
+        expect_test::expect![[r#""OK [0 0 0 0 0]""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(make-vector 3 nil)",
+        expect_test::expect![[r#""OK [nil nil nil]""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(make-vector 0 42)",
+        expect_test::expect![[r#""OK []""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(make-vector 4 'hello)",
+        expect_test::expect![[r#""OK [hello hello hello hello]""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_make_vector_with_string_init() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(make-vector 3 "test")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(make-vector 3 "test")"#,
+        expect_test::expect![[r#""OK [\"test\" \"test\" \"test\"]""#]],
+    );
 }
 
 #[test]
@@ -39,7 +54,10 @@ fn oracle_prop_make_vector_modify() {
                   (aset v 4 30)
                   (list (aref v 0) (aref v 1) (aref v 2)
                         (aref v 3) (aref v 4)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 0 20 0 30)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -50,11 +68,23 @@ fn oracle_prop_make_vector_modify() {
 fn oracle_prop_vconcat_vectors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(vconcat [1 2 3] [4 5 6])");
-    assert_oracle_parity("(vconcat [1] [2] [3])");
-    assert_oracle_parity("(vconcat [] [1 2])");
-    assert_oracle_parity("(vconcat [1 2] [])");
-    assert_oracle_parity("(vconcat)");
+    crate::common::assert_oracle_parity_expect(
+        "(vconcat [1 2 3] [4 5 6])",
+        expect_test::expect![[r#""OK [1 2 3 4 5 6]""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(vconcat [1] [2] [3])",
+        expect_test::expect![[r#""OK [1 2 3]""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(vconcat [] [1 2])",
+        expect_test::expect![[r#""OK [1 2]""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(vconcat [1 2] [])",
+        expect_test::expect![[r#""OK [1 2]""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(vconcat)", expect_test::expect![[r#""OK []""#]]);
 }
 
 #[test]
@@ -62,9 +92,18 @@ fn oracle_prop_vconcat_lists() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // vconcat can accept lists
-    assert_oracle_parity("(vconcat '(1 2 3))");
-    assert_oracle_parity("(vconcat '(a b) '(c d))");
-    assert_oracle_parity("(vconcat [1 2] '(3 4))");
+    crate::common::assert_oracle_parity_expect(
+        "(vconcat '(1 2 3))",
+        expect_test::expect![[r#""OK [1 2 3]""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(vconcat '(a b) '(c d))",
+        expect_test::expect![[r#""OK [a b c d]""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(vconcat [1 2] '(3 4))",
+        expect_test::expect![[r#""OK [1 2 3 4]""#]],
+    );
 }
 
 #[test]
@@ -72,15 +111,24 @@ fn oracle_prop_vconcat_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // vconcat converts strings to vectors of char codes
-    assert_oracle_parity(r#"(vconcat "abc")"#);
-    assert_oracle_parity(r#"(vconcat "hi" [33])"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(vconcat "abc")"#,
+        expect_test::expect![[r#""OK [97 98 99]""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(vconcat "hi" [33])"#,
+        expect_test::expect![[r#""OK [104 105 33]""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_vconcat_multiple_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(vconcat [1 2] '(3 4) "AB")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(vconcat [1 2] '(3 4) "AB")"#,
+        expect_test::expect![[r#""OK [1 2 3 4 65 66]""#]],
+    );
 }
 
 #[test]
@@ -97,7 +145,12 @@ fn oracle_vconcat_rejects_char_table_like_gnu() {
     (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (wrong-type-argument (sequencep #^[65 nil generic 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65]))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -108,23 +161,53 @@ fn oracle_vconcat_rejects_char_table_like_gnu() {
 fn oracle_prop_vectorp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(vectorp [1 2 3])");
-    assert_oracle_parity("(vectorp [])");
-    assert_oracle_parity("(vectorp '(1 2 3))");
-    assert_oracle_parity("(vectorp nil)");
-    assert_oracle_parity("(vectorp 42)");
-    assert_oracle_parity(r#"(vectorp "hello")"#);
+    crate::common::assert_oracle_parity_expect(
+        "(vectorp [1 2 3])",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(vectorp [])", expect_test::expect![[r#""OK t""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(vectorp '(1 2 3))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(vectorp nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(vectorp 42)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(vectorp "hello")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_arrayp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(arrayp [1 2 3])");
-    assert_oracle_parity(r#"(arrayp "hello")"#);
-    assert_oracle_parity("(arrayp '(1 2 3))");
-    assert_oracle_parity("(arrayp nil)");
-    assert_oracle_parity("(arrayp 42)");
+    crate::common::assert_oracle_parity_expect(
+        "(arrayp [1 2 3])",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(arrayp "hello")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(arrayp '(1 2 3))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(arrayp nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(arrayp 42)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -135,26 +218,50 @@ fn oracle_prop_arrayp_basic() {
 fn oracle_prop_elt_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(elt [10 20 30 40] 0)");
-    assert_oracle_parity("(elt [10 20 30 40] 2)");
-    assert_oracle_parity("(elt [10 20 30 40] 3)");
+    crate::common::assert_oracle_parity_expect(
+        "(elt [10 20 30 40] 0)",
+        expect_test::expect![[r#""OK 10""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(elt [10 20 30 40] 2)",
+        expect_test::expect![[r#""OK 30""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(elt [10 20 30 40] 3)",
+        expect_test::expect![[r#""OK 40""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_elt_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(elt '(a b c d) 0)");
-    assert_oracle_parity("(elt '(a b c d) 2)");
-    assert_oracle_parity("(elt '(a b c d) 3)");
+    crate::common::assert_oracle_parity_expect(
+        "(elt '(a b c d) 0)",
+        expect_test::expect![[r#""OK a""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(elt '(a b c d) 2)",
+        expect_test::expect![[r#""OK c""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(elt '(a b c d) 3)",
+        expect_test::expect![[r#""OK d""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_elt_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(elt "hello" 0)"#);
-    assert_oracle_parity(r#"(elt "hello" 4)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(elt "hello" 0)"#,
+        expect_test::expect![[r#""OK 104""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(elt "hello" 4)"#,
+        expect_test::expect![[r#""OK 111""#]],
+    );
 }
 
 #[test]
@@ -166,7 +273,7 @@ fn oracle_prop_elt_complex_sequence_dispatch() {
                         (lst '(x y z))
                         (str "ABC"))
                     (list (elt vec 1) (elt lst 1) (elt str 1)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (b y 66)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,11 +284,26 @@ fn oracle_prop_elt_complex_sequence_dispatch() {
 fn oracle_prop_delete_from_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(delete 3 (list 1 2 3 4 3 5))");
-    assert_oracle_parity("(delete 'b (list 'a 'b 'c 'b 'd))");
-    assert_oracle_parity("(delete 99 (list 1 2 3))");
-    assert_oracle_parity("(delete 1 (list 1))");
-    assert_oracle_parity("(delete 1 nil)");
+    crate::common::assert_oracle_parity_expect(
+        "(delete 3 (list 1 2 3 4 3 5))",
+        expect_test::expect![[r#""OK (1 2 4 5)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(delete 'b (list 'a 'b 'c 'b 'd))",
+        expect_test::expect![[r#""OK (a c d)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(delete 99 (list 1 2 3))",
+        expect_test::expect![[r#""OK (1 2 3)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(delete 1 (list 1))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(delete 1 nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 #[test]
@@ -190,7 +312,10 @@ fn oracle_prop_delete_string_from_list() {
 
     // delete uses equal comparison
     let form = r####"(delete "hello" (list "hello" "world" "hello" "foo"))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"world\" \"foo\")""#]],
+    );
 }
 
 #[test]
@@ -198,8 +323,14 @@ fn oracle_prop_delete_from_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // delete on vectors returns a new vector
-    assert_oracle_parity("(delete 3 [1 2 3 4 3 5])");
-    assert_oracle_parity("(delete 99 [1 2 3])");
+    crate::common::assert_oracle_parity_expect(
+        "(delete 3 [1 2 3 4 3 5])",
+        expect_test::expect![[r#""OK [1 2 4 5]""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(delete 99 [1 2 3])",
+        expect_test::expect![[r#""OK [1 2 3]""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -210,35 +341,68 @@ fn oracle_prop_delete_from_vector() {
 fn oracle_prop_number_sequence_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(number-sequence 1 5)");
-    assert_oracle_parity("(number-sequence 0 0)");
-    assert_oracle_parity("(number-sequence 5 1)");
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 1 5)",
+        expect_test::expect![[r#""OK (1 2 3 4 5)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 0 0)",
+        expect_test::expect![[r#""OK (0)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 5 1)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_number_sequence_with_step() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(number-sequence 0 10 2)");
-    assert_oracle_parity("(number-sequence 0 10 3)");
-    assert_oracle_parity("(number-sequence 10 0 -2)");
-    assert_oracle_parity("(number-sequence 5 -5 -3)");
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 0 10 2)",
+        expect_test::expect![[r#""OK (0 2 4 6 8 10)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 0 10 3)",
+        expect_test::expect![[r#""OK (0 3 6 9)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 10 0 -2)",
+        expect_test::expect![[r#""OK (10 8 6 4 2 0)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 5 -5 -3)",
+        expect_test::expect![[r#""OK (5 2 -1 -4)""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_number_sequence_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(number-sequence 0.0 1.0 0.25)");
-    assert_oracle_parity("(number-sequence 1.0 2.0 0.5)");
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 0.0 1.0 0.25)",
+        expect_test::expect![[r#""OK (0.0 0.25 0.5 0.75 1.0)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 1.0 2.0 0.5)",
+        expect_test::expect![[r#""OK (1.0 1.5 2.0)""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_number_sequence_single() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(number-sequence 42 42)");
-    assert_oracle_parity("(number-sequence 42 42 5)");
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 42 42)",
+        expect_test::expect![[r#""OK (42)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 42 42 5)",
+        expect_test::expect![[r#""OK (42)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +424,10 @@ fn oracle_prop_vector_as_lookup_table() {
                           (setq result
                                 (cons (cons i (aref freq i)) result))))
                       (nreverse result)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 . 2) (2 . 1) (3 . 2) (4 . 1) (5 . 3) (6 . 1) (9 . 1))""#]],
+    );
 }
 
 #[test]
@@ -282,7 +449,10 @@ fn oracle_prop_vector_matrix_operations() {
                     (aset r 3 (+ (* (aref a 2) (aref b 1))
                                  (* (aref a 3) (aref b 3))))
                     r))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK [19 22 43 50]""#]],
+    );
 }
 
 #[test]
@@ -295,7 +465,10 @@ fn oracle_prop_vconcat_flatten_nested() {
                     (dolist (chunk chunks)
                       (setq result (vconcat result chunk)))
                     result))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK [1 2 3 4 5 6]""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------

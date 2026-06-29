@@ -15,7 +15,7 @@ fn combo_save_restriction_marker_overlay_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // save-restriction with edit inside; markers/overlays track.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-srn")))
     (with-current-buffer buf
@@ -59,6 +59,7 @@ fn combo_save_restriction_marker_overlay_textprop_undo() {
                                   (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after-save after-undo))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -67,7 +68,7 @@ fn combo_save_excursion_marker_overlay_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // save-excursion with edit; point must be restored.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-se")))
     (with-current-buffer buf
@@ -103,6 +104,7 @@ fn combo_save_excursion_marker_overlay_textprop_undo() {
                                   (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after-save after-undo))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -111,7 +113,7 @@ fn combo_save_restriction_nested_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Nested save-restriction with edits; markers track.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-srnested")))
     (with-current-buffer buf
@@ -154,6 +156,7 @@ fn combo_save_restriction_nested_marker_overlay_undo() {
                                 (get-text-property 26 'sect))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -162,7 +165,7 @@ fn combo_save_excursion_save_restriction_nested_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Nested save-excursion + save-restriction with edits.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-se-srn")))
     (with-current-buffer buf
@@ -206,6 +209,7 @@ fn combo_save_excursion_save_restriction_nested_undo() {
                                 (get-text-property 16 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -214,7 +218,7 @@ fn combo_save_restriction_regex_replace_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // save-restriction with regex replace-match inside; markers track.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-srregex")))
     (with-current-buffer buf
@@ -255,5 +259,6 @@ fn combo_save_restriction_regex_replace_marker_overlay_undo() {
                                 (get-text-property 31 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (args-out-of-range 31 40)""#]],
     );
 }

@@ -21,7 +21,10 @@ fn oracle_prop_regexp_string_match_start() {
                           (string-match "foo" s 9)
                           (string-match "foo" s 15)
                           (string-match "xyz" s 0)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 8 16 16 nil)""#]],
+    );
 }
 
 #[test]
@@ -40,7 +43,12 @@ fn oracle_prop_regexp_string_match_groups_at_start() {
                                     results))
                         (setq pos (match-end 0)))
                       (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"key1\" \"val1\") (\"key2\" \"val2\") (\"key3\" \"val3\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -59,7 +67,10 @@ fn oracle_prop_regexp_re_search_count() {
                       (list found (point)
                             ;; Position after 3rd "aaa"
                             (buffer-substring (- (point) 3) (point)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (20 20 \"aaa\")""#]],
+    );
 }
 
 #[test]
@@ -72,7 +83,7 @@ fn oracle_prop_regexp_re_search_count_negative() {
                     (goto-char (point-max))
                     (let ((found (re-search-forward "xx" nil t -2)))
                       (list found (point))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (7 7)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +98,10 @@ fn oracle_prop_regexp_replace_basic() {
                     (replace-regexp-in-string "foo" "bar" "foo baz foo")
                     (replace-regexp-in-string "[0-9]+" "N" "a1 b23 c456")
                     (replace-regexp-in-string "\\s-+" " " "a   b\t\tc"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"bar baz bar\" \"aN bN cN\" \"a b c\")""#]],
+    );
 }
 
 #[test]
@@ -102,7 +116,10 @@ fn oracle_prop_regexp_replace_fixedcase() {
                     ;; With fixedcase=t: replacement used as-is
                     (replace-regexp-in-string "hello" "world"
                                               "Hello HELLO hello" t))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"World WORLD world\" \"world world world\")""#]],
+    );
 }
 
 #[test]
@@ -120,7 +137,10 @@ fn oracle_prop_regexp_replace_literal() {
                     (replace-regexp-in-string
                      "[0-9]+" "\\1"
                      "a1b2c3" nil t))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"123-foo 456-bar\" \"a\\\\1b\\\\1c\\\\1\")""#]],
+    );
 }
 
 #[test]
@@ -132,7 +152,10 @@ fn oracle_prop_regexp_replace_start() {
                     (replace-regexp-in-string "x" "Y" "xAxBxCxDx" nil nil 4)
                     (replace-regexp-in-string "[aeiou]" "*"
                                               "hello world" nil nil 3))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (error \"replace-match subexpression does not exist\" 4)""#]],
+    );
 }
 
 #[test]
@@ -150,7 +173,10 @@ fn oracle_prop_regexp_replace_function_rep() {
                      "\\b[a-z]"
                      #'upcase
                      "hello world foo bar"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"a2 b4 c6\" \"Hello World Foo Bar\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +194,10 @@ fn oracle_prop_regexp_shy_groups() {
                      "bar-42")
                     (list (match-string 0 "bar-42")
                           (match-string 1 "bar-42")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"bar-42\" \"42\")""#]],
+    );
 }
 
 #[test]
@@ -183,7 +212,10 @@ fn oracle_prop_regexp_word_boundary() {
                               pos (match-end 0)))
                       (list (nreverse matches)
                             (length matches))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"cat\") 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +240,12 @@ fn oracle_prop_regexp_url_parser() {
                                (match-string 3 url)
                                (match-string 4 url))))
                      urls))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"https\" \"example.com\" nil \"/path\") (\"http\" \"foo.bar\" \"8080\" \"/api/v1\") (\"ftp\" \"files.server.net\" nil \"/data\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -233,5 +270,10 @@ fn oracle_prop_regexp_text_transformer() {
                               "XMLHttpRequest"
                               "simpleWord"
                               "already_snake")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"c_am_el_ca_se\" \"g_et_el_em_en_tb_yi_d\" \"x_ml_ht_tp_re_qu_es_t\" \"s_im_pl_ew_or_d\" \"a_lr_ea_dy_s_na_ke\")""#
+        ]],
+    );
 }

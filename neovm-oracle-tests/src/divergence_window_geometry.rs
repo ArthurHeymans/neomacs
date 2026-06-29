@@ -7,12 +7,13 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_window_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-edges)
   (fboundp 'window-inside-edges)
   (fboundp 'window-pixel-edges)
   (fboundp 'window-inside-pixel-edges))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -20,12 +21,13 @@ fn divergence_window_edges() {
 fn divergence_window_body_height() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-body-height)
   (fboundp 'window-body-width)
   (fboundp 'window-total-height)
   (fboundp 'window-total-width))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -33,12 +35,13 @@ fn divergence_window_body_height() {
 fn divergence_window_pixel_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-pixel-height)
   (fboundp 'window-pixel-width)
   (fboundp 'window-mode-line-height)
   (fboundp 'window-header-line-height))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -46,13 +49,14 @@ fn divergence_window_pixel_dimensions() {
 fn divergence_window_scroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'scroll-up)
   (fboundp 'scroll-down)
   (fboundp 'scroll-other-window)
   (fboundp 'scroll-other-window-down)
   (fboundp 'recenter))"#,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -60,12 +64,13 @@ fn divergence_window_scroll() {
 fn divergence_window_hscroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-hscroll)
   (fboundp 'set-window-hscroll)
   (fboundp 'scroll-left)
   (fboundp 'scroll-right))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -73,13 +78,14 @@ fn divergence_window_hscroll() {
 fn divergence_window_start_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-start)
   (fboundp 'window-end)
   (fboundp 'set-window-start)
   (fboundp 'set-window-point)
   (fboundp 'pos-visible-in-window-p))"#,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -87,12 +93,13 @@ fn divergence_window_start_end() {
 fn divergence_window_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-buffer)
   (fboundp 'window-point)
   (fboundp 'window-dedicated-p)
   (fboundp 'set-window-dedicated-p))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -100,11 +107,12 @@ fn divergence_window_buffer() {
 fn divergence_window_parameters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-parameters)
   (fboundp 'window-parameter)
   (fboundp 'set-window-parameter))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -112,10 +120,11 @@ fn divergence_window_parameters() {
 fn divergence_window_display_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-display-table)
   (fboundp 'set-window-display-table))"#,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -123,11 +132,12 @@ fn divergence_window_display_table() {
 fn divergence_window_combination() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-combination-limit)
   (fboundp 'set-window-combination-limit)
   (fboundp 'window-combination-resize)
   (fboundp 'set-window-combination-resize))"#,
+        expect_test::expect![[r#""OK (t t nil nil)""#]],
     );
 }

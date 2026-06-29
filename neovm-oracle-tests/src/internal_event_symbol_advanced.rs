@@ -40,7 +40,12 @@ fn oracle_prop_iespm_basic_event_symbols() {
   (internal-event-symbol-parse-modifiers 'down-mouse-1)
   (internal-event-symbol-parse-modifiers 'double-mouse-1))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a) (z) (x) (f1) (f12) (return) (tab) (backspace) (escape) (home) (end) (delete) (insert) (mouse-1 click) (mouse-2 click) (mouse-3 click) (mouse-1 down) (mouse-1 double))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +85,12 @@ fn oracle_prop_iespm_single_modifiers() {
   (internal-event-symbol-parse-modifiers 'M-mouse-2)
   (internal-event-symbol-parse-modifiers 'S-mouse-3))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a control) (x control) (return control) (f1 control) (a meta) (x meta) (return meta) (f1 meta) (a shift) (return shift) (tab shift) (a super) (x super) (f1 super) (a hyper) (x hyper) (f1 hyper) (mouse-1 control click) (mouse-2 meta click) (mouse-3 shift click))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +124,12 @@ fn oracle_prop_iespm_combined_modifiers() {
   (internal-event-symbol-parse-modifiers 'C-M-S-mouse-3)
   (internal-event-symbol-parse-modifiers 'C-M-down-mouse-1))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a meta control) (x meta control) (a control shift) (a meta shift) (return meta control) (f1 control shift) (a meta control shift) (z meta control shift) (return meta control shift) (a control super) (a meta hyper) (a meta control super) (a meta control hyper) (mouse-1 meta control click) (mouse-3 meta control shift click) (mouse-1 meta control down))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +166,12 @@ fn oracle_prop_iespm_consistency_with_event_api() {
                 test-syms))
     (fmakunbound 'neovm--iespm-check-consistency)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a a nil) (C-a a (control)) (M-a a (meta)) (C-M-a a (control meta)) (S-a a (shift)) (C-S-a a (control shift)) (M-S-a a (meta shift)) (C-M-S-a a (control meta shift)) (s-a a (super)) (H-a a (hyper)) (C-s-a a (control super)) (M-H-a a (hyper meta)) (return return nil) (C-return return (control)) (M-return return (meta)) (C-M-return return (control meta)) (f1 f1 nil) (C-f1 f1 (control)) (M-f1 f1 (meta)) (C-M-f1 f1 (control meta)) (mouse-1 mouse-1 (click)) (C-mouse-1 mouse-1 (click control)) (C-M-mouse-1 mouse-1 (click control meta)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -227,5 +247,10 @@ fn oracle_prop_iespm_decomposition_table() {
     (fmakunbound 'neovm--iespm-decompose)
     (fmakunbound 'neovm--iespm-build-table)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:entries ((\"a\" a nil \"plain\") (\"x\" x nil \"plain\") (\"z\" z nil \"plain\") (\"C-a\" a (control) \"single-control\") (\"C-x\" x (control) \"single-control\") (\"C-z\" z (control) \"single-control\") (\"M-a\" a (meta) \"single-meta\") (\"M-x\" x (meta) \"single-meta\") (\"M-z\" z (meta) \"single-meta\") (\"S-a\" a (shift) \"single-shift\") (\"S-x\" x (shift) \"single-shift\") (\"s-a\" a (super) \"single-super\") (\"H-a\" a (hyper) \"single-hyper\") (\"C-M-a\" a (control meta) \"double-mod\") (\"C-M-x\" x (control meta) \"double-mod\") (\"C-S-a\" a (control shift) \"double-mod\") (\"M-S-a\" a (meta shift) \"double-mod\") (\"C-M-S-a\" a (control meta shift) \"triple-mod\") (\"C-M-S-z\" z (control meta shift) \"triple-mod\") (\"return\" return nil \"plain\") (\"C-return\" return (control) \"single-control\") (\"M-return\" return (meta) \"single-meta\") (\"C-M-return\" return (control meta) \"double-mod\") (\"f1\" f1 nil \"plain\") (\"C-f1\" f1 (control) \"single-control\") (\"mouse-1\" mouse-1 (click) \"single-click\") (\"C-mouse-1\" mouse-1 (click control) \"double-mod\") (\"C-M-mouse-1\" mouse-1 (click control meta) \"triple-mod\")) :total 28 :stats ((\"double-mod\" . 6) (\"plain\" . 5) (\"single-click\" . 1) (\"single-control\" . 5) (\"single-hyper\" . 1) (\"single-meta\" . 4) (\"single-shift\" . 2) (\"single-super\" . 1) (\"triple-mod\" . 3)))""#
+        ]],
+    );
 }

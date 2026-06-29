@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_string_props_with_replace_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (let ((s (propertize \"TODO: fix bug #123\" 'face 'bold)))
     (insert s)
@@ -21,6 +21,9 @@ fn divergence_string_props_with_replace_chain() {
             (get-text-property 1 'face)
             num
             (string= num \"123\"))))) ",
+        expect_test::expect![[
+            r#""TODO: fix bug #issue-123OK (#(\"TODO: fix bug #issue-123\" 0 14 (face bold) 21 24 (face bold)) bold bold #(\"123\" 0 3 (face bold)) t)""#
+        ]],
     );
 }
 
@@ -28,12 +31,13 @@ fn divergence_string_props_with_replace_chain() {
 fn deficiency_map_with_side_effects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((result nil))
   (mapc (lambda (x) (push (* x x) result)) '(1 2 3 4 5))
   (list (nreverse result)
         (= (length result) 5)
         (= (nth 2 (nreverse result)) 9))) ",
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
     );
 }
 
@@ -41,7 +45,7 @@ fn deficiency_map_with_side_effects() {
 fn deficiency_cl_loop_with_into_and_finally() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (cl-loop for x from 1 to 10
            sum x into total
@@ -53,6 +57,7 @@ fn deficiency_cl_loop_with_into_and_finally() {
   (cl-loop for i from 0
            for x in '(a b c d e)
            collect (cons i x))) ",
+        expect_test::expect![[r#""OK ((55 5) 30 ((0 . a) (1 . b) (2 . c) (3 . d) (4 . e)))""#]],
     );
 }
 
@@ -60,7 +65,7 @@ fn deficiency_cl_loop_with_into_and_finally() {
 fn divergence_rx_pcase_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((re (rx bos (group (one-or-more digit)) \".\"
                      (group (one-or-more digit)) \".\"
                      (group (one-or-more digit)) eos)))
@@ -68,6 +73,7 @@ fn divergence_rx_pcase_combo() {
         (string-match re \"2.1.5\")
         (when (string-match re \"2.1.5\")
           (list (match-string 1) (match-string 2) (match-string 3))))) ",
+        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 1)""#]],
     );
 }
 
@@ -75,7 +81,7 @@ fn divergence_rx_pcase_combo() {
 fn deficiency_pcase_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (pcase '(1 2 3)
     ((pred listp) (list 'list))
@@ -90,6 +96,7 @@ fn deficiency_pcase_destructuring() {
   (pcase \"hello\"
     ((pred numberp) 'number)
     ((pred stringp) 'string))) ",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -97,7 +104,7 @@ fn deficiency_pcase_destructuring() {
 fn deficiency_thread_first_last() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (thread-first 5
     (+ 3)
@@ -107,6 +114,7 @@ fn deficiency_thread_first_last() {
     (mapcar (lambda (x) (* x x)))
     (seq-filter (lambda (x) (> x 10)))
     (seq-reduce #'+ 0))) ",
+        expect_test::expect![[r#""ERR (void-function thread-first)""#]],
     );
 }
 
@@ -114,7 +122,7 @@ fn deficiency_thread_first_last() {
 fn divergence_string_properties_manipulation_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((s (copy-sequence \"ABCDEFGHIJ\")))
   (put-text-property 0 5 'face 'bold s)
   (put-text-property 5 10 'face 'italic s)
@@ -127,6 +135,7 @@ fn divergence_string_properties_manipulation_chain() {
         (remove-text-properties 0 10 '(face nil weight nil) s)
         (get-text-property 3 'face s)
         (get-text-property 3 'weight s))) ",
+        expect_test::expect![[r#""OK (bold bold heavy italic italic t nil nil)""#]],
     );
 }
 
@@ -134,7 +143,7 @@ fn divergence_string_properties_manipulation_chain() {
 fn deficiency_seq_group_by() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((data '((a 1) (b 2) (a 3) (c 4) (b 5)))
         (grouped (seq-group-by #'car data)))
   (list (length grouped)
@@ -142,6 +151,7 @@ fn deficiency_seq_group_by() {
         (alist-get 'b grouped)
         (alist-get 'c grouped)
         (= (length (alist-get 'a grouped)) 2))) ",
+        expect_test::expect![[r#""OK (3 ((a 1) (a 3)) ((b 2) (b 5)) ((c 4)) t)""#]],
     );
 }
 
@@ -149,13 +159,14 @@ fn deficiency_seq_group_by() {
 fn deficiency_cl_values_multiple_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (defun test-divmod-xxx (a b)
     (cl-values (floor a b) (mod a b)))
   (multiple-value-bind (q r)
       (test-divmod-xxx 17 5)
     (list q r (= q 3) (= r 2)))) ",
+        expect_test::expect![[r#""ERR (void-function multiple-value-bind)""#]],
     );
 }
 
@@ -163,7 +174,7 @@ fn deficiency_cl_values_multiple_values() {
 fn divergence_combine_and_eval_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((exprs (list '(+ 1 2) '(* 3 4) '(- 10 3) '(/ 20 4)))
         (results (mapcar #'eval exprs))
         (expr-str (mapconcat (lambda (e) (format \"%S\" e)) exprs \", \"))
@@ -173,5 +184,8 @@ fn divergence_combine_and_eval_string() {
         sum
         (= sum 21)
         (string= expr-str \"(+ 1 2), (* 3 4), (- 10 3), (/ 20 4)\"))) ",
+        expect_test::expect![[
+            r#""OK ((3 12 7 5) \"(+ 1 2), (* 3 4), (- 10 3), (/ 20 4)\" 27 nil t)""#
+        ]],
     );
 }

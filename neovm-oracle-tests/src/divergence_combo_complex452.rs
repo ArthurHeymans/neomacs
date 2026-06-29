@@ -11,136 +11,161 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx452_string_join() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(string-join '("a" "b" "c") ", ")"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(string-join '("a" "b" "c") ", ")"##,
+        expect_test::expect![[r#""OK \"a, b, c\"""#]],
+    );
 }
 
 #[test]
 fn div_cx452_string_repeat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(string-repeat "ab" 3)"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(string-repeat "ab" 3)"##,
+        expect_test::expect![[r#""ERR (void-function string-repeat)""#]],
+    );
 }
 
 #[test]
 fn div_cx452_string_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(string-replace "foo" "bar" "foo foo foo")"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(string-replace "foo" "bar" "foo foo foo")"##,
+        expect_test::expect![[r#""OK \"bar bar bar\"""#]],
+    );
 }
 
 #[test]
 fn div_cx452_string_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (string-search "world" "hello world")
       (string-search "xyz" "hello world"))"##,
+        expect_test::expect![[r#""OK (6 nil)""#]],
     );
 }
 
 #[test]
 fn div_cx452_string_equal_ignore_case_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (string-equal-ignore-case "cafe" "CAFE")
       (string-equal-ignore-case "cafe" "cafe")
       (string-equal-ignore-case "abc" "def"))"##,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx452_string_lessp_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (string-lessp "abc" "abc")
       (string-lessp "abc" "abcd")
       (string-lessp "" "a"))"##,
+        expect_test::expect![[r#""OK (nil t t)""#]],
     );
 }
 
 #[test]
 fn div_cx452_string_version_lessp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (string-version-lessp "1.0" "2.0")
       (string-version-lessp "1.10" "1.2"))"##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx452_string_version_greaterp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (string-version-greaterp "2.0" "1.0")
       (string-version-greaterp "1.0" "2.0"))"##,
+        expect_test::expect![[r#""ERR (void-function string-version-greaterp)""#]],
     );
 }
 
 #[test]
 fn div_cx452_string_to_number_hex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (string-to-number "ff" 16)
       (string-to-number "0xff" 16)
       (string-to-number "1010" 2)
       (string-to-number "  -42  "))"##,
+        expect_test::expect![[r#""OK (255 0 10 -42)""#]],
     );
 }
 
 #[test]
 fn div_cx452_string_trim_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(string-trim "  hello  " nil nil)"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(string-trim "  hello  " nil nil)"##,
+        expect_test::expect![[r#""OK \"hello\"""#]],
+    );
 }
 
 #[test]
 fn div_cx452_string_limit_after() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'subr-x)
   (list (string-limit "hello world" 5)
         (string-limit "hello world" 5 t)))"##,
+        expect_test::expect![[r#""OK (\"hello\" \"world\")""#]],
     );
 }
 
 #[test]
 fn div_cx452_string_pad_after() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'subr-x)
   (list (string-pad "hello" 8)
         (string-pad "hello" 8 nil t)
         (string-pad "hello" 3)))"##,
+        expect_test::expect![[r#""OK (\"hello   \" \"   hello\" \"hello\")""#]],
     );
 }
 
 #[test]
 fn div_cx452_substring_no_properties_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((s "hello"))
   (put-text-property 1 4 'face 'bold s)
   (list (substring-no-properties s)
         (substring-no-properties s 1 3)
         (substring s 1 3)))"##,
+        expect_test::expect![[r#""OK (\"hello\" \"el\" #(\"el\" 0 2 (face bold)))""#]],
     );
 }
 
 #[test]
 fn div_cx452_make_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (make-string 5 ?x)
       (make-string 3 65)
       (make-string 0 ?x))"##,
+        expect_test::expect![[r#""OK (\"xxxxx\" \"AAA\" \"\")""#]],
     );
 }
 
 #[test]
 fn div_cx452_format_with_printf_flags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (format "%-10s" "left")
       (format "%10s" "right")
       (format "%010d" 42)
       (format "%+d" 42)
       (format "% d" 42))"##,
+        expect_test::expect![[
+            r#""OK (\"left      \" \"     right\" \"0000000042\" \"+42\" \" 42\")""#
+        ]],
     );
 }

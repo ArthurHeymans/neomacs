@@ -57,7 +57,12 @@ fn oracle_prop_replace_match_newtext_plain_string() {
          (buffer-string))
        results)
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello earth\" \"remove\" \"ABCDEF\" \"bar\" \"hello earth\" \"abc\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +110,12 @@ fn oracle_prop_replace_match_fixedcase_comprehensive() {
         (string-match "A" s)
         (push (replace-match "the" nil nil s) results))
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"GREETINGS world\" \"greetings world\" \"Greetings world\" \"greetings world\" \"greetings world\" \"GREETINGS world\" \"greetings world\" \"THE quick fox\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +147,12 @@ fn oracle_prop_replace_match_literal_exhaustive() {
         (replace-match "a\\\\b" t t s)
         ;; LITERAL=t: plain string (no backslashes)
         (replace-match "replacement" t t s)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"[foo-bar] baz\" \"bar_foo baz\" \"foo\\\\bar baz\" \"<<foo-bar>> baz\" \"\\\\& baz\" \"\\\\1-\\\\2 baz\" \"a\\\\\\\\b baz\" \"replacement baz\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +194,12 @@ fn oracle_prop_replace_match_string_param_buffer_vs_string() {
          (buffer-string))
        results)
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"alpha beta gamma\" \"alpha BETA gamma\" t) \"alpha BETA gamma\" \"val->key\" \"val->key\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +241,12 @@ fn oracle_prop_replace_match_subexp_all_groups() {
          (buffer-string))
        results)
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"WHOLE\" \"XXX-bbb-ccc\" \"aaa-YYY-ccc\" \"aaa-bbb-ZZZ\" \"xOUTERy\" \"xaINNERcy\" \"start-CENTER-end\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -261,7 +286,12 @@ fn oracle_prop_replace_match_string_match_vs_re_search() {
                 (string= str-g0 (nth 1 buf-results))
                 (string= str-g1 (nth 2 buf-results))
                 (string= str-g2 (nth 3 buf-results))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"price: EUR 42,99\" \"$42.99\" \"42\" \"99\" \"price: EUR 42,99\" \"$42.99\" \"42\" \"99\" t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -301,7 +331,12 @@ fn oracle_prop_replace_match_fixedcase_literal_matrix() {
         ;; fixedcase=t, literal=t
         (push (replace-match "new-\\2" t t s) results))
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"BAR-FOO\" \"\\\\2-\\\\1\" \"BAR-FOO\" \"\\\\2-\\\\1\" \"New-World\" \"New-\\\\2\" \"new-World\" \"new-\\\\2\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -361,7 +396,12 @@ fn oracle_prop_replace_match_backrefs_complex_pipeline() {
       (fmakunbound 'test--reformat-date)
       (fmakunbound 'test--swap-names)
       (fmakunbound 'test--wrap-groups))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"02/03/2026\" \"31/12/1999\" \"no-date-here\" \"John Doe\" \"Alice Smith\" \"[count]=<42> extra\" \"[level]=<100>\" \"<<hello>>\" \"C:\\\\Users\\\\path\" \"aabbab\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -394,7 +434,12 @@ fn oracle_prop_replace_match_iterative_buffer_replacement() {
           (list cat-count after-cat
                 count (buffer-string)
                 (buffer-size)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (2 \"The dog sat on the mat. The dog ate the rat.\" 4 \"a dog sat on a mat. a dog ate a rat.\" 36)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -430,5 +475,10 @@ fn oracle_prop_replace_match_multipass_with_backref_and_subexp() {
          (buffer-string))
        results)
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"host=example.com port=8080 db=mydb\" \"host=example.com port: 8080 db=mydb\" \"host=example.com port: 8080 db=\" \"color:blue size:large\")""#
+        ]],
+    );
 }

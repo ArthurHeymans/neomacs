@@ -9,32 +9,34 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx12_font_info_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((fi (font-info (face-attribute 'default :font))))
       (list (vectorp fi) (> (length fi) 5)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
     );
 }
 
 #[test]
 fn div_cx12_fontset_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (stringp (frame-parameter nil 'font))
       (fboundp 'fontset-info)
       (fboundp 'query-fontset))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx12_match_data_vector_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (string-match "\\(.\\)\\(.\\)\\(.\\)" "abcdef")
@@ -42,13 +44,14 @@ fn div_cx12_match_data_vector_format() {
     (list (vectorp md) (length md)
           (aref md 0) (aref md 1) (aref md 2) (aref md 3))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument arrayp (0 3 0 1 1 2 2 3))""#]],
     );
 }
 
 #[test]
 fn div_cx12_char_table_parent_inherit_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-char-table 'cx12 nil)) (c1 (make-char-table 'cx12 nil)) (c2 (make-char-table 'cx12 nil)))
   (aset p ?a :parent-a)
@@ -59,13 +62,16 @@ fn div_cx12_char_table_parent_inherit_override() {
   (list (aref c2 ?a) (aref c2 ?b) (aref c1 ?a) (aref p ?a)
         (char-table-parent c2) (char-table-parent c1)))
 "##,
+        expect_test::expect![[
+            r#""OK (:child1-a :parent-b :child1-a :parent-a #^[nil #^[nil nil cx12 #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil :parent-a :parent-b nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] #^^[1 0 #^^[2 0 #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil :parent-a :parent-b nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] cx12 #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil :child1-a nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] #^^[1 0 #^^[2 0 #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil :child1-a nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] #^[nil nil cx12 #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil :parent-a :parent-b nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] #^^[1 0 #^^[2 0 #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil :parent-a :parent-b nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil])""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx12_window_point_marker_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx12-wp*")))
   (with-current-buffer buf (insert "0123456789"))
@@ -79,13 +85,14 @@ fn div_cx12_window_point_marker_restore() {
         (set-window-buffer (selected-window) (get-buffer-create "*scratch*"))
         (kill-buffer buf))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx12_looking_at_looking_back_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello world foo")
@@ -95,13 +102,14 @@ fn div_cx12_looking_at_looking_back_consistency() {
         (progn (looking-at "world") (match-end 0))
         (looking-at "foo")))
 "##,
+        expect_test::expect![[r#""OK (t t 12 nil)""#]],
     );
 }
 
 #[test]
 fn div_cx12_with_silent_modifications() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello")
@@ -111,13 +119,14 @@ fn div_cx12_with_silent_modifications() {
       (insert "X"))
     (list (buffer-modified-p) hooks-fired)))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx12_max_unicode_codepoint() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((max #x10FFFF))
   (list (char-to-string max)
@@ -126,38 +135,41 @@ fn div_cx12_max_unicode_codepoint() {
         (aref (char-to-string max) 0)
         (characterp max)))
 "##,
+        expect_test::expect![[r#""OK (\"\u{10ffff}\" 1 4 1114111 t)""#]],
     );
 }
 
 #[test]
 fn div_cx12_circular_hash_table_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((ht (make-hash-table :test 'eq))
        (print-circle t))
   (puthash 'self ht ht)
   (string-match "#s(hash-table" (prin1-to-string ht)))
 "##,
+        expect_test::expect![[r#""OK 3""#]],
     );
 }
 
 #[test]
 fn div_cx12_cl_labels_mutual_recursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-labels ((even-p (n) (if (= n 0) t (odd-p (1- n))))
             (odd-p (n) (if (= n 0) nil (even-p (1- n)))))
   (list (even-p 10) (odd-p 7) (even-p 0) (odd-p 0)))
 "##,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx12_buffer_local_lifecycle_default_kill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defvar neo-cx12-bl 'global)
@@ -171,26 +183,28 @@ fn div_cx12_buffer_local_lifecycle_default_kill() {
     (push (default-value 'neo-cx12-bl) results)
     (nreverse results)))
 "##,
+        expect_test::expect![[r#""OK (global :local :new-default :new-default)""#]],
     );
 }
 
 #[test]
 fn div_cx12_cl_coerce_chain_vector_list_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((v [97 98 233])
        (l (cl-coerce v 'list))
        (s (cl-coerce l 'string)))
   (list l s (append s nil)))
 "##,
+        expect_test::expect![[r#""OK ((97 98 233) \"abé\" (97 98 233))""#]],
     );
 }
 
 #[test]
 fn div_cx12_set_match_data_restore_after_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (with-temp-buffer
@@ -206,13 +220,14 @@ fn div_cx12_set_match_data_restore_after_search() {
             (progn (set-match-data md)
                    (match-string 0))))))
 "##,
+        expect_test::expect![[r#""OK (4 9 \"lo wo\" \"lo wo\" \"lo wo\")""#]],
     );
 }
 
 #[test]
 fn div_cx12_overlay_keymap_lookup_at_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((m (make-sparse-keymap)))
   (define-key m "x" 'overlay-action)
@@ -224,13 +239,14 @@ fn div_cx12_overlay_keymap_lookup_at_point() {
       (list (get-char-property (point) 'keymap)
             (local-key-binding "x")))))
 "##,
+        expect_test::expect![[r#""OK ((keymap (120 . overlay-action)) nil)""#]],
     );
 }
 
 #[test]
 fn div_cx12_field_property_beginning_of_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "line1\nAAAABBBB\nline3\n")
@@ -242,36 +258,39 @@ fn div_cx12_field_property_beginning_of_line() {
         (field-beginning (point) t)
         (field-end (point) t)))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument integerp t)""#]],
     );
 }
 
 #[test]
 fn div_cx12_string_match_p_vs_string_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-match-p "café" "le café here")
       (progn (string-match-p "café" "le café here") (match-data))
       (string-match-p "[a-zé]+" "héllo"))
 "##,
+        expect_test::expect![[r#""OK (3 (4 9) 0)""#]],
     );
 }
 
 #[test]
 fn div_cx12_read_without_circle_circular() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((read-circle nil))
   (condition-case e (read-from-string "#1=(a . #1#)") (error (cons 'errored (car e)))))
 "##,
+        expect_test::expect![[r#""OK (errored . invalid-read-syntax)""#]],
     );
 }
 
 #[test]
 fn div_cx12_unwind_protpect_gc_cons_threshold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((orig gc-cons-threshold))
   (unwind-protect
@@ -279,13 +298,14 @@ fn div_cx12_unwind_protpect_gc_cons_threshold() {
              (list gc-cons-threshold (> gc-cons-threshold orig)))
     (setq gc-cons-threshold orig)))
 "##,
+        expect_test::expect![[r#""OK (0 t)""#]],
     );
 }
 
 #[test]
 fn div_cx12_process_coding_system_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx12-pc" :command '("echo" "x"))))
   (prog1 (list (consp (process-coding-system p))
@@ -293,13 +313,14 @@ fn div_cx12_process_coding_system_default() {
                (cdr (process-coding-system p)))
     (delete-process p)))
 "##,
+        expect_test::expect![[r#""OK (t utf-8-unix utf-8-unix)""#]],
     );
 }
 
 #[test]
 fn div_cx12_text_property_sticky_with_rear_nonsticky() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "AAAAABBBBB")
@@ -311,13 +332,14 @@ fn div_cx12_text_property_sticky_with_rear_nonsticky() {
   (list (get-text-property 5 'face)
         (get-text-property 6 'face)))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx12_format_percent_s_of_overlay_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello")
@@ -327,5 +349,6 @@ fn div_cx12_format_percent_s_of_overlay_marker() {
           (format "%s" (marker-position m))
           (length (format "%s" ov)))))
 "##,
+        expect_test::expect![[r#""OK (\"2\" \"3\" 33)""#]],
     );
 }

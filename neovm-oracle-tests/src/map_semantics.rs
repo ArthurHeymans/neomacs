@@ -29,7 +29,12 @@ fn oracle_mapcar_mapc_sequence_types_and_char_table_error() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a b c) (a b c) (97 233) (nil t nil) (t [a b c]) (wrong-type-argument (listp #^[nil nil test nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil])) (wrong-type-argument (sequencep 42)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -52,7 +57,12 @@ fn oracle_map_functions_accept_byte_code_sequence_like_gnu() {
    (mapconcat (lambda (x) (symbol-name (type-of x))) bc ",")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (byte-code-function 4 (integer string vector integer) (t (integer string vector integer)) (integer string vector integer) \"integer,string,vector,integer\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -73,7 +83,10 @@ fn oracle_mapcar_stops_when_list_shortened_by_callback() {
    seq))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10) (1) (1))""#]],
+    );
 }
 
 #[test]
@@ -98,7 +111,10 @@ fn oracle_mapcar_follows_callback_rewritten_cdr() {
    replacement))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10 990) (1 99) (1 99) (99))""#]],
+    );
 }
 
 #[test]
@@ -121,7 +137,7 @@ fn oracle_mapc_stops_when_list_shortened_by_callback() {
    seq))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t (1) (1))""#]]);
 }
 
 #[test]
@@ -146,7 +162,10 @@ fn oracle_mapc_follows_callback_rewritten_cdr() {
    replacement))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t (1 99) (1 99) (99))""#]],
+    );
 }
 
 #[test]
@@ -167,7 +186,10 @@ fn oracle_mapconcat_separator_and_return_validation() {
    (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 40)""#]],
+    );
 }
 
 #[test]
@@ -194,7 +216,10 @@ fn oracle_mapconcat_follows_callback_rewritten_cdr() {
    replacement))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"a,z\" (\"a\" \"z\") (\"a\" \"z\") (\"z\"))""#]],
+    );
 }
 
 #[test]
@@ -219,7 +244,10 @@ fn oracle_mapcan_destructive_nconc_semantics() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 16 43)""#]],
+    );
 }
 
 #[test]
@@ -242,7 +270,10 @@ fn oracle_mapcan_stops_when_list_shortened_by_callback() {
    seq))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((a a) (a) (a))""#]],
+    );
 }
 
 #[test]
@@ -268,7 +299,10 @@ fn oracle_mapcan_follows_callback_rewritten_cdr() {
    replacement))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((a z) (a z) (a z) (z))""#]],
+    );
 }
 
 #[test]
@@ -293,5 +327,10 @@ fn oracle_mapping_dotted_and_circular_input_errors() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument (listp c)) (wrong-type-argument (listp c)) (wrong-type-argument (listp c)) (circular-list ((a b a b . #2))))""#
+        ]],
+    );
 }

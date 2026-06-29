@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_f3_string_make_unibyte_nonlatin1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case err (string-make-unibyte "日本") (error (car err)))
       (condition-case err (string-make-unibyte "café") (error (car err)))
@@ -20,13 +20,14 @@ fn div_f3_string_make_unibyte_nonlatin1() {
       (string-make-unibyte "abc")
       (multibyte-string-p (string-make-unibyte "abc")))
 "##,
+        expect_test::expect![[r#""OK (\"\\345,\" \"caf\\351\" 4 \"abc\" nil)""#]],
     );
 }
 
 #[test]
 fn div_f3_tab_motion_widths() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
         (setq-local tab-width 4)
@@ -45,13 +46,14 @@ fn div_f3_tab_motion_widths() {
         (move-to-column 4)
         (list (current-column) (point))))
 "##,
+        expect_test::expect![[r#""OK (9 17 (4 3))""#]],
     );
 }
 
 #[test]
 fn div_f3_invisible_buffer_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "aaaa")
@@ -61,13 +63,14 @@ fn div_f3_invisible_buffer_substring() {
         (buffer-invisibility-spec)
         (progn (add-to-invisibility-spec 'probe-inv) (buffer-invisibility-spec))))
 "##,
+        expect_test::expect![[r#""ERR (void-function buffer-invisibility-spec)""#]],
     );
 }
 
 #[test]
 fn div_f3_char_table_extra_slots_filled() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'display-table 0)))
   (set-char-table-extra-slot ct 0 'slot0)
@@ -77,13 +80,16 @@ fn div_f3_char_table_extra_slots_filled() {
         (char-table-extra-slots ct)
         (char-table-extra-slot ct 5)))
 "##,
+        expect_test::expect![[
+            r#""ERR (args-out-of-range #^[0 nil display-table 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0] 0)""#
+        ]],
     );
 }
 
 #[test]
 fn div_f3_window_hscroll_body_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-hsbw*")))
   (unwind-protect
@@ -97,13 +103,14 @@ fn div_f3_window_hscroll_body_width() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (10 80 80)""#]],
     );
 }
 
 #[test]
 fn div_f3_overlay_string_vs_buffer_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -117,13 +124,14 @@ fn div_f3_overlay_string_vs_buffer_string() {
           (overlay-start o)
           (overlay-end o))))
 "##,
+        expect_test::expect![[r#""OK (\"abcdef\" \"<B>\" \"<A>\" 1 2 4)""#]],
     );
 }
 
 #[test]
 fn div_f3_decode_char_out_of_charset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (decode-char 'ascii 128)
       (decode-char 'ascii 65)
@@ -132,5 +140,6 @@ fn div_f3_decode_char_out_of_charset() {
       (condition-case err (decode-char 'nonexistent-probe-cs 65)
         (error (car err))))
 "##,
+        expect_test::expect![[r#""OK (nil 65 nil 65 wrong-type-argument)""#]],
     );
 }

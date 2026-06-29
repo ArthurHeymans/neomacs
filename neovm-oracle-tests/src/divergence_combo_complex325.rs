@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx325_print_circle_deeply_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((inner (list 1 2 3))
        (data (list inner inner inner)))
@@ -16,13 +16,14 @@ fn div_cx325_print_circle_deeply_shared() {
         (let ((print-circle nil))
           (condition-case e (prin1-to-string data) (error (car e))))))
 "##,
+        expect_test::expect![[r#""OK (\"(#1=(1 2 3) #1# #1#)\" \"((1 2 3) (1 2 3) (1 2 3))\")""#]],
     )
 }
 
 #[test]
 fn div_cx325_print_circle_circular_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((circular (list 1 2 3)))
   (setcdr (cddr circular) circular)
@@ -30,13 +31,14 @@ fn div_cx325_print_circle_circular_list() {
         (let ((print-circle nil))
           (condition-case e (prin1-to-string circular) (error (car e))))))
 "##,
+        expect_test::expect![[r##""OK (\"#1=(1 2 3 . #1#)\" \"(1 2 3 1 2 . #2)\")""##]],
     )
 }
 
 #[test]
 fn div_cx325_print_gensym_uninterned_in_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((gs (gensym "G-")))
   (list (symbol-name gs)
@@ -45,13 +47,14 @@ fn div_cx325_print_gensym_uninterned_in_shared() {
         (let ((print-gensym t) (print-circle t))
           (prin1-to-string (list gs gs)))))
 "##,
+        expect_test::expect![[r##""OK (\"G-12\" \"#:G-12\" \"G-12\" \"(#1=#:G-12 #1#)\")""##]],
     )
 }
 
 #[test]
 fn div_cx325_print_length_and_level_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((deep '(((("deep")))))
       (long (number-sequence 1 50)))
@@ -62,38 +65,47 @@ fn div_cx325_print_length_and_level_combined() {
         (let ((print-length nil) (print-level nil))
           (prin1-to-string (list deep long)))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"((...) (1 2 3 ...))\" \"...\" \"(((((\\\"deep\\\")))) (1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50))\")""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx325_print_quoted_emits_quote_form() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '(alpha (beta (gamma delta)))))
   (list (let ((print-quoted t)) (prin1-to-string data))
         (let ((print-quoted nil)) (prin1-to-string data))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"(alpha (beta (gamma delta)))\" \"(alpha (beta (gamma delta)))\")""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx325_print_escape_nonascii_and_control() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s (decode-coding-string (unibyte-string #xff #xfe) 'utf-8-unix t)))
   (list (prin1-to-string s)
         (let ((print-escape-nonascii t)) (prin1-to-string s))
         (let ((print-escape-multibyte t)) (prin1-to-string s))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"\\\"\\\\377\\\\376\\\"\" \"\\\"\\\\377\\\\376\\\"\" \"\\\"\\\\377\\\\376\\\"\")""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx325_read_circle_shared_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((shared (list 1 2 3))
        (data (list shared shared))
@@ -107,13 +119,16 @@ fn div_cx325_read_circle_shared_round_trip() {
         (eq (car (car read-with)) (cadr (car read-with)))
         read-without))
 "##,
+        expect_test::expect![[
+            r#""OK (\"(#1=(1 2 3) #1#)\" ((1 2 3) (1 2 3)) t (:err . invalid-read-syntax))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx325_prin1_vs_princ_with_strings_and_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "with \"quotes\" and \\ backslash")
       (lst '(1 "two" (3 4))))
@@ -124,13 +139,14 @@ fn div_cx325_prin1_vs_princ_with_strings_and_structures() {
         (length (prin1-to-string s))
         (length (princ-to-string s))))
 "##,
+        expect_test::expect![[r#""ERR (void-function princ-to-string)""#]],
     )
 }
 
 #[test]
 fn div_cx325_pp_to_string_with_deep_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '(:config
               (:option-a "value"
@@ -143,13 +159,16 @@ fn div_cx325_pp_to_string_with_deep_indent() {
           (> (length (split-string pp-str "\n")) 3)
           (car (split-string pp-str "\n")))))
 "##,
+        expect_test::expect![[
+            r#""OK (t nil \"(:config (:option-a \\\"value\\\" :option-b (:nested-a 1 :nested-b 2))\")""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx325_print_read_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((shared (list 1 2 3))
        (data (list shared shared (list :a :b)))
@@ -175,5 +194,6 @@ fn div_cx325_print_read_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

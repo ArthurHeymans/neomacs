@@ -52,7 +52,12 @@ fn oracle_prop_copy_keymap_creates_independent_copy() {
           ;; They are not eq
           (eq neovm--ckadv-orig copy)))
     (makunbound 'neovm--ckadv-orig)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (alpha-v2 bravo charlie delta nil alpha bravo-copy charlie nil echo-copy t t nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +108,12 @@ fn oracle_prop_copy_keymap_modify_copy_no_affect_original() {
               (lookup-key copy [?z])
               (lookup-key copy [?w])))))
     (makunbound 'neovm--ckadv-m1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((cmd-x cmd-y cmd-z) (cmd-x cmd-y cmd-z nil nil) t t t replaced-x nil replaced-z new-w)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +169,12 @@ fn oracle_prop_copy_keymap_nested_sub_keymaps() {
             (eq orig-sub copy-sub))))
     (makunbound 'neovm--ckadv-root)
     (makunbound 'neovm--ckadv-sub)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (find-file save-buffer-v2 switch-buffer nil find-file-v2 save-buffer switch-buffer kill-buffer quit quit t t nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +226,12 @@ fn oracle_prop_copy_keymap_parent_inheritance() {
                 (lookup-key copy [?c])))))
     (makunbound 'neovm--ckadv-parent)
     (makunbound 'neovm--ckadv-child)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t parent-a-v2 child-b parent-c parent-d parent-a-v2 child-b copy-c parent-d nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +293,12 @@ fn oracle_prop_copy_keymap_define_key_independence_audit() {
                   snap-copy-3))))))
     (fmakunbound 'neovm--ckadv-snapshot)
     (makunbound 'neovm--ckadv-keys)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t orig-f copy-f nil (([97] . orig-a-v2) ([98] . cmd-b) ([99] . cmd-c) ([100] . orig-d) ([101]) ([102] . orig-f)) (([97] . cmd-a) ([98] . copy-b-v2) ([99] . cmd-c) ([100]) ([101] . copy-e) ([102] . copy-f)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -353,7 +378,12 @@ fn oracle_prop_copy_keymap_mode_hierarchy() {
     (makunbound 'neovm--ckadv-global)
     (makunbound 'neovm--ckadv-text)
     (makunbound 'neovm--ckadv-markdown)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (global-quit text-fill md-bold md-h1 md-h3 nil global-quit text-fill gfm-bold gfm-table gfm-checkbox gfm-h1 md-h2 gfm-h4 md-h1 nil t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -399,5 +429,10 @@ fn oracle_prop_copy_keymap_full_keymap_char_table() {
             ;; Not eq
             (eq neovm--ckadv-full copy))))
     (makunbound 'neovm--ckadv-full)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t cmd-a orig-cmd-z-v2 cmd-ctrl-a nil copy-cmd-a cmd-z cmd-ctrl-a copy-cmd-m nil)""#
+        ]],
+    );
 }

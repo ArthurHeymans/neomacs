@@ -32,7 +32,10 @@ fn oracle_primitive_predicates_records_closures_booleans_and_not() {
    (not "")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil nil t nil nil t t nil t t nil nil nil)""#]],
+    );
 }
 
 #[test]
@@ -73,5 +76,10 @@ fn oracle_primitive_predicates_symbol_positions_and_specials() {
     (makunbound 'neovm--oracle-special-var)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t nil (wrong-type-argument (symbolp \"not-a-symbol\")) t nil nil t neovm--oracle-symbol neovm--oracle-symbol 123 456 neovm--oracle-symbol \"not-a-symbol\" (wrong-type-argument (symbol-with-pos-p neovm--oracle-symbol)) (wrong-type-argument ((symbolp symbol-with-pos-p) \"not-a-symbol\")) (wrong-type-argument (fixnum-or-symbol-with-pos-p \"not-a-position\")))""#
+        ]],
+    );
 }

@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_inlinetask_region_insert_promote_demote_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-inlinetask)
@@ -42,6 +42,7 @@ fn org_inlinetask_region_insert_promote_demote_combo() {
               (org-inlinetask-get-task-level)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -49,7 +50,7 @@ fn org_inlinetask_region_insert_promote_demote_combo() {
 fn org_inlinetask_element_export_archive_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-inlinetask)
@@ -85,6 +86,9 @@ fn org_inlinetask_element_export_archive_combo() {
               (not (null (string-match-p "SCHEDULED" html)))
               (not (null (string-match-p "Effort" html)))
               html)))))"##,
+        expect_test::expect![[
+            r#""OK (((\"TODO\" \"Inline one\" (\"tag\") 4 68)) t nil nil \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> Project</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nPlain before.\n</p>\n<div class=\\\"inlinetask\\\">\n<b><span class=\\\"todo TODO\\\">TODO</span> Inline one&nbsp;&nbsp;&nbsp<span class=\\\"tag\\\"><span class=\\\"tag\\\">tag</span></span></b><br />\n<p>\nInline body with <a href=\\\"https://example.org\\\">link</a>.\n</p>\n</div>\n<p>\nPlain after.\n</p>\n</div>\n</div>\n\")""#
+        ]],
     );
 }
 
@@ -92,7 +96,7 @@ fn org_inlinetask_element_export_archive_combo() {
 fn org_inlinetask_visibility_and_remove_end_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-inlinetask)
@@ -121,6 +125,7 @@ fn org_inlinetask_visibility_and_remove_end_combo() {
                 (org-fold-folded-p (line-end-position) 'headline)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -128,7 +133,7 @@ fn org_inlinetask_visibility_and_remove_end_combo() {
 fn org_inlinetask_fontify_edit_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-inlinetask)
@@ -198,6 +203,7 @@ fn org_inlinetask_fontify_edit_export_combo() {
                   html
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -205,7 +211,7 @@ fn org_inlinetask_fontify_edit_export_combo() {
 fn org_inlinetask_cycle_hook_odd_levels_error_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-inlinetask)
@@ -281,6 +287,7 @@ fn org_inlinetask_cycle_hook_odd_levels_error_combo() {
                 after-promote
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -288,7 +295,7 @@ fn org_inlinetask_cycle_hook_odd_levels_error_combo() {
 fn org_inlinetask_adjacent_boundary_cut_paste_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-inlinetask)
@@ -399,6 +406,7 @@ fn org_inlinetask_adjacent_boundary_cut_paste_combo() {
                     (nreverse states)
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -406,7 +414,7 @@ fn org_inlinetask_adjacent_boundary_cut_paste_combo() {
 fn org_inlinetask_insert_promote_demote_export_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-inlinetask)
@@ -446,5 +454,8 @@ fn org_inlinetask_insert_promote_demote_export_deep() {
                     html
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))))))"##,
+        expect_test::expect![[
+            r#""ERR (user-error \"Cannot promote an inline task at minimum level\")""#
+        ]],
     );
 }

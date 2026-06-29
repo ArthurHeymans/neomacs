@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx110_search_forward_basic_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "Hello world from Emacs")
@@ -16,13 +16,14 @@ fn div_cx110_search_forward_basic_ascii() {
   (search-forward "world")
   (list (point) (match-beginning 0) (match-end 0)))
 "##,
+        expect_test::expect![[r#""OK (12 7 12)""#]],
     );
 }
 
 #[test]
 fn div_cx110_search_forward_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "Hello café 世界 from Emacs")
@@ -34,13 +35,14 @@ fn div_cx110_search_forward_multibyte() {
     (list cafe-beg cafe-end
           (match-beginning 0) (match-end 0))))
 "##,
+        expect_test::expect![[r#""OK (7 11 12 14)""#]],
     );
 }
 
 #[test]
 fn div_cx110_search_backward_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "alpha beta gamma beta delta")
@@ -48,13 +50,14 @@ fn div_cx110_search_backward_basic() {
   (search-backward "beta")
   (list (point) (match-beginning 0) (match-end 0)))
 "##,
+        expect_test::expect![[r#""OK (18 18 22)""#]],
     );
 }
 
 #[test]
 fn div_cx110_word_search_forward_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "the quick brown fox the theocratic")
@@ -64,13 +67,14 @@ fn div_cx110_word_search_forward_basic() {
     (word-search-forward "the")
     (list first (match-beginning 0) (match-end 0))))
 "##,
+        expect_test::expect![[r#""OK ((1 4) 21 24)""#]],
     );
 }
 
 #[test]
 fn div_cx110_re_search_forward_with_groups_and_quantifiers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "name:alpha age:42 city:Tokyo name:beta age:30")
@@ -83,13 +87,16 @@ fn div_cx110_re_search_forward_with_groups_and_quantifiers() {
           (match-string 1) (match-string 2)
           (match-data))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"name\" \"alpha\" \"age\" \"42\" (#<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer>))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx110_re_search_backward_with_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "name:alpha name:beta name:gamma")
@@ -98,13 +105,14 @@ fn div_cx110_re_search_backward_with_groups() {
   (list (match-string 1) (match-string 2)
         (match-beginning 0) (match-end 0)))
 "##,
+        expect_test::expect![[r#""OK (\"e\" \"gamma\" 25 32)""#]],
     );
 }
 
 #[test]
 fn div_cx110_looking_at_with_alternation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "Hello world foo bar baz")
@@ -115,13 +123,14 @@ fn div_cx110_looking_at_with_alternation() {
         (match-string 0)
         (looking-at "x")))
 "##,
+        expect_test::expect![[r#""OK (t \"Hello\" t \"Hello\" nil)""#]],
     );
 }
 
 #[test]
 fn div_cx110_match_data_save_restore_via_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (saved)
   (with-temp-buffer
@@ -134,13 +143,14 @@ fn div_cx110_match_data_save_restore_via_set() {
           (match-string 2)
           (match-data))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 5)""#]],
     );
 }
 
 #[test]
 fn div_cx110_search_with_bound_and_noerror() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "aaa bbb ccc ddd eee")
@@ -151,13 +161,14 @@ fn div_cx110_search_with_bound_and_noerror() {
         (search-forward "zzz" nil t)
         (point)))
 "##,
+        expect_test::expect![[r#""OK (12 nil 20 nil 20)""#]],
     );
 }
 
 #[test]
 fn div_cx110_search_with_narrow_active() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "outside-BEG inside-content outside-END")
@@ -170,13 +181,14 @@ fn div_cx110_search_with_narrow_active() {
     (let ((out-buf-2 (search-forward "outside" nil t)))
       (list in-buf out-buf-1 out-buf-2))))
 "##,
+        expect_test::expect![[r#""OK (19 nil 8)""#]],
     );
 }
 
 #[test]
 fn div_cx110_case_fold_search_t_affects_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "Hello WORLD Foo")
@@ -186,13 +198,14 @@ fn div_cx110_case_fold_search_t_affects_search() {
    (let ((case-fold-search nil)) (goto-char 1) (search-forward "world" nil t))
    (let ((case-fold-search t))   (goto-char 1) (search-forward "world" nil t))))
 "##,
+        expect_test::expect![[r#""OK (nil 6 nil 12)""#]],
     );
 }
 
 #[test]
 fn div_cx110_char_fold_search_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -203,13 +216,14 @@ fn div_cx110_char_fold_search_basic() {
           (list r1))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx110_search_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -237,5 +251,6 @@ fn div_cx110_search_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

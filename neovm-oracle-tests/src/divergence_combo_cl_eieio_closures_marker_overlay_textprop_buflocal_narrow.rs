@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_closure_capture_slots_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass closure-obj ()
     ((name :initarg :name :accessor co-name :initform "")
@@ -80,6 +80,7 @@ fn combo_eieio_closure_capture_slots_edit() {
               (overlay-start ov) (overlay-end ov)
               my-cl-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -87,7 +88,7 @@ fn combo_eieio_closure_capture_slots_edit() {
 fn combo_eieio_closure_overlay_mod_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass hook-track ()
     ((fire-count :initarg :count :accessor ht-count :initform 0)
@@ -150,6 +151,7 @@ fn combo_eieio_closure_overlay_mod_hooks() {
               (overlay-start ov2) (overlay-end ov2)
               my-ht-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-variable ov1)""#]],
     );
 }
 
@@ -157,7 +159,7 @@ fn combo_eieio_closure_overlay_mod_hooks() {
 fn combo_eieio_closure_nested_save_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass pos-track ()
     ((pos-list :initarg :pos :accessor pt-positions :initform nil)
@@ -217,6 +219,7 @@ fn combo_eieio_closure_nested_save_excursion() {
               (overlay-start ov) (overlay-end ov)
               my-pt-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -224,7 +227,7 @@ fn combo_eieio_closure_nested_save_excursion() {
 fn combo_eieio_closure_defmethod_with_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass edit-ctx ()
     ((buf-name :initarg :buf :accessor ec-buf :initform "")
@@ -282,6 +285,7 @@ fn combo_eieio_closure_defmethod_with_edit() {
               (overlay-start ov) (overlay-end ov)
               (ec-log ctx))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -289,7 +293,7 @@ fn combo_eieio_closure_defmethod_with_edit() {
 fn combo_eieio_closure_with_overlay_lists() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ov-collect ()
     ((collected :initarg :col :accessor oc-col :initform nil)
@@ -366,5 +370,6 @@ fn combo_eieio_closure_with_overlay_lists() {
               (overlay-live-p ov3) (overlay-live-p ov4)
               my-oc-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
     );
 }

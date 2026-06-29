@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_before_after_change_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass change-log ()
     ((change-type :initarg :change-type :accessor cl-type :initform "")
@@ -73,6 +73,7 @@ fn combo_eieio_before_after_change_insert() {
                 (buffer-string)
                 tracking-obj))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -80,7 +81,7 @@ fn combo_eieio_before_after_change_insert() {
 fn combo_eieio_change_hooks_delete_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass delete-tracker ()
     ((pos :initarg :pos :accessor dt-pos :initform 0)
@@ -131,6 +132,7 @@ fn combo_eieio_change_hooks_delete_text() {
                 (buffer-string)
                 my-deletions))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -138,7 +140,7 @@ fn combo_eieio_change_hooks_delete_text() {
 fn combo_eieio_change_hooks_replace_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass replace-event ()
     ((op :initarg :op :accessor re-op :initform "")
@@ -189,6 +191,7 @@ fn combo_eieio_change_hooks_replace_with_props() {
                 (buffer-string)
                 my-events))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (cl-no-applicable-method re-op (propchange yellow))""#]],
     );
 }
 
@@ -196,7 +199,7 @@ fn combo_eieio_change_hooks_replace_with_props() {
 fn combo_eieio_change_hooks_narrow_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-change ()
     ((narrow-min :initarg :narrow-min :accessor nc-min :initform 1)
@@ -252,6 +255,7 @@ fn combo_eieio_change_hooks_narrow_interaction() {
                 (buffer-string)
                 my-ncs))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -259,7 +263,7 @@ fn combo_eieio_change_hooks_narrow_interaction() {
 fn combo_eieio_change_hooks_overlay_modification() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass overlay-event ()
     ((ov-start :initarg :ov-start :accessor oe-start :initform 0)
@@ -319,5 +323,6 @@ fn combo_eieio_change_hooks_overlay_modification() {
                 (buffer-string)
                 my-events))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (cl-no-applicable-method oe-beg (after-delete 5 14 6))""#]],
     );
 }

@@ -10,9 +10,10 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn event_modifiers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (event-modifiers ?\C-a) (event-modifiers ?\M-\C-a)
         (event-basic-type ?\C-a) (event-basic-type ?\M-b))"##,
+        expect_test::expect![[r#""OK ((control) (control meta) 97 98)""#]],
     );
 }
 
@@ -20,8 +21,9 @@ fn event_modifiers() {
 fn kbd_edge_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (kbd "DEL") (kbd "ESC") (kbd "C-?") (kbd "C-SPC") (kbd "<backspace>"))"##,
+        expect_test::expect![[r#""OK (\"\u{7f}\" \"\u{1b}\" [67108927] [67108896] [backspace])""#]],
     );
 }
 
@@ -29,9 +31,10 @@ fn kbd_edge_chars() {
 fn kbd_function_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (kbd "<mouse-1>") (kbd "<down>") (kbd "<C-up>")
         (kbd "M-<f7>") (kbd "S-<tab>"))"##,
+        expect_test::expect![[r#""OK ([mouse-1] [down] [C-up] [M-f7] [S-tab])""#]],
     );
 }
 
@@ -39,9 +42,12 @@ fn kbd_function_keys() {
 fn kbd_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (kbd "C-x C-c") (kbd "M-x") (kbd "<f5>") (kbd "C-M-a")
         (kbd "RET") (kbd "TAB") (kbd "SPC") (kbd "C-c C-x C-v"))"##,
+        expect_test::expect![[
+            r#""OK (\"\u{18}\u{3}\" [134217848] [f5] [134217729] \"\\r\" \"\t\" \" \" \"\u{3}\u{18}\u{16}\")""#
+        ]],
     );
 }
 
@@ -49,10 +55,11 @@ fn kbd_various() {
 fn key_binding_global() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (eq (key-binding (kbd "C-f")) 'forward-char)
         (eq (key-binding (kbd "C-x C-f")) 'find-file)
         (commandp (key-binding (kbd "C-a"))))"##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -60,9 +67,10 @@ fn key_binding_global() {
 fn key_description_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (key-description [?\C-x] [?\C-c])
         (single-key-description ?\C-a) (single-key-description ?\M-x))"##,
+        expect_test::expect![[r#""OK (\"C-c C-x\" \"C-a\" \"M-x\")""#]],
     );
 }
 
@@ -70,9 +78,10 @@ fn key_description_prefix() {
 fn key_description_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (key-description (kbd "C-x C-c")) (key-description (kbd "M-RET"))
         (key-description (kbd "<f1>")) (key-description [?\C-a ?\M-b]))"##,
+        expect_test::expect![[r#""OK (\"C-x C-c\" \"M-RET\" \"<f1>\" \"C-a M-b\")""#]],
     );
 }
 
@@ -80,8 +89,9 @@ fn key_description_roundtrip() {
 fn key_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e (list (key-parse "C-x C-c") (key-parse "M-x") (key-parse "RET")) (error (cons (quote ERR) (car e))))"##,
+        expect_test::expect![[r#""OK ([24 3] [134217848] [13])""#]],
     );
 }
 
@@ -89,9 +99,10 @@ fn key_parse() {
 fn key_valid_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e (list (key-valid-p "C-x C-c") (key-valid-p "C-xC-c")
         (key-valid-p "<f5>") (key-valid-p "RET")) (error (cons (quote ERR) (car e))))"##,
+        expect_test::expect![[r#""OK (t nil t t)""#]],
     );
 }
 
@@ -99,8 +110,9 @@ fn key_valid_p() {
 fn listify_key_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (listify-key-sequence (kbd "C-a")) (listify-key-sequence (kbd "abc"))
         (listify-key-sequence [?\M-a]))"##,
+        expect_test::expect![[r#""OK ((1) (97 98 99) (134217825))""#]],
     );
 }

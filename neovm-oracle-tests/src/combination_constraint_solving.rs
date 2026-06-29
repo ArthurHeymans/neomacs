@@ -97,7 +97,12 @@ fn oracle_prop_constraint_n_queens() {
     (fmakunbound 'neovm--cst-queens-bt)
     (fmakunbound 'neovm--cst-queens-valid-p)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 0 0 2 10 4 40) 10 t ((3 . 1) (2 . 3) (1 . 0) (0 . 2)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +280,10 @@ fn oracle_prop_constraint_sudoku_solver() {
     (fmakunbound 'neovm--cst-sudoku-bt)
     (fmakunbound 'neovm--cst-sudoku-valid4-p)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t [1 4 3 2 3 2 4 1 4 1 2 3 2 3 1 4] t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -409,7 +417,7 @@ fn oracle_prop_constraint_map_coloring_ac3() {
     (fmakunbound 'neovm--cst-ac3-solve)
     (fmakunbound 'neovm--cst-ac3-bt)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -534,7 +542,10 @@ fn oracle_prop_constraint_2sat_implication() {
     (fmakunbound 'neovm--cst-2sat-check)
     (fmakunbound 'neovm--cst-2sat-verify)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t t t (t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -652,7 +663,12 @@ fn oracle_prop_constraint_cryptarithmetic_puzzle() {
     (fmakunbound 'neovm--cst-crypto-solve-ab-b-ca)
     (fmakunbound 'neovm--cst-crypto-solve-xy-yx-zz)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 ((:a 2 :b 6 :c 3 :ab 26 :sum 32 :ca 32) (:a 4 :b 7 :c 5 :ab 47 :sum 54 :ca 54) (:a 6 :b 8 :c 7 :ab 68 :sum 76 :ca 76)) t 32 t ((12 21 33) (13 31 44) (14 41 55)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -774,5 +790,5 @@ fn oracle_prop_constraint_general_csp_framework() {
     (fmakunbound 'neovm--cst-csp-solve)
     (fmakunbound 'neovm--cst-csp-bt)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t)""#]]);
 }

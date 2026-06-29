@@ -11,16 +11,20 @@ use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_intern_creates_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(symbolp (intern "neovm--test-intern-abc"))"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(symbolp (intern "neovm--test-intern-abc"))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_intern_same_name_returns_same_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(eq (intern "neovm--test-same")
              (intern "neovm--test-same"))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &oracle, &neovm);
 }
@@ -28,18 +32,21 @@ fn oracle_intern_same_name_returns_same_symbol() {
 #[test]
 fn oracle_intern_soft_returns_nil_for_unknown() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) =
-        eval_oracle_and_neovm(r#"(intern-soft "neovm--test-never-interned-xyz")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(intern-soft "neovm--test-never-interned-xyz")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_intern_soft_returns_symbol_when_present() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (intern "neovm--test-is-there")
   (symbolp (intern-soft "neovm--test-is-there")))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &oracle, &neovm);
 }
@@ -47,11 +54,12 @@ fn oracle_intern_soft_returns_symbol_when_present() {
 #[test]
 fn oracle_make_symbol_creates_uninterned() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (let ((s (make-symbol "neovm--test-uninterned")))
     (list (symbolp s)
           (eq s (intern-soft "neovm--test-uninterned")))))"#,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
     assert_ok_eq("(t nil)", &oracle, &neovm);
 }
@@ -59,20 +67,29 @@ fn oracle_make_symbol_creates_uninterned() {
 #[test]
 fn oracle_intern_empty_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(symbolp (intern ""))"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(symbolp (intern ""))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_obarrayp_for_standard_obarray() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(obarrayp obarray)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(obarrayp obarray)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_intern_wrong_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(intern 42)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(intern 42)",
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }

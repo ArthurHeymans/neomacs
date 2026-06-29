@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_attach_git_default_repo_copy_delete_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-attach)
@@ -65,6 +65,9 @@ fn org_attach_git_default_repo_copy_delete_combo() {
                        (point-min) (point-max)))))))
       (when (get-file-buffer org-file) (kill-buffer (get-file-buffer org-file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK (\"at/tach-git-default\" (\"source.txt\") (\"Synchronized attachments\" \"at/tach-git-default/source.txt\") \"\" nil (\"Synchronized attachments\" \"D\tat/tach-git-default/source.txt\") \"\" \"* Task                                                               :ATTACH:\n:PROPERTIES:\n:ID: attach-git-default\n:END:\n\")""#
+        ]],
     );
 }
 
@@ -72,7 +75,7 @@ fn org_attach_git_default_repo_copy_delete_combo() {
 fn org_attach_git_individual_repo_buffer_sync_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-attach)
@@ -140,6 +143,9 @@ fn org_attach_git_individual_repo_buffer_sync_combo() {
       (when (get-buffer "payload.md") (kill-buffer "payload.md"))
       (when (get-file-buffer org-file) (kill-buffer (get-file-buffer org-file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK (\"repo\" nil (\".git\" \"payload.md\") (\"fatal: your current branch 'master' does not have any commits yet\") (\".git\") (\"fatal: your current branch 'master' does not have any commits yet\") \"\" \"* Parent                                                             :ATTACH:\n:PROPERTIES:\n:DIR: <root>/repo\n:END:\n** Child\n\")""#
+        ]],
     );
 }
 
@@ -147,7 +153,7 @@ fn org_attach_git_individual_repo_buffer_sync_combo() {
 fn org_attach_git_annex_detection_and_open_hook_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-attach)
@@ -191,6 +197,9 @@ fn org_attach_git_annex_detection_and_open_hook_combo() {
                           #'string<)))))
       (when (get-file-buffer org-file) (kill-buffer (get-file-buffer org-file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK (t (error \"File <root>/data/an/nex-id/big.bin stored in git annex but unavailable\") \"data/an/nex-id/big.bin\" (\"org-attach-git-annex-get-maybe\"))""#
+        ]],
     );
 }
 
@@ -198,7 +207,7 @@ fn org_attach_git_annex_detection_and_open_hook_combo() {
 fn org_attach_dir_file_list_sync_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-attach)
@@ -232,5 +241,8 @@ fn org_attach_dir_file_list_sync_deep_state_combo() {
               (kill-buffer)
               (list dir-exists dir-path files doc-content))))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK (t \"<root>/data/fi/xed-attach-id\" (\"doc.txt\" \"img.png\") \"document content\")""#
+        ]],
     );
 }

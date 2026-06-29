@@ -21,7 +21,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_this_command_chain_through_command_execute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((trace nil))
     (defun tracify (sym)
@@ -39,6 +39,9 @@ fn combo_this_command_chain_through_command_execute() {
     (setq last-command this-command)
     (tracify 'after-last-transfer)
     (nreverse trace)))"#,
+        expect_test::expect![[
+            r#""OK ((before-execute cmd-alpha cmd-alpha cmd-prev) (after-execute cmd-alpha cmd-alpha cmd-prev) (after-last-transfer cmd-alpha cmd-alpha cmd-alpha))""#
+        ]],
     );
 }
 
@@ -46,7 +49,7 @@ fn combo_this_command_chain_through_command_execute() {
 fn combo_this_command_after_multiple_command_execute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((results nil))
     (setq this-command nil real-this-command nil last-command nil)
@@ -59,6 +62,7 @@ fn combo_this_command_after_multiple_command_execute() {
     (command-execute 'backward-char)
     (push (list 'step3 this-command real-this-command last-command) results)
     (nreverse results)))"#,
+        expect_test::expect![[r#""ERR (end-of-buffer)""#]],
     );
 }
 
@@ -70,7 +74,7 @@ fn combo_this_command_after_multiple_command_execute() {
 fn combo_prefix_arg_transition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((results nil))
     (push (list 'initial
@@ -82,6 +86,9 @@ fn combo_prefix_arg_transition() {
     (push (list 'after-command-execute
                 prefix-arg current-prefix-arg last-prefix-arg) results)
     (nreverse results)))"#,
+        expect_test::expect![[
+            r#""OK ((initial nil nil nil) (after-set-prefix (4) nil nil) (after-command-execute nil (4) nil))""#
+        ]],
     );
 }
 
@@ -89,7 +96,7 @@ fn combo_prefix_arg_transition() {
 fn combo_prefix_arg_numeric_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((results nil))
     (dolist (parg (list nil 1 '(4) '(16) '(64) -1 '(-1)))
@@ -101,6 +108,9 @@ fn combo_prefix_arg_numeric_values() {
             results)
       (setq prefix-arg nil))
     (nreverse results)))"#,
+        expect_test::expect![[
+            r#""OK ((nil nil 1) (1 1 1) ((4) (4) 4) ((16) (16) 16) ((64) (64) 64) (-1 -1 -1) ((-1) (-1) -1))""#
+        ]],
     );
 }
 
@@ -108,7 +118,7 @@ fn combo_prefix_arg_numeric_values() {
 fn combo_prefix_arg_survives_until_command_execute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((captured-prefix nil))
     (defun capture-prefix ()
@@ -118,6 +128,7 @@ fn combo_prefix_arg_survives_until_command_execute() {
     (list captured-prefix
           (prefix-numeric-value captured-prefix)
           (eq captured-prefix '(4)))))"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument commandp capture-prefix)""#]],
     );
 }
 
@@ -129,7 +140,7 @@ fn combo_prefix_arg_survives_until_command_execute() {
 fn combo_pre_post_command_hooks_fire_around_command_execute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((trace nil))
     (add-hook 'pre-command-hook
@@ -145,6 +156,7 @@ fn combo_pre_post_command_hooks_fire_around_command_execute() {
     (remove-hook 'pre-command-hook nil t)
     (remove-hook 'post-command-hook nil t)
     (nreverse trace)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -152,7 +164,7 @@ fn combo_pre_post_command_hooks_fire_around_command_execute() {
 fn combo_pre_command_hook_sees_old_this_command() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((pre-snap nil)
         (post-snap nil))
@@ -171,6 +183,7 @@ fn combo_pre_command_hook_sees_old_this_command() {
     (remove-hook 'pre-command-hook nil t)
     (remove-hook 'post-command-hook nil t)
     (list pre-snap post-snap)))"#,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
@@ -178,7 +191,7 @@ fn combo_pre_command_hook_sees_old_this_command() {
 fn combo_post_command_hook_runs_after_this_command_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((observed nil))
     (add-hook 'post-command-hook
@@ -191,6 +204,7 @@ fn combo_post_command_hook_runs_after_this_command_set() {
     (command-execute 'ignore)
     (remove-hook 'post-command-hook nil t)
     (nreverse observed)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -202,7 +216,7 @@ fn combo_post_command_hook_runs_after_this_command_set() {
 fn combo_post_command_hook_modifies_last_command() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((snapshots nil))
     (add-hook 'post-command-hook
@@ -215,6 +229,7 @@ fn combo_post_command_hook_modifies_last_command() {
     (remove-hook 'post-command-hook nil t)
     (push (list 'final last-command) snapshots)
     (nreverse snapshots)))"#,
+        expect_test::expect![[r#""OK ((final nil))""#]],
     );
 }
 
@@ -222,7 +237,7 @@ fn combo_post_command_hook_modifies_last_command() {
 fn combo_pre_command_hook_sets_prefix_arg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((captured nil))
     (add-hook 'pre-command-hook
@@ -234,6 +249,7 @@ fn combo_pre_command_hook_sets_prefix_arg() {
     (command-execute 'snap-prefix)
     (remove-hook 'pre-command-hook nil t)
     captured))"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument commandp snap-prefix)""#]],
     );
 }
 
@@ -245,7 +261,7 @@ fn combo_pre_command_hook_sets_prefix_arg() {
 fn combo_timer_callback_reads_this_command_during_sit_for() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((snap nil)
         (timer nil))
@@ -257,6 +273,7 @@ fn combo_timer_callback_reads_this_command_during_sit_for() {
     (sit-for 0.3)
     (cancel-timer timer)
     snap))"#,
+        expect_test::expect![[r#""OK (some-cmd some-cmd nil nil)""#]],
     );
 }
 
@@ -264,7 +281,7 @@ fn combo_timer_callback_reads_this_command_during_sit_for() {
 fn combo_timer_mutates_this_command_during_sit_for() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((timer nil))
     (setq this-command 'before-timer)
@@ -274,6 +291,7 @@ fn combo_timer_mutates_this_command_during_sit_for() {
     (sit-for 0.3)
     (cancel-timer timer)
     this-command))"#,
+        expect_test::expect![[r#""OK timer-set-it""#]],
     );
 }
 
@@ -281,7 +299,7 @@ fn combo_timer_mutates_this_command_during_sit_for() {
 fn combo_idle_timer_reads_this_command_during_sit_for() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((snap nil)
         (timer nil))
@@ -293,6 +311,7 @@ fn combo_idle_timer_reads_this_command_during_sit_for() {
     (sit-for 0.3)
     (cancel-timer timer)
     snap))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -304,7 +323,7 @@ fn combo_idle_timer_reads_this_command_during_sit_for() {
 fn combo_multiple_timers_see_mutated_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((trace nil)
         (t1 nil) (t2 nil) (t3 nil))
@@ -326,6 +345,7 @@ fn combo_multiple_timers_see_mutated_state() {
     (cancel-timer t3)
     (push (list 'final this-command) trace)
     (nreverse trace)))"#,
+        expect_test::expect![[r#""OK ((t1 initial) (t2 from-t1) (t3 from-t2) (final from-t2))""#]],
     );
 }
 
@@ -333,7 +353,7 @@ fn combo_multiple_timers_see_mutated_state() {
 fn combo_timer_fires_during_accept_process_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((fired nil)
         (timer nil)
@@ -349,6 +369,7 @@ fn combo_timer_fires_during_accept_process_output() {
         (cancel-timer timer)
         (kill-buffer buf)
         result))))"#,
+        expect_test::expect![[r#""OK (t \"TIMER-RAN\")""#]],
     );
 }
 
@@ -360,7 +381,7 @@ fn combo_timer_fires_during_accept_process_output() {
 fn combo_command_remapping_sets_this_original_command() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((original-cmd nil)
         (remapped-cmd nil)
@@ -376,6 +397,7 @@ fn combo_command_remapping_sets_this_original_command() {
     (list original-cmd remapped-cmd
           (eq original-cmd 'forward-char)
           (eq remapped-cmd 'forward-char))))"#,
+        expect_test::expect![[r#""ERR (end-of-buffer)""#]],
     );
 }
 
@@ -383,7 +405,7 @@ fn combo_command_remapping_sets_this_original_command() {
 fn combo_command_remapping_through_call_interactively() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((observed-this nil)
         (observed-real nil)
@@ -399,6 +421,7 @@ fn combo_command_remapping_through_call_interactively() {
     (use-global-map (make-sparse-keymap))
     (list observed-this observed-real observed-orig
           (command-remapping 'ignore))))"#,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     );
 }
 
@@ -410,7 +433,7 @@ fn combo_command_remapping_through_call_interactively() {
 fn combo_command_execute_error_preserves_partial_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((results nil))
     (setq this-command 'before-error real-this-command 'before-error)
@@ -420,6 +443,9 @@ fn combo_command_execute_error_preserves_partial_state() {
       (error (push (list 'caught err this-command real-this-command) results)))
     (push (list 'after this-command real-this-command last-command) results)
     (nreverse results)))"#,
+        expect_test::expect![[
+            r#""OK ((caught (wrong-type-argument commandp (closure (t) nil (error \"test-error\"))) before-error before-error) (after before-error before-error nil))""#
+        ]],
     );
 }
 
@@ -427,7 +453,7 @@ fn combo_command_execute_error_preserves_partial_state() {
 fn combo_post_command_hook_after_error_in_command() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((post-fired nil)
         (post-snapshot nil))
@@ -442,6 +468,7 @@ fn combo_post_command_hook_after_error_in_command() {
       (error nil))
     (remove-hook 'post-command-hook nil t)
     (list post-fired post-snapshot)))"#,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
@@ -453,7 +480,7 @@ fn combo_post_command_hook_after_error_in_command() {
 fn combo_this_command_keys_after_various_invocations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((results nil))
     (push (list 'initial
@@ -472,6 +499,9 @@ fn combo_this_command_keys_after_various_invocations() {
                 (this-command-keys)
                 (this-single-command-keys)) results)
     (nreverse results)))"#,
+        expect_test::expect![[
+            r#""OK ((initial \"\" []) (after-command-execute \"\" []) (after-call-interactively \"\" []) (after-funcall \"\" []))""#
+        ]],
     );
 }
 
@@ -479,13 +509,14 @@ fn combo_this_command_keys_after_various_invocations() {
 fn combo_clear_this_command_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((before nil) (after nil))
     (setq before (length (this-command-keys)))
     (clear-this-command-keys t)
     (setq after (length (this-command-keys)))
     (list before after)))"#,
+        expect_test::expect![[r#""OK (0 0)""#]],
     );
 }
 
@@ -497,7 +528,7 @@ fn combo_clear_this_command_keys() {
 fn combo_hooks_timers_prefix_arg_this_command_full_stack() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((trace nil)
         (timer nil))
@@ -530,6 +561,7 @@ fn combo_hooks_timers_prefix_arg_this_command_full_stack() {
     (remove-hook 'pre-command-hook nil t)
     (remove-hook 'post-command-hook nil t)
     (nreverse trace)))"#,
+        expect_test::expect![[r#""OK ((timer nil nil nil (4)))""#]],
     );
 }
 
@@ -537,7 +569,7 @@ fn combo_hooks_timers_prefix_arg_this_command_full_stack() {
 fn combo_nested_command_execute_through_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((trace nil))
     (defun inner-cmd ()
@@ -551,6 +583,7 @@ fn combo_nested_command_execute_through_funcall() {
     (command-execute 'outer-cmd)
     (push (list 'top-level this-command real-this-command last-command) trace)
     (nreverse trace)))"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument commandp outer-cmd)""#]],
     );
 }
 
@@ -562,7 +595,7 @@ fn combo_nested_command_execute_through_funcall() {
 fn combo_last_command_real_last_command_transition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((results nil))
     (push (list 'initial
@@ -584,6 +617,7 @@ fn combo_last_command_real_last_command_transition() {
                 real-this-command
                 (bound-and-true-p real-last-command)) results)
     (nreverse results)))"#,
+        expect_test::expect![[r#""ERR (end-of-buffer)""#]],
     );
 }
 
@@ -595,7 +629,7 @@ fn combo_last_command_real_last_command_transition() {
 fn combo_called_interactively_in_post_command_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((result nil))
     (add-hook 'post-command-hook
@@ -607,6 +641,7 @@ fn combo_called_interactively_in_post_command_hook() {
     (command-execute 'ignore)
     (remove-hook 'post-command-hook nil t)
     result))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -614,7 +649,7 @@ fn combo_called_interactively_in_post_command_hook() {
 fn combo_called_interactively_in_timer_callback() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((result nil)
         (timer nil))
@@ -626,6 +661,7 @@ fn combo_called_interactively_in_timer_callback() {
     (sit-for 0.3)
     (cancel-timer timer)
     result))"#,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
@@ -637,7 +673,7 @@ fn combo_called_interactively_in_timer_callback() {
 fn combo_timer_list_management_interleaved() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((t1 (run-with-timer 10 nil 'ignore))
         (t2 (run-with-timer 10 nil 'ignore))
@@ -660,6 +696,7 @@ fn combo_timer_list_management_interleaved() {
               before-i after-i
               t1-live t2-live t3-live
               i1-live i2-live)))))"#,
+        expect_test::expect![[r#""OK (4 3 3 2 t nil t nil t)""#]],
     );
 }
 
@@ -667,7 +704,7 @@ fn combo_timer_list_management_interleaved() {
 fn combo_repeating_timer_cancellation_from_callback() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((count 0)
         (timer nil)
@@ -681,6 +718,7 @@ fn combo_repeating_timer_cancellation_from_callback() {
     (sit-for 0.5)
     (cancel-timer timer)
     (list count (nreverse trace))))"#,
+        expect_test::expect![[r#""OK (3 (1 2 3))""#]],
     );
 }
 
@@ -692,7 +730,7 @@ fn combo_repeating_timer_cancellation_from_callback() {
 fn combo_repeating_idle_timer_cancel_from_own_callback() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((count 0)
         (timer nil)
@@ -706,6 +744,7 @@ fn combo_repeating_idle_timer_cancel_from_own_callback() {
     (sit-for 0.5)
     (cancel-timer timer)
     (list count (nreverse trace))))"#,
+        expect_test::expect![[r#""OK (0 nil)""#]],
     );
 }
 
@@ -717,7 +756,7 @@ fn combo_repeating_idle_timer_cancel_from_own_callback() {
 fn combo_timer_modifies_buffer_during_command_execution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-timer-buf"))
         (timer nil)
@@ -736,6 +775,7 @@ fn combo_timer_modifies_buffer_during_command_execution() {
       (setq result (buffer-string)))
     (kill-buffer buf)
     result))"#,
+        expect_test::expect![[r#""OK \"INITIAL-TIMER\"""#]],
     );
 }
 
@@ -743,7 +783,7 @@ fn combo_timer_modifies_buffer_during_command_execution() {
 fn combo_post_command_hook_modifies_buffer_and_timer_reads_it() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-hook-timer"))
         (timer nil)
@@ -766,6 +806,7 @@ fn combo_post_command_hook_modifies_buffer_and_timer_reads_it() {
     (remove-hook 'post-command-hook nil t)
     (kill-buffer buf)
     snap))"#,
+        expect_test::expect![[r#""OK \"START\"""#]],
     );
 }
 
@@ -777,7 +818,7 @@ fn combo_post_command_hook_modifies_buffer_and_timer_reads_it() {
 fn combo_echo_keystrokes_value_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((default (default-value 'echo-keystrokes))
         (local (symbol-value 'echo-keystrokes)))
@@ -786,6 +827,7 @@ fn combo_echo_keystrokes_value_bounds() {
           (number-or-marker-p local)
           (or (null local) (> local 0))
           (eq default local))))"#,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -793,10 +835,11 @@ fn combo_echo_keystrokes_value_bounds() {
 fn combo_echo_keystrokes_help_bound_and_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (boundp 'echo-keystrokes-help)
         (symbol-value 'echo-keystrokes-help)
         (not (null echo-keystrokes-help))))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }

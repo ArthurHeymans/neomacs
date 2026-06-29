@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_word_move_syntax_marker_overlay_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "wsm")))
     (with-current-buffer buf
@@ -35,6 +35,7 @@ fn combo_word_move_syntax_marker_overlay_narrow() {
                   (widen)
                   (list p1 p2 p3 mp1 os oe)))))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -42,7 +43,7 @@ fn combo_word_move_syntax_marker_overlay_narrow() {
 fn combo_word_move_syntax_change_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "wcs")))
     (with-current-buffer buf
@@ -62,6 +63,7 @@ fn combo_word_move_syntax_change_marker() {
               (let ((p3 (point)))
                 (list p1 p2 p3 mp1)))))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -69,7 +71,7 @@ fn combo_word_move_syntax_change_marker() {
 fn combo_word_move_narrow_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "wnu")))
     (with-current-buffer buf
@@ -97,6 +99,7 @@ fn combo_word_move_narrow_overlay_undo() {
                 (buffer-string)
                 (marker-position m)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -104,7 +107,7 @@ fn combo_word_move_narrow_overlay_undo() {
 fn combo_word_move_undo_insert_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "wui")))
     (with-current-buffer buf
@@ -132,6 +135,7 @@ fn combo_word_move_undo_insert_marker() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -139,7 +143,7 @@ fn combo_word_move_undo_insert_marker() {
 fn combo_word_move_textprop_overlay_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "wtn")))
     (with-current-buffer buf
@@ -170,5 +174,6 @@ fn combo_word_move_textprop_overlay_narrow() {
                   (widen)
                   (list p1 p2 p3 k1 k2 mp os oe))))))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

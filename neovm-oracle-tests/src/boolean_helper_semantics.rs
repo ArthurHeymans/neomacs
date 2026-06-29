@@ -27,5 +27,10 @@ fn oracle_prop_xor_ignore_always_gnu_subr_contracts() {
    (list (always (push 'a trace)
                  (push 'b trace))
          (nreverse trace))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (nil :right :left nil 0 (right (a b)) (nil (a b)) (t (a b)))""#
+        ],
+    );
 }

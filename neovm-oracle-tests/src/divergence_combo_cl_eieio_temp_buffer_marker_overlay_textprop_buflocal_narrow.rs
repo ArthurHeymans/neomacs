@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_temp_buffer_insert_from_main() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass temp-ctx ()
     ((source-buf :initarg :src :accessor tc-src :initform "")
@@ -65,6 +65,7 @@ fn combo_eieio_temp_buffer_insert_from_main() {
               (overlay-start ov) (overlay-end ov)
               my-tb-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -72,7 +73,7 @@ fn combo_eieio_temp_buffer_insert_from_main() {
 fn combo_eieio_temp_buffer_with_overlay_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass temp-ov-ctx ()
     ((label :initarg :label :accessor toc-label :initform "")
@@ -126,6 +127,7 @@ fn combo_eieio_temp_buffer_with_overlay_props() {
               (overlay-start ov) (overlay-end ov)
               my-toc-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-variable my-toc-log)""#]],
     );
 }
 
@@ -133,7 +135,7 @@ fn combo_eieio_temp_buffer_with_overlay_props() {
 fn combo_eieio_temp_buffer_marker_across_bufs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cross-mk ()
     ((m-pos :initarg :mpos :accessor cm-mpos :initform 0)
@@ -188,6 +190,7 @@ fn combo_eieio_temp_buffer_marker_across_bufs() {
               (cm-temp ctx)
               my-cm-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-variable my-cm-log)""#]],
     );
 }
 
@@ -195,7 +198,7 @@ fn combo_eieio_temp_buffer_marker_across_bufs() {
 fn combo_eieio_temp_buffer_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass temp-narrow-ctx ()
     ((edit-count :initarg :edits :accessor tnc-edits :initform 0)
@@ -257,6 +260,7 @@ fn combo_eieio_temp_buffer_narrow_undo() {
               (tnc-temps ctx)
               my-tnc-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-variable my-tnc-log)""#]],
     );
 }
 
@@ -264,7 +268,7 @@ fn combo_eieio_temp_buffer_narrow_undo() {
 fn combo_eieio_temp_buffer_process_and_return() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass proc-ctx ()
     ((processed :initarg :proc :accessor pc-proc :initform nil)
@@ -323,5 +327,6 @@ fn combo_eieio_temp_buffer_process_and_return() {
               (pc-proc ctx)
               my-pc-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }

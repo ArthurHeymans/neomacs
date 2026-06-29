@@ -16,47 +16,110 @@ fn oracle_prop_format_s_vs_S_differences() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // String: %s strips quotes, %S keeps them
-    assert_oracle_parity(r#"(format "%s" "hello")"#);
-    assert_oracle_parity(r#"(format "%S" "hello")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" "hello")"#,
+        expect_test::expect![[r#""OK \"hello\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" "hello")"#,
+        expect_test::expect![[r#""OK \"\\\"hello\\\"\"""#]],
+    );
 
     // String with special chars
-    assert_oracle_parity(r#"(format "%s" "line1\nline2")"#);
-    assert_oracle_parity(r#"(format "%S" "line1\nline2")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" "line1\nline2")"#,
+        expect_test::expect![[r#""OK \"line1\nline2\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" "line1\nline2")"#,
+        expect_test::expect![[r#""OK \"\\\"line1\nline2\\\"\"""#]],
+    );
 
     // nil
-    assert_oracle_parity(r#"(format "%s" nil)"#);
-    assert_oracle_parity(r#"(format "%S" nil)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" nil)"#,
+        expect_test::expect![[r#""OK \"nil\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" nil)"#,
+        expect_test::expect![[r#""OK \"nil\"""#]],
+    );
 
     // t
-    assert_oracle_parity(r#"(format "%s" t)"#);
-    assert_oracle_parity(r#"(format "%S" t)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" t)"#,
+        expect_test::expect![[r#""OK \"t\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" t)"#,
+        expect_test::expect![[r#""OK \"t\"""#]],
+    );
 
     // Symbols
-    assert_oracle_parity(r#"(format "%s" 'hello)"#);
-    assert_oracle_parity(r#"(format "%S" 'hello)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" 'hello)"#,
+        expect_test::expect![[r#""OK \"hello\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" 'hello)"#,
+        expect_test::expect![[r#""OK \"hello\"""#]],
+    );
 
     // Lists
-    assert_oracle_parity(r#"(format "%s" '(1 2 3))"#);
-    assert_oracle_parity(r#"(format "%S" '(1 2 3))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" '(1 2 3))"#,
+        expect_test::expect![[r#""OK \"(1 2 3)\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" '(1 2 3))"#,
+        expect_test::expect![[r#""OK \"(1 2 3)\"""#]],
+    );
 
     // Nested lists
-    assert_oracle_parity(r#"(format "%s" '(a (b c) (d (e f))))"#);
-    assert_oracle_parity(r#"(format "%S" '(a (b c) (d (e f))))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" '(a (b c) (d (e f))))"#,
+        expect_test::expect![[r#""OK \"(a (b c) (d (e f)))\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" '(a (b c) (d (e f))))"#,
+        expect_test::expect![[r#""OK \"(a (b c) (d (e f)))\"""#]],
+    );
 
     // Vectors
-    assert_oracle_parity(r#"(format "%s" [1 2 3])"#);
-    assert_oracle_parity(r#"(format "%S" [1 2 3])"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" [1 2 3])"#,
+        expect_test::expect![[r#""OK \"[1 2 3]\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" [1 2 3])"#,
+        expect_test::expect![[r#""OK \"[1 2 3]\"""#]],
+    );
 
     // Cons pairs (dotted)
-    assert_oracle_parity(r#"(format "%s" '(a . b))"#);
-    assert_oracle_parity(r#"(format "%S" '(a . b))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" '(a . b))"#,
+        expect_test::expect![[r#""OK \"(a . b)\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" '(a . b))"#,
+        expect_test::expect![[r#""OK \"(a . b)\"""#]],
+    );
 
     // String with embedded quotes
-    assert_oracle_parity(r#"(format "%S" "he said \"hi\"")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" "he said \"hi\"")"#,
+        expect_test::expect![[r#""OK \"\\\"he said \\\\\\\"hi\\\\\\\"\\\"\"""#]],
+    );
 
     // Characters
-    assert_oracle_parity(r#"(format "%s" ?A)"#);
-    assert_oracle_parity(r#"(format "%S" ?A)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" ?A)"#,
+        expect_test::expect![[r#""OK \"65\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" ?A)"#,
+        expect_test::expect![[r#""OK \"65\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -68,25 +131,58 @@ fn oracle_prop_format_c_characters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // ASCII printable
-    assert_oracle_parity(r#"(format "%c" 65)"#);
-    assert_oracle_parity(r#"(format "%c" 122)"#);
-    assert_oracle_parity(r#"(format "%c" 48)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%c" 65)"#,
+        expect_test::expect![[r#""OK \"A\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%c" 122)"#,
+        expect_test::expect![[r#""OK \"z\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%c" 48)"#,
+        expect_test::expect![[r#""OK \"0\"""#]],
+    );
 
     // Space and special ASCII
-    assert_oracle_parity(r#"(format "%c" 32)"#);
-    assert_oracle_parity(r#"(format "%c" 126)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%c" 32)"#,
+        expect_test::expect![[r#""OK \" \"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%c" 126)"#,
+        expect_test::expect![[r#""OK \"~\"""#]],
+    );
 
     // Unicode characters
-    assert_oracle_parity(r#"(format "%c" #x03B1)"#); // alpha
-    assert_oracle_parity(r#"(format "%c" #x03B2)"#); // beta
-    assert_oracle_parity(r#"(format "%c" #x4e16)"#); // CJK char
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%c" #x03B1)"#,
+        expect_test::expect![[r#""OK \"α\"""#]],
+    ); // alpha
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%c" #x03B2)"#,
+        expect_test::expect![[r#""OK \"β\"""#]],
+    ); // beta
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%c" #x4e16)"#,
+        expect_test::expect![[r#""OK \"世\"""#]],
+    ); // CJK char
 
     // Multiple %c in one format
-    assert_oracle_parity(r#"(format "%c%c%c%c%c" 72 101 108 108 111)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%c%c%c%c%c" 72 101 108 108 111)"#,
+        expect_test::expect![[r#""OK \"Hello\"""#]],
+    );
 
     // %c with width
-    assert_oracle_parity(r#"(format "[%5c]" 65)"#);
-    assert_oracle_parity(r#"(format "[%-5c]" 65)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%5c]" 65)"#,
+        expect_test::expect![[r#""OK \"[    A]\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%-5c]" 65)"#,
+        expect_test::expect![[r#""OK \"[A    ]\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -98,38 +194,98 @@ fn oracle_prop_format_d_all_flags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Basic
-    assert_oracle_parity(r#"(format "%d" 42)"#);
-    assert_oracle_parity(r#"(format "%d" -42)"#);
-    assert_oracle_parity(r#"(format "%d" 0)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%d" 42)"#,
+        expect_test::expect![[r#""OK \"42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%d" -42)"#,
+        expect_test::expect![[r#""OK \"-42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%d" 0)"#,
+        expect_test::expect![[r#""OK \"0\"""#]],
+    );
 
     // Width
-    assert_oracle_parity(r#"(format "%10d" 42)"#);
-    assert_oracle_parity(r#"(format "%10d" -42)"#);
-    assert_oracle_parity(r#"(format "%3d" 42)"#);
-    assert_oracle_parity(r#"(format "%1d" 42)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%10d" 42)"#,
+        expect_test::expect![[r#""OK \"        42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%10d" -42)"#,
+        expect_test::expect![[r#""OK \"       -42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%3d" 42)"#,
+        expect_test::expect![[r#""OK \" 42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%1d" 42)"#,
+        expect_test::expect![[r#""OK \"42\"""#]],
+    );
 
     // Zero-padding
-    assert_oracle_parity(r#"(format "%010d" 42)"#);
-    assert_oracle_parity(r#"(format "%010d" -42)"#);
-    assert_oracle_parity(r#"(format "%05d" 0)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%010d" 42)"#,
+        expect_test::expect![[r#""OK \"0000000042\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%010d" -42)"#,
+        expect_test::expect![[r#""OK \"-000000042\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%05d" 0)"#,
+        expect_test::expect![[r#""OK \"00000\"""#]],
+    );
 
     // Left-justify
-    assert_oracle_parity(r#"(format "[%-10d]" 42)"#);
-    assert_oracle_parity(r#"(format "[%-10d]" -42)"#);
-    assert_oracle_parity(r#"(format "[%-3d]" 42)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%-10d]" 42)"#,
+        expect_test::expect![[r#""OK \"[42        ]\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%-10d]" -42)"#,
+        expect_test::expect![[r#""OK \"[-42       ]\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%-3d]" 42)"#,
+        expect_test::expect![[r#""OK \"[42 ]\"""#]],
+    );
 
     // Plus sign
-    assert_oracle_parity(r#"(format "%+d" 42)"#);
-    assert_oracle_parity(r#"(format "%+d" -42)"#);
-    assert_oracle_parity(r#"(format "%+d" 0)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%+d" 42)"#,
+        expect_test::expect![[r#""OK \"+42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%+d" -42)"#,
+        expect_test::expect![[r#""OK \"-42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%+d" 0)"#,
+        expect_test::expect![[r#""OK \"+0\"""#]],
+    );
 
     // Combined flags
-    assert_oracle_parity(r#"(format "[%+10d]" 42)"#);
-    assert_oracle_parity(r#"(format "[%-+10d]" 42)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%+10d]" 42)"#,
+        expect_test::expect![[r#""OK \"[       +42]\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%-+10d]" 42)"#,
+        expect_test::expect![[r#""OK \"[+42       ]\"""#]],
+    );
 
     // Large numbers
-    assert_oracle_parity(r#"(format "%d" 1000000000)"#);
-    assert_oracle_parity(r#"(format "%d" -1000000000)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%d" 1000000000)"#,
+        expect_test::expect![[r#""OK \"1000000000\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%d" -1000000000)"#,
+        expect_test::expect![[r#""OK \"-1000000000\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -141,34 +297,88 @@ fn oracle_prop_format_octal_hex_flags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Basic octal
-    assert_oracle_parity(r#"(format "%o" 8)"#);
-    assert_oracle_parity(r#"(format "%o" 255)"#);
-    assert_oracle_parity(r#"(format "%o" 0)"#);
-    assert_oracle_parity(r#"(format "%o" 511)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%o" 8)"#,
+        expect_test::expect![[r#""OK \"10\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%o" 255)"#,
+        expect_test::expect![[r#""OK \"377\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%o" 0)"#,
+        expect_test::expect![[r#""OK \"0\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%o" 511)"#,
+        expect_test::expect![[r#""OK \"777\"""#]],
+    );
 
     // Octal with width
-    assert_oracle_parity(r#"(format "%10o" 255)"#);
-    assert_oracle_parity(r#"(format "%010o" 255)"#);
-    assert_oracle_parity(r#"(format "[%-10o]" 255)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%10o" 255)"#,
+        expect_test::expect![[r#""OK \"       377\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%010o" 255)"#,
+        expect_test::expect![[r#""OK \"0000000377\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%-10o]" 255)"#,
+        expect_test::expect![[r#""OK \"[377       ]\"""#]],
+    );
 
     // Hex lowercase
-    assert_oracle_parity(r#"(format "%x" 255)"#);
-    assert_oracle_parity(r#"(format "%x" 4096)"#);
-    assert_oracle_parity(r#"(format "%x" 0)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%x" 255)"#,
+        expect_test::expect![[r#""OK \"ff\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%x" 4096)"#,
+        expect_test::expect![[r#""OK \"1000\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%x" 0)"#,
+        expect_test::expect![[r#""OK \"0\"""#]],
+    );
 
     // Hex uppercase
-    assert_oracle_parity(r#"(format "%X" 255)"#);
-    assert_oracle_parity(r#"(format "%X" 4096)"#);
-    assert_oracle_parity(r#"(format "%X" 48879)"#); // 0xBEEF
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%X" 255)"#,
+        expect_test::expect![[r#""OK \"FF\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%X" 4096)"#,
+        expect_test::expect![[r#""OK \"1000\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%X" 48879)"#,
+        expect_test::expect![[r#""OK \"BEEF\"""#]],
+    ); // 0xBEEF
 
     // Hex with width and zero-pad
-    assert_oracle_parity(r#"(format "%08x" 255)"#);
-    assert_oracle_parity(r#"(format "%08X" 255)"#);
-    assert_oracle_parity(r#"(format "[%-10x]" 255)"#);
-    assert_oracle_parity(r#"(format "[%-10X]" 255)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%08x" 255)"#,
+        expect_test::expect![[r#""OK \"000000ff\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%08X" 255)"#,
+        expect_test::expect![[r#""OK \"000000FF\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%-10x]" 255)"#,
+        expect_test::expect![[r#""OK \"[ff        ]\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%-10X]" 255)"#,
+        expect_test::expect![[r#""OK \"[FF        ]\"""#]],
+    );
 
     // All integer formats in one call
-    assert_oracle_parity(r#"(format "d=%d o=%o x=%x X=%X" 42 42 42 42)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "d=%d o=%o x=%x X=%X" 42 42 42 42)"#,
+        expect_test::expect![[r#""OK \"d=42 o=52 x=2a X=2A\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -180,45 +390,126 @@ fn oracle_prop_format_float_precision_extensive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // %f with various precisions
-    assert_oracle_parity(r#"(format "%.0f" 3.14159)"#);
-    assert_oracle_parity(r#"(format "%.1f" 3.14159)"#);
-    assert_oracle_parity(r#"(format "%.2f" 3.14159)"#);
-    assert_oracle_parity(r#"(format "%.5f" 3.14159)"#);
-    assert_oracle_parity(r#"(format "%.10f" 3.14159)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.0f" 3.14159)"#,
+        expect_test::expect![[r#""OK \"3\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.1f" 3.14159)"#,
+        expect_test::expect![[r#""OK \"3.1\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.2f" 3.14159)"#,
+        expect_test::expect![[r#""OK \"3.14\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.5f" 3.14159)"#,
+        expect_test::expect![[r#""OK \"3.14159\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.10f" 3.14159)"#,
+        expect_test::expect![[r#""OK \"3.1415900000\"""#]],
+    );
 
     // %f with width and precision
-    assert_oracle_parity(r#"(format "%10.2f" 3.14159)"#);
-    assert_oracle_parity(r#"(format "%10.2f" -3.14159)"#);
-    assert_oracle_parity(r#"(format "%010.2f" 3.14)"#);
-    assert_oracle_parity(r#"(format "[%-10.2f]" 3.14)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%10.2f" 3.14159)"#,
+        expect_test::expect![[r#""OK \"      3.14\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%10.2f" -3.14159)"#,
+        expect_test::expect![[r#""OK \"     -3.14\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%010.2f" 3.14)"#,
+        expect_test::expect![[r#""OK \"0000003.14\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%-10.2f]" 3.14)"#,
+        expect_test::expect![[r#""OK \"[3.14      ]\"""#]],
+    );
 
     // %e with precisions
-    assert_oracle_parity(r#"(format "%.0e" 3.14159)"#);
-    assert_oracle_parity(r#"(format "%.2e" 3.14159)"#);
-    assert_oracle_parity(r#"(format "%.5e" 3.14159)"#);
-    assert_oracle_parity(r#"(format "%.2e" 0.001)"#);
-    assert_oracle_parity(r#"(format "%.2e" 123456.789)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.0e" 3.14159)"#,
+        expect_test::expect![[r#""OK \"3e+00\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.2e" 3.14159)"#,
+        expect_test::expect![[r#""OK \"3.14e+00\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.5e" 3.14159)"#,
+        expect_test::expect![[r#""OK \"3.14159e+00\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.2e" 0.001)"#,
+        expect_test::expect![[r#""OK \"1.00e-03\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.2e" 123456.789)"#,
+        expect_test::expect![[r#""OK \"1.23e+05\"""#]],
+    );
 
     // %e with width
-    assert_oracle_parity(r#"(format "%15.3e" 3.14159)"#);
-    assert_oracle_parity(r#"(format "[%-15.3e]" 3.14159)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%15.3e" 3.14159)"#,
+        expect_test::expect![[r#""OK \"      3.142e+00\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%-15.3e]" 3.14159)"#,
+        expect_test::expect![[r#""OK \"[3.142e+00      ]\"""#]],
+    );
 
     // %g chooses between %f and %e style
-    assert_oracle_parity(r#"(format "%g" 3.14159)"#);
-    assert_oracle_parity(r#"(format "%g" 100000.0)"#);
-    assert_oracle_parity(r#"(format "%g" 0.0001)"#);
-    assert_oracle_parity(r#"(format "%.2g" 3.14159)"#);
-    assert_oracle_parity(r#"(format "%.10g" 3.14159)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%g" 3.14159)"#,
+        expect_test::expect![[r#""OK \"3.14159\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%g" 100000.0)"#,
+        expect_test::expect![[r#""OK \"100000\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%g" 0.0001)"#,
+        expect_test::expect![[r#""OK \"0.0001\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.2g" 3.14159)"#,
+        expect_test::expect![[r#""OK \"3.1\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.10g" 3.14159)"#,
+        expect_test::expect![[r#""OK \"3.14159\"""#]],
+    );
 
     // Negative floats
-    assert_oracle_parity(r#"(format "%.3f" -0.0)"#);
-    assert_oracle_parity(r#"(format "%.3e" -1.5)"#);
-    assert_oracle_parity(r#"(format "%+.2f" 3.14)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.3f" -0.0)"#,
+        expect_test::expect![[r#""OK \"-0.000\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.3e" -1.5)"#,
+        expect_test::expect![[r#""OK \"-1.500e+00\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%+.2f" 3.14)"#,
+        expect_test::expect![[r#""OK \"+3.14\"""#]],
+    );
 
     // Very small / very large
-    assert_oracle_parity(r#"(format "%e" 1e-15)"#);
-    assert_oracle_parity(r#"(format "%e" 1e15)"#);
-    assert_oracle_parity(r#"(format "%f" 1e10)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%e" 1e-15)"#,
+        expect_test::expect![[r#""OK \"1.000000e-15\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%e" 1e15)"#,
+        expect_test::expect![[r#""OK \"1.000000e+15\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%f" 1e10)"#,
+        expect_test::expect![[r#""OK \"10000000000.000000\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -230,22 +521,33 @@ fn oracle_prop_format_nested_calls() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Format producing a format string that is then used
-    assert_oracle_parity(r#"(format (format "%%0%dd" 5) 42)"#);
-    assert_oracle_parity(r#"(format (format "%%-%ds" 10) "hello")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format (format "%%0%dd" 5) 42)"#,
+        expect_test::expect![[r#""OK \"00042\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format (format "%%-%ds" 10) "hello")"#,
+        expect_test::expect![[r#""OK \"hello     \"""#]],
+    );
 
     // Nested format as argument
-    assert_oracle_parity(r#"(format "result: %s" (format "%d + %d = %d" 3 4 7))"#);
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "result: %s" (format "%d + %d = %d" 3 4 7))"#,
+        expect_test::expect![[r#""OK \"result: 3 + 4 = 7\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
         r#"(format "[%s] [%s]"
                                     (format "%05d" 42)
                                     (format "%-10s" "hi"))"#,
+        expect_test::expect![[r#""OK \"[00042] [hi        ]\"""#]],
     );
 
     // Triple nesting
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(format "outer(%s)"
                                     (format "mid(%s)"
                                             (format "inner(%d)" 42)))"#,
+        expect_test::expect![[r#""OK \"outer(mid(inner(42)))\"""#]],
     );
 
     // Format in a loop building a string
@@ -254,7 +556,10 @@ fn oracle_prop_format_nested_calls() {
     (setq parts (cons (format "[%02d:%s]" i (make-string (1+ i) ?*)) parts))
     (setq i (1+ i)))
   (mapconcat #'identity (nreverse parts) "-"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"[00:*]-[01:**]-[02:***]-[03:****]-[04:*****]\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -266,37 +571,86 @@ fn oracle_prop_format_diverse_arg_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // nil and t
-    assert_oracle_parity(r#"(format "%s %s %S %S" nil t nil t)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s %s %S %S" nil t nil t)"#,
+        expect_test::expect![[r#""OK \"nil t nil t\"""#]],
+    );
 
     // Symbols
-    assert_oracle_parity(r#"(format "sym: %s %S" 'hello 'hello)"#);
-    assert_oracle_parity(r#"(format "%s" 'with-special-chars)"#);
-    assert_oracle_parity(r#"(format "%S" 'with-special-chars)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "sym: %s %S" 'hello 'hello)"#,
+        expect_test::expect![[r#""OK \"sym: hello hello\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" 'with-special-chars)"#,
+        expect_test::expect![[r#""OK \"with-special-chars\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" 'with-special-chars)"#,
+        expect_test::expect![[r#""OK \"with-special-chars\"""#]],
+    );
 
     // Lists
-    assert_oracle_parity(r#"(format "%s" '(1 2 3))"#);
-    assert_oracle_parity(r#"(format "%S" '(1 "two" three))"#);
-    assert_oracle_parity(r#"(format "%s" '(a . b))"#);
-    assert_oracle_parity(r#"(format "%S" '(a b . c))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" '(1 2 3))"#,
+        expect_test::expect![[r#""OK \"(1 2 3)\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" '(1 "two" three))"#,
+        expect_test::expect![[r#""OK \"(1 \\\"two\\\" three)\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" '(a . b))"#,
+        expect_test::expect![[r#""OK \"(a . b)\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" '(a b . c))"#,
+        expect_test::expect![[r#""OK \"(a b . c)\"""#]],
+    );
 
     // Vectors
-    assert_oracle_parity(r#"(format "%s" [1 2 3])"#);
-    assert_oracle_parity(r#"(format "%S" [1 "two" three])"#);
-    assert_oracle_parity(r#"(format "%s" [])"#);
-    assert_oracle_parity(r#"(format "%S" [])"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" [1 2 3])"#,
+        expect_test::expect![[r#""OK \"[1 2 3]\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" [1 "two" three])"#,
+        expect_test::expect![[r#""OK \"[1 \\\"two\\\" three]\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" [])"#,
+        expect_test::expect![[r#""OK \"[]\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" [])"#,
+        expect_test::expect![[r#""OK \"[]\"""#]],
+    );
 
     // Integers as %s
-    assert_oracle_parity(r#"(format "%s" 42)"#);
-    assert_oracle_parity(r#"(format "%S" 42)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" 42)"#,
+        expect_test::expect![[r#""OK \"42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" 42)"#,
+        expect_test::expect![[r#""OK \"42\"""#]],
+    );
 
     // Floats as %s
-    assert_oracle_parity(r#"(format "%s" 3.14)"#);
-    assert_oracle_parity(r#"(format "%S" 3.14)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" 3.14)"#,
+        expect_test::expect![[r#""OK \"3.14\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" 3.14)"#,
+        expect_test::expect![[r#""OK \"3.14\"""#]],
+    );
 
     // Mixed in one call
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(format "%s|%S|%s|%S|%s"
                                     nil '(a b) [1 2] "text" 42)"#,
+        expect_test::expect![[r#""OK \"nil|(a b)|[1 2]|\\\"text\\\"|42\"""#]],
     );
 }
 
@@ -308,11 +662,26 @@ fn oracle_prop_format_diverse_arg_types() {
 fn oracle_prop_format_literal_percent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(format "100%%")"#);
-    assert_oracle_parity(r#"(format "%d%%" 50)"#);
-    assert_oracle_parity(r#"(format "%%d = %d" 42)"#);
-    assert_oracle_parity(r#"(format "%%%%")"#);
-    assert_oracle_parity(r#"(format "%s is %d%% complete" "task" 75)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "100%%")"#,
+        expect_test::expect![[r#""OK \"100%\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%d%%" 50)"#,
+        expect_test::expect![[r#""OK \"50%\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%%d = %d" 42)"#,
+        expect_test::expect![[r#""OK \"%d = 42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%%%%")"#,
+        expect_test::expect![[r#""OK \"%%\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s is %d%% complete" "task" 75)"#,
+        expect_test::expect![[r#""OK \"task is 75% complete\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -323,17 +692,32 @@ fn oracle_prop_format_literal_percent() {
 fn oracle_prop_format_unicode_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(format "%s" "cafe\u0301")"#);
-    assert_oracle_parity(r#"(format "%s %s" "hello" "world")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" "cafe\u0301")"#,
+        expect_test::expect![[r#""OK \"cafe\u{301}\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s %s" "hello" "world")"#,
+        expect_test::expect![[r#""OK \"hello world\"""#]],
+    );
 
     // Width with unicode (interesting because char width != byte width)
-    assert_oracle_parity(r#"(format "%s" "\u03b1\u03b2\u03b3")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" "\u03b1\u03b2\u03b3")"#,
+        expect_test::expect![[r#""OK \"αβγ\"""#]],
+    );
 
     // Mixed ASCII and unicode
-    assert_oracle_parity(r#"(format "Greek: %s, Number: %d" "\u03c0" 314)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "Greek: %s, Number: %d" "\u03c0" 314)"#,
+        expect_test::expect![[r#""OK \"Greek: π, Number: 314\"""#]],
+    );
 
     // CJK characters
-    assert_oracle_parity(r#"(format "%s" "\u4e16\u754c")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" "\u4e16\u754c")"#,
+        expect_test::expect![[r#""OK \"世界\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -345,11 +729,24 @@ fn oracle_prop_format_long_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Wide field with short content
-    assert_oracle_parity(r#"(format "%100s" "x")"#);
-    assert_oracle_parity(r#"(format "[%-100s]" "x")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%100s" "x")"#,
+        expect_test::expect![[
+            r#""OK \"                                                                                                   x\"""#
+        ]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%-100s]" "x")"#,
+        expect_test::expect![[
+            r#""OK \"[x                                                                                                   ]\"""#
+        ]],
+    );
 
     // Multiple wide fields
-    assert_oracle_parity(r#"(length (format "%50s%50s%50s" "a" "b" "c"))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(length (format "%50s%50s%50s" "a" "b" "c"))"#,
+        expect_test::expect![[r#""OK 150""#]],
+    );
 
     // Repeated format in accumulation
     let form = r#"(let ((parts nil) (i 0))
@@ -357,7 +754,12 @@ fn oracle_prop_format_long_output() {
     (setq parts (cons (format "%05d" (* i i)) parts))
     (setq i (1+ i)))
   (mapconcat #'identity (nreverse parts) ","))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK \"00000,00001,00004,00009,00016,00025,00036,00049,00064,00081,00100,00121,00144,00169,00196,00225,00256,00289,00324,00361\"""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -369,33 +771,72 @@ fn oracle_prop_format_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // No format specs
-    assert_oracle_parity(r#"(format "hello world")"#);
-    assert_oracle_parity(r#"(format "")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "hello world")"#,
+        expect_test::expect![[r#""OK \"hello world\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "")"#,
+        expect_test::expect![[r#""OK \"\"""#]],
+    );
 
     // Width of 0
-    assert_oracle_parity(r#"(format "%0d" 42)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%0d" 42)"#,
+        expect_test::expect![[r#""OK \"42\"""#]],
+    );
 
     // String arg wider than field
-    assert_oracle_parity(r#"(format "%3s" "hello world")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%3s" "hello world")"#,
+        expect_test::expect![[r#""OK \"hello world\"""#]],
+    );
 
     // Integer arg wider than field
-    assert_oracle_parity(r#"(format "%1d" 123456789)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%1d" 123456789)"#,
+        expect_test::expect![[r#""OK \"123456789\"""#]],
+    );
 
     // Float with precision 0
-    assert_oracle_parity(r#"(format "%.0f" 3.5)"#);
-    assert_oracle_parity(r#"(format "%.0f" 3.4)"#);
-    assert_oracle_parity(r#"(format "%.0f" -2.5)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.0f" 3.5)"#,
+        expect_test::expect![[r#""OK \"4\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.0f" 3.4)"#,
+        expect_test::expect![[r#""OK \"3\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.0f" -2.5)"#,
+        expect_test::expect![[r#""OK \"-2\"""#]],
+    );
 
     // Very large precision
-    assert_oracle_parity(r#"(format "%.15f" 1.0)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.15f" 1.0)"#,
+        expect_test::expect![[r#""OK \"1.000000000000000\"""#]],
+    );
 
     // Format with special chars in literal parts
-    assert_oracle_parity(r#"(format "tab:\there" )"#);
-    assert_oracle_parity(r#"(format "newline:\n%d" 42)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "tab:\there" )"#,
+        expect_test::expect![[r#""OK \"tab:\there\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "newline:\n%d" 42)"#,
+        expect_test::expect![[r#""OK \"newline:\n42\"""#]],
+    );
 
     // Multiple format specs with same value types
-    assert_oracle_parity(r#"(format "%d %d %d %d %d" 1 2 3 4 5)"#);
-    assert_oracle_parity(r#"(format "%s %s %s" "a" "b" "c")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%d %d %d %d %d" 1 2 3 4 5)"#,
+        expect_test::expect![[r#""OK \"1 2 3 4 5\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s %s %s" "a" "b" "c")"#,
+        expect_test::expect![[r#""OK \"a b c\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -421,7 +862,12 @@ fn oracle_prop_format_table_alignment() {
                         (nth 0 row) (nth 1 row) (nth 2 row) (nth 3 row))
                 lines)))
   (mapconcat #'identity (nreverse lines) "\n"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK \"Name              Age    Score     Status\n-----------------------------------------\nAlice              30       95       pass\nBob                25       67       fail\nCarol              35       88       pass\nDave               28       72       pass\"""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -432,19 +878,40 @@ fn oracle_prop_format_table_alignment() {
 fn oracle_prop_format_nested_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(format "%S" '((1 2) (3 4) (5 6)))"#);
-    assert_oracle_parity(r#"(format "%S" '((a . 1) (b . 2) (c . 3)))"#);
-    assert_oracle_parity(r#"(format "%S" '(lambda (x) (* x x)))"#);
-    assert_oracle_parity(r#"(format "%S" (list 'quote (list 1 2 3)))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" '((1 2) (3 4) (5 6)))"#,
+        expect_test::expect![[r#""OK \"((1 2) (3 4) (5 6))\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" '((a . 1) (b . 2) (c . 3)))"#,
+        expect_test::expect![[r#""OK \"((a . 1) (b . 2) (c . 3))\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" '(lambda (x) (* x x)))"#,
+        expect_test::expect![[r#""OK \"(lambda (x) (* x x))\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" (list 'quote (list 1 2 3)))"#,
+        expect_test::expect![[r#""OK \"'(1 2 3)\"""#]],
+    );
 
     // Deep nesting
-    assert_oracle_parity(r#"(format "%S" '(a (b (c (d (e))))))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" '(a (b (c (d (e))))))"#,
+        expect_test::expect![[r#""OK \"(a (b (c (d (e)))))\"""#]],
+    );
 
     // Mixed types in deep structure
-    assert_oracle_parity(r#"(format "%S" (list 1 "two" 'three [4 5] '(6 . 7)))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" (list 1 "two" 'three [4 5] '(6 . 7)))"#,
+        expect_test::expect![[r#""OK \"(1 \\\"two\\\" three [4 5] (6 . 7))\"""#]],
+    );
 
     // Empty collections
-    assert_oracle_parity(r#"(format "%S %S %S" nil '() [])"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S %S %S" nil '() [])"#,
+        expect_test::expect![[r#""OK \"nil nil []\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -456,21 +923,38 @@ fn oracle_prop_format_combined_directives() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // All directives in one format string
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(format "s=%s S=%S d=%d o=%o x=%x X=%X c=%c f=%.2f e=%.2e g=%g %%"
                   "hi" 'sym 42 42 42 42 65 3.14 3.14 0.0042)"#,
+        expect_test::expect![[
+            r#""OK \"s=hi S=sym d=42 o=52 x=2a X=2A c=A f=3.14 e=3.14e+00 g=0.0042 %\"""#
+        ]],
     );
 
     // Repeated same directive
-    assert_oracle_parity(r#"(format "%d+%d+%d=%d" 1 2 3 6)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%d+%d+%d=%d" 1 2 3 6)"#,
+        expect_test::expect![[r#""OK \"1+2+3=6\"""#]],
+    );
 
     // Width and precision with every numeric type
     let form = r#"(format "%8d %8o %8x %8X %10.3f %12.3e %10g" 255 255 255 255 3.14 3.14 3.14)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK \"     255      377       ff       FF      3.140    3.140e+00       3.14\"""#
+        ]],
+    );
 
     // Zero-pad with every integer type
-    assert_oracle_parity(r#"(format "%08d %08o %08x %08X" 42 42 42 42)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%08d %08o %08x %08X" 42 42 42 42)"#,
+        expect_test::expect![[r#""OK \"00000042 00000052 0000002a 0000002A\"""#]],
+    );
 
     // Left-justify with every type
-    assert_oracle_parity(r#"(format "[%-8d][%-8o][%-8x][%-8s][%-8.2f]" 42 42 42 "hi" 3.14)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "[%-8d][%-8o][%-8x][%-8s][%-8.2f]" 42 42 42 "hi" 3.14)"#,
+        expect_test::expect![[r#""OK \"[42      ][52      ][2a      ][hi      ][3.14    ]\"""#]],
+    );
 }

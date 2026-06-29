@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx174_char_syntax_matrix_per_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c) (list c (char-syntax c)))
         '(?a ?A ?0 ?9 ?_ ?-
@@ -15,26 +15,30 @@ fn div_cx174_char_syntax_matrix_per_class() {
           ?\" ?\' ?\` ?\; ?, ?.
           ?\\ ?? ?! ?# ?$ ?% ?& ?* ?+ ?< ?> ?@ ?/ ?| ?~ ?^))
 "##,
+        expect_test::expect![[
+            r#""OK ((97 119) (65 119) (48 119) (57 119) (95 95) (45 95) (40 40) (41 41) (91 40) (93 41) (123 40) (125 41) (34 34) (39 46) (96 46) (59 46) (44 46) (46 46) (92 92) (63 46) (33 46) (35 46) (36 119) (37 119) (38 95) (42 95) (43 95) (60 95) (62 95) (64 46) (47 95) (124 95) (126 46) (94 46))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx174_string_to_syntax_class_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (mapcar (lambda (s) (list s (string-to-syntax s)))
             '("w" "_" "." "(" ")" "\"" ";" "'" "\\" "/" "<" ">" "@" "!"))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx174_syntax_class_to_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (syntax-class-to-char (string-to-syntax "w"))
@@ -46,13 +50,14 @@ fn div_cx174_syntax_class_to_char() {
           (syntax-class-to-char (string-to-syntax ";")))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
     );
 }
 
 #[test]
 fn div_cx174_category_set_manipulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((ct (make-category-table)))
@@ -70,13 +75,14 @@ fn div_cx174_category_set_manipulation() {
               (category-docstring ?c ct))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
     );
 }
 
 #[test]
 fn div_cx174_char_table_range_query_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'neo-cx174-test :default)))
   (set-char-table-range ct nil :all-default)
@@ -94,13 +100,16 @@ fn div_cx174_char_table_range_query_complex() {
         (char-table-range ct ?!)
         (aref ct ?a)))
 "##,
+        expect_test::expect![[
+            r#""OK (:all-default :lowercase :uppercase :digit :underscore :paren-family :default :lowercase)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx174_with_syntax_table_local_scope() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((before-at (char-syntax ?@))
       (before-dash (char-syntax ?-)))
@@ -112,13 +121,14 @@ fn div_cx174_with_syntax_table_local_scope() {
           before-at
           before-dash)))
 "##,
+        expect_test::expect![[r#""OK (119 95 46 95)""#]],
     );
 }
 
 #[test]
 fn div_cx174_char_table_parent_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((parent (make-char-table 'neo-cx174-parent :parent-default))
        (child (make-char-table 'neo-cx174-child :child-default)))
@@ -133,13 +143,14 @@ fn div_cx174_char_table_parent_inheritance() {
         (char-table-p child)
         (eq (char-table-parent child) parent)))
 "##,
+        expect_test::expect![[r#""OK (:in-child :child-default :child-default :in-parent t t)""#]],
     );
 }
 
 #[test]
 fn div_cx174_map_char_table_collect_counts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'neo-cx174-map nil)))
   (set-char-table-range ct '(?a . ?e) :vowel-or-low)
@@ -156,13 +167,14 @@ fn div_cx174_map_char_table_collect_counts() {
     (sort counts (lambda (a b)
                    (string< (symbol-name (car a)) (symbol-name (car b)))))))
 "##,
+        expect_test::expect![[r#""OK ((:special . 1) (:vowel-or-low . 1) (:vowel-or-up . 1))""#]],
     );
 }
 
 #[test]
 fn div_cx174_char_table_extra_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((ct (make-char-table 'neo-cx174-extra nil 4)))
@@ -176,13 +188,14 @@ fn div_cx174_char_table_extra_slots() {
             (char-table-extra-slot ct 3)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
     );
 }
 
 #[test]
 fn div_cx174_syntax_table_per_buffer_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx174-a*"))
       (buf-b (get-buffer-create " *neo-cx174-b*")))
@@ -198,13 +211,14 @@ fn div_cx174_syntax_table_per_buffer_switch() {
     (kill-buffer buf-b)
     (list at-a at-b)))
 "##,
+        expect_test::expect![[r#""OK (119 46)""#]],
     );
 }
 
 #[test]
 fn div_cx174_syntax_char_table_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -235,5 +249,6 @@ fn div_cx174_syntax_char_table_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

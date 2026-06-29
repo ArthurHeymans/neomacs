@@ -10,7 +10,10 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_string_to_number_octal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(string-to-number "077" 8)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "077" 8)"#,
+        expect_test::expect![[r#""OK 63""#]],
+    );
     assert_ok_eq("63", &o, &n);
 }
 
@@ -18,28 +21,40 @@ fn oracle_string_to_number_octal() {
 fn oracle_string_to_number_hex_base_16() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // With explicit base 16, string content should be hex digits
-    let (o, n) = eval_oracle_and_neovm(r#"(string-to-number "ff" 16)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "ff" 16)"#,
+        expect_test::expect![[r#""OK 255""#]],
+    );
     assert_ok_eq("255", &o, &n);
 }
 
 #[test]
 fn oracle_string_to_number_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(string-to-number "1010" 2)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "1010" 2)"#,
+        expect_test::expect![[r#""OK 10""#]],
+    );
     assert_ok_eq("10", &o, &n);
 }
 
 #[test]
 fn oracle_string_to_number_whitespace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(string-to-number "  -42  ")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "  -42  ")"#,
+        expect_test::expect![[r#""OK -42""#]],
+    );
     assert_ok_eq("-42", &o, &n);
 }
 
 #[test]
 fn oracle_string_to_number_non_numeric_returns_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(string-to-number "abc")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "abc")"#,
+        expect_test::expect![[r#""OK 0""#]],
+    );
     assert_ok_eq("0", &o, &n);
 }
 
@@ -48,14 +63,20 @@ fn oracle_string_to_number_non_numeric_returns_zero() {
 #[test]
 fn oracle_substring_mid_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "hello" 1 4)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "hello" 1 4)"#,
+        expect_test::expect![[r#""OK \"ell\"""#]],
+    );
     assert_ok_eq("\"ell\"", &o, &n);
 }
 
 #[test]
 fn oracle_substring_from_mid_to_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "hello" 2)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "hello" 2)"#,
+        expect_test::expect![[r#""OK \"llo\"""#]],
+    );
     assert_ok_eq("\"llo\"", &o, &n);
 }
 
@@ -63,7 +84,10 @@ fn oracle_substring_from_mid_to_end() {
 fn oracle_substring_negative_from() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // 0-indexed start, -1 means up to last character exclusive
-    let (o, n) = eval_oracle_and_neovm(r#"(substring "hello" 0 -1)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(substring "hello" 0 -1)"#,
+        expect_test::expect![[r#""OK \"hell\"""#]],
+    );
     assert_ok_eq("\"hell\"", &o, &n);
 }
 
@@ -72,21 +96,30 @@ fn oracle_substring_negative_from() {
 #[test]
 fn oracle_safe_length_proper_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(safe-length '(a b c))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(safe-length '(a b c))"#,
+        expect_test::expect![[r#""OK 3""#]],
+    );
     assert_ok_eq("3", &o, &n);
 }
 
 #[test]
 fn oracle_safe_length_dotted_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(safe-length '(a . b))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(safe-length '(a . b))"#,
+        expect_test::expect![[r#""OK 1""#]],
+    );
     assert_ok_eq("1", &o, &n);
 }
 
 #[test]
 fn oracle_safe_length_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(safe-length nil)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(safe-length nil)"#,
+        expect_test::expect![[r#""OK 0""#]],
+    );
     assert_ok_eq("0", &o, &n);
 }
 
@@ -95,20 +128,29 @@ fn oracle_safe_length_nil() {
 #[test]
 fn oracle_number_to_string_positive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(number-to-string 255)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(number-to-string 255)"#,
+        expect_test::expect![[r#""OK \"255\"""#]],
+    );
     assert_ok_eq("\"255\"", &o, &n);
 }
 
 #[test]
 fn oracle_number_to_string_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(number-to-string -10)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(number-to-string -10)"#,
+        expect_test::expect![[r#""OK \"-10\"""#]],
+    );
     assert_ok_eq("\"-10\"", &o, &n);
 }
 
 #[test]
 fn oracle_number_to_string_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(number-to-string 0)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(number-to-string 0)"#,
+        expect_test::expect![[r#""OK \"0\"""#]],
+    );
     assert_ok_eq("\"0\"", &o, &n);
 }

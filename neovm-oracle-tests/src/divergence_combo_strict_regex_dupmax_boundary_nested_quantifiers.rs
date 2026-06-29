@@ -16,7 +16,7 @@ fn div_r6_regex_dupmax_boundary() {
     // expression too big" (RE_DUP_MAX = 32767), while GNU Emacs accepts up to
     // \\{65535\\} (RE_DUP_MAX = 65535). \\{32767\\} agrees (nil = accepted).
     // At \\{65536\\} both reject but with different messages.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case err (string-match "a\\{32767\\}" "text") (invalid-regexp (cadr err)) (error 'other))
       (condition-case err (string-match "a\\{32768\\}" "text") (invalid-regexp (cadr err)) (error 'other))
@@ -24,6 +24,9 @@ fn div_r6_regex_dupmax_boundary() {
       (condition-case err (string-match "a\\{65536\\}" "text") (invalid-regexp (cadr err)) (error 'other))
       (condition-case err (string-match "a\\{100000\\}" "text") (invalid-regexp (cadr err)) (error 'other)))
 "##,
+        expect_test::expect![[
+            r#""OK (nil nil nil \"Invalid content of \\\\{\\\\}\" \"Invalid content of \\\\{\\\\}\")""#
+        ]],
     );
 }
 
@@ -37,7 +40,7 @@ fn div_r6_regex_nested_quantifiers() {
     // matching at position 0 (zero-width, like a*), Neomacs returns nil (no
     // match, likely treats the second * as literal). a++/a??/\\{2\\}*/\\{2,3\\}+
     // agree.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case err (string-match "a**" "text") (invalid-regexp (cadr err)) (error 'other))
       (condition-case err (string-match "a*+" "text") (invalid-regexp (cadr err)) (error 'other))
@@ -46,5 +49,6 @@ fn div_r6_regex_nested_quantifiers() {
       (condition-case err (string-match "a\\{2\\}*" "text") (invalid-regexp (cadr err)) (error 'other))
       (condition-case err (string-match "a\\{2,3\\}+" "text") (invalid-regexp (cadr err)) (error 'other)))
 "##,
+        expect_test::expect![[r#""OK (0 0 nil 0 0 nil)""#]],
     );
 }

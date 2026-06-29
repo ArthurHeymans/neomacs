@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_utf8_bidi_direction_across_scripts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (with-temp-buffer (insert "مرحبا") (current-bidi-paragraph-direction))
       (with-temp-buffer (insert "你好") (current-bidi-paragraph-direction))
@@ -19,6 +19,9 @@ fn div_utf8_bidi_direction_across_scripts() {
       (with-temp-buffer (insert "123") (current-bidi-paragraph-direction))
       (with-temp-buffer (insert "السلام") (current-bidi-paragraph-direction)))
 "#,
+        expect_test::expect![[
+            r#""OK (right-to-left left-to-right left-to-right left-to-right right-to-left)""#
+        ]],
     );
 }
 
@@ -26,20 +29,21 @@ fn div_utf8_bidi_direction_across_scripts() {
 fn div_utf8_bidi_paragraph_direction_variable_honored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Forcing the paragraph direction via the variable.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (let ((bidi-paragraph-direction 'right-to-left))
         (with-temp-buffer (insert "abc") (current-bidi-paragraph-direction)))
       (let ((bidi-paragraph-direction 'left-to-right))
         (with-temp-buffer (insert "abc") (current-bidi-paragraph-direction))))
 "#,
+        expect_test::expect![[r#""OK (right-to-left left-to-right)""#]],
     );
 }
 
 #[test]
 fn div_utf8_bidi_mixed_direction_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "abcאבגdef")
@@ -47,18 +51,20 @@ fn div_utf8_bidi_mixed_direction_substring() {
         (append (buffer-substring 1 (point-max)) nil)
         (point-max)))
 "#,
+        expect_test::expect![[r#""OK (\"abcאבגdef\" (97 98 99 1488 1489 1490 100 101 102) 10)""#]],
     );
 }
 
 #[test]
 fn div_utf8_char_after_in_rtl_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "שלום")
   (list (char-after 1) (char-after 2) (char-after 3) (char-after 4)))
 "#,
+        expect_test::expect![[r#""OK (1513 1500 1493 1501)""#]],
     );
 }
 
@@ -67,25 +73,27 @@ fn div_utf8_char_after_in_rtl_region() {
 #[test]
 fn div_utf8_sort_lines_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "café\napple\nzoo\n世界\n")
   (sort-lines nil (point-min) (point-max))
   (buffer-string))
 "#,
+        expect_test::expect![[r#""OK \"apple\ncafé\nzoo\n世界\n\"""#]],
     );
 }
 
 #[test]
 fn div_utf8_upcase_region_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "café straße")
   (upcase-region (point-min) (point-max))
   (buffer-string))
 "#,
+        expect_test::expect![[r#""OK \"CAFÉ STRASSE\"""#]],
     );
 }

@@ -10,14 +10,20 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_delete_by_eq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(delete 'b '(a b c b d))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(delete 'b '(a b c b d))"#,
+        expect_test::expect![[r#""OK (a c d)""#]],
+    );
     assert_ok_eq("(a c d)", &o, &n);
 }
 
 #[test]
 fn oracle_delete_sequence_on_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(delete 2 [1 2 3 2 4])"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(delete 2 [1 2 3 2 4])"#,
+        expect_test::expect![[r#""OK [1 3 4]""#]],
+    );
     assert_ok_eq("[1 3 4]", &o, &n);
 }
 
@@ -25,21 +31,30 @@ fn oracle_delete_sequence_on_vector() {
 fn oracle_delete_first_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // delete removes all matches by default
-    let (o, n) = eval_oracle_and_neovm(r#"(delete 'x '(x x x))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(delete 'x '(x x x))"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_delq_removes_all_eq_matches() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(delq 'a '(a b a c a d))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(delq 'a '(a b a c a d))"#,
+        expect_test::expect![[r#""OK (b c d)""#]],
+    );
     assert_ok_eq("(b c d)", &o, &n);
 }
 
 #[test]
 fn oracle_delq_nil_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(delq 'a nil)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(delq 'a nil)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -47,14 +62,20 @@ fn oracle_delq_nil_returns_nil() {
 fn oracle_delete_string_from_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // delete uses equal, so string matching works
-    let (o, n) = eval_oracle_and_neovm(r#"(delete "hi" '("hi" "there" "hi"))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(delete "hi" '("hi" "there" "hi"))"#,
+        expect_test::expect![[r#""OK (\"there\")""#]],
+    );
     assert_ok_eq("(\"there\")", &o, &n);
 }
 
 #[test]
 fn oracle_delete_not_found_returns_original() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(delete 99 '(1 2 3))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(delete 99 '(1 2 3))"#,
+        expect_test::expect![[r#""OK (1 2 3)""#]],
+    );
     assert_ok_eq("(1 2 3)", &o, &n);
 }
 
@@ -62,10 +83,11 @@ fn oracle_delete_not_found_returns_original() {
 fn oracle_delq_vs_delete_eq_difference() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // delq uses eq, so string identity matters; delete uses equal
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(list
    (delq "s" '("s"))
    (delete "s" '("s")))"#,
+        expect_test::expect![[r#""OK ((\"s\") nil)""#]],
     );
     assert_ok_eq("((\"s\") nil)", &o, &n);
 }

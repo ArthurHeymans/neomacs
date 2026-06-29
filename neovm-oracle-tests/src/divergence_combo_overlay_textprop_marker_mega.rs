@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_overlay_stack_undo_after_delete_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"osu\")))\n\
          (with-current-buffer buf\n\
@@ -41,6 +41,7 @@ fn deficiency_overlay_stack_undo_after_delete_range() {
          (marker-position m15)\n\
          (get-text-property 1 'half)))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -48,7 +49,7 @@ fn deficiency_overlay_stack_undo_after_delete_range() {
 fn deficiency_narrow_overlay_prop_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"nop\")))\n\
          (with-current-buffer buf\n\
@@ -83,6 +84,7 @@ fn deficiency_narrow_overlay_prop_undo_chain() {
          (get-text-property 4 'section)\n\
          (marker-position m)))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 4 4)""#]],
     );
 }
 
@@ -90,7 +92,7 @@ fn deficiency_narrow_overlay_prop_undo_chain() {
 fn deficiency_kill_yank_overlay_preserve() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kyo\")))\n\
          (with-current-buffer buf\n\
@@ -124,6 +126,7 @@ fn deficiency_kill_yank_overlay_preserve() {
          (overlay-get ov1 'bracket)\n\
          (overlay-get ov2 'bracket))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -131,7 +134,7 @@ fn deficiency_kill_yank_overlay_preserve() {
 fn deficiency_5_overlay_layers_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"5ol\")))\n\
          (with-current-buffer buf\n\
@@ -169,6 +172,7 @@ fn deficiency_5_overlay_layers_undo() {
          (mapcar #'overlay-start (list ov1 ov2 ov3 ov4 ov5))\n\
          (marker-position m)))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -176,7 +180,7 @@ fn deficiency_5_overlay_layers_undo() {
 fn deficiency_evaporate_overlay_delete_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"eod\")))\n\
          (with-current-buffer buf\n\
@@ -213,6 +217,7 @@ fn deficiency_evaporate_overlay_delete_undo() {
          (get-text-property 4 'zone)\n\
          (get-text-property 7 'zone))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -220,7 +225,7 @@ fn deficiency_evaporate_overlay_delete_undo() {
 fn deficiency_replace_match_overlay_move_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rmo\")))\n\
          (with-current-buffer buf\n\
@@ -259,6 +264,7 @@ fn deficiency_replace_match_overlay_move_undo() {
          (overlay-get ov-bbb 'value)\n\
          (get-text-property 7 'section))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -266,7 +272,7 @@ fn deficiency_replace_match_overlay_move_undo() {
 fn deficiency_overlay_invisible_text_prop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"oit\")))\n\
          (with-current-buffer buf\n\
@@ -295,6 +301,7 @@ fn deficiency_overlay_invisible_text_prop_undo() {
          (get-text-property 5 'vis)\n\
          (overlay-get ov1 'invisible))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -302,7 +309,7 @@ fn deficiency_overlay_invisible_text_prop_undo() {
 fn deficiency_overlay_face_priority_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ofp\")))\n\
          (with-current-buffer buf\n\
@@ -337,6 +344,7 @@ fn deficiency_overlay_face_priority_undo() {
          (overlay-get ov3 'face)\n\
          (get-text-property 1 'original))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -344,7 +352,7 @@ fn deficiency_overlay_face_priority_undo() {
 fn deficiency_overlay_modify_after_kill_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"omk\")))\n\
          (with-current-buffer buf\n\
@@ -370,6 +378,7 @@ fn deficiency_overlay_modify_after_kill_undo() {
          (overlay-get ov 'type)\n\
          (get-text-property 11 'role))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -377,7 +386,7 @@ fn deficiency_overlay_modify_after_kill_undo() {
 fn deficiency_many_overlays_same_point_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mos\")))\n\
          (with-current-buffer buf\n\
@@ -404,5 +413,6 @@ fn deficiency_many_overlays_same_point_undo() {
          (mapcar (lambda (ov) (overlay-get ov 'idx)) ovs)\n\
          (get-text-property 1 'base))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }

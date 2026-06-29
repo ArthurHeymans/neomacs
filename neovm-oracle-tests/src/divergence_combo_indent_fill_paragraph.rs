@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_indent_line_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1\nline2\nline3\nline4\nline5")
   (goto-char 1)
@@ -33,6 +33,9 @@ fn divergence_indent_line_functions() {
           (current-column)
           (= (current-column) 4)
           (= (buffer-size) 30)))) "#,
+        expect_test::expect![[
+            r#""    line1\n\tline2\n    line3\nline4\nline5OK (\"    line1\n\tline2\n    line3\nline4\nline5\" t t t t 1 0 t nil 4 t nil)""#
+        ]],
     );
 }
 
@@ -40,7 +43,7 @@ fn divergence_indent_line_functions() {
 fn divergence_fill_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq fill-column 20)
   (insert "This is a long line that should be filled at the fill-column boundary when we call fill-paragraph.")
@@ -56,6 +59,9 @@ fn divergence_fill_region_basic() {
             (= fill-column 20)
             (>= (length (split-string s "\n")) 1)
             s)))) "#,
+        expect_test::expect![[
+            r#""This is a long line\nthat should be\nfilled at the\nfill-column boundary\nwhen we call\nfill-paragraph.OK (t t t 20 t t \"This is a long line\nthat should be\nfilled at the\nfill-column boundary\nwhen we call\nfill-paragraph.\")""#
+        ]],
     );
 }
 
@@ -63,7 +69,7 @@ fn divergence_fill_region_basic() {
 fn divergence_paragraph_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "First paragraph here.\n\nSecond paragraph here.\n\nThird paragraph here.")
   (goto-char 1)
@@ -81,6 +87,9 @@ fn divergence_paragraph_operations() {
           (forward-paragraph)
           (forward-paragraph)
           (= (point) (point-max))))) "#,
+        expect_test::expect![[
+            r#""First paragraph here.\n\nSecond paragraph here.\n\nThird paragraph here.OK (t t nil 69 0 0 t t 0 0 t)""#
+        ]],
     );
 }
 
@@ -88,7 +97,7 @@ fn divergence_paragraph_operations() {
 fn divergence_page_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Page 1 content\n\x0CPage 2 content\n\x0CPage 3 content")
   (goto-char 1)
@@ -101,6 +110,9 @@ fn divergence_page_operations() {
           (what-page)
           (consp (what-page))
           (= (car (what-page)) 1)))) "#,
+        expect_test::expect![[
+            r#""Page 1 content\n\u{c}Page 2 content\n\u{c}Page 3 contentERR (wrong-type-argument listp \"Page 1, line 1\")""#
+        ]],
     );
 }
 
@@ -108,7 +120,7 @@ fn divergence_page_operations() {
 fn divergence_comment_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r#"(progn
   (insert "line1\nline2\nline3\nline4")
   (comment-region 1 6)
@@ -126,7 +138,7 @@ fn divergence_comment_operations() {
 fn divergence_tab_stop_and_indent_tabs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq tab-width 4)
   (setq indent-tabs-mode nil)
@@ -142,6 +154,7 @@ fn divergence_tab_stop_and_indent_tabs() {
           (= tab-width 4)
           indent-tabs-mode
           (null indent-tabs-mode)))) "#,
+        expect_test::expect![[r#""        helloOK (t t t 4 t nil t)""#]],
     );
 }
 
@@ -149,7 +162,7 @@ fn divergence_tab_stop_and_indent_tabs() {
 fn divergence_current_column_with_mixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq tab-width 4)
   (insert "abc\tdef\tghi")
@@ -166,6 +179,7 @@ fn divergence_current_column_with_mixed() {
                 c4 (= c4 4)
                 c7 (>= c7 7)
                 (= (buffer-size) 11))))))) "#,
+        expect_test::expect![[r#""abc\tdef\tghiOK (0 t 3 t 4 t 7 t t)""#]],
     );
 }
 
@@ -173,7 +187,7 @@ fn divergence_current_column_with_mixed() {
 fn divergence_line_beginning_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1\nline2\nline3\nline4\nline5")
   (goto-char 10)
@@ -190,6 +204,7 @@ fn divergence_line_beginning_position() {
           (line-number-at-pos)
           (= (line-number-at-pos) 5)
           (= (buffer-size) 29)))) "#,
+        expect_test::expect![[r#""line1\nline2\nline3\nline4\nline5OK (t t t 1 1 t 30 5 t t)""#]],
     );
 }
 
@@ -197,7 +212,7 @@ fn divergence_line_beginning_position() {
 fn divergence_delete_indentation_and_newline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello\nworld\ntest")
   (goto-char 7)
@@ -208,6 +223,7 @@ fn divergence_delete_indentation_and_newline() {
             (= (length (split-string before "\n")) 3)
             (= (length (split-string after "\n")) 2)
             (>= (length before) (length after)))))) "#,
+        expect_test::expect![[r#""hello world\ntestOK (t t t t)""#]],
     );
 }
 
@@ -215,7 +231,7 @@ fn divergence_delete_indentation_and_newline() {
 fn divergence_move_to_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "abcdefghijklmn")
   (goto-char 1)
@@ -230,5 +246,6 @@ fn divergence_move_to_column() {
               (= c3 0)
               (= (point) 1)
               (= (buffer-size) 14)))))) "#,
+        expect_test::expect![[r#""abcdefghijklmnOK (t t t t t)""#]],
     );
 }

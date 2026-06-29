@@ -66,7 +66,10 @@ fn oracle_prop_lc_adv_free_variables() {
         (funcall 'neovm--lca-free-vars
           '(lam x (app (lam x (var x)) (var x)))))
     (fmakunbound 'neovm--lca-free-vars)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((x) nil (x) (y) (z) (w y z) nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +143,12 @@ fn oracle_prop_lc_adv_alpha_conversion() {
     (fmakunbound 'neovm--lca-fresh-var)
     (fmakunbound 'neovm--lca-rename)
     (fmakunbound 'neovm--lca-alpha-convert)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (x x1 x2 (var y) (lam z (app (var y) (var z))) (lam x (var x)) (lam x1 (var x1)) (lam x1 (app (var x1) (var y))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -277,7 +285,12 @@ fn oracle_prop_lc_adv_substitution_and_beta() {
     (fmakunbound 'neovm--lca-rename)
     (fmakunbound 'neovm--lca-subst)
     (fmakunbound 'neovm--lca-beta-step)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((var y) (lam z (app (var y) (var z))) (lam y1 (app (var y) (var y1))) (var y) (app (var z) (var z)) (lam y (app (var z) (var y))) (lam x (var x)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +413,12 @@ fn oracle_prop_lc_adv_normal_order_evaluation() {
     (fmakunbound 'neovm--lca-subst)
     (fmakunbound 'neovm--lca-beta-step)
     (fmakunbound 'neovm--lca-normalize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((2 var a) (3 var a) (6 var w) (1 lam x (var x)) (5 var z))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -471,7 +489,10 @@ fn oracle_prop_lc_adv_church_numerals() {
             ;; SUCC structure check
             (and (consp SUCC) (eq (car SUCC) 'lam) t))))
     (fmakunbound 'neovm--lca-church-to-int)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 1 2 3 5 t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -615,7 +636,10 @@ fn oracle_prop_lc_adv_church_booleans() {
     (fmakunbound 'neovm--lca-beta-step)
     (fmakunbound 'neovm--lca-normalize)
     (fmakunbound 'neovm--lca-to-bool)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil nil t t nil nil t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -694,5 +718,8 @@ fn oracle_prop_lc_adv_ski_combinators() {
           '(app (app (app S I) I) a) 20))
     (fmakunbound 'neovm--lca-cl-step)
     (fmakunbound 'neovm--lca-cl-normalize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 . a) (2 . a) (3 . a) (3 . a) (3 . b) (4 app a a))""#]],
+    );
 }

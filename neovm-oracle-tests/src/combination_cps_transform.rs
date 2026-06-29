@@ -91,7 +91,10 @@ fn oracle_prop_cps_basic_arithmetic_and_let() {
     (fmakunbound 'neovm--cps-mul-k)
     (fmakunbound 'neovm--cps-div-k)
     (fmakunbound 'neovm--cps-let-k)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 26 5 22 169 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +204,10 @@ fn oracle_prop_cps_conditional_expressions() {
     (fmakunbound 'neovm--cps-eq-k)
     (fmakunbound 'neovm--cps-and-k)
     (fmakunbound 'neovm--cps-or-k)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"yes\" \"single-digit\" t t 42 \"large\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +315,10 @@ fn oracle_prop_cps_trampolined_recursion() {
     (fmakunbound 'neovm--cps-fact-k)
     (fmakunbound 'neovm--cps-sum-k)
     (fmakunbound 'neovm--cps-fib-k)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 1 120 3628800 0 55 5050 0 1 55 610)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -414,7 +423,12 @@ fn oracle_prop_cps_exception_handling() {
     (fmakunbound 'neovm--cps-safe-sqrt)
     (fmakunbound 'neovm--cps-try-catch)
     (fmakunbound 'neovm--cps-chain)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:ok 5) (:error (division-by-zero 10 0)) 20 (:caught (division-by-zero 100 0)) (:ok 5) (:error (division-by-zero 20 0)) 999)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -518,7 +532,12 @@ fn oracle_prop_cps_coroutines() {
     (fmakunbound 'neovm--cps-count-step)
     (fmakunbound 'neovm--cps-accum-coro)
     (fmakunbound 'neovm--cps-accum-step)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:yields (0 1 2 3 4) :final 10) (:yields (10 11 12) :final 33) (:yields nil :final 0) (:yields (1 3 6 10 15) :final 15) (100 101 102 (:done 303)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -635,7 +654,10 @@ fn oracle_prop_cps_interpreter() {
         (funcall 'neovm--cps-run 'z '((z . 999))))
     (fmakunbound 'neovm--cps-interp)
     (fmakunbound 'neovm--cps-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 30 12 10 12 100 200 7 12 23 999)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -752,5 +774,10 @@ fn oracle_prop_cps_higher_order_transforms() {
     (fmakunbound 'neovm--cps-filter-k)
     (fmakunbound 'neovm--cps-foldl-k)
     (fmakunbound 'neovm--cps-flatmap-k)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 4 9 16 25) (\"10\" \"20\" \"30\") (2 4 6 8 10) (\"hello\" \"world\" \"great\") 15 \"hello-brave-new-world\" 220 (1 2 2 3 3 3))""#
+        ]],
+    );
 }

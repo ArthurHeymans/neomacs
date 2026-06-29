@@ -110,7 +110,12 @@ fn oracle_prop_symbolic_diff_core_rules() {
        ;; d/dx(ln(x^2 + 1))
        (funcall 'neovm--sd-deriv '(ln (+ (^ x 2) 1)) 'x))
     (fmakunbound 'neovm--sd-deriv)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 0 (+ 1 0) (+ (* 1 y) (* x 0)) (* (* 3 (^ x (- 3 1))) 1) (* (cos x) 1) (* (- (sin x)) 1) (/ 1 x) (* (exp x) 1) (* (cos (^ x 2)) (* (* 2 (^ x (- 2 1))) 1)) (* (exp (* 3 x)) (+ (* 0 x) (* 3 1))) (/ (+ (* (* 2 (^ x (- 2 1))) 1) 0) (+ (^ x 2) 1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +245,12 @@ fn oracle_prop_symbolic_diff_simplification() {
     (fmakunbound 'neovm--sd-simplify)
     (fmakunbound 'neovm--sd-simplify-fix)
     (fmakunbound 'neovm--sd-deriv)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 3 (* 2 x) (* 3 (^ x 2)) (cos x) (- (sin x)) (/ 1 x) (+ (* 5 (* 2 x)) 3) (exp x))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +314,12 @@ fn oracle_prop_symbolic_diff_chain_rule() {
        ;; d/dx(exp(sin(x))) = exp(sin(x)) * cos(x)
        (funcall 'neovm--sd-d '(exp (sin x)) 'x))
     (fmakunbound 'neovm--sd-d)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((* (cos (^ x 2)) (* (* 2 (^ x 1)) 1)) (* (- (sin (* 3 x))) (+ (* 0 x) (* 3 1))) (* (exp (+ (^ x 2) x)) (+ (* (* 2 (^ x 1)) 1) 1)) (/ (* (cos x) 1) (sin x)) (* (* 3 (^ (+ (^ x 2) 1) 2)) (+ (* (* 2 (^ x 1)) 1) 0)) (* (cos (cos x)) (* (- (sin x)) 1)) (* (exp (sin x)) (* (cos x) 1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -411,7 +426,12 @@ fn oracle_prop_symbolic_diff_partial_derivatives() {
     (fmakunbound 'neovm--sd-d)
     (fmakunbound 'neovm--sd-s)
     (fmakunbound 'neovm--sd-sf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((+ x x) (+ y y) (* y z) (* x z) (* x y) (+ (* 3 (+ x x)) (* 2 y)) (* 2 x) (* (cos (+ (* x x) (* y y))) (+ x x)) 2 2)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -523,7 +543,12 @@ fn oracle_prop_symbolic_diff_gradient() {
     (fmakunbound 'neovm--sd-sf)
     (fmakunbound 'neovm--sd-gradient)
     (fmakunbound 'neovm--sd-laplacian)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((+ x x) (+ y y)) (y x) (3 2 -1) ((* y z) (* x z) (* x y)) 4 6 0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -615,5 +640,10 @@ fn oracle_prop_symbolic_diff_quotient_and_complex() {
     (fmakunbound 'neovm--sd-d)
     (fmakunbound 'neovm--sd-s)
     (fmakunbound 'neovm--sd-sf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((/ y (* y y)) (/ -1 (* x x)) (/ (- (+ x 1) x) (* (+ x 1) (+ x 1))) (/ (- (* (+ x x) (+ x 1)) (- (* x x) 1)) (* (+ x 1) (+ x 1))) (+ (* (cos x) (cos x)) (* (sin x) (- (sin x)))) (+ (* (+ x x) (sin x)) (* (* x x) (cos x))))""#
+        ]],
+    );
 }

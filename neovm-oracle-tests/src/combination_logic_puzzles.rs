@@ -95,7 +95,7 @@ fn oracle_prop_sudoku_constraint_checker() {
     (fmakunbound 'neovm--lp-sudoku-valid-group)
     (fmakunbound 'neovm--lp-sudoku-check)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +181,12 @@ fn oracle_prop_eight_puzzle_moves() {
     (fmakunbound 'neovm--lp-puzzle-moves)
     (fmakunbound 'neovm--lp-puzzle-goal-p)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 (5 3 7 1) 4 ([1 2 3 4 5 0 7 8 6] [1 2 3 0 4 5 7 8 6] [1 2 3 4 8 5 7 0 6] [1 0 3 4 2 5 7 8 6]) nil t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +259,7 @@ fn oracle_prop_map_coloring() {
     (fmakunbound 'neovm--lp-color-solve)
     (fmakunbound 'neovm--lp-color-bt)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +312,12 @@ fn oracle_prop_cryptarithmetic_solver() {
             all-valid)))
     (fmakunbound 'neovm--lp-crypto-solve)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (32 ((12 21 33) (13 31 44) (14 41 55) (15 51 66) (16 61 77) (17 71 88) (18 81 99) (21 12 33) (23 32 55) (24 42 66) (25 52 77) (26 62 88) (27 72 99) (31 13 44) (32 23 55) (34 43 77) (35 53 88) (36 63 99) (41 14 55) (42 24 66) (43 34 77) (45 54 99) (51 15 66) (52 25 77) (53 35 88) (54 45 99) (61 16 77) (62 26 88) (63 36 99) (71 17 88) (72 27 99) (81 18 99)) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +400,7 @@ fn oracle_prop_sat_checker() {
     (fmakunbound 'neovm--lp-sat-eval-formula)
     (fmakunbound 'neovm--lp-sat-solve)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -475,5 +485,10 @@ fn oracle_prop_logic_gate_simulator() {
     (fmakunbound 'neovm--lp-half-adder)
     (fmakunbound 'neovm--lp-full-adder)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 0) (1 0) (1 0) (0 1) (0 0) (1 0) (1 0) (0 1) (1 0) (0 1) (0 1) (1 1) (t t t t))""#
+        ]],
+    );
 }

@@ -45,7 +45,12 @@ fn oracle_prop_setcar_setcdr_deep_nested_mutation() {
           (eq (car root) branch1)
           (eq (cdr root) branch2)
           (eq (car (car root)) leaf1))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((((A . b) x . y) (E . f) g . H) (A . b) (x . y) (E . f) (g . H) t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +100,10 @@ fn oracle_prop_setcar_setcdr_circular_detection() {
        (when (eq slow fast)
          (setq found t)))
      (list found steps))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 42 t t 1 2 t x y z (t 3))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +141,12 @@ fn oracle_prop_setcar_setcdr_alist_modification() {
    (cdr (assq 'grade alist))
    (cdr (assq 'active alist))
    (length alist)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((name . \"Alice\") (age . 31) (location . \"NYC\") (grade . \"A\") (active . t)) \"Alice\" 31 nil \"NYC\" \"A\" t 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +181,10 @@ fn oracle_prop_setcar_setcdr_incremental_list_building() {
          (last-cell (last result)))
     (list result sum len (eq tail last-cell)
           (car tail) (car result))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10 20 30 40 50 60 70 80 90 100) 550 10 t 100 10)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +237,12 @@ fn oracle_prop_setcar_setcdr_inplace_reverse() {
             (equal doubly-reversed original-items)
             ;; The first-cell should now be at the head again
             (eq first-cell doubly-reversed)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10) (10 9 8 7 6 5 4 3 2 1) t (1 2 3 4 5 6 7 8 9 10) t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -287,7 +308,10 @@ fn oracle_prop_setcar_setcdr_zipper() {
     (list f0 f1 f2 f3 f4 l3 l4
           ;; Original list should be intact (we used copy-tree)
           (equal (funcall zipper-to-list z0) lst))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (a b c X b (a b X d e) (a b X d e) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +390,10 @@ fn oracle_prop_setcar_setcdr_doubly_linked_list() {
               (setq forward3 (nreverse forward3))
               (list forward backward forward2 forward3
                     (length forward) (length forward2) (length forward3))))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 66 81)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -426,5 +453,8 @@ fn oracle_prop_setcar_setcdr_ring_buffer_queue() {
         (setq ptr (cdr ptr)))
       (setq results (cons sum results))))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 5 (10 20 30 40 50) (100 20 300 40 500) 960)""#]],
+    );
 }

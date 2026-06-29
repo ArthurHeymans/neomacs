@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx392_marker_copy_insertion_type_kill_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -18,13 +18,14 @@ fn div_cx392_marker_copy_insertion_type_kill_buffer() {
     (set-marker m1 8)
     (list (marker-position m1) (marker-position m2) (eq m1 m2))))
 "##,
+        expect_test::expect![[r#""OK (8 5 nil)""#]],
     )
 }
 
 #[test]
 fn div_cx392_marker_insertion_type_front_rear() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -37,13 +38,14 @@ fn div_cx392_marker_insertion_type_front_rear() {
     (list (marker-insertion-type m-front) (marker-insertion-type m-rear)
           (marker-position m-front) (marker-position m-rear))))
 "##,
+        expect_test::expect![[r#""OK (t nil 6 5)""#]],
     )
 }
 
 #[test]
 fn div_cx392_marker_after_kill_buffer_is_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx392-kill*")))
   (with-current-buffer buf (insert "content"))
@@ -51,13 +53,14 @@ fn div_cx392_marker_after_kill_buffer_is_nil() {
     (kill-buffer buf)
     (list (marker-buffer m) (marker-position m))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx392_undo_list_capture_boundary_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -73,13 +76,14 @@ fn div_cx392_undo_list_capture_boundary_chain() {
       (let ((after-undo-2 (buffer-string)))
         (list after-3 after-undo-1 after-undo-2)))))
 "##,
+        expect_test::expect![[r#""OK (\"123\" \"1\" \"1\")""#]],
     )
 }
 
 #[test]
 fn div_cx392_undo_after_insert_delete_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -90,13 +94,14 @@ fn div_cx392_undo_after_insert_delete_textprop() {
     (undo)
     (list before-undo (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK (\"o world\" \"\")""#]],
     )
 }
 
 #[test]
 fn div_cx392_undo_amalgamating_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -107,13 +112,14 @@ fn div_cx392_undo_amalgamating_change() {
         (list (> (length buffer-undo-list) before) (buffer-string))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     )
 }
 
 #[test]
 fn div_cx392_narrow_widen_point_min_max() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -123,13 +129,14 @@ fn div_cx392_narrow_widen_point_min_max() {
         (widen)
         (point-min) (point-max)))
 "##,
+        expect_test::expect![[r#""OK (1 27 nil 5 20 nil 1 27)""#]],
     )
 }
 
 #[test]
 fn div_cx392_save_restriction_and_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDEF")
@@ -140,13 +147,14 @@ fn div_cx392_save_restriction_and_excursion() {
       (list (point-min) (point-max)))
     (list narrowed-min narrowed-max (point-min) (point-max))))
 "##,
+        expect_test::expect![[r#""OK (5 10 5 10)""#]],
     )
 }
 
 #[test]
 fn div_cx392_save_excursion_across_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx392-a*"))
       (buf-b (get-buffer-create " *neo-cx392-b*")))
@@ -163,13 +171,14 @@ fn div_cx392_save_excursion_across_buffers() {
   (kill-buffer buf-a)
   (kill-buffer buf-b))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     )
 }
 
 #[test]
 fn div_cx392_marker_undo_narrow_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -198,5 +207,6 @@ fn div_cx392_marker_undo_narrow_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (void-variable m2)""#]],
     )
 }

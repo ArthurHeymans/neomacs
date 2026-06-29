@@ -101,7 +101,10 @@ fn oracle_prop_datalog_facts_and_ground_queries() {
     (fmakunbound 'neovm--dl-var-p)
     (fmakunbound 'neovm--dl-unify)
     (fmakunbound 'neovm--dl-query)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 62 43)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +229,10 @@ fn oracle_prop_datalog_rules_with_join() {
     (fmakunbound 'neovm--dl-subst)
     (fmakunbound 'neovm--dl-eval-body)
     (fmakunbound 'neovm--dl-apply-rule)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -341,7 +347,7 @@ fn oracle_prop_datalog_transitive_closure_ancestor() {
     (fmakunbound 'neovm--dl-eval-body)
     (fmakunbound 'neovm--dl-apply-rule)
     (fmakunbound 'neovm--dl-fixpoint)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -469,7 +475,10 @@ fn oracle_prop_datalog_graph_path_finding() {
     (fmakunbound 'neovm--dl-eval-body)
     (fmakunbound 'neovm--dl-apply-rule)
     (fmakunbound 'neovm--dl-fixpoint)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 nil nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -576,7 +585,12 @@ fn oracle_prop_datalog_negation_as_failure() {
     (fmakunbound 'neovm--dl-query-1)
     (fmakunbound 'neovm--dl-subst)
     (fmakunbound 'neovm--dl-fact-exists)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"alice\" \"bob\" \"dave\") (\"alice\" \"bob\" \"dave\") (\"eve\") (\"science\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -676,5 +690,10 @@ fn oracle_prop_datalog_multi_predicate_aggregation() {
     (fmakunbound 'neovm--dl-var-p)
     (fmakunbound 'neovm--dl-unify)
     (fmakunbound 'neovm--dl-query-1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((engineering . 3) (marketing . 2) (sales . 1)) ((engineering . 270000) (marketing . 145000) (sales . 60000)) (\"alice\") 79166)""#
+        ]],
+    );
 }

@@ -7,41 +7,59 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_char_charset_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(symbolp (char-charset ?a))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(symbolp (char-charset ?a))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_char_equal_same() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(char-equal ?a ?A)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(char-equal ?a ?A)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_char_equal_diff() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(char-equal ?a ?b)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(char-equal ?a ?b)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_characterp_on_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(characterp ?x)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(characterp ?x)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_characterp_on_non_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(characterp 999999999)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(characterp 999999999)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_charsetp_on_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(charsetp 'ascii)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(charsetp 'ascii)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }

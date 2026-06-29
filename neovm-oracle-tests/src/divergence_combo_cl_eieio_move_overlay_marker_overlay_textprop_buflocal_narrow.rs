@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_move_overlay_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mov-snap ()
     ((step :initarg :step :accessor mvs-step :initform "")
@@ -83,6 +83,7 @@ fn combo_eieio_move_overlay_basic() {
               (overlay-start ov) (overlay-end ov)
               my-mov-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -90,7 +91,7 @@ fn combo_eieio_move_overlay_basic() {
 fn combo_eieio_move_overlay_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mov-narrow-snap ()
     ((step :initarg :step :accessor mvns-step :initform "")
@@ -170,6 +171,7 @@ fn combo_eieio_move_overlay_narrow() {
               (overlay-start ov) (overlay-end ov)
               my-mvn-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -177,7 +179,7 @@ fn combo_eieio_move_overlay_narrow() {
 fn combo_eieio_move_overlay_multi_swap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mov-swap-snap ()
     ((step :initarg :step :accessor mvss-step :initform "")
@@ -251,6 +253,7 @@ fn combo_eieio_move_overlay_multi_swap() {
               (overlay-start ov2) (overlay-end ov2)
               my-swap-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -258,7 +261,7 @@ fn combo_eieio_move_overlay_multi_swap() {
 fn combo_eieio_move_overlay_undo_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mov-undo-snap ()
     ((step :initarg :step :accessor mvus-step :initform "")
@@ -320,6 +323,7 @@ fn combo_eieio_move_overlay_undo_restore() {
               (overlay-start ov) (overlay-end ov)
               my-mvu-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -327,7 +331,7 @@ fn combo_eieio_move_overlay_undo_restore() {
 fn combo_eieio_move_overlay_with_mod_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mov-hook-snap ()
     ((step :initarg :step :accessor mvhs-step :initform "")
@@ -406,5 +410,6 @@ fn combo_eieio_move_overlay_with_mod_hooks() {
               (overlay-start ov) (overlay-end ov)
               hook-fire-count my-mvh-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

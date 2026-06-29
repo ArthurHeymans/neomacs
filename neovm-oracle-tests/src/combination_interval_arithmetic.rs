@@ -85,7 +85,12 @@ fn oracle_prop_interval_arith_basic_operations() {
     (fmakunbound 'neovm--ia-sub)
     (fmakunbound 'neovm--ia-mul)
     (fmakunbound 'neovm--ia-div)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3.0 . 8.0) (-4.0 . 1.0) (2.0 . 15.0) (-5.0 . 20.0) (0.3333333333333333 . 1.5) (-2.0 . 2.0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +157,10 @@ fn oracle_prop_interval_arith_predicates() {
     (fmakunbound 'neovm--ia-overlap-p)
     (fmakunbound 'neovm--ia-width)
     (fmakunbound 'neovm--ia-mid)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t nil nil t nil t nil 4.0 2.5 3.0 -0.75)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +254,12 @@ fn oracle_prop_interval_arith_union_intersection() {
     (fmakunbound 'neovm--ia-intersect)
     (fmakunbound 'neovm--ia-union)
     (fmakunbound 'neovm--ia-merge-all)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3.0 . 5.0) nil (1.0 . 7.0) nil ((1.0 . 6.0) (8.0 . 12.0) (15.0 . 18.0)) ((1.0 . 8.0)) ((1.0 . 2.0) (5.0 . 6.0) (9.0 . 10.0)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -336,7 +349,7 @@ fn oracle_prop_interval_arith_newton_root_finding() {
     (fmakunbound 'neovm--ia-width)
     (fmakunbound 'neovm--ia-newton-step)
     (fmakunbound 'neovm--ia-newton-sqrt2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t 4)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +466,10 @@ fn oracle_prop_interval_arith_uncertainty_propagation() {
     (fmakunbound 'neovm--ia-mul)
     (fmakunbound 'neovm--ia-scale)
     (fmakunbound 'neovm--ia-square)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t (48.02000000000001 . 52.019999999999996) t (t t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -553,7 +569,10 @@ fn oracle_prop_interval_arith_bisection_search() {
     (fmakunbound 'neovm--ia-eval-f)
     (fmakunbound 'neovm--ia-contains-zero-p)
     (fmakunbound 'neovm--ia-bisect)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil nil t 34)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -647,5 +666,10 @@ fn oracle_prop_interval_arith_polynomial_evaluation() {
     (fmakunbound 'neovm--ia-mul)
     (fmakunbound 'neovm--ia-horner)
     (fmakunbound 'neovm--ia-naive-poly)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((-6.0 . -6.0) (0.0 . 0.0) (0.0 . 0.0) (0.0 . 0.0) (6.0 . 6.0) ((-4.625 . 7.125) t) (140.0 255.0 t))""#
+        ]],
+    );
 }

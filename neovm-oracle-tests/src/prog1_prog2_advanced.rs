@@ -33,7 +33,12 @@ fn oracle_prop_prog1_returns_first_evaluates_all() {
     (list r1 r2 r3 r4
           ;; Trace proves all forms evaluated in order
           (nreverse trace))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (alpha 42 only-one nil (first second third fourth after-42))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +66,12 @@ fn oracle_prop_prog2_returns_second_evaluates_all() {
         (r3 (prog2 'ignored 'kept)))
     (list r1 r2 r3
           (nreverse trace))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (result-value 300 kept (setup compute cleanup p2-first p2-third p2-fourth p2-fifth))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +107,10 @@ fn oracle_prop_prog_side_effects_in_non_returned() {
         ;; val2 should be 3 (1 * 3)
         ;; counter should be 103 (3 + 100)
         (list prog1-result val2 counter (nreverse accum))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 15 (10 15)) 3 103 (103))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +155,12 @@ fn oracle_prop_prog_nested_combinations() {
                    (setq log (cons 'deep-1 log)))
                (setq log (cons 'deep-0 log)))))
         (list outer nested2 deep (nreverse log))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (prog2-result 30 deep-val (inner-progn-1 inner-progn-2 prog2-second prog2-body prog1-body n2-progn-start n2-first n2-third n2-prog1-body deepest deep-2 deep-1 deep-0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +189,10 @@ fn oracle_prop_prog1_save_state_during_mutation() {
             (setq queue (append queue (list 'w)))
             (list popped1 popped2 top second
                   stack queue front)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (a b c d (c d e) (y z w) x)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +240,12 @@ fn oracle_prop_prog2_setup_compute_cleanup() {
       (list result1 result2
             resources-held  ;; should be nil (all released)
             (nreverse resource-log)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (15 42 nil ((acquire db-conn) (release db-conn) (acquire file-handle) (acquire lock) (release lock) (release file-handle)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -268,5 +294,10 @@ fn oracle_prop_prog_pipeline_pattern() {
                     'count (length transformed))
                  (setq pipeline-log (cons 'complete pipeline-log)))))
           (list final-result (nreverse pipeline-log)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((original (5 3 8 1 9 2 7 4 6) sorted (1 2 3 4 5 6 7 8 9) transformed (12 14 16 18) count 4) ((stage1-input 9) stage2-start stage2-done stage3-start (stage3-doubled 9) stage3-done complete))""#
+        ]],
+    );
 }

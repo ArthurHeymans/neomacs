@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx146_package_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -20,13 +20,14 @@ fn div_cx146_package_availability() {
             (boundp 'package-directory-list)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx146_melpa_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((archives '(("melpa" . "https://melpa.org/packages/")
@@ -37,13 +38,16 @@ fn div_cx146_melpa_availability() {
             (assoc "gnu" archives)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (t (\"melpa\" . \"https://melpa.org/packages/\") (\"gnu\" . \"https://elpa.gnu.org/packages/\"))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx146_use_package_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -54,13 +58,14 @@ fn div_cx146_use_package_availability() {
             (boundp 'use-package-minimum-reported-time)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx146_package_desc_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'package-desc-from-define)
@@ -70,13 +75,14 @@ fn div_cx146_package_desc_format() {
           (boundp 'package--builtins))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx146_package_version_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'version-to-list)
@@ -86,13 +92,14 @@ fn div_cx146_package_version_format() {
           (package-version-join '(1 2 3 4)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t (1 2 3) \"1.2.3\" \"1.2.3.4\")""#]],
     );
 }
 
 #[test]
 fn div_cx146_use_package_expand_form() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((expanded (macroexpand
@@ -105,13 +112,14 @@ fn div_cx146_use_package_expand_form() {
             (eq (car expanded) 'progn)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx146_package_installed_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'package-installed-p)
@@ -120,13 +128,14 @@ fn div_cx146_package_installed_p() {
           (boundp 'package-selected-packages))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx146_elpa_archive_url_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (boundp 'package-archives)
@@ -134,13 +143,14 @@ fn div_cx146_elpa_archive_url_format() {
           (stringp (cdr (car package-archives))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx146_package_activated_list_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (boundp 'package-activated-list)
@@ -148,13 +158,14 @@ fn div_cx146_package_activated_list_query() {
           (boundp 'package-archive-priorities))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx146_package_import_with_existing_directory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'package-import-keyring)
@@ -162,13 +173,14 @@ fn div_cx146_package_import_with_existing_directory() {
           (boundp 'package-gnupghome-dir))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx146_use_package_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -195,5 +207,6 @@ fn div_cx146_use_package_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

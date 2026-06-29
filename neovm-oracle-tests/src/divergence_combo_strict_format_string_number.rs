@@ -16,7 +16,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_fsn_g_cutoffs_and_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%g" 1e-3)
       (format "%g" 1e-4)
@@ -28,13 +28,16 @@ fn div_fsn_g_cutoffs_and_width() {
       (format "%g" 123456789.0)
       (format "%.10g" 0.1))
 "##,
+        expect_test::expect![[
+            r#""OK (\"0.001\" \"0.0001\" \"1e-05\" \"1\" \"100000\" \"1e+06\" \"1e-05\" \"1.23457e+08\" \"0.1\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_fsn_f_e_rounding_and_flags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%.0f" 0.5)
       (format "%.0f" 1.5)
@@ -47,13 +50,16 @@ fn div_fsn_f_e_rounding_and_flags() {
       (format "%010.3f" 3.14159)
       (format "%+.2e" -3.14159))
 "##,
+        expect_test::expect![[
+            r#""OK (\"0\" \"2\" \"2\" \"4\" \"1.00\" \"2.67\" \"0.000000e+00\" \"1.235e+05\" \"000003.142\" \"-3.14e+00\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_fsn_integer_format_flags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%+d" 42)
       (format "% d" 42)
@@ -66,6 +72,9 @@ fn div_fsn_integer_format_flags() {
       (format "%o" 64)
       (format "%b" 42))
 "##,
+        expect_test::expect![[
+            r#""OK (\"+42\" \" 42\" \"00042\" \"42   |\" \"0100\" \"0xff\" \"deadbeef\" \"0XFF\" \"100\" \"101010\")""#
+        ]],
     );
 }
 
@@ -74,7 +83,7 @@ fn div_fsn_integer_format_flags() {
 #[test]
 fn div_fsn_bignum_and_base_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (number-to-string 100000000000000000000)
       (format "%d" 1000000000000000000000)
@@ -87,13 +96,14 @@ fn div_fsn_bignum_and_base_conversion() {
       (string-to-number "1e3")
       (string-to-number "  -17  "))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 36)""#]],
     );
 }
 
 #[test]
 fn div_fsn_char_format_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%c" 65)
       (format "%c" 128578)
@@ -101,6 +111,7 @@ fn div_fsn_char_format_multibyte() {
       (string (list 65 66 67))
       (format "%c" 945))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument characterp (65 66 67))""#]],
     );
 }
 
@@ -109,7 +120,7 @@ fn div_fsn_char_format_multibyte() {
 #[test]
 fn div_fsn_split_string_trim_and_omit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (split-string "  a  b  c  " " +" t)
       (split-string "  a  b  c  " " +" nil)
@@ -120,6 +131,7 @@ fn div_fsn_split_string_trim_and_omit() {
       (split-string "Remove trailing
 " "\n+" t))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument sequencep t)""#]],
     );
 }
 
@@ -128,7 +140,7 @@ fn div_fsn_split_string_trim_and_omit() {
 #[test]
 fn div_fsn_replace_regexp_in_string_modes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (replace-regexp-in-string "[0-9]+" "#" "a1b22c333")
       (replace-regexp-in-string "[a-z]" "*" "AbCdEf")
@@ -138,13 +150,16 @@ fn div_fsn_replace_regexp_in_string_modes() {
       (replace-regexp-in-string "\\([0-9]\\)" "[\\1]" "a1b2")
       (replace-regexp-in-string "o" "0" "foooo"))
 "##,
+        expect_test::expect![[
+            r#""OK (\"a#b#c#\" \"******\" \"Hello World\" \"bar bar bar\" \"Bar bar BAR\" \"a[1]b[2]\" \"f0000\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_fsn_replace_match_subexp_and_literal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (progn (string-match "ell" "hello") (replace-match "ELL" nil nil "hello"))
       (progn (string-match "\\(o\\)" "foo") (replace-match "0" t t "foo" 1))
@@ -156,6 +171,7 @@ fn div_fsn_replace_match_subexp_and_literal() {
                    (match-substring 1)))
       (replace-regexp-in-string "\\([a-z]\\)\\1" "<\\1\\1>" "aabbc"))
 "##,
+        expect_test::expect![[r#""ERR (void-function match-substring)""#]],
     );
 }
 
@@ -164,7 +180,7 @@ fn div_fsn_replace_match_subexp_and_literal() {
 #[test]
 fn div_fsn_format_spec_flags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format-spec "%a-%b-%c" '((?a . "x") (?b . "y") (?c . "z")))
       (format-spec "%2a|%2b" '((?a . "x") (?b . "yz")))
@@ -173,6 +189,9 @@ fn div_fsn_format_spec_flags() {
       (format-spec "[%4a]" '((?a . "x")))
       (format-spec "[%-4a]" '((?a . "x"))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"x-y-z\" \" x|yz\" \"x | y\" \"100% done: yes\" \"[   x]\" \"[x   ]\")""#
+        ]],
     );
 }
 
@@ -181,7 +200,7 @@ fn div_fsn_format_spec_flags() {
 #[test]
 fn div_fsn_cjk_char_string_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-width ?a)
       (string-width "abc")
@@ -190,6 +209,7 @@ fn div_fsn_cjk_char_string_width() {
       (char-width ?\N{TIBETAN VOWEL SIGN AA})
       (string-width "日本語テスト"))
 "##,
+        expect_test::expect![[r#""OK (1 3 2 4 0 12)""#]],
     );
 }
 
@@ -198,7 +218,7 @@ fn div_fsn_cjk_char_string_width() {
 #[test]
 fn div_fsn_secure_hash_family() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (secure-hash 'md5 "abc")
       (secure-hash 'sha1 "abc")
@@ -211,6 +231,9 @@ fn div_fsn_secure_hash_family() {
       (secure-hash 'sha1 "")
       (secure-hash 'sha256 "The quick brown fox jumps over the lazy dog"))
 "##,
+        expect_test::expect![[
+            r#""OK (\"900150983cd24fb0d6963f7d28e17f72\" \"a9993e364706816aba3e25717850c26c9cd0d89d\" \"23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7\" \"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\" \"cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7\" \"ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f\" \"a9993e364706816aba3e25717850c26c9cd0d89d\" \"900150983cd24fb0d6963f7d28e17f72\" \"da39a3ee5e6b4b0d3255bfef95601890afd80709\" \"d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592\")""#
+        ]],
     );
 }
 
@@ -219,7 +242,7 @@ fn div_fsn_secure_hash_family() {
 #[test]
 fn div_fsn_regexp_opt_and_quote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (regexp-opt '("foo" "bar" "baz"))
       (regexp-opt '("foo" "bar" "baz") t)
@@ -227,6 +250,9 @@ fn div_fsn_regexp_opt_and_quote() {
       (regexp-opt '("cat" "category" "catalog") nil)
       (regexp-opt '("x" "xx" "xxx") t))
 "##,
+        expect_test::expect![[
+            r#""OK (\"\\\\(?:ba[rz]\\\\|foo\\\\)\" \"\\\\(ba[rz]\\\\|foo\\\\)\" \"a\\\\.b\\\\*c\\\\+d\\\\?\" \"\\\\(?:cat\\\\(?:alog\\\\|egory\\\\)?\\\\)\" \"\\\\(x\\\\(?:xx?\\\\)?\\\\)\")""#
+        ]],
     );
 }
 
@@ -235,7 +261,7 @@ fn div_fsn_regexp_opt_and_quote() {
 #[test]
 fn div_fsn_base64_roundtrips() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (base64-encode-string "hello world")
       (base64-encode-string "hello world" t)
@@ -243,6 +269,9 @@ fn div_fsn_base64_roundtrips() {
       (base64url-encode-string "??")
       (base64url-encode-string "a/b+c="))
 "##,
+        expect_test::expect![[
+            r#""OK (\"aGVsbG8gd29ybGQ=\" \"aGVsbG8gd29ybGQ=\" \"hello\" \"Pz8=\" \"YS9iK2M9\")""#
+        ]],
     );
 }
 
@@ -251,7 +280,7 @@ fn div_fsn_base64_roundtrips() {
 #[test]
 fn div_fsn_cl_loop_accumulators() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-loop for x in '(1 2 3 4) sum x)
       (cl-loop for x in '(1 2 3 4) count (= (% x 2) 0))
@@ -264,13 +293,16 @@ fn div_fsn_cl_loop_accumulators() {
       (cl-loop for x in '(1 2 3) append (list x x))
       (cl-loop for x in '(1 2 3) sum (* x x)))
 "##,
+        expect_test::expect![[
+            r#""OK (10 2 3 1 (3 2 1) (1 3 5 7 9) (10 7 4 1) (1 4 9) (1 1 2 2 3 3) 14)""#
+        ]],
     );
 }
 
 #[test]
 fn div_fsn_cl_destructure_labels_coerce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-destructuring-bind (a (b c) &rest d) '(1 (2 3) 4 5) (list a b c d))
       (cl-destructuring-bind (&key a b) '(:a 1 :b 2) (list a b))
@@ -283,6 +315,9 @@ fn div_fsn_cl_destructure_labels_coerce() {
       (cl-position 2 '(1 2 3 2 1))
       (cl-substitute 9 2 '(1 2 3 2 1)))
 "##,
+        expect_test::expect![[
+            r#""OK ((1 2 3 (4 5)) (1 2) 720 (97 98 99) 65 (1 3 2 4) (1 2 3) \"bcd\" 1 (1 9 3 9 1))""#
+        ]],
     );
 }
 
@@ -291,7 +326,7 @@ fn div_fsn_cl_destructure_labels_coerce() {
 #[test]
 fn div_fsn_compare_and_version() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (compare-strings "abcdef" 0 6 "abcxyz" 0 3)
       (compare-strings "abcdef" 0 6 "abcdef" 0 6)
@@ -303,6 +338,7 @@ fn div_fsn_compare_and_version() {
       (string-lessp "abc" "abc")
       (version-list-< '(1 2 3) '(1 2 10)))
 "##,
+        expect_test::expect![[r#""OK (4 t 1 t t t t nil t)""#]],
     );
 }
 
@@ -311,7 +347,7 @@ fn div_fsn_compare_and_version() {
 #[test]
 fn div_fsn_string_ops_and_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (store-substring "abcdef" 2 ?X)
       (make-string 5 ?*)
@@ -327,6 +363,9 @@ fn div_fsn_string_ops_and_coding() {
       (encode-coding-string (string 200) 'iso-8859-1)
       (length (encode-coding-string (string 200) 'iso-8859-1)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"abXdef\" \"*****\" \"🙂🙂🙂\" \"abbc\" \"bcd\" \"ab\" \"\\310\" 1 \"caf\\303\\251\" 5 \"café\" \"\\310\" 1)""#
+        ]],
     );
 }
 
@@ -335,7 +374,7 @@ fn div_fsn_string_ops_and_coding() {
 #[test]
 fn div_fsn_narrow_textprop_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -348,6 +387,9 @@ fn div_fsn_narrow_textprop_combo() {
         (next-single-property-change 3 'face)
         (previous-single-property-change 7 'face)))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"cdefg\" 0 3 (weight heavy face bold)) 3 8 (weight heavy face bold) bold 6 6)""#
+        ]],
     );
 }
 
@@ -356,7 +398,7 @@ fn div_fsn_narrow_textprop_combo() {
 #[test]
 fn div_fsn_mapcar_mapconcat_mixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (mapcar #'1+ '(1 2 3))
       (mapcar #'car '((1 . 2) (3 . 4)))
@@ -366,5 +408,8 @@ fn div_fsn_mapcar_mapconcat_mixed() {
       (mapcar #'char-to-string "ABC")
       (apply #'concat (mapcar #'char-to-string "xyz")))
 "##,
+        expect_test::expect![[
+            r#""OK ((2 3 4) (1 3) \"a-b-c\" \"1,2,3\" (97 98 99) (\"A\" \"B\" \"C\") \"xyz\")""#
+        ]],
     );
 }

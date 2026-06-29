@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx38_subword_backward_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -20,13 +20,14 @@ fn div_cx38_subword_backward_word() {
       (point))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK 10""#]],
     );
 }
 
 #[test]
 fn div_cx38_subword_upcase_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -37,13 +38,14 @@ fn div_cx38_subword_upcase_word() {
       (buffer-string))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"CAMELCaseString\"""#]],
     );
 }
 
 #[test]
 fn div_cx38_subword_downcase_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -54,13 +56,14 @@ fn div_cx38_subword_downcase_word() {
       (buffer-string))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"camelCaseString\"""#]],
     );
 }
 
 #[test]
 fn div_cx38_subword_capitalize_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -71,13 +74,14 @@ fn div_cx38_subword_capitalize_word() {
       (buffer-string))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"Camel case string\"""#]],
     );
 }
 
 #[test]
 fn div_cx38_subword_kill_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -88,13 +92,14 @@ fn div_cx38_subword_kill_word() {
       (buffer-string))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"CaseString rest\"""#]],
     );
 }
 
 #[test]
 fn div_cx38_subword_backward_kill_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -105,13 +110,14 @@ fn div_cx38_subword_backward_kill_word() {
       (buffer-string))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"rest camelCaseg\"""#]],
     );
 }
 
 #[test]
 fn div_cx38_superword_backward_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -122,13 +128,14 @@ fn div_cx38_superword_backward_word() {
       (point))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK 1""#]],
     );
 }
 
 #[test]
 fn div_cx38_superword_upcase_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -139,13 +146,14 @@ fn div_cx38_superword_upcase_word() {
       (buffer-string))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"SNAKE_CASE_VAR rest\"""#]],
     );
 }
 
 #[test]
 fn div_cx38_superword_kill_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -156,13 +164,14 @@ fn div_cx38_superword_kill_word() {
       (buffer-string))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \" rest\"""#]],
     );
 }
 
 #[test]
 fn div_cx38_superword_capitalize_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -173,13 +182,14 @@ fn div_cx38_superword_capitalize_word() {
       (buffer-string))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"Snake_Case_Var rest\"""#]],
     );
 }
 
 #[test]
 fn div_cx38_subword_mark_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -190,13 +200,14 @@ fn div_cx38_subword_mark_word() {
       (list (region-beginning) (region-end)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (1 6)""#]],
     );
 }
 
 #[test]
 fn div_cx38_subword_forward_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -209,38 +220,41 @@ fn div_cx38_subword_forward_multiple() {
             (progn (forward-word 1) (point))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (3 8 11 18)""#]],
     );
 }
 
 #[test]
 fn div_cx38_display_property_relative_width_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
   (put-text-property 2 4 'display '(space :relative-width 5))
   (current-column))
 "##,
+        expect_test::expect![[r#""OK 9""#]],
     );
 }
 
 #[test]
 fn div_cx38_process_exit_code_make_process_exit_0() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx38-e0" :command '("true"))))
   (accept-process-output p 2)
   (list (process-status p) (process-exit-status p)))
 "##,
+        expect_test::expect![[r#""OK (exit 0)""#]],
     );
 }
 
 #[test]
 fn div_cx38_encode_coding_region_utf8_length_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "café世界"))
   (with-temp-buffer
@@ -248,26 +262,28 @@ fn div_cx38_encode_coding_region_utf8_length_check() {
     (encode-coding-region (point-min) (point-max) 'utf-8)
     (length (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK 11""#]],
     );
 }
 
 #[test]
 fn div_cx38_overlay_display_string_column_effect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
   (put-text-property 1 3 'display "XXXXXX")
   (current-column))
 "##,
+        expect_test::expect![[r#""OK 10""#]],
     );
 }
 
 #[test]
 fn div_cx38_set_buffer_multibyte_corruption_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (set-buffer-multibyte nil)
@@ -275,23 +291,25 @@ fn div_cx38_set_buffer_multibyte_corruption_count() {
   (set-buffer-multibyte t)
   (length (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK 8""#]],
     );
 }
 
 #[test]
 fn div_cx38_coding_system_priority_list_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (length (coding-system-priority-list))
 "##,
+        expect_test::expect![[r#""OK 20""#]],
     );
 }
 
 #[test]
 fn div_cx38_fill_paragraph_with_long_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((fill-column 10))
@@ -299,13 +317,14 @@ fn div_cx38_fill_paragraph_with_long_word() {
     (fill-paragraph)
     (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK \"short thisisaverylongwordthatwontfit end\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx38_abbrev_mode_hook_on_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((tbl (make-abbrev-table)))
   (define-abbrev tbl "neohook" "expanded" nil)
@@ -319,13 +338,14 @@ fn div_cx38_abbrev_mode_hook_on_expansion() {
       (expand-abbrev)
       (list (buffer-string) hook-fired))))
 "##,
+        expect_test::expect![[r#""OK (\"neohook \" :hook-fired)""#]],
     );
 }
 
 #[test]
 fn div_cx38_undo_after_multiple_word_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -336,5 +356,6 @@ fn div_cx38_undo_after_multiple_word_operations() {
     (capitalize-word 1)
     (list p1 (point) (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK (6 12 \"HELLO World foo bar\")""#]],
     );
 }

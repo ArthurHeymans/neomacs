@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_h1_thing_at_point_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (insert "Hello world\n  (a b c)\n")
@@ -24,13 +24,16 @@ fn div_h1_thing_at_point_variants() {
         (bounds-of-thing-at-point 'list)))
 "##,
         &["thingatpt.el"],
+        expect_test::expect![[
+            r#""OK (\"Hello\" \"Hello\" (1 . 6) \"(a b c)\" \"(a b c)\" (15 . 22))""#
+        ]],
     );
 }
 
 #[test]
 fn div_h1_ring_overflow_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((r (make-ring 3)))
   (ring-insert r 'a)
@@ -44,13 +47,14 @@ fn div_h1_ring_overflow_ops() {
         (ring-elements r)))
 "##,
         &["emacs-lisp/ring.el"],
+        expect_test::expect![[r#""OK (3 3 d c (d c b))""#]],
     );
 }
 
 #[test]
 fn div_h1_pp_to_string_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (pp-to-string '(a (b (c (d))) e))
       (pp-to-string '(1 2 3))
@@ -58,13 +62,16 @@ fn div_h1_pp_to_string_structures() {
       (length (pp-to-string '(1 2 3 4 5))))
 "##,
         &["emacs-lisp/pp.el"],
+        expect_test::expect![[
+            r#""OK (\"(a (b (c (d))) e)\n\" \"(1 2 3)\n\" \"((one . 1) (two . 2) (three . 3))\n\" 12)""#
+        ]],
     );
 }
 
 #[test]
 fn div_h1_subword_motion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (insert "camelCaseWord HTTPResponse XML")
@@ -76,13 +83,14 @@ fn div_h1_subword_motion() {
     (list p1 p2 p3)))
 "##,
         &["progmodes/subword.el"],
+        expect_test::expect![[r#""OK (6 10 14)""#]],
     );
 }
 
 #[test]
 fn div_h1_thing_at_point_word_neighborhood() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (insert "first second third fourth")
@@ -92,5 +100,6 @@ fn div_h1_thing_at_point_word_neighborhood() {
         (save-excursion (forward-word 1) (thing-at-point 'word))))
 "##,
         &["thingatpt.el"],
+        expect_test::expect![[r#""OK (\"second\" \"second\" \"second\")""#]],
     );
 }

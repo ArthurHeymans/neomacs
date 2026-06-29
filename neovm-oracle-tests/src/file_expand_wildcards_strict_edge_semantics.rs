@@ -70,5 +70,8 @@ fn oracle_file_expand_wildcards_nested_full_regexp_and_error_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 44)""#]],
+    );
 }

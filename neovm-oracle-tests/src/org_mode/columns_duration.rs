@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_columns_compute_summaries_and_update_properties_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-colview)
@@ -33,6 +33,9 @@ fn org_columns_compute_summaries_and_update_properties_combo() {
                      (get-text-property (point) 'org-summaries)))
              org-columns-current-fmt-compiled)
      (buffer-substring-no-properties (point-min) (point-max)))))"##,
+        expect_test::expect![[
+            r##""OK (\"2:00\" \"5.5\" \"[1/2]\" \"[50%]\" ((\"ITEM\" ((\"CHECK\" \"Check\" nil \"X%\" nil) . \"[50%]\") ((\"DONE\" \"Done\" nil \"X/\" nil) . \"[1/2]\") ((\"POINTS\" \"Points\" nil \"+\" \"%.1f\") . \"5.5\") ((\"EFFORT\" \"Effort\" nil \":\" nil) . \"2:00\")) (\"EFFORT\" ((\"CHECK\" \"Check\" nil \"X%\" nil) . \"[50%]\") ((\"DONE\" \"Done\" nil \"X/\" nil) . \"[1/2]\") ((\"POINTS\" \"Points\" nil \"+\" \"%.1f\") . \"5.5\") ((\"EFFORT\" \"Effort\" nil \":\" nil) . \"2:00\")) (\"POINTS\" ((\"CHECK\" \"Check\" nil \"X%\" nil) . \"[50%]\") ((\"DONE\" \"Done\" nil \"X/\" nil) . \"[1/2]\") ((\"POINTS\" \"Points\" nil \"+\" \"%.1f\") . \"5.5\") ((\"EFFORT\" \"Effort\" nil \":\" nil) . \"2:00\")) (\"DONE\" ((\"CHECK\" \"Check\" nil \"X%\" nil) . \"[50%]\") ((\"DONE\" \"Done\" nil \"X/\" nil) . \"[1/2]\") ((\"POINTS\" \"Points\" nil \"+\" \"%.1f\") . \"5.5\") ((\"EFFORT\" \"Effort\" nil \":\" nil) . \"2:00\")) (\"CHECK\" ((\"CHECK\" \"Check\" nil \"X%\" nil) . \"[50%]\") ((\"DONE\" \"Done\" nil \"X/\" nil) . \"[1/2]\") ((\"POINTS\" \"Points\" nil \"+\" \"%.1f\") . \"5.5\") ((\"EFFORT\" \"Effort\" nil \":\" nil) . \"2:00\"))) \"#+COLUMNS: %24ITEM %Effort{:} %Points{+;%.1f} %Done{X/} %Check{X%}\n* Project\n:PROPERTIES:\n:EFFORT:   2:00\n:POINTS:   5.5\n:DONE:     [1/2]\n:CHECK:    [50%]\n:END:\n** TODO Alpha\n:PROPERTIES:\n:Effort: 1:15\n:Points: 2.5\n:Done: [X]\n:Check: [X]\n:END:\n** TODO Beta\n:PROPERTIES:\n:Effort: 0:45\n:Points: 3.0\n:Done: [ ]\n:Check: [ ]\n:END:\n\")""##
+        ]],
     );
 }
 
@@ -40,7 +43,7 @@ fn org_columns_compute_summaries_and_update_properties_combo() {
 fn org_columns_capture_view_filter_skip_indent_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-colview)
@@ -60,6 +63,9 @@ fn org_columns_capture_view_filter_skip_indent_combo() {
      2 "+work" t '("skip")
      "%20ITEM(Task) %TODO(State) %Effort{:} %Owner"
      nil)))"##,
+        expect_test::expect![[
+            r#""OK ((\"Task\" \"State\" \"Effort\" \"Owner\") hline (2 \"Visible\" \"TODO\" \"0:10\" \"Bea\") (2 \"Empty\" \"TODO\" \"\" \"\"))""#
+        ]],
     );
 }
 
@@ -67,7 +73,7 @@ fn org_columns_capture_view_filter_skip_indent_combo() {
 fn org_duration_custom_units_columns_time_summary_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-duration)
@@ -96,6 +102,9 @@ fn org_duration_custom_units_columns_time_summary_combo() {
        (org-entry-get nil "Effort")
        (org-entry-get nil "Age")
        (buffer-substring-no-properties (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r##""OK ((630.0 1320.0 105.0) (\"1d 2h 30min\" \"2d 6h 0min\" \"1h 45min\") nil nil \"#+COLUMNS: %18ITEM %Effort{:} %Age{@mean}\n* Project\n** A\n:PROPERTIES:\n:Effort: 1d 2h 30min\n:Age: 2d\n:END:\n** B\n:PROPERTIES:\n:Effort: 0d 1h 45min\n:Age: 4h\n:END:\n\")""##
+        ]],
     );
 }
 
@@ -103,7 +112,7 @@ fn org_duration_custom_units_columns_time_summary_combo() {
 fn org_columns_allowed_value_cycle_and_update_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-colview)
@@ -147,6 +156,9 @@ fn org_columns_allowed_value_cycle_and_update_combo() {
         (list (nreverse snapshots)
               (org-entry-properties nil 'standard)
               (buffer-substring-no-properties (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""ERR (error \"Allowed values for this property have not been defined\")""#
+        ]],
     );
 }
 
@@ -154,7 +166,7 @@ fn org_columns_allowed_value_cycle_and_update_combo() {
 fn org_columns_format_store_insert_delete_move_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-colview)
@@ -189,6 +201,7 @@ fn org_columns_format_store_insert_delete_move_combo() {
               line-with-overlays
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -196,7 +209,7 @@ fn org_columns_format_store_insert_delete_move_combo() {
 fn org_duration_parse_format_summary_matrix_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-duration)
@@ -247,6 +260,9 @@ fn org_duration_parse_format_summary_matrix_combo() {
              '("1:00" "2h" "3pt" "0:30") nil)
             (org-columns--summary-mean-time
              '("1:00" "2h" "3pt" "0:30") nil)))))"##,
+        expect_test::expect![[
+            r#""OK (((\"\" nil 0.0 0.0) (7 nil 7.0 nil) (\"1:02\" 0 62.0 62.0) (\"2:03:30\" 0 123.5 123.5) (\"1d 2h 15min\" 0 585.0 1575.0) (\"1w 2d 3:30\" 0 3360.0 3360.0) (\"4pt 0:45\" 0 105.0 105.0) (\"bad unit\" nil (error \"Invalid duration format: \\\"bad unit\\\"\") canonical-error)) (\"0:00\" \"1:15\" \"1d 0:00\" \"1w 1d 3:45\" \"-1:15\" \"48:45\" \"48:45:00\" \"6d 3h 45min\" \"2d 0h 45min\" (error \"Unknown unit: nil\")) (h:mm h:mm:ss nil nil) \"4:15\" \"0:30\" \"2:00\" \"1:03\")""#
+        ]],
     );
 }
 
@@ -254,7 +270,7 @@ fn org_duration_parse_format_summary_matrix_combo() {
 fn org_columns_property_inheritance_compute_mutation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-colview)
@@ -334,6 +350,7 @@ fn org_columns_property_inheritance_compute_mutation_combo() {
                               (org-element-property :value node))))
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -341,7 +358,7 @@ fn org_columns_property_inheritance_compute_mutation_combo() {
 fn org_columns_dblock_property_summary_refresh_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-colview)
@@ -428,6 +445,7 @@ fn org_columns_dblock_property_summary_refresh_combo() {
                    nil)
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -435,7 +453,7 @@ fn org_columns_dblock_property_summary_refresh_combo() {
 fn org_columns_overlay_row_move_recompute_allowed_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-colview)
@@ -553,6 +571,7 @@ fn org_columns_overlay_row_move_recompute_allowed_combo() {
                       project-computed
                       content-after
                        (nreverse states))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -560,7 +579,7 @@ fn org_columns_overlay_row_move_recompute_allowed_combo() {
 fn org_columns_compute_all_dblock_insert_refresh_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-colview)
@@ -609,5 +628,6 @@ fn org_columns_compute_all_dblock_insert_refresh_combo() {
                 content-after
                 dblock-content
                 table-lisp)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

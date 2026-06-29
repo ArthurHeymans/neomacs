@@ -26,7 +26,10 @@ fn oracle_prop_setq_setf_multiple_pairs_cross_reference() {
                     (list a b c d e
                           ;; setq returns the last value
                           (setq a 100 b 200 c 300)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 9 12 3 (3 9 12 3) 300)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -55,7 +58,10 @@ fn oracle_prop_setq_setf_set_with_computed_symbol() {
               neovm--test-set-target-a))
     (makunbound 'neovm--test-set-target-a)
     (makunbound 'neovm--test-set-target-b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (100 400 reset reset)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +85,12 @@ fn oracle_prop_setq_setf_car_cdr_mutation() {
                             (cadr xs)
                             (nth 2 xs)
                             (length xs))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((first second third 4 5 extra tail) first second third 7)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +114,10 @@ fn oracle_prop_setq_setf_aref_vector_mutation() {
                     (list (aref v 0) (aref v 1) (aref v 2) (aref v 3)
                           (aref v 4) (aref v 5) (aref v 6) (aref v 7)
                           (length v)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (h b c 108 \"idx-4\" f g a 8)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +142,10 @@ fn oracle_prop_setq_setf_gethash_place() {
                           (gethash "age" h)
                           (gethash "scores" h)
                           (hash-table-count h)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"Alice\" 31 (95 87 92 100) 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +173,12 @@ fn oracle_prop_setq_setf_symbol_function_and_plist() {
           (fboundp 'neovm--test-setf-fn)))
     (fmakunbound 'neovm--test-setf-fn)
     (setplist 'neovm--test-setf-fn nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (27 125 (doc \"cubes a number\" version 2) \"cubes a number\" 2 t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +210,12 @@ fn oracle_prop_setq_setf_push_pop_operations() {
                       (push "entry-1" (cdr (assq 'log data)))
                       (setq results (cons data results)))
                     (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((d c b a) (popped d c) (b a) ((items y x) (log \"entry-1\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +246,10 @@ fn oracle_prop_setq_setf_cl_pushnew() {
                     (length after-dup)
                     strs
                     (length strs)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((d a b c) (d a b c) 4 4 (\"new\" \"hello\" \"world\") 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +288,10 @@ fn oracle_prop_setq_setf_incf_decf_places() {
                 (aref v 0) (aref v 1) (aref v 2)
                 (gethash 'score h)
                 (car cell)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 4 4 10 120 15 125 42)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +314,10 @@ fn oracle_prop_setq_setf_nth_deep_mutation() {
                     (setf (nth 2 (nth 0 matrix)) 'tr)
                     (setf (nth 0 (nth 2 matrix)) 'bl)
                     matrix)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 2 tr) (4 0 6) (bl 8 0))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -325,7 +361,12 @@ fn oracle_prop_setq_setf_graph_adjacency_builder() {
                           (maphash (lambda (k v) (push (cons k (length v)) degrees)) graph)
                           (sort degrees (lambda (a b) (string< (symbol-name (car a))
                                                                 (symbol-name (car b)))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a e b c d) (b c e) ((a . 3) (b . 2) (c . 3) (d . 2) (e . 1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -354,5 +395,10 @@ fn oracle_prop_setq_setf_symbol_value_dynamic() {
         (push (symbol-value 'neovm--test-dynvar) results)
         (nreverse results))
     (makunbound 'neovm--test-dynvar)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (global-val let-bound setf-changed setf-changed global-val)""#
+        ]],
+    );
 }

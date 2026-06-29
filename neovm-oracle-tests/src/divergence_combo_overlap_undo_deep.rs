@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_overlapping_overlays_undo_reorder() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"oor\")))\n\
          (with-current-buffer buf\n\
@@ -72,6 +72,7 @@ fn deficiency_overlapping_overlays_undo_reorder() {
          (overlay-end ov-c)\n\
          (overlay-end ov-d))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -79,7 +80,7 @@ fn deficiency_overlapping_overlays_undo_reorder() {
 fn deficiency_kill_yank_textprop_preserve_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kyp\")))\n\
          (with-current-buffer buf\n\
@@ -108,6 +109,7 @@ fn deficiency_kill_yank_textprop_preserve_undo() {
          (get-text-property 44 'face)\n\
          (get-text-property 53 'face)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 69 78)""#]],
     );
 }
 
@@ -115,7 +117,7 @@ fn deficiency_kill_yank_textprop_preserve_undo() {
 fn deficiency_narrow_widen_replace_prop_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"nwr\")))\n\
          (with-current-buffer buf\n\
@@ -157,6 +159,7 @@ fn deficiency_narrow_widen_replace_prop_cycle() {
          (marker-position m2)\n\
          (marker-position m3))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 5 5)""#]],
     );
 }
 
@@ -164,7 +167,7 @@ fn deficiency_narrow_widen_replace_prop_cycle() {
 fn deficiency_struct_marker_slots_undo_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (span (:constructor make-span))\n\
          (start nil) (end nil) (label nil))\n\
@@ -208,6 +211,7 @@ fn deficiency_struct_marker_slots_undo_move() {
          (marker-position (span-end s3))\n\
          (span-label s3)))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -215,7 +219,7 @@ fn deficiency_struct_marker_slots_undo_move() {
 fn deficiency_eieio_composition_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass text-chunk nil\n\
          ((content :initarg :content :accessor chunk-content)\n\
@@ -256,6 +260,7 @@ fn deficiency_eieio_composition_undo_chain() {
          (get-text-property 1 'face)\n\
          (get-text-property 7 'face)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-function second)""#]],
     );
 }
 
@@ -263,7 +268,7 @@ fn deficiency_eieio_composition_undo_chain() {
 fn deficiency_multi_buf_markers_undo_interleave() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf1 (generate-new-buffer \"mb1\"))\n\
          (buf2 (generate-new-buffer \"mb2\"))\n\
@@ -311,6 +316,7 @@ fn deficiency_multi_buf_markers_undo_interleave() {
          (kill-buffer buf1)\n\
          (kill-buffer buf2)\n\
          (kill-buffer buf3)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -318,7 +324,7 @@ fn deficiency_multi_buf_markers_undo_interleave() {
 fn deficiency_advice_chain_text_transform_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar my-transform-count 0)\n\
          (defun my-double-word (start end)\n\
@@ -358,6 +364,7 @@ fn deficiency_advice_chain_text_transform_undo() {
          (let ((new-end (+ start (* 2 (- end start)))))\n\
          (put-text-property start new-end 'transform-count my-transform-count))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -365,7 +372,7 @@ fn deficiency_advice_chain_text_transform_undo() {
 fn deficiency_hash_table_textprop_key_identity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"hti\"))\n\
          (tbl (make-hash-table :test 'equal)))\n\
@@ -391,6 +398,7 @@ fn deficiency_hash_table_textprop_key_identity() {
          (gethash \"key3\" tbl)\n\
          (= (hash-table-count tbl) 3))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -398,7 +406,7 @@ fn deficiency_hash_table_textprop_key_identity() {
 fn deficiency_cl_loop_with_buffer_manipulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"clb\")))\n\
          (with-current-buffer buf\n\
@@ -424,6 +432,7 @@ fn deficiency_cl_loop_with_buffer_manipulation() {
          (= (first (first sorted)) 1)\n\
          (= (first (car (last sorted))) 9)))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-function first)""#]],
     );
 }
 
@@ -431,7 +440,7 @@ fn deficiency_cl_loop_with_buffer_manipulation() {
 fn deficiency_deeply_nested_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"dnn\")))\n\
          (with-current-buffer buf\n\
@@ -471,5 +480,6 @@ fn deficiency_deeply_nested_narrow_undo() {
          (get-text-property 10 'section)\n\
          (marker-position m-total)))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 10 10)""#]],
     );
 }

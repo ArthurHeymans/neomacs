@@ -5,154 +5,169 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx538_compiler_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (define-compiler-macro cx538-cm (&whole form arg)
     (if (numberp arg) (* arg 2) form))
   (cx538-cm 5))
 "##,
+        expect_test::expect![[r#""ERR (void-function define-compiler-macro)""#]],
     );
 }
 
 #[test]
 fn div_cx538_compiler_macro_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (define-compiler-macro cx538-cm2 (&whole form a b)
     `(+ (* ,a 2) (* ,b 3)))
   (compiler-macroexpand '(cx538-cm2 5 6)))
 "##,
+        expect_test::expect![[r#""ERR (void-function define-compiler-macro)""#]],
     );
 }
 
 #[test]
 fn div_cx538_declaim_inline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (declaim (inline cx538-inline-fn))
   (defun cx538-inline-fn (x) (* x 3))
   (cx538-inline-fn 7))
 "##,
+        expect_test::expect![[r#""ERR (void-function declaim)""#]],
     );
 }
 
 #[test]
 fn div_cx538_proclaim_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (cl-proclaim '(type (function (integer) integer) 1+))
   (1+ 5))
 "##,
+        expect_test::expect![[r#""OK 6""#]],
     );
 }
 
 #[test]
 fn div_cx538_declare_ftype() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (defun cx538-ft (x) (* x 4))
   (cl-declare (ftype (function (number) number) cx538-ft))
   (cx538-ft 5))
 "##,
+        expect_test::expect![[r#""OK 20""#]],
     );
 }
 
 #[test]
 fn div_cx538_check_declare_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (cl-check-type 42 integer)
   'ok)
 "##,
+        expect_test::expect![[r#""OK ok""#]],
     );
 }
 
 #[test]
 fn div_cx538_check_declare_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (cl-check-type "hello" integer)
   (error (car e)))
 "##,
+        expect_test::expect![[r#""OK wrong-type-argument""#]],
     );
 }
 
 #[test]
 fn div_cx538_assert_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(cl-assert (equal 1 1) t "should be true")
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx538_assert_fail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (cl-assert nil t "assertion failed")
   (error (car e)))
 "##,
+        expect_test::expect![[r#""OK error""#]],
     );
 }
 
 #[test]
 fn div_cx538_multiple_value_bind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(multiple-value-bind (a b c) (values 1 2 3) (+ a b c))
 "##,
+        expect_test::expect![[r#""ERR (void-function multiple-value-bind)""#]],
     );
 }
 
 #[test]
 fn div_cx538_multiple_value_call() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(multiple-value-call #'list (values 1 2 3))
 "##,
+        expect_test::expect![[r#""ERR (void-function multiple-value-call)""#]],
     );
 }
 
 #[test]
 fn div_cx538_multiple_value_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(multiple-value-list (values 1 2 3))
 "##,
+        expect_test::expect![[r#""ERR (void-function multiple-value-list)""#]],
     );
 }
 
 #[test]
 fn div_cx538_values_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(multiple-value-list (values 'a 'b))
 "##,
+        expect_test::expect![[r#""ERR (void-function multiple-value-list)""#]],
     );
 }
 
 #[test]
 fn div_cx538_nth_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(nth-value 0 (values 10 20 30))
 "##,
+        expect_test::expect![[r#""ERR (void-function nth-value)""#]],
     );
 }
 
 #[test]
 fn div_cx538_nth_value_second() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(nth-value 1 (values 10 20 30))
 "##,
+        expect_test::expect![[r#""ERR (void-function nth-value)""#]],
     );
 }

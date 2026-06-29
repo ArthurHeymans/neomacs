@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_make_char_table_and_aref_aset_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ct (make-char-table 'syntax-table nil)))\n\
          (aset ct ?A 'word)\n\
@@ -23,6 +23,7 @@ fn deficiency_make_char_table_and_aref_aset_range() {
          (aref ct ?9)\n\
          (aref ct ?+)\n\
          (aref ct ? ))))",
+        expect_test::expect![[r#""OK (word word word digit digit nil nil)""#]],
     );
 }
 
@@ -30,7 +31,7 @@ fn deficiency_make_char_table_and_aref_aset_range() {
 fn deficiency_char_table_range_set_and_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((parent (make-char-table 'category-table 'base))\n\
          (child (make-char-table 'category-table nil)))\n\
@@ -43,6 +44,9 @@ fn deficiency_char_table_range_set_and_parent() {
          (aref child ?0)\n\
          (aref child ?+)\n\
          (char-table-parent child))))",
+        expect_test::expect![[
+            r#""OK (override base digit base #^[base nil category-table #^^[3 0 base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base digit base base base base base base base base base base base base base base base base alpha base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base] #^^[1 0 #^^[2 0 #^^[3 0 base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base digit base base base base base base base base base base base base base base base base alpha base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base] base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base] base base base base base base base base base base base base base base base] base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base base])""#
+        ]],
     );
 }
 
@@ -50,7 +54,7 @@ fn deficiency_char_table_range_set_and_parent() {
 fn deficiency_map_char_table_collects_all_ranges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ct (make-char-table 'syntax-table nil))\n\
          (ranges nil))\n\
@@ -68,6 +72,7 @@ fn deficiency_map_char_table_collects_all_ranges() {
          (< (if (consp ra) (car ra) ra)\n\
          (if (consp rb) (car rb) rb)))))))\n\
          (length sorted))))",
+        expect_test::expect![[r#""OK 2""#]],
     );
 }
 
@@ -75,7 +80,7 @@ fn deficiency_map_char_table_collects_all_ranges() {
 fn deficiency_category_table_set_and_category_docstring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ct (make-category-table)))\n\
          (define-category ?a \\\"ASCII letters\\\" ct)\n\
@@ -89,6 +94,7 @@ fn deficiency_category_table_set_and_category_docstring() {
          (char-category-set ?a ct)\n\
          (char-category-set ?0 ct)\n\
          (char-category-set ?+ ct))))",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments define-category 4)""#]],
     );
 }
 
@@ -96,7 +102,7 @@ fn deficiency_category_table_set_and_category_docstring() {
 fn deficiency_syntax_table_after_modify_syntax_entry() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((st (copy-syntax-table (standard-syntax-table))))\n\
          (with-syntax-table st\n\
@@ -107,6 +113,7 @@ fn deficiency_syntax_table_after_modify_syntax_entry() {
          (char-syntax ?a)\n\
          (char-syntax ?0)\n\
          (char-syntax ? ))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -114,7 +121,7 @@ fn deficiency_syntax_table_after_modify_syntax_entry() {
 fn deficiency_char_table_extra_slots_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ct (make-char-table 'foo 0)))\n\
          (set-char-table-extra-slot ct 0 'slot0)\n\
@@ -123,6 +130,9 @@ fn deficiency_char_table_extra_slots_access() {
          (list (char-table-extra-slot ct 0)\n\
          (char-table-extra-slot ct 1)\n\
          (char-table-extra-slot ct 2))))",
+        expect_test::expect![[
+            r#""ERR (args-out-of-range #^[0 nil foo 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0] 0)""#
+        ]],
     );
 }
 
@@ -130,7 +140,7 @@ fn deficiency_char_table_extra_slots_access() {
 fn deficiency_char_table_default_value_and_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ct (make-char-table 'test-table 'default-val)))\n\
          (aset ct ?x 'x-specific)\n\
@@ -140,6 +150,7 @@ fn deficiency_char_table_default_value_and_p() {
          (char-table-p ct)\n\
          (char-table-p [1 2 3])\n\
          (char-table-p \\\"string\\\"))))",
+        expect_test::expect![[r#""ERR (void-variable \\\"string\\\")""#]],
     );
 }
 
@@ -147,7 +158,7 @@ fn deficiency_char_table_default_value_and_p() {
 fn deficiency_category_table_merge_two_tables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ct1 (make-category-table))\n\
          (ct2 (make-category-table)))\n\
@@ -161,6 +172,7 @@ fn deficiency_category_table_merge_two_tables() {
          (char-category-set ?y merged)\n\
          (category-docstring ?a merged)\n\
          (category-docstring ?b ct2)))))",
+        expect_test::expect![[r#""ERR (void-variable \\\"Alpha\\\")""#]],
     );
 }
 
@@ -168,7 +180,7 @@ fn deficiency_category_table_merge_two_tables() {
 fn deficiency_optimize_char_table_with_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ct (make-char-table 'test nil)))\n\
          (aset ct ?A 'letter)\n\
@@ -182,6 +194,7 @@ fn deficiency_optimize_char_table_with_default() {
          (aref ct ?A)\n\
          (aref ct ?a)\n\
          (aref ct ?Z)))))",
+        expect_test::expect![[r#""OK (2 letter lower nil)""#]],
     );
 }
 
@@ -189,7 +202,7 @@ fn deficiency_optimize_char_table_with_default() {
 fn deficiency_char_table_with_multibyte_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ct (make-char-table 'syntax-table nil)))\n\
          (aset ct ?\\x300 'japanese)\n\
@@ -198,5 +211,6 @@ fn deficiency_char_table_with_multibyte_chars() {
          (aref ct ?\\x400)\n\
          (aref ct ?A)\n\
          (aref ct ?z))))",
+        expect_test::expect![[r#""OK (japanese cyrillic nil nil)""#]],
     );
 }

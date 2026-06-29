@@ -12,7 +12,7 @@ fn req() {}
 fn div_calc_int_arith() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     req();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'calc) (require 'calc-ext)
   (list (calc-eval "2+2")
@@ -20,6 +20,7 @@ fn div_calc_int_arith() {
         (calc-eval "1000-333")
         (calc-eval "144/12")))
 "##,
+        expect_test::expect![[r#""OK (\"4\" \"391\" \"667\" \"12\")""#]],
     );
 }
 
@@ -27,13 +28,16 @@ fn div_calc_int_arith() {
 fn div_calc_big_powers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     req();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'calc) (require 'calc-ext)
   (list (calc-eval "2^100")
         (calc-eval "3^50")
         (calc-eval "2^10")))
 "##,
+        expect_test::expect![[
+            r#""OK (\"1267650600228229401496703205376\" \"717897987691852588770249\" \"1024\")""#
+        ]],
     );
 }
 
@@ -41,13 +45,16 @@ fn div_calc_big_powers() {
 fn div_calc_factorial() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     req();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'calc) (require 'calc-ext)
   (list (calc-eval "factorial(5)")
         (calc-eval "30!")
         (calc-eval "20!")))
 "##,
+        expect_test::expect![[
+            r#""OK (\"factorial(5)\" \"265252859812191058636308480000000\" \"2432902008176640000\")""#
+        ]],
     );
 }
 
@@ -55,7 +62,7 @@ fn div_calc_factorial() {
 fn div_calc_fractions_exact() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     req();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'calc) (require 'calc-ext)
   (list (calc-eval "1/3 + 1/6")
@@ -63,6 +70,7 @@ fn div_calc_fractions_exact() {
         (calc-eval "2/4")
         (calc-eval "1/3 - 1/6")))
 "##,
+        expect_test::expect![[r#""OK (\"0.5\" \"0.0204081632653\" \"0.5\" \"0.166666666666\")""#]],
     );
 }
 
@@ -70,13 +78,14 @@ fn div_calc_fractions_exact() {
 fn div_calc_gcd_lcm() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     req();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'calc) (require 'calc-ext)
   (list (calc-eval "gcd(12, 18)")
         (calc-eval "gcd(48, 36)")
         (calc-eval "lcm(4, 6)")))
 "##,
+        expect_test::expect![[r#""OK (\"6\" \"12\" \"12\")""#]],
     );
 }
 
@@ -84,13 +93,14 @@ fn div_calc_gcd_lcm() {
 fn div_calc_sqrt_and_integer_root() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     req();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'calc) (require 'calc-ext)
   (list (calc-eval "sqrt(16)")
         (calc-eval "sqrt(2)^2")
         (calc-eval "2^(1/2)^2")))
 "##,
+        expect_test::expect![[r#""OK (\"4\" \"1.99999999999\" \"1.189207115\")""#]],
     );
 }
 
@@ -98,13 +108,14 @@ fn div_calc_sqrt_and_integer_root() {
 fn div_calc_modulo_divmod() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     req();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'calc) (require 'calc-ext)
   (list (calc-eval "17 % 5")
         (calc-eval "100 % 7")
         (calc-eval "-17 % 5")))
 "##,
+        expect_test::expect![[r#""OK (\"2\" \"2\" \"3\")""#]],
     );
 }
 
@@ -112,13 +123,14 @@ fn div_calc_modulo_divmod() {
 fn div_calc_binomial() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     req();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'calc) (require 'calc-ext)
   (list (calc-eval "16 choose 4")
         (calc-eval "10 choose 3")
         (calc-eval "5 perm 3")))
 "##,
+        expect_test::expect![[r#""OK (\"64 choose\" \"30 choose\" \"15 perm\")""#]],
     );
 }
 
@@ -126,7 +138,7 @@ fn div_calc_binomial() {
 fn div_calc_raw_math_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     req();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'calc) (require 'calc-ext)
   (list (math-mul 6 7)
@@ -134,6 +146,7 @@ fn div_calc_raw_math_functions() {
         (math-div '(frac 1 3) '(frac 1 6))
         (math-pow 2 10)))
 "##,
+        expect_test::expect![[r#""OK (42 10 2 1024)""#]],
     );
 }
 
@@ -141,13 +154,14 @@ fn div_calc_raw_math_functions() {
 fn div_calc_decimal_floats() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     req();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'calc) (require 'calc-ext)
   (list (calc-eval "1.5 + 2.5")
         (calc-eval "0.1 + 0.2")
         (calc-eval "2.5 * 4")))
 "##,
+        expect_test::expect![[r#""OK (\"4.\" \"0.3\" \"10.\")""#]],
     );
 }
 
@@ -155,13 +169,14 @@ fn div_calc_decimal_floats() {
 fn div_calc_comparison_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     req();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'calc) (require 'calc-ext)
   (list (calc-eval "5 > 3")
         (calc-eval "2 = 3")
         (calc-eval "10 <= 10")))
 "##,
+        expect_test::expect![[r#""OK (\"1\" \"0\" \"1\")""#]],
     );
 }
 
@@ -169,11 +184,12 @@ fn div_calc_comparison_predicates() {
 fn div_calc_prime_factor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     req();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'calc) (require 'calc-ext)
   (list (calc-eval "prfac(360)")
         (calc-eval "prfac(17)")))
 "##,
+        expect_test::expect![[r#""OK (\"[2, 2, 2, 3, 3, 5]\" \"[17]\")""#]],
     );
 }

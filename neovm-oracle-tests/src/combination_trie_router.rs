@@ -105,7 +105,12 @@ fn oracle_prop_trie_router_exact_match() {
     (fmakunbound 'neovm--tr-add-route)
     (fmakunbound 'neovm--tr-match-exact)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((home-handler) (users-list) (users-create) (users-new) (api-status) nil nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +216,12 @@ fn oracle_prop_trie_router_path_params() {
     (fmakunbound 'neovm--tr2-match)
     (fmakunbound 'neovm--tr2-match-rec)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((user-show (\"id\" . \"42\")) (user-update (\"id\" . \"99\")) (user-post (\"id\" . \"7\") (\"post_id\" . \"123\")) (repo-show (\"owner\" . \"octocat\") (\"repo\" . \"hello-world\")) nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +342,12 @@ fn oracle_prop_trie_router_wildcard() {
     (fmakunbound 'neovm--tr3-match)
     (fmakunbound 'neovm--tr3-match-rec)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((serve-file (\"filepath\" . \"css/style.css\")) (serve-file (\"filepath\" . \"js/app.js\")) (serve-file (\"filepath\" . \"img/logo.png\")) (api-proxy (\"version\" . \"v2\") (\"rest\" . \"users/list\")) (api-proxy (\"version\" . \"v1\") (\"rest\" . \"deep/nested/path\")) (static-handler (\"path\" . \"favicon.ico\")) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -440,7 +455,12 @@ fn oracle_prop_trie_router_method_routing() {
     (fmakunbound 'neovm--tr4-match)
     (fmakunbound 'neovm--tr4-allowed-methods)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (articles-index articles-create articles-featured articles-set-featured articles-clear-featured nil (get post) (delete get put) articles-index-v2)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -564,7 +584,12 @@ fn oracle_prop_trie_router_middleware_chain() {
     (fmakunbound 'neovm--tr5-add-route)
     (fmakunbound 'neovm--tr5-dispatch)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:status 200 :body \"public\" :ctx ((timestamp . 12345) (user . \"guest\"))) (:status 401 :body \"unauthorized\") (:status 200 :body \"private\" :ctx ((timestamp . 12345) (user . \"admin\") (auth-token . \"secret\"))) (:status 404 :body \"not found\") (:status 405 :body \"method not allowed\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -690,7 +715,12 @@ fn oracle_prop_trie_router_priority() {
     (fmakunbound 'neovm--tr6-match)
     (fmakunbound 'neovm--tr6-match-rec)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (admin-handler (user-handler (\"id\" . \"42\")) (user-wildcard (\"rest\" . \"42/posts\")) docs-api-exact (docs-page (\"page\" . \"tutorial\")) (docs-wildcard (\"path\" . \"guides/advanced/tips\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -793,5 +823,10 @@ fn oracle_prop_trie_router_list_routes() {
     (fmakunbound 'neovm--tr7-list-routes)
     (fmakunbound 'neovm--tr7-walk)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (6 ((get \"/\" root-handler) (delete \"/api/posts\" api-posts-delete) (get \"/api/posts\" api-posts-get) (get \"/api/users\" api-users-get) (post \"/api/users\" api-users-post) (get \"/health\" health-check)) (\"/\" \"/api/posts\" \"/api/users\" \"/health\") ((\"/\" . 1) (\"/api/posts\" . 2) (\"/api/users\" . 2) (\"/health\" . 1)))""#
+        ]],
+    );
 }

@@ -44,7 +44,10 @@ fn oracle_prop_plist_get_various_key_types() {
                      (plist-get '(:only 42) :other)
                      ;; plist-get with default nil for missing
                      (plist-get '(:a 1) :b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 3 5 nil 10 40 nil zero three nil nil nil 42 nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -94,7 +97,12 @@ fn oracle_prop_plist_put_new_and_update() {
                                  (q (plist-put q :x 3))
                                  (q (plist-put q :x 4)))
                             (list (plist-get q :x) (length q)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:a 1 :b 2 :c 3) (:a 100 :b 2 :c 3) (:a 100 :b 200 :c 300) \"string-now\" nil (list now) 4 5 (:b nil :c (list now) :d 4 :e 5) (4 2))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +141,12 @@ fn oracle_prop_plist_member_tail_comprehensive() {
                              ;; present returns non-nil tail, missing returns nil
                              (if (plist-member pl2 :present) 'found 'not-found)
                              (if (plist-member pl2 :missing) 'found 'not-found)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t nil 30 (:y 30 :z 40) 8 4 nil ((:present nil :also-here 42) nil found not-found))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +213,12 @@ fn oracle_prop_symbol_plist_get_put_comprehensive() {
         (nreverse results))
     (setplist 'neovm--cptest-sym-a nil)
     (setplist 'neovm--cptest-sym-b nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (val1 42 (a b c) different \"string-val\") overwritten 999 42 (nil t) nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -276,7 +294,12 @@ fn oracle_prop_plist_as_kv_store() {
                        (let ((nums '(:a 5 :b 25 :c 10 :d 50 :e 30)))
                          (funcall kv-filter nums
                                   (lambda (_k v) (> v 20)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Alice\" \"fallback\" (:name :age :score :level) (\"Alice\" 30 85 3) 4 (:x 20 :y 40 :z 60) (:b 25 :d 50 :e 30))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -330,7 +353,12 @@ fn oracle_prop_nested_plists() {
                          (list (plist-get creds :user)
                                (plist-get creds :pass)
                                (plist-member creds :user))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"localhost\" 5432 \"admin\" \"secret\" t 300 :info nil nil \"localhost\" (\"admin\" \"secret\" (:user \"admin\" :pass \"secret\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -399,7 +427,12 @@ fn oracle_prop_plist_iteration_patterns() {
                          (setq count (1+ count))
                          (setq rest (cddr rest)))
                        count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((:name . \"Bob\") (:age . 25) (:city . \"NYC\") (:score . 92) (:rank . 3)) 5 (:age :score :rank) 120 \":name=\\\"Bob\\\", :age=25, :city=\\\"NYC\\\", :score=92, :rank=3\" (my-name \"Bob\" my-age 25 my-city \"NYC\" my-score 92 my-rank 3) 0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -492,7 +525,12 @@ fn oracle_prop_plist_merge_update_patterns() {
                        ;; Select subset of keys
                        (funcall plist-select '(:a 1 :b 2 :c 3 :d 4) '(:b :d))
                        (funcall plist-select '(:a 1 :b 2) '(:x :y)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:a 1 :b 22 :c 33 :d 4 :e 50) (:a 1 :b 2 :c 3 :d 4 :e 50) (:a 1 :b 20 :c 30 :d 4 :e 50) (:a 1 :b (2 20) :c (3 30) :d 4 :e 50) (:x 1 :z 3) (:x 1 :y 2) t nil nil (:b 2 :d 4) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -529,7 +567,12 @@ fn oracle_prop_plist_get_with_comparison() {
                           (pl (plist-put pl "host" "prod.com" #'equal)))
                      (list (plist-get pl "host" #'equal)
                            (plist-get pl "port" #'equal))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 \"Alice\" 30 nil \"second\" 10 20 (\"b\" 2) 99 (\"prod.com\" 8080))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -593,5 +636,10 @@ fn oracle_prop_plist_event_handler_system() {
                        (funcall handler-count d :hover)
                        (funcall handler-count d :keypress)
                        (funcall handler-count d :scroll))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"logged: (:x 100 :y 200)\" 100 200) (\"hover at button-1\") (\"HELLO\" 5) nil 3 1 2 0)""#
+        ]],
+    );
 }

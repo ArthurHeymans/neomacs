@@ -20,7 +20,10 @@ fn oracle_prop_let_star_dependency_chain() {
                        (d (expt c 2))
                        (e (- d a)))
                   (list a b c d e))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 2 4 16 15)""#]],
+    );
 }
 
 #[test]
@@ -35,7 +38,10 @@ fn oracle_prop_let_star_accumulating() {
                        (min-val (apply #'min items))
                        (range (- max-val min-val)))
                   (list sum count avg max-val min-val range))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (23 6 3.8333333333333335 9 1 8)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -57,7 +63,10 @@ fn oracle_prop_let_star_closure_capture() {
                   (list (funcall get-base)
                         (funcall get-mult)
                         (funcall get-all)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 30 (10 30 40))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +86,10 @@ fn oracle_prop_let_vs_let_star_parallel() {
                     ;; let*: x gets y=2, then y gets new x=2
                     (let* ((x y) (y x))
                       (list x y))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 1) (2 2))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +110,12 @@ fn oracle_prop_let_star_builder_pattern() {
                                       host
                                       (plist-get config :port))))
                     (list config url))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:host \"localhost\" :port 8080 :debug t :timeout 30) \"http://localhost:8080\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -120,5 +137,8 @@ fn oracle_prop_let_star_destructure() {
                        (keys (mapcar #'car nested))
                        (vals (mapcar #'cadr nested)))
                   (list first second a b c keys vals))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (hello world 1 2 3 (a b c) (1 2 3))""#]],
+    );
 }

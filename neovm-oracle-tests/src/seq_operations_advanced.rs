@@ -28,7 +28,12 @@ fn oracle_prop_seq_mapn_multiple_sequences() {
                     (seq-mapn #'* [2 3 4] '(10 20 30))
                     ;; Single sequence degenerates to seq-map
                     (seq-mapn #'1+ '(5 6 7))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((11 22 33 44) ((a 1 x) (b 2 y) (c 3 z)) ((a . 1) (b . 2) (c . 3)) (20 60 120) (6 7 8))""#
+        ]],
+    );
 }
 
 #[test]
@@ -61,7 +66,12 @@ fn oracle_prop_seq_mapn_truncation_strings_and_error_contracts() {
     (condition-case err
         (seq-mapn #'list 42 '(1 2))
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a 1 x) (b 2 y)) ((97 10) (98 20) (99 30)) (2 4 6) nil (((a 1) (b 2)) ((b 2) (a 1))) (wrong-type-argument sequencep))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +88,10 @@ fn oracle_prop_seq_group_by() {
                     ;; Sort by key for determinism
                     (sort result (lambda (a b)
                                    (and (null (car a)) (car b)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 #[test]
@@ -90,7 +103,10 @@ fn oracle_prop_seq_group_by_complex_key() {
                     (let ((groups (seq-group-by #'length words)))
                       ;; Sort by key (length) for determinism
                       (sort groups (lambda (a b) (< (car a) (car b))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +127,12 @@ fn oracle_prop_seq_sort_by() {
                                  '((alice . 30) (bob . 25) (carol . 35) (dave . 28)))
                     ;; Sort numbers by absolute value
                     (seq-sort-by #'abs #'< '(-5 3 -1 4 -2 0))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"fig\" \"kiwi\" \"apple\" \"banana\" \"elderberry\") ((bob . 25) (dave . 28) (alice . 30) (carol . 35)) (0 -1 -2 3 4 -5))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +155,10 @@ fn oracle_prop_seq_min_max() {
                     ;; Negative numbers
                     (seq-min '(-10 -5 -20 -1))
                     (seq-max '(-10 -5 -20 -1))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 9 25 300 42 42 -20 -1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +181,12 @@ fn oracle_prop_seq_partition() {
                     (seq-partition #'numberp '("a" "b" "c"))
                     ;; Empty
                     (seq-partition #'numberp nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""ERR (wrong-type-argument number-or-marker-p (1 2 3 4 5 6 7 8 9 10))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +214,12 @@ fn oracle_prop_seq_subseq() {
                     ;; Negative indices (from end)
                     (seq-subseq '(a b c d e) -3)
                     (seq-subseq "abcdef" -4 -1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((b c d) (d e f) [20 30] \"world\" (1 2 3) nil (c d e) \"cde\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +283,10 @@ fn oracle_prop_seq_data_analysis_pipeline() {
                                    (lambda (a b)
                                      (string-lessp (symbol-name (car a))
                                                    (symbol-name (car b)))))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -309,5 +346,8 @@ fn oracle_prop_seq_custom_set_operations() {
                                (sort (seq-map id-of sym-diff) #'<)
                                ;; Union count
                                (length union))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }

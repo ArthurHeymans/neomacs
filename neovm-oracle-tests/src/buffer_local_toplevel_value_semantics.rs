@@ -28,7 +28,12 @@ fn oracle_buffer_local_toplevel_value_read_set_and_missing_local_errors() {
      (error (cons (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((void-variable neomacs--oracle-bltv) nil 11 t nil (void-variable neomacs--oracle-bltv))""#
+        ],
+    );
 }
 
 #[test]
@@ -85,5 +90,8 @@ fn oracle_buffer_local_toplevel_value_ignores_active_let_local_binding() {
       (makunbound 'neomacs--oracle-bltv-let))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 47)""#]],
+    );
 }

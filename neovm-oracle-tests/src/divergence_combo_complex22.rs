@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx22_terminal_parameter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((term (frame-terminal (selected-frame))))
   (set-terminal-parameter term 'neo-param :val)
@@ -17,13 +17,14 @@ fn div_cx22_terminal_parameter() {
         (terminal-parameter term 'neo-param)
         (terminal-parameter term 'nonexistent)))
 "##,
+        expect_test::expect![[r#""ERR (void-function terminalp)""#]],
     );
 }
 
 #[test]
 fn div_cx22_thingatpt_sentence_paragraph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "First sentence.  Second one.\n\nSecond paragraph.\n")
@@ -32,13 +33,14 @@ fn div_cx22_thingatpt_sentence_paragraph() {
         (save-excursion (forward-paragraph 1) (point))
         (save-excursion (backward-paragraph 1) (point))))
 "##,
+        expect_test::expect![[r#""OK (\"First sentence.\" 30 1)""#]],
     );
 }
 
 #[test]
 fn div_cx22_thingatpt_sexp_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -48,13 +50,14 @@ fn div_cx22_thingatpt_sexp_defun() {
         (save-excursion (beginning-of-defun) (point))
         (save-excursion (end-of-defun) (point))))
 "##,
+        expect_test::expect![[r#""OK (\"(x)\" 1 36)""#]],
     );
 }
 
 #[test]
 fn div_cx22_outline_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -67,13 +70,14 @@ fn div_cx22_outline_navigation() {
             (progn (outline-forward-same-level 1) (point))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (errored . args-out-of-range)""#]],
     );
 }
 
 #[test]
 fn div_cx22_comment_region_uncomment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -83,13 +87,16 @@ fn div_cx22_comment_region_uncomment() {
     (uncomment-region 1 (point-max))
     (list commented (buffer-string))))
 "##,
+        expect_test::expect![[
+            r#""OK (\";; line one\n;; line two\n;; line t\nhree\n\" \"line one\nline two\nline t\nhree\n\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx22_align_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -98,13 +105,14 @@ fn div_cx22_align_regexp() {
       (buffer-string))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"a\t\t= 1\nfoo\t\t= 2\nlongname\t= 3\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx22_syntax_pp_cache() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -116,13 +124,14 @@ fn div_cx22_syntax_pp_cache() {
             (nth 3 (syntax-ppss))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t 1 34)""#]],
     );
 }
 
 #[test]
 fn div_cx22_word_search_forward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello world café-world test")
@@ -131,13 +140,14 @@ fn div_cx22_word_search_forward() {
         (progn (goto-char 1) (word-search-forward "world" nil t))
         (progn (goto-char 1) (word-search-forward "xyz" nil t))))
 "##,
+        expect_test::expect![[r#""OK (17 12 nil)""#]],
     );
 }
 
 #[test]
 fn div_cx22_keymap_menu_item() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((m (make-sparse-keymap)))
   (define-key m [menu-bar neo] (cons "Neo" (make-sparse-keymap)))
@@ -146,13 +156,14 @@ fn div_cx22_keymap_menu_item() {
   (list (lookup-key m [menu-bar neo item1])
         (get (lookup-key m [menu-bar neo item1]) 'menu-item-help)))
 "##,
+        expect_test::expect![[r#""OK (neo-action nil)""#]],
     );
 }
 
 #[test]
 fn div_cx22_current_indentation_indent_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "no-indent\n    indented\n  partial\n")
@@ -160,25 +171,27 @@ fn div_cx22_current_indentation_indent_line() {
         (progn (forward-line 1) (current-indentation))
         (progn (forward-line 1) (current-indentation))))
 "##,
+        expect_test::expect![[r#""OK (0 0 0)""#]],
     );
 }
 
 #[test]
 fn div_cx22_print_vector_length() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((print-length 100) (print-vector-length t))
   (list (prin1-to-string (make-vector 5 nil))
         (length (prin1-to-string (make-bool-vector 8 t)))))
 "##,
+        expect_test::expect![[r#""OK (\"[nil nil nil nil nil]\" 9)""#]],
     );
 }
 
 #[test]
 fn div_cx22_search_whitespace_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello   world\tcafé")
@@ -188,13 +201,14 @@ fn div_cx22_search_whitespace_regexp() {
           (progn (goto-char 1) (search-forward "hello   world" nil t))
           (progn (goto-char 1) (search-forward "world café" nil t)))))
 "##,
+        expect_test::expect![[r#""OK (nil 14 nil)""#]],
     );
 }
 
 #[test]
 fn div_cx22_char_table_range_vector_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'cx22 nil)))
   (set-char-table-range ct ?a [:foo :bar])
@@ -202,13 +216,14 @@ fn div_cx22_char_table_range_vector_value() {
         (aref (char-table-range ct ?a) 0)
         (vectorp (char-table-range ct ?a))))
 "##,
+        expect_test::expect![[r#""OK ([:foo :bar] :foo t)""#]],
     );
 }
 
 #[test]
 fn div_cx22_frame_parameter_modification() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (selected-frame)))
   (let ((orig-name (frame-parameter f 'name)))
@@ -216,25 +231,27 @@ fn div_cx22_frame_parameter_modification() {
     (prog1 (list (frame-parameter f 'name) orig-name)
       (modify-frame-parameters f (list (cons 'name orig-name))))))
 "##,
+        expect_test::expect![[r#""OK (\"neo-cx22-test\" \"F1\")""#]],
     );
 }
 
 #[test]
 fn div_cx22_read_skip_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (car (read-from-string ";; comment\nactual-symbol"))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK actual-symbol""#]],
     );
 }
 
 #[test]
 fn div_cx22_format_escape_multibyte_in_prin1_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s "café\t世界\n😀")
        (p1 (prin1-to-string s))
@@ -244,13 +261,14 @@ fn div_cx22_format_escape_multibyte_in_prin1_combined() {
         (equal (car (read-from-string p1)) s)
         (equal (car (read-from-string p2)) s)))
 "##,
+        expect_test::expect![[r#""OK (11 12 11 t t)""#]],
     );
 }
 
 #[test]
 fn div_cx22_buffer_narrow_marker_undo_overlays_textprops_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -280,13 +298,14 @@ fn div_cx22_buffer_narrow_marker_undo_overlays_textprops_mega() {
             (text-properties-at 1) (text-properties-at 5)
             (length (overlays-at 3)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx22_coding_system_for_write_file_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx22-cw-")))
   (let ((coding-system-for-write 'latin-1-unix))
@@ -300,13 +319,14 @@ fn div_cx22_coding_system_for_write_file_roundtrip() {
                  (buffer-string)))
     (ignore-errors (delete-file f))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments insert-file-contents 6)""#]],
     );
 }
 
 #[test]
 fn div_cx22_cl_defstruct_print_object_inherited() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (cl-defstruct neo-cx22-animal name)
@@ -318,13 +338,14 @@ fn div_cx22_cl_defstruct_print_object_inherited() {
           (neo-cx22-animal-p c)
           (string-match "cat" (prin1-to-string c)))))
 "##,
+        expect_test::expect![[r#""OK (\"Whiskers\" \"black\" t t 12)""#]],
     );
 }
 
 #[test]
 fn div_cx22_process_list_filter_dead() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx22-pl" :command '("true"))))
   (accept-process-output p 2)
@@ -335,5 +356,6 @@ fn div_cx22_process_list_filter_dead() {
           (length (cl-remove-if-not #'processp (process-list)))
           (memq p (process-list)))))
 "##,
+        expect_test::expect![[r#""OK (nil nil 0 nil)""#]],
     );
 }

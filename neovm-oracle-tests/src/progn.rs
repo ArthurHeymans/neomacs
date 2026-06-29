@@ -23,7 +23,10 @@ fn oracle_progn_proptest_failure_path() -> &'static str {
 fn oracle_prop_progn_returns_last_fixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(progn 1 2 3)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(progn 1 2 3)",
+        expect_test::expect![[r#""OK 3""#]],
+    );
     assert_ok_eq("3", &oracle, &neovm);
 }
 
@@ -31,7 +34,10 @@ fn oracle_prop_progn_returns_last_fixed() {
 fn oracle_prop_progn_empty_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(progn)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(progn)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
@@ -39,7 +45,10 @@ fn oracle_prop_progn_empty_returns_nil() {
 fn oracle_prop_progn_single_form_returns_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(let ((x 42)) (progn x))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((x 42)) (progn x))",
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &oracle, &neovm);
 }
 
@@ -49,7 +58,8 @@ fn oracle_prop_progn_observes_left_to_right_side_effect_order() {
 
     let form =
         "(let ((xs nil)) (progn (setq xs (cons 'a xs)) (setq xs (cons 'b xs)) (nreverse xs)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (a b)""#]]);
     assert_ok_eq("(a b)", &oracle, &neovm);
 }
 
@@ -58,7 +68,8 @@ fn oracle_prop_progn_error_short_circuits_later_forms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((x 0)) (condition-case nil (progn (setq x 1) (car 1) (setq x 2)) (error x)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 1""#]]);
     assert_ok_eq("1", &oracle, &neovm);
 }
 
@@ -67,7 +78,8 @@ fn oracle_prop_progn_nested_blocks_return_outer_last() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn 10 (progn 20 30) 40)";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 40""#]]);
     assert_ok_eq("40", &oracle, &neovm);
 }
 
@@ -76,7 +88,8 @@ fn oracle_prop_progn_with_defun_body_and_multiple_steps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defun neovm--pg-step (x) (progn (setq x (+ x 1)) (setq x (+ x 2)) x)) (unwind-protect (neovm--pg-step 5) (fmakunbound 'neovm--pg-step)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 8""#]]);
     assert_ok_eq("8", &oracle, &neovm);
 }
 
@@ -85,7 +98,8 @@ fn oracle_prop_progn_with_macro_expanding_to_progn() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defmacro neovm--pg-inc2 (sym) (list 'progn (list 'setq sym (list '+ sym 1)) (list 'setq sym (list '+ sym 1)) sym)) (unwind-protect (let ((x 0)) (neovm--pg-inc2 x)) (fmakunbound 'neovm--pg-inc2)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 2""#]]);
     assert_ok_eq("2", &oracle, &neovm);
 }
 
@@ -97,7 +111,10 @@ fn oracle_prop_progn_multiple_funcall_sequencing() {
     // the `let`, so `x` is not captured — both GNU Emacs and NeoVM signal
     // void-variable.
     let form = "(let ((x 0) (f (lambda () (setq x (1+ x)) x))) (progn (list (funcall f) (funcall f) (funcall f) x)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
+    );
     assert_eq!(neovm, oracle, "neovm and oracle should match");
 }
 
@@ -106,7 +123,8 @@ fn oracle_prop_progn_multiple_macro_layers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defmacro neovm--pg-inner (sym n) (list 'setq sym (list '+ sym n))) (defmacro neovm--pg-outer (sym a b) (list 'progn (list 'neovm--pg-inner sym a) (list 'neovm--pg-inner sym b) sym)) (unwind-protect (let ((x 1)) (neovm--pg-outer x 4 7)) (fmakunbound 'neovm--pg-inner) (fmakunbound 'neovm--pg-outer)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 12""#]]);
     assert_ok_eq("12", &oracle, &neovm);
 }
 
@@ -115,7 +133,10 @@ fn oracle_prop_progn_macroexpand_shape_from_builder_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defmacro neovm--pg-build (&rest body) (cons 'progn body)) (unwind-protect (macroexpand '(neovm--pg-build 1 (funcall + 2 3) 4)) (fmakunbound 'neovm--pg-build)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (progn 1 (funcall + 2 3) 4)""#]],
+    );
     assert_ok_eq("(progn 1 (funcall + 2 3) 4)", &oracle, &neovm);
 }
 
@@ -124,7 +145,8 @@ fn oracle_prop_progn_nested_progn_inside_macro_then_funcalls() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defmacro neovm--pg-wrap (&rest body) (cons 'progn body)) (defmacro neovm--pg-inc (sym) (list 'setq sym (list '+ sym 1))) (unwind-protect (let ((x 0)) (neovm--pg-wrap (neovm--pg-inc x) (neovm--pg-inc x) (list x (funcall (lambda (z) (+ z 10)) x)))) (fmakunbound 'neovm--pg-wrap) (fmakunbound 'neovm--pg-inc)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (2 12)""#]]);
     assert_ok_eq("(2 12)", &oracle, &neovm);
 }
 
@@ -133,7 +155,8 @@ fn oracle_prop_progn_function_position_with_side_effect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((x 1)) (funcall (progn (setq x (+ x 4)) (lambda (y) (+ x y))) 3))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 8""#]]);
     assert_ok_eq("8", &oracle, &neovm);
 }
 
@@ -142,7 +165,8 @@ fn oracle_prop_progn_throw_skips_remaining_forms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(catch 'neovm--pg-tag (progn 1 (throw 'neovm--pg-tag 42) 99))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 42""#]]);
     assert_ok_eq("42", &oracle, &neovm);
 }
 
@@ -151,7 +175,8 @@ fn oracle_prop_progn_unwind_cleanup_happens_on_throw() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((x 0)) (list (catch 'neovm--pg-tag (progn (unwind-protect (throw 'neovm--pg-tag 7) (setq x 11)) 99)) x))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (7 11)""#]]);
     assert_ok_eq("(7 11)", &oracle, &neovm);
 }
 
@@ -160,7 +185,8 @@ fn oracle_prop_progn_nested_error_not_overwritten_by_later_forms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(condition-case nil (progn 1 (progn (car 1) 2) 3) (wrong-type-argument 'caught))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK caught""#]]);
     assert_ok_eq("caught", &oracle, &neovm);
 }
 
@@ -169,7 +195,8 @@ fn oracle_prop_progn_macro_and_defun_multiple_funcall_flow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defmacro neovm--pg-call3 (fn arg) (list 'progn (list 'funcall fn arg) (list 'funcall fn arg) (list 'funcall fn arg))) (defun neovm--pg-bump-cell (cell) (setcar cell (1+ (car cell))) (car cell)) (unwind-protect (let ((cell (list 0))) (list (neovm--pg-call3 'neovm--pg-bump-cell cell) (car cell))) (fmakunbound 'neovm--pg-call3) (fmakunbound 'neovm--pg-bump-cell)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (3 3)""#]]);
     assert_ok_eq("(3 3)", &oracle, &neovm);
 }
 
@@ -178,7 +205,10 @@ fn oracle_prop_progn_macroexpand_nested_progn_shape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defmacro neovm--pg-nested-shape (a b) (list 'progn a (list 'progn b))) (unwind-protect (macroexpand '(neovm--pg-nested-shape (setq x 1) (setq x 2))) (fmakunbound 'neovm--pg-nested-shape)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (progn (setq x 1) (progn (setq x 2)))""#]],
+    );
     assert_ok_eq("(progn (setq x 1) (progn (setq x 2)))", &oracle, &neovm);
 }
 
@@ -187,7 +217,10 @@ fn oracle_prop_progn_nonlocal_exit_with_cleanup_and_post_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((x 'start)) (list (catch 'neovm--pg-tag (progn (setq x 'entered) (unwind-protect (throw 'neovm--pg-tag 'boom) (setq x 'cleaned)) 'tail)) x))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (boom cleaned)""#]],
+    );
 }
 
 proptest! {

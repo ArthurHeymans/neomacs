@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_marker_overlay_textprop_buflocal_narrow_clone_setf_replace_undo_multi_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "n1a"))
         (b2 (generate-new-buffer "n1b")))
@@ -91,6 +91,7 @@ fn combo_marker_overlay_textprop_buflocal_narrow_clone_setf_replace_undo_multi_u
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
     );
 }
 
@@ -98,7 +99,7 @@ fn combo_marker_overlay_textprop_buflocal_narrow_clone_setf_replace_undo_multi_u
 fn combo_marker_overlay_textprop_buflocal_narrow_clone_replace_setf_undo_multi_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "r2a"))
         (b2 (generate-new-buffer "r2b")))
@@ -183,6 +184,7 @@ fn combo_marker_overlay_textprop_buflocal_narrow_clone_replace_setf_undo_multi_u
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
     );
 }
 
@@ -190,7 +192,7 @@ fn combo_marker_overlay_textprop_buflocal_narrow_clone_replace_setf_undo_multi_u
 fn combo_marker_overlay_textprop_buflocal_narrow_clone_multi_overlay_undo_multi_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "x1a"))
         (b2 (generate-new-buffer "x1b")))
@@ -283,6 +285,7 @@ fn combo_marker_overlay_textprop_buflocal_narrow_clone_multi_overlay_undo_multi_
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
     );
 }
 
@@ -290,7 +293,7 @@ fn combo_marker_overlay_textprop_buflocal_narrow_clone_multi_overlay_undo_multi_
 fn combo_marker_overlay_textprop_buflocal_narrow_clone_textprop_replace_undo_multi_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "y1a"))
         (b2 (generate-new-buffer "y1b")))
@@ -375,6 +378,7 @@ fn combo_marker_overlay_textprop_buflocal_narrow_clone_textprop_replace_undo_mul
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
     );
 }
 
@@ -382,7 +386,7 @@ fn combo_marker_overlay_textprop_buflocal_narrow_clone_textprop_replace_undo_mul
 fn combo_marker_overlay_textprop_buflocal_narrow_clone_setf_replace_undo_multi_undo_2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "z2a"))
         (b2 (generate-new-buffer "z2b")))
@@ -465,5 +469,6 @@ fn combo_marker_overlay_textprop_buflocal_narrow_clone_setf_replace_undo_multi_u
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
     );
 }

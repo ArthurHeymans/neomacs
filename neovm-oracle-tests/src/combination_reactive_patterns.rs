@@ -111,7 +111,12 @@ fn oracle_prop_reactive_observable_value() {
     (makunbound 'neovm--rx-obs-listeners)
     (makunbound 'neovm--rx-obs-log)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (15 70 6 ((display temperature 20 25 \"Temp: 20 -> 25\") (alarm temperature 20 25 \"ok\") (display temperature 25 35 \"Temp: 25 -> 35\") (alarm temperature 25 35 \"HOT!\") (display humidity 50 70 \"Hum: 50 -> 70\") (display temperature 35 15 \"Temp: 35 -> 15\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -217,7 +222,10 @@ fn oracle_prop_reactive_computed_values() {
     (makunbound 'neovm--rx-computed)
     (makunbound 'neovm--rx-eval-log)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (500 50 550 1000 50 550 600 50 550 2)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +345,10 @@ fn oracle_prop_reactive_two_way_binding() {
     (makunbound 'neovm--rx-bind-updating)
     (makunbound 'neovm--rx-bind-log)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable 9/5)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -470,7 +481,12 @@ fn oracle_prop_reactive_event_stream() {
     (fmakunbound 'neovm--rx-stream-scan)
     (fmakunbound 'neovm--rx-stream-materialize)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((:type click :x 10 :y 20) (:type click :x 30 :y 40) (:type click :x 50 :y 60) (:type click :x 70 :y 80)) ((10 . 20) (30 . 40) (50 . 60) (70 . 80)) ((10 . 20) (30 . 40)) (30 100 210 360) (15 50 105 180) 8 4 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -552,7 +568,12 @@ fn oracle_prop_reactive_debounce() {
     (fmakunbound 'neovm--rx-debounce-process)
     (fmakunbound 'neovm--rx-throttle-process)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((5 . \"c\") (14 . \"e\") (23 . \"f\") (36 . \"j\") (53 . \"k\")) ((7 . \"c\") (16 . \"e\") (25 . \"f\") (38 . \"j\") (55 . \"k\")) ((3 . \"c\") (12 . \"e\") (21 . \"f\") (34 . \"j\") (51 . \"k\")) ((0 . \"a\") (10 . \"d\") (20 . \"f\") (30 . \"g\") (50 . \"k\")) ((0 . \"a\") (10 . \"d\") (20 . \"f\") (30 . \"g\") (50 . \"k\")) (11 5 5))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -712,5 +733,10 @@ fn oracle_prop_reactive_dependency_graph() {
     (makunbound 'neovm--rx-dg-fns)
     (makunbound 'neovm--rx-dg-update-order)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 20 15 35 1225) (20 40 25 65 4225) ((b 40) (c 25) (d 65) (e 4225)) nil)""#
+        ]],
+    );
 }

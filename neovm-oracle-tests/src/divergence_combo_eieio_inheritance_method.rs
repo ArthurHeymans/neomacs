@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_eieio_hierarchy_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-ehd-base-xxx ()
     ((value :initarg :value :initform 0 :accessor test-ehd-get-val)))
@@ -35,6 +35,7 @@ fn divergence_eieio_hierarchy_dispatch() {
           (child-of-p g 'test-ehd-child-xxx)
           (child-of-p g 'test-ehd-base-xxx)
           (not (child-of-p b 'test-ehd-child-xxx))))) "#,
+        expect_test::expect![[r#""ERR (void-function child-of-p)""#]],
     );
 }
 
@@ -42,7 +43,7 @@ fn divergence_eieio_hierarchy_dispatch() {
 fn divergence_eieio_slots_accessors_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-esam-xxx ()
     ((name :initarg :name :initform 'unnamed
@@ -69,6 +70,7 @@ fn divergence_eieio_slots_accessors_modify() {
           (slot-boundp obj 'tags)
           (slot-exists-p obj 'name)
           (not (slot-exists-p obj 'nonexistent))))) "#,
+        expect_test::expect![[r#""OK (beta t 8 t (d a b c) t t t t 1 t)""#]],
     );
 }
 
@@ -76,7 +78,7 @@ fn divergence_eieio_slots_accessors_modify() {
 fn divergence_eieio_with_buffer_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-ebo-xxx ()
     ((buf :initarg :buf :initform nil :accessor test-ebo-buf)
@@ -104,6 +106,9 @@ fn divergence_eieio_with_buffer_operations() {
     (let ((result (test-ebo-verify-xxx obj)))
       (kill-buffer buf)
       result))) "#,
+        expect_test::expect![[
+            r#""OK (1 t #(\"Hello World\" 0 11 (owner #s(test-ebo-xxx #<killed buffer> #<marker (moves after insertion) in no buffer>))) t #s(test-ebo-xxx #<killed buffer> #<marker (moves after insertion) in no buffer>) t)""#
+        ]],
     );
 }
 
@@ -111,7 +116,7 @@ fn divergence_eieio_with_buffer_operations() {
 fn divergence_eieio_method_before_after_around() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-emba-log-xxx nil)
   (defclass test-emba-xxx () ((val :initarg :val :initform 0)))
@@ -137,6 +142,9 @@ fn divergence_eieio_method_before_after_around() {
             (equal (nth 2 log) '(primary 42))
             (eq (nth 3 log) 'after)
             (eq (nth 4 log) 'around-exit))))) "#,
+        expect_test::expect![[
+            r#""OK ((around-enter before (primary 42) after around-exit) t t t t t t)""#
+        ]],
     );
 }
 
@@ -144,7 +152,7 @@ fn divergence_eieio_method_before_after_around() {
 fn divergence_eieio_make_instance_with_initargs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-emi-xxx ()
     ((a :initarg :a :initform 1)
@@ -171,6 +179,9 @@ fn divergence_eieio_make_instance_with_initargs() {
           (= (slot-value obj3 'computed) 105)
           (object-of-class-p obj1 'test-emi-xxx)
           (not (object-of-class-p obj1 'string))))) "#,
+        expect_test::expect![[
+            r#""ERR (wrong-type-argument eieio--class #s(built-in-class string nil (#s(built-in-class array \"Abstract supertype of arrays.\" (#s(built-in-class sequence \"Abstract supertype of sequences.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil) #s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) nil nil nil) class)""#
+        ]],
     );
 }
 
@@ -178,7 +189,7 @@ fn divergence_eieio_make_instance_with_initargs() {
 fn divergence_eieio_polymorphic_collection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-epc-shape-xxx ()
     ((color :initarg :color :initform 'black)))
@@ -206,6 +217,7 @@ fn divergence_eieio_polymorphic_collection() {
             (equal colors '(red blue green yellow))
             (every (lambda (s) (child-of-p s 'test-epc-shape-xxx))
                    shapes))))) "#,
+        expect_test::expect![[r#""ERR (void-function every)""#]],
     );
 }
 
@@ -213,7 +225,7 @@ fn divergence_eieio_polymorphic_collection() {
 fn divergence_eieio_slot_type_checking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-estc-xxx ()
     ((name :initarg :name :type string :initform "default")
@@ -234,6 +246,7 @@ fn divergence_eieio_slot_type_checking() {
               (progn (setf (slot-value obj 'name) 42) 'no-error)
             (error 'got-error))
           (slot-value obj 'name)))) "#,
+        expect_test::expect![[r#""OK (\"test\" t nil t 3.14 t (1 2 3) t got-error \"test\")""#]],
     );
 }
 
@@ -241,7 +254,7 @@ fn divergence_eieio_slot_type_checking() {
 fn divergence_eieio_with_closure_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-ewcc-xxx ()
     ((items :initarg :items :initform nil :accessor test-ewcc-items)))
@@ -258,6 +271,7 @@ fn divergence_eieio_with_closure_capture() {
               (= (length result) 5)
               (test-ewcc-items store)
               (eq (test-ewcc-items store) result))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -265,7 +279,7 @@ fn divergence_eieio_with_closure_capture() {
 fn divergence_eieio_shared_and_class_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-escs-xxx ()
     ((instance-count :allocation :class :initform 0
@@ -286,6 +300,7 @@ fn divergence_eieio_shared_and_class_slots() {
           (eq (slot-value o2 'name) 'second)
           (slot-value o3 'name)
           (eq (slot-value o3 'name) 'third)))) "#,
+        expect_test::expect![[r#""OK (3 t t t first t second t third t)""#]],
     );
 }
 
@@ -293,7 +308,7 @@ fn divergence_eieio_shared_and_class_slots() {
 fn divergence_eieio_composition_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-ecw-xxx ()
     ((buffer :initarg :buffer :initform nil :accessor test-ecw-buffer)
@@ -336,5 +351,6 @@ fn divergence_eieio_composition_with_undo() {
               (string= (car state2) "BaseContent")
               (eq (nth 4 state2) widget)
               (eq (nth 7 state2) widget)))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

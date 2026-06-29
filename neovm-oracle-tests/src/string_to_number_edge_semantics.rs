@@ -11,69 +11,99 @@ use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_string_to_number_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-to-number "42")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "42")"#,
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_string_to_number_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-to-number "-99")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "-99")"#,
+        expect_test::expect![[r#""OK -99""#]],
+    );
     assert_ok_eq("-99", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_string_to_number_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-to-number "3.14")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "3.14")"#,
+        expect_test::expect![[r#""OK 3.14""#]],
+    );
     assert_ok_eq("3.14", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_string_to_number_garbage_returns_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-to-number "not-a-number")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "not-a-number")"#,
+        expect_test::expect![[r#""OK 0""#]],
+    );
     assert_ok_eq("0", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_string_to_number_empty_string_returns_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-to-number "")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "")"#,
+        expect_test::expect![[r#""OK 0""#]],
+    );
     assert_ok_eq("0", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_string_to_number_leading_whitespace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-to-number "  123")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "  123")"#,
+        expect_test::expect![[r#""OK 123""#]],
+    );
     assert_ok_eq("123", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_string_to_number_trailing_garbage_ignored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-to-number "123abc")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "123abc")"#,
+        expect_test::expect![[r#""OK 123""#]],
+    );
     assert_ok_eq("123", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_string_to_number_negative_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-to-number "-0.5")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "-0.5")"#,
+        expect_test::expect![[r#""OK -0.5""#]],
+    );
     assert_ok_eq("-0.5", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_string_to_number_wrong_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-to-number 42)"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number 42)"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
 #[test]
 fn oracle_string_to_number_large_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(> (string-to-number "999999999999999") 0)"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(> (string-to-number "999999999999999") 0)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 }

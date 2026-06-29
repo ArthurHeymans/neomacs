@@ -22,5 +22,10 @@ fn oracle_utf8_converter_test_primitives_follow_gnu_availability() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (void-function internal-encode-string-utf-8) nil (void-function internal-decode-string-utf-8))""#
+        ]],
+    );
 }

@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_destructuring_bind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-destructuring-bind (a (b c) &rest rest) '(1 (2 3) 4 5 6)
     (list a (= a 1)
@@ -18,6 +18,7 @@ fn divergence_cl_destructuring_bind() {
     (list x (= x 10) y (= y 20) z (= z 30)))
   (cl-destructuring-bind (&aux (extra 99) val) '(:val 42)
     (list extra val (= extra 99) (null val)))) "#,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (&aux (extra 99) val) 2)""#]],
     );
 }
 
@@ -25,7 +26,7 @@ fn divergence_cl_destructuring_bind() {
 fn divergence_pcase_complex_patterns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (pcase '(1 2 3)
           ((or `(,a ,b ,c) (list a b c)) (+ a b c)))
@@ -59,6 +60,7 @@ fn divergence_pcase_complex_patterns() {
         (eq (pcase '(1 2)
               ((app length 2) 'two-elements))
             'two-elements)))) "#,
+        expect_test::expect![[r#""ERR (error \"Unknown list pattern: (list a b c)\")""#]],
     );
 }
 
@@ -66,7 +68,7 @@ fn divergence_pcase_complex_patterns() {
 fn divergence_pcase_guard_and_let() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (pcase 42
           ((and x (guard (> x 10))) 'big)
@@ -102,6 +104,7 @@ fn divergence_pcase_guard_and_let() {
         (string= (pcase '(error "bad")
                    (`(error ,msg) msg))
                  "bad")))) "#,
+        expect_test::expect![[r#""ERR (void-variable it)""#]],
     );
 }
 
@@ -109,7 +112,7 @@ fn divergence_pcase_guard_and_let() {
 fn divergence_rx_macro_patterns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((r1 (rx bos (+ (any "a-zA-Z")) eos))
         (r2 (rx "hello" (zero-or-more space) "world"))
@@ -130,6 +133,7 @@ fn divergence_rx_macro_patterns() {
           (string= (match-string 1 "123-456") "123")
           (match-string 2 "123-456")
           (string= (match-string 2 "123-456") "456")))) "#,
+        expect_test::expect![[r#""OK (t 0 t t t 0 t 0 t t 0 t \"123\" t \"456\" t)""#]],
     );
 }
 
@@ -137,7 +141,7 @@ fn divergence_rx_macro_patterns() {
 fn divergence_rx_with_substitution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((word "test")
         (count 3))
@@ -148,6 +152,7 @@ fn divergence_rx_with_substitution() {
             (not (string-match r "nope123"))
             (rx-to-string '(: "hello" (+ digit)))
             (stringp (rx-to-string '(: "hello" (+ digit)))))))) "#,
+        expect_test::expect![[r#""OK (t 4 nil t \"\\\\(?:hello[[:digit:]]+\\\\)\" t)""#]],
     );
 }
 
@@ -155,7 +160,7 @@ fn divergence_rx_with_substitution() {
 fn divergence_cl_typep_and_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-typep 42 'integer)
         (cl-typep "hello" 'string)
@@ -177,6 +182,7 @@ fn divergence_cl_typep_and_check() {
                (cl-check-type "not-int" integer)
              (wrong-type-argument (car err)))
             'wrong-type-argument)))) "#,
+        expect_test::expect![[r#""ERR (error \"Bad type spec: (list integer)\")""#]],
     );
 }
 
@@ -184,7 +190,7 @@ fn divergence_cl_typep_and_check() {
 fn divergence_cl_loop_with_accumulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-loop for x in '(1 2 3 4 5) sum (* x x))
         (= (cl-loop for x in '(1 2 3 4 5) sum (* x x)) 55)
@@ -213,6 +219,9 @@ fn divergence_cl_loop_with_accumulation() {
                         for y in '(1 2 3 4 5)
                         collect (cons x y))
                '((a . 1) (b . 2) (c . 3) (d . 4) (e . 5))))) "#,
+        expect_test::expect![[
+            r#""OK (55 t 2 t 5 t 1 t (10 20 30 40 50) t 60 t \"ABCDE\" t ((a . 1) (b . 2) (c . 3) (d . 4) (e . 5)) t)""#
+        ]],
     );
 }
 
@@ -220,7 +229,7 @@ fn divergence_cl_loop_with_accumulation() {
 fn divergence_cl_loop_with_conditions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-loop for x in '(1 2 3 4 5 6 7 8 9)
                  when (cl-evenp x) collect x)
@@ -253,6 +262,9 @@ fn divergence_cl_loop_with_conditions() {
                     do (setq total (+ total x))
                     finally return total)
            15))) "#,
+        expect_test::expect![[
+            r#""OK ((2 4 6 8) t 9 t (1 2 3 4) t (1 2 3 4 5) t (10 30 50) t 15 t)""#
+        ]],
     );
 }
 
@@ -260,7 +272,7 @@ fn divergence_cl_loop_with_conditions() {
 fn divergence_thread_last_first() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (thread-last 5 (+ 1) (* 2) (- 3))
         (= (thread-last 5 (+ 1) (* 2) (- 3)) 9)
@@ -300,6 +312,7 @@ fn divergence_thread_last_first() {
                     (number-to-string)
                     (concat "result: "))
                  "result: 30"))) "#,
+        expect_test::expect![[r#""ERR (void-function thread-last)""#]],
     );
 }
 
@@ -307,7 +320,7 @@ fn divergence_thread_last_first() {
 fn divergence_cl_defmacro_with_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defmacro test-dmd-xxx ((a b) &key (c 10) (d 20))
     `(list ,a ,b ,c ,d))
@@ -321,5 +334,8 @@ fn divergence_cl_defmacro_with_destructuring() {
         (eval (macroexpand '(test-dmd2-xxx 'a 1 2 3)))
         (equal (eval (macroexpand '(test-dmd2-xxx 'a 1 2 3)))
                '(a 3 (1 2 3))))) "#,
+        expect_test::expect![[
+            r#""OK ((1 2 10 20) t (3 4 30 40) t test-dmd2-xxx (a 3 (1 2 3)) t)""#
+        ]],
     );
 }

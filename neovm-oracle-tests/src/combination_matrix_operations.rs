@@ -64,7 +64,12 @@ fn oracle_prop_matrix_creation() {
     (fmakunbound 'neovm--test-mat-zeros)
     (fmakunbound 'neovm--test-mat-identity)
     (fmakunbound 'neovm--test-mat-ref)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 0 0) (0 0 0)) ((1 0 0) (0 1 0) (0 0 1)) ((1 0 0 0) (0 1 0 0) (0 0 1 0) (0 0 0 1)) ((1)) (1 0 1 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +125,12 @@ fn oracle_prop_matrix_add_and_scalar_mult() {
                    (funcall 'neovm--test-mat-scale 3 b))))
     (fmakunbound 'neovm--test-mat-add)
     (fmakunbound 'neovm--test-mat-scale)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((8 10 12) (14 16 18)) ((3 6 9) (12 15 18)) ((0 0 0) (0 0 0)) ((-1 -2 -3) (-4 -5 -6)) ((-6 -6 -6) (-6 -6 -6)) ((23 28 33) (38 43 48)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +203,12 @@ fn oracle_prop_matrix_multiplication() {
     (fmakunbound 'neovm--test-mat-transpose)
     (fmakunbound 'neovm--test-dot)
     (fmakunbound 'neovm--test-mat-mult)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((27 30 33) (61 68 75) (95 106 117)) ((1 2) (3 4)) ((1 2) (3 4)) ((19 22) (43 50)) ((32)) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -239,7 +254,12 @@ fn oracle_prop_matrix_transpose() {
         ;; Square matrix
         (funcall 'neovm--test-mat-transpose '((1 2) (3 4))))
     (fmakunbound 'neovm--test-mat-transpose)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 4) (2 5) (3 6)) ((1 2 3) (4 5 6)) ((1) (2) (3) (4)) t t ((1 3) (2 4)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +315,10 @@ fn oracle_prop_matrix_determinant() {
         (funcall 'neovm--test-det2x2 '((0 1) (1 0))))
     (fmakunbound 'neovm--test-det2x2)
     (fmakunbound 'neovm--test-det3x3)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (-2 25 1 0 1 0 -1 -306 -1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +383,12 @@ fn oracle_prop_matrix_inverse_2x2() {
     (fmakunbound 'neovm--test-mat-adjugate2x2)
     (fmakunbound 'neovm--test-dot2)
     (fmakunbound 'neovm--test-mmul2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((-2 ((4 -2) (-3 1)) ((-2 0) (0 -2)) t) (25 ((5 0) (0 5)) ((25 0) (0 25)) t) (1 ((4 -1) (-7 2)) ((1 0) (0 1)) t) (11 ((2 1) (-5 3)) ((11 0) (0 11)) t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -467,7 +495,10 @@ fn oracle_prop_matrix_gaussian_elimination() {
     (fmakunbound 'neovm--test-mat-set)
     (fmakunbound 'neovm--test-mat-get)
     (fmakunbound 'neovm--test-gauss-solve)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2) (2 1) (0 5 3))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -517,5 +548,8 @@ fn oracle_prop_matrix_trace_and_frobenius() {
                (funcall 'neovm--test-mat-trace mt)))))
     (fmakunbound 'neovm--test-mat-trace)
     (fmakunbound 'neovm--test-mat-frobenius-sq)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 12 15 3 30 t)""#]],
+    );
 }

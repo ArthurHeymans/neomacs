@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_make_instance_buffer_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tracked-obj ()
     ((id :initarg :id :accessor obj-id :initform 0)
@@ -59,6 +59,7 @@ fn combo_eieio_make_instance_buffer_insert() {
                 (buffer-string)
                 tracked)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -66,7 +67,7 @@ fn combo_eieio_make_instance_buffer_insert() {
 fn combo_eieio_shared_initialize_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass versioned-doc ()
     ((title :initarg :title :accessor doc-title :initform "")
@@ -120,6 +121,7 @@ fn combo_eieio_shared_initialize_narrow_undo() {
                 (buffer-string)
                 my-doc)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -127,7 +129,7 @@ fn combo_eieio_shared_initialize_narrow_undo() {
 fn combo_eieio_reinitialize_instance_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass connection ()
     ((host :initarg :host :accessor conn-host :initform "localhost")
@@ -179,6 +181,7 @@ fn combo_eieio_reinitialize_instance_overlay_undo() {
                 (buffer-string)
                 my-conn)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -186,7 +189,7 @@ fn combo_eieio_reinitialize_instance_overlay_undo() {
 fn combo_eieio_allocation_class_slots_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass counter ()
     ((name :initarg :name :accessor counter-name :initform "")
@@ -237,6 +240,7 @@ fn combo_eieio_allocation_class_slots_buffer() {
                 (buffer-string)
                 counters)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -244,7 +248,7 @@ fn combo_eieio_allocation_class_slots_buffer() {
 fn combo_eieio_constructor_allocation_multi_buf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass buffer-state ()
     ((buf-name :initarg :buf-name :accessor state-buf-name :initform "")
@@ -310,5 +314,6 @@ fn combo_eieio_constructor_allocation_multi_buf() {
               (with-current-buffer buf2 (buffer-string)))))
     (kill-buffer buf1)
     (kill-buffer buf2)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }

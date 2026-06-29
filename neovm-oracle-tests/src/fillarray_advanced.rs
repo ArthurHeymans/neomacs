@@ -63,7 +63,12 @@ fn oracle_prop_fillarray_advanced_diverse_element_types() {
           results))
   (nreverse results))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((cons-fill t t t) (vector-fill t t) (string-fill t t) (float-fill t t) (bool-fill t t) (keyword-fill t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +110,12 @@ fn oracle_prop_fillarray_advanced_string_chars() {
       (push (list 'each-pos (nreverse chars)) results)))
   (nreverse results))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ascii \"XXXXXX\" 6) (space \"           \" 11) (zero 4 0 0) (digit \"999\") (empty \"\" 0) (each-pos (98 98 98 98 98 98 98 98)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -130,7 +140,10 @@ fn oracle_fillarray_multibyte_string_preserves_byte_length() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 16 43)""#]],
+    );
 }
 
 #[test]
@@ -153,7 +166,10 @@ fn oracle_fillarray_char_table_rewrites_top_level_like_gnu() {
      (aref table #x100))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 1 0 filled filled)""#]],
+    );
 }
 
 #[test]
@@ -186,7 +202,12 @@ fn oracle_fillarray_type_and_character_error_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument (arrayp #s(tag 1 2))) (wrong-type-argument (arrayp (closure (t) (x) x))) (wrong-type-argument (arrayp nil)) (wrong-type-argument (characterp not-a-character)) (wrong-type-argument (characterp 4194304)) (wrong-type-argument (characterp -1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +261,12 @@ fn oracle_prop_fillarray_advanced_bool_vector_sizes() {
         (push (list 'alternate count-t count-nil) results))))
   (nreverse results))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((size1 t) (size7 t) (size8 t) (size9 t) (size16 t t t t) (alternate 10 10))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +306,12 @@ fn oracle_prop_fillarray_advanced_return_identity() {
           results))
   (nreverse results))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((vec-eq t 99) (str-eq t t) (bv-eq t t t) (chain t t t 3 3 3) (expr-use 42 4))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -343,7 +374,12 @@ fn oracle_prop_fillarray_advanced_pattern_building() {
         (push (list 'matrix-rows (nreverse row-sums)) results))))
   (nreverse results))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((checkerboard (0 1 0 1 0 1 0 1 0 1)) (gradient (100 110 120 130 140 150 160 170)) (ring-buf a t) (matrix-rows (4 8 12)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -412,7 +448,12 @@ fn oracle_prop_fillarray_advanced_algorithm_clearing() {
     (push (list 'pool-reset (aref pool 0) (aref pool 7) (aref pool 25)) results))
   (nreverse results))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((sieve-primes (2 3 5 7 11 13 17 19 23 29)) (sieve-reset t) (hist-r1 (3 3 2 2 2) hist-r2 (0 0 1 2 3)) (freq ((100 1) (101 1) (104 1) (108 3) (111 2) (114 1) (119 1))) (pool-reset 0 0 0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -479,7 +520,12 @@ fn oracle_prop_fillarray_advanced_large_operations() {
       (push (list 'large-bv true-count) results)))
   (nreverse results))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((large-500 t t t 500) (repeated t t t) (selective 180 20) (large-str 122 122 122 200) (large-bv 100))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -540,5 +586,10 @@ fn oracle_prop_fillarray_advanced_shared_structure() {
             results)))
   (nreverse results))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((shared-vec t 42 42) (in-list b b t) (nested 99 99 99) (str-shared t t t) (hash-val 7 7 t))""#
+        ]],
+    );
 }

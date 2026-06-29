@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_utf8_define_charset_custom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (condition-case err
     (progn
@@ -25,13 +25,14 @@ fn div_utf8_define_charset_custom() {
             (charset-dimension 'neo-test-charset-1)))
   (error (list 'errored (car err))))
 "#,
+        expect_test::expect![[r#""OK (errored wrong-type-argument)""#]],
     );
 }
 
 #[test]
 fn div_utf8_make_coding_system_custom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (condition-case err
     (progn
@@ -39,62 +40,71 @@ fn div_utf8_make_coding_system_custom() {
       (coding-system-p 'neo-cs-1))
   (error (list 'errored (car err))))
 "#,
+        expect_test::expect![[r#""OK (errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_utf8_charset_plist_builtins() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (charset-plist 'ascii)
       (charset-plist 'unicode)
       (charset-plist 'eight-bit))
 "#,
+        expect_test::expect![[
+            r#""OK ((:name ascii :dimension 1 :code-space [0 127 0 0 0 0 0 0] :iso-final-char 66 :emacs-mule-id 0 :ascii-compatible-p t :code-offset 0 :docstring \"ASCII (ISO646 IRV)\" :short-name \"ASCII\" :long-name \"ASCII (ISO646 IRV)\") (:name unicode :dimension 3 :code-space [0 255 0 255 0 16 0 0] :iso-final-char nil :emacs-mule-id nil :ascii-compatible-p t :code-offset 0 :docstring \"Unicode (ISO10646)\" :short-name \"Unicode\" :long-name \"Unicode (ISO10646)\") (:name eight-bit :dimension 1 :code-space [128 255 0 0 0 0 0 0] :iso-final-char nil :emacs-mule-id nil :ascii-compatible-p nil :code-offset 4194176 :docstring \"Raw bytes 128-255\" :short-name \"Raw bytes\"))""#
+        ]],
     );
 }
 
 #[test]
 fn div_utf8_charset_code_space_builtins() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (charset-code-space 'ascii)
       (charset-code-space 'unicode)
       (charset-code-space 'japanese-jisx0208))
 "#,
+        expect_test::expect![[r#""ERR (void-function charset-code-space)""#]],
     );
 }
 
 #[test]
 fn div_utf8_coding_system_aliases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (coding-system-aliases 'utf-8)
       (coding-system-aliases 'latin-1)
       (coding-system-aliases 'iso-8859-1)
       (coding-system-aliases 'emacs-mule))
 "#,
+        expect_test::expect![[
+            r#""OK ((utf-8 mule-utf-8 cp65001) (iso-latin-1 iso-8859-1 latin-1) (iso-latin-1 iso-8859-1 latin-1) (emacs-mule))""#
+        ]],
     );
 }
 
 #[test]
 fn div_utf8_charset_chars_counts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (charset-chars 'ascii)
       (charset-chars 'unicode)
       (charset-chars 'eight-bit))
 "#,
+        expect_test::expect![[r#""OK (128 256 128)""#]],
     );
 }
 
 #[test]
 fn div_utf8_block_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (get-char-code-property ?a 'block)
       (get-char-code-property ?\x3042 'block)
@@ -102,13 +112,14 @@ fn div_utf8_block_property() {
       (get-char-code-property ?\x5d0 'block)
       (get-char-code-property ?é 'block))
 "#,
+        expect_test::expect![[r#""OK (nil nil nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_utf8_coding_system_type_and_mnemonic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (coding-system-type 'utf-8)
       (coding-system-type 'utf-16)
@@ -116,5 +127,6 @@ fn div_utf8_coding_system_type_and_mnemonic() {
       (coding-system-mnemonic 'utf-8)
       (coding-system-mnemonic 'latin-1))
 "#,
+        expect_test::expect![[r#""OK (utf-8 utf-16 charset 85 49)""#]],
     );
 }

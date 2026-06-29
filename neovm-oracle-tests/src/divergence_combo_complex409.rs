@@ -13,7 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx409_window_point_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "line1\nline2\nline3\nline4\nline5")
@@ -23,6 +23,7 @@ fn div_cx409_window_point_start() {
     (list (window-point w)
           (window-start w))))
 "##,
+        expect_test::expect![[r#""OK (1 1)""#]],
     );
 }
 
@@ -30,7 +31,7 @@ fn div_cx409_window_point_start() {
 #[test]
 fn div_cx409_pos_visible_window_partial() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "aaa bbb ccc ddd eee fff ggg hhh iii jjj")
@@ -38,6 +39,7 @@ fn div_cx409_pos_visible_window_partial() {
         (pos-visible-in-window-p (point-max))
         (pos-visible-in-window-p 5 nil t)))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
@@ -46,13 +48,14 @@ fn div_cx409_pos_visible_window_partial() {
 #[test]
 fn div_cx409_input_pending_recent_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (input-pending-p)
       (length (recent-keys))
       (this-command-keys)
       (last-command-keys))
 "##,
+        expect_test::expect![[r#""ERR (void-function last-command-keys)""#]],
     );
 }
 
@@ -60,7 +63,7 @@ fn div_cx409_input_pending_recent_keys() {
 #[test]
 fn div_cx409_keyboard_translate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (keyboard-translate ?a ?b)
@@ -68,6 +71,7 @@ fn div_cx409_keyboard_translate() {
     (list kt
           (if kt (char-equal kt ?b) nil))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 1)""#]],
     );
 }
 
@@ -76,12 +80,13 @@ fn div_cx409_keyboard_translate() {
 #[test]
 fn div_cx409_coding_system_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (locale-coding-system)
       (keyboard-coding-system)
       (file-coding-system-alist))
 "##,
+        expect_test::expect![[r#""ERR (void-function locale-coding-system)""#]],
     );
 }
 
@@ -89,7 +94,7 @@ fn div_cx409_coding_system_config() {
 #[test]
 fn div_cx409_file_equal_in_dir() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((d (make-temp-file "neo-cx409-dir-" t))
       (f1 (make-temp-file "neo-cx409-f1-"))
@@ -103,6 +108,7 @@ fn div_cx409_file_equal_in_dir() {
     (ignore-errors (delete-file f2))
     (ignore-errors (delete-directory d t))))
 "##,
+        expect_test::expect![[r#""OK (t nil nil nil)""#]],
     );
 }
 
@@ -110,7 +116,7 @@ fn div_cx409_file_equal_in_dir() {
 #[test]
 fn div_cx409_file_name_base_ext() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (file-name-base "foo.txt")
       (file-name-extension "foo.txt")
@@ -118,6 +124,7 @@ fn div_cx409_file_name_base_ext() {
       (file-name-base "/path/to/bar.tar.gz")
       (file-name-extension "/path/to/bar.tar.gz"))
 "##,
+        expect_test::expect![[r#""OK (\"foo\" \"txt\" \"foo\" \"bar.tar\" \"gz\")""#]],
     );
 }
 
@@ -125,13 +132,16 @@ fn div_cx409_file_name_base_ext() {
 #[test]
 fn div_cx409_backup_file_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f "/tmp/neo-cx409-fixed-name.el"))
   (list (make-backup-file-name f)
         (file-name-extension (make-backup-file-name f))
         (file-name-base (make-backup-file-name f))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"/tmp/neo-cx409-fixed-name.el~\" \"el\" \"neo-cx409-fixed-name\")""#
+        ]],
     );
 }
 
@@ -139,13 +149,14 @@ fn div_cx409_backup_file_name() {
 #[test]
 fn div_cx409_replace_regexp_subexp_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-fold-search t))
   (list (replace-regexp-in-string "\\([a-z]+\\)" "\\1!" "hello world")
         (replace-regexp-in-string "\\([a-z]+\\)" "\\1!" "hello world" nil nil nil 1)
         (replace-regexp-in-string "a" "X" "aaa aaa" nil nil nil 2)))
 "##,
+        expect_test::expect![[r#""OK (\"hello! world!\" \"ello! world!\" \"X XXX\")""#]],
     );
 }
 
@@ -153,7 +164,7 @@ fn div_cx409_replace_regexp_subexp_count() {
 #[test]
 fn div_cx409_sort_subr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "banana\napple\ncherry\ndate\n")
@@ -161,6 +172,7 @@ fn div_cx409_sort_subr() {
              (lambda (a b) (string< (buffer-substring a b) (buffer-substring (car b) (cdr b)))))
   (buffer-string))
 "##,
+        expect_test::expect![[r#""OK \"banana\napple\ncherry\ndate\n\"""#]],
     );
 }
 
@@ -168,7 +180,7 @@ fn div_cx409_sort_subr() {
 #[test]
 fn div_cx409_describe_key_briefly() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'help)
   (with-temp-buffer
@@ -177,6 +189,7 @@ fn div_cx409_describe_key_briefly() {
       (list (describe-key-briefly "a" map)
             (key-description (kbd "C-c C-f"))))))
 "##,
+        expect_test::expect![[r#""OK (nil \"C-c C-f\")""#]],
     );
 }
 
@@ -184,7 +197,7 @@ fn div_cx409_describe_key_briefly() {
 #[test]
 fn div_cx409_help_buffer_xref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'help-mode)
   (with-temp-buffer
@@ -192,6 +205,7 @@ fn div_cx409_help_buffer_xref() {
     (list (help-buffer)
           (buffer-name (current-buffer)))))
 "##,
+        expect_test::expect![[r#""OK (\"*Help*\" \" *temp*\")""#]],
     );
 }
 
@@ -199,7 +213,7 @@ fn div_cx409_help_buffer_xref() {
 #[test]
 fn div_cx409_apropos_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'apropos)
   (let ((buf (get-buffer-create "*Apropos*")))
@@ -208,6 +222,9 @@ fn div_cx409_apropos_search() {
              (buffer-string))
       (kill-buffer buf))))
 "##,
+        expect_test::expect![[
+            r#""OK #(\"Type RET on a type label to view its full documentation.\n\ndelete-forward-char\n  Command: Delete the following N characters (previous if N is negative).\n  Properties: interactive-only function-history\nforward-char\n  Command: Move point N characters forward (backward if N is negative).\nkill-forward-chars\n  Function: (not documented)\n  Properties: function-history\n\" 5 8 (font-lock-face help-key-binding face help-key-binding) 58 77 (outline-level 1 face apropos-symbol skip t category apropos-symbol-button button (t)) 80 87 (apropos-symbol delete-forward-char category apropos-command-button button (t)) 154 164 (apropos-symbol delete-forward-char category apropos-plist-button button (t)) 200 212 (outline-level 1 face apropos-symbol skip t category apropos-symbol-button button (t)) 215 222 (apropos-symbol forward-char category apropos-command-button button (t)) 285 303 (outline-level 1 face apropos-symbol skip t category apropos-symbol-button button (t)) 306 314 (apropos-symbol kill-forward-chars category apropos-function-button button (t)) 316 332 (font-lock-face shadow) 335 345 (apropos-symbol kill-forward-chars category apropos-plist-button button (t)))""#
+        ]],
     );
 }
 
@@ -216,7 +233,7 @@ fn div_cx409_apropos_search() {
 #[test]
 fn div_cx409_format_find_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx409-fmt-")))
   (with-temp-file f (insert "test content"))
@@ -226,6 +243,7 @@ fn div_cx409_format_find_file() {
         (buffer-string))
     (delete-file f)))
 "##,
+        expect_test::expect![[r#""ERR (error \"Unknown format \")""#]],
     );
 }
 
@@ -233,7 +251,7 @@ fn div_cx409_format_find_file() {
 #[test]
 fn div_cx409_save_buffer_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx409-sv-")))
   (unwind-protect
@@ -243,6 +261,7 @@ fn div_cx409_save_buffer_basic() {
               (buffer-file-name)))
     (delete-file f)))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
@@ -250,7 +269,7 @@ fn div_cx409_save_buffer_basic() {
 #[test]
 fn div_cx409_window_vscroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert (make-string 100 ?a))
@@ -259,6 +278,7 @@ fn div_cx409_window_vscroll() {
           (set-window-vscroll w 10.0)
           (window-vscroll w))))
 "##,
+        expect_test::expect![[r#""OK (0 0 0)""#]],
     );
 }
 
@@ -266,12 +286,13 @@ fn div_cx409_window_vscroll() {
 #[test]
 fn div_cx409_compare_window_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((c1 (current-window-configuration))
       (c2 (current-window-configuration)))
   (compare-window-configurations c1 c2))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -279,13 +300,14 @@ fn div_cx409_compare_window_config() {
 #[test]
 fn div_cx409_force_window_update() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "test")
   (list (force-window-update (selected-window))
         (redisplay t)))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -294,12 +316,13 @@ fn div_cx409_force_window_update() {
 #[test]
 fn div_cx409_translation_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((tt (make-translation-table)))
   (list (char-table-p tt)
         (condition-case e (set-translation-table tt) (error (car e)))))
 "##,
+        expect_test::expect![[r#""OK (t void-function)""#]],
     );
 }
 
@@ -307,10 +330,11 @@ fn div_cx409_translation_table() {
 #[test]
 fn div_cx409_sit_for_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (sit-for 0)
       (sit-for 0.01))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }

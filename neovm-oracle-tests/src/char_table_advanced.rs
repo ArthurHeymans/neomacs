@@ -35,7 +35,10 @@ fn oracle_prop_char_table_advanced_range_types() {
    ;; Char just outside the range gets default
    (char-table-range ct ?/)
    (char-table-range ct ?:)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (default letter-x digit digit digit default default)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +73,10 @@ fn oracle_prop_char_table_advanced_parent_chain() {
    (eq (char-table-parent c) p)
    (eq (char-table-parent p) gp)
    (char-table-parent gp)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (from-child from-parent from-gp t t nil)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -93,7 +99,10 @@ fn oracle_prop_char_table_advanced_predicates() {
   (vector-or-char-table-p (make-char-table 'generic))
   (vector-or-char-table-p [1 2 3])
   (vector-or-char-table-p '(1 2 3)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (t t nil nil nil generic syntax-table t t nil)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +130,10 @@ fn oracle_prop_char_table_advanced_range_overwrite() {
    (char-table-range ct ?z)
    ;; Outside the range
    (char-table-range ct ?A)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (lower lower mid specific mid lower nil)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +159,10 @@ fn oracle_prop_char_table_advanced_parent_override() {
           ;; ?b still inherited
           (after-b (char-table-range child ?b)))
       (list before-a before-b after-a after-b))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (parent-a parent-default child-a parent-default)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +198,12 @@ fn oracle_prop_char_table_advanced_unicode_classifier() {
    (char-table-range ct #x4e2d)
    ;; A char outside all defined ranges
    (char-table-range ct #x1f600)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (ascii-upper ascii-lower ascii-digit space basic-latin latin-1-supplement cjk-unified other)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +246,10 @@ fn oracle_prop_char_table_advanced_case_mapping() {
       (list first-pass
             (concat (nreverse second-output))
             (string= input (concat (nreverse second-output)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"Uryyb Jbeyq\" \"Hello World\" nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -262,5 +285,8 @@ fn oracle_prop_char_table_advanced_frequency_counter() {
       (char-table-range freq ?r)
       (char-table-range freq ?c)
       (char-table-range freq ?d))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (5 2 2 1 1 0 11)""#],
+    );
 }

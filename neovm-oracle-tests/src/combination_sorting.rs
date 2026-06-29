@@ -93,7 +93,12 @@ fn oracle_prop_sorting_quicksort_median_pivot() {
     (fmakunbound 'neovm--test-partition)
     (fmakunbound 'neovm--test-qsort)
     (fmakunbound 'neovm--test-quicksort)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9) (1 2 3 4 5) (1 2 3 4 5 6 7 8 9) (1 1 2 3 3 4 5 5 5 6 9) (42) (2 7) (4 4 4 4 4) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +148,12 @@ fn oracle_prop_sorting_insertion_sort() {
                (sort (list 5 3 1 4 2) #'<)))
     (fmakunbound 'neovm--test-insert-sorted)
     (fmakunbound 'neovm--test-insertion-sort)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((11 12 22 25 34 64 90) (90 64 34 25 22 12 11) (\"apple\" \"banana\" \"cherry\" \"date\" \"elderberry\") nil (1) (1 2 3 4 5) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +202,12 @@ fn oracle_prop_sorting_counting_sort() {
           (equal (funcall 'neovm--test-counting-sort data 9)
                  (sort (copy-sequence data) #'<))))
     (fmakunbound 'neovm--test-counting-sort)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 2 3 3 4 8) (0 0 0 1 2 3 5) (3 3 3 3 3) (7) (0 1 2 3 4 5) (1 25 50 75 99) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +268,12 @@ fn oracle_prop_sorting_radix_sort_strings() {
                         '("dog" "cat" "ant" "bat" "cow"))
                (sort (list "dog" "cat" "ant" "bat" "cow") #'string<)))
     (fmakunbound 'neovm--test-radix-sort-strings)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"ant\" \"ape\" \"bat\" \"bee\" \"cat\" \"cow\" \"dog\") (\"acai\" \"date\" \"fig!\" \"kiwi\" \"lime\" \"pear\" \"plum\") (\"aaa\" \"bbb\" \"ccc\" \"ddd\") (\"aaa\" \"bbb\" \"ccc\" \"ddd\") (\"abc\" \"abc\" \"def\" \"xyz\" \"xyz\") t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -335,7 +355,10 @@ fn oracle_prop_sorting_stability_verification() {
     (fmakunbound 'neovm--test-tag-with-indices)
     (fmakunbound 'neovm--test-is-stable)
     (fmakunbound 'neovm--test-stable-sort)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 1 2 3 3 4 5 5 5 6 7 8 9 9 9) t (4 8 10) (5 12 14) 15)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -401,5 +424,10 @@ fn oracle_prop_sorting_multi_key_sort() {
               (sort counts (lambda (a b) (string< (car a) (car b))))))))
     (fmakunbound 'neovm--test-make-employee)
     (fmakunbound 'neovm--test-multi-key-compare)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"eng\" 5 \"Alice\" 150000) (\"eng\" 5 \"Ivan\" 145000) (\"eng\" 3 \"Bob\" 95000) (\"eng\" 3 \"Carol\" 90000) (\"hr\" 3 \"Grace\" 85000) (\"hr\" 1 \"Heidi\" 55000) (\"sales\" 4 \"Dave\" 110000) (\"sales\" 4 \"Frank\" 105000) (\"sales\" 2 \"Eve\" 70000)) (\"Alice\" \"Ivan\" \"Bob\" \"Carol\" \"Grace\" \"Heidi\" \"Dave\" \"Frank\" \"Eve\") \"eng\" 5 ((\"eng\" . 4) (\"hr\" . 2) (\"sales\" . 3)))""#
+        ]],
+    );
 }

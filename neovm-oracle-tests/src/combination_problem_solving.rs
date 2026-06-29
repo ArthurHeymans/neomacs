@@ -72,7 +72,7 @@ fn oracle_prop_ps_maze_solver_bfs() {
           ;; Open 4x4 maze: shortest path is 6 (Manhattan distance)
           (funcall 'neovm--ps-maze-solve maze4 4 4)))
     (fmakunbound 'neovm--ps-maze-solve)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (8 nil 0 6)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -180,7 +180,10 @@ fn oracle_prop_ps_sudoku_4x4_solver() {
     (fmakunbound 'neovm--ps-sdk-find-empty)
     (fmakunbound 'neovm--ps-sdk-solve)
     (fmakunbound 'neovm--ps-sdk-board-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument arrayp nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +289,10 @@ fn oracle_prop_ps_expression_evaluator() {
                           50
                         0))) nil))
     (fmakunbound 'neovm--ps-eval-expr)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (7 30 8 30 3 120 5 50)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -384,7 +390,10 @@ fn oracle_prop_ps_simple_regex_engine() {
     (fmakunbound 'neovm--ps-re-match-star)
     (fmakunbound 'neovm--ps-re-search)
     (fmakunbound 'neovm--ps-re-full-match)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable text-chars)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -472,7 +481,10 @@ fn oracle_prop_ps_countdown_solver() {
         (null (funcall 'neovm--ps-cd-solve '(42) 43)))
     (fmakunbound 'neovm--ps-cd-remove-nth)
     (fmakunbound 'neovm--ps-cd-solve)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -547,7 +559,10 @@ fn oracle_prop_ps_water_jug_bfs() {
         ;; 7L and 11L, measure 1L
         (funcall 'neovm--ps-wj-solve 7 11 1))
     (fmakunbound 'neovm--ps-wj-solve)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 4 1 1 0 8 nil 8)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -626,7 +641,10 @@ fn oracle_prop_ps_n_queens() {
     (fmakunbound 'neovm--ps-nq-bt)
     (fmakunbound 'neovm--ps-nq-first-solution)
     (fmakunbound 'neovm--ps-nq-bt1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 0 0 2 10 4 (1 3 0 2) (0 2 4 1 3) (0))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -695,5 +713,10 @@ fn oracle_prop_ps_tower_of_hanoi() {
           (funcall 'neovm--ps-hanoi-verify 4 moves4)))
     (fmakunbound 'neovm--ps-hanoi-solve)
     (fmakunbound 'neovm--ps-hanoi-verify)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 3 7 15 ((0 2) (0 1) (2 1) (0 2) (1 0) (1 2) (0 2)) t t t t)""#
+        ]],
+    );
 }

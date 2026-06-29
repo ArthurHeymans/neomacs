@@ -13,33 +13,36 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_utf8_char_width_ascii_and_latin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (mapcar #'char-width
         (list ?a ?A ?1 ?\s ?\t ?\n ?é ?\x100 ?\x250))
 "#,
+        expect_test::expect![[r#""OK (1 1 1 1 8 0 1 1 1)""#]],
     );
 }
 
 #[test]
 fn div_utf8_char_width_cjk_and_hangul() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (mapcar #'char-width
         (list ?\x3042 ?\x4e2d ?\xac00 ?\xff21 ?\xff41))
 "#,
+        expect_test::expect![[r#""OK (2 2 2 2 2)""#]],
     );
 }
 
 #[test]
 fn div_utf8_char_width_emoji_and_supplementary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (mapcar #'char-width
         (list ?\x1f600 ?\x1f680 ?\x10000 ?\x10300))
 "#,
+        expect_test::expect![[r#""OK (2 2 1 1)""#]],
     );
 }
 
@@ -47,7 +50,7 @@ fn div_utf8_char_width_emoji_and_supplementary() {
 fn div_utf8_char_width_combining_and_zero_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Combining marks and zero-width characters must be width 0 in GNU.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (mapcar #'char-width
         (list ?\x300 ?\x301 ?\x302     ; combining diacritics
@@ -56,17 +59,19 @@ fn div_utf8_char_width_combining_and_zero_width() {
               ?\xfeff                    ; BOM / ZWNBSP
               ?\xad))                    ; soft hyphen
 "#,
+        expect_test::expect![[r#""OK (0 0 0 0 0 0 1)""#]],
     );
 }
 
 #[test]
 fn div_utf8_char_width_control_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (mapcar #'char-width
         (list 0 7 8 27 127 128))
 "#,
+        expect_test::expect![[r#""OK (2 2 2 2 2 4)""#]],
     );
 }
 
@@ -77,47 +82,53 @@ fn div_utf8_upcase_german_sharp_s() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // ß upcases to "SS" (two chars) in GNU; a likely divergence under simple
     // Unicode mapping.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (upcase "straße") (length (upcase "straße"))
       (downcase "STRASSE")
       (upcase "groß"))
 "#,
+        expect_test::expect![[r#""OK (\"STRASSE\" 7 \"strasse\" \"GROSS\")""#]],
     );
 }
 
 #[test]
 fn div_utf8_upcase_downcase_accented() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (upcase "café") (downcase "CAFÉ")
       (upcase "résümé") (downcase "RÉSUMÉ")
       (capitalize "héllo wörld")
       (upcase-initials "café résumé"))
 "#,
+        expect_test::expect![[
+            r#""OK (\"CAFÉ\" \"café\" \"RÉSÜMÉ\" \"résumé\" \"Héllo Wörld\" \"Café Résumé\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_utf8_char_upcase_downcase_single() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (char-upcase ?a) (char-upcase ?é) (char-upcase ?ß)
       (char-downcase ?A) (char-downcase ?É))
 "#,
+        expect_test::expect![[r#""ERR (void-function char-upcase)""#]],
     );
 }
 
 #[test]
 fn div_utf8_upcase_greek_and_cyrillic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (upcase "άρχή") (downcase "ΑΡΧΗ")
       (upcase "привет") (downcase "ПРИВЕТ"))
 "#,
+        expect_test::expect![[r#""OK (\"ΆΡΧΉ\" \"αρχη\" \"ПРИВЕТ\" \"привет\")""#]],
     );
 }
 
@@ -127,7 +138,7 @@ fn div_utf8_upcase_greek_and_cyrillic() {
 fn div_utf8_char_charset_classification() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Charset names (symbols) may differ between implementations.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (char-charset ?a)
       (char-charset ?é)
@@ -136,13 +147,16 @@ fn div_utf8_char_charset_classification() {
       (char-charset ?\x4e2d)
       (char-charset (unibyte-char-to-multibyte 200)))
 "#,
+        expect_test::expect![[
+            r#""OK (ascii unicode-bmp unicode-bmp unicode-bmp unicode-bmp eight-bit)""#
+        ]],
     );
 }
 
 #[test]
 fn div_utf8_charsetp_and_encoding_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (charset-p 'ascii) (charset-p 'unicode)
       (charset-p 'eight-bit)
@@ -150,6 +164,7 @@ fn div_utf8_charsetp_and_encoding_basics() {
       (encode-char ?é 'unicode)
       (decode-char 'unicode #xe9))
 "#,
+        expect_test::expect![[r#""ERR (void-function charset-p)""#]],
     );
 }
 
@@ -158,24 +173,26 @@ fn div_utf8_charsetp_and_encoding_basics() {
 #[test]
 fn div_utf8_regex_ascii_class_vs_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (progn
   (string-match "[a-z]+" "héllo")
   (list (match-beginning 0) (match-end 0)))
 "#,
+        expect_test::expect![[r#""OK (0 1)""#]],
     );
 }
 
 #[test]
 fn div_utf8_regex_posix_alpha_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (progn
   (string-match "[[:alpha:]]+" "héllo wörld")
   (list (match-beginning 0) (match-end 0)))
 "#,
+        expect_test::expect![[r#""OK (0 5)""#]],
     );
 }
 
@@ -183,62 +200,67 @@ fn div_utf8_regex_posix_alpha_class() {
 fn div_utf8_regex_word_constituent_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // \w word-constituent includes non-ASCII letters under multibyte syntax.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (progn
   (string-match "\\w+" "héllo_café")
   (list (match-beginning 0) (match-end 0)))
 "#,
+        expect_test::expect![[r#""OK (0 5)""#]],
     );
 }
 
 #[test]
 fn div_utf8_regex_match_multibyte_literal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (string-match "café" "le café est prêt")
       (progn (string-match "café" "le café est prêt") (match-end 0))
       (string-match "[éèê]" "rêve")
       (string-match "世界" "你好世界"))
 "#,
+        expect_test::expect![[r#""OK (3 7 1 2)""#]],
     );
 }
 
 #[test]
 fn div_utf8_regexp_quote_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (regexp-quote "a.b+é?c")
       (regexp-quote "世界")
       (length (regexp-quote "café+")))
 "#,
+        expect_test::expect![[r#""OK (\"a\\\\.b\\\\+é\\\\?c\" \"世界\" 6)""#]],
     );
 }
 
 #[test]
 fn div_utf8_skip_chars_forward_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "abcéxyz")
   (skip-chars-forward "a-z")
   (point))
 "#,
+        expect_test::expect![[r#""OK 8""#]],
     );
 }
 
 #[test]
 fn div_utf8_skip_chars_forward_nonascii_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "café-x")
   (skip-chars-forward "a-fé")
   (point))
 "#,
+        expect_test::expect![[r#""OK 7""#]],
     );
 }

@@ -33,7 +33,10 @@ fn oracle_prop_vector_ops_comp_make_vector_aref_aset_roundtrip() {
         (progn (aset v 6 nil) (aset v 7 3.14) (list (aref v 6) (aref v 7)))
         ;; Original values unchanged
         (aref v 0) (aref v 1) (aref v 2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -59,7 +62,10 @@ fn oracle_prop_vector_ops_comp_vector_constructor_and_vconcat_mixed() {
         (length cat1) (length cat4)
         ;; vconcat with empty inputs
         (vconcat) (vconcat []) (vconcat '() "" [])))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +97,10 @@ fn oracle_prop_vector_ops_comp_fillarray_comprehensive() {
        (fillarray v5 '(a b c))
        ;; All elements share the same list object
        (list v5 (eq (aref v5 0) (aref v5 1)) (eq (aref v5 1) (aref v5 2)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +132,10 @@ fn oracle_prop_vector_ops_comp_copy_sequence_independence() {
                  (mc (copy-sequence mixed)))
             (list (equal mixed mc)
                   (aref mc 0) (aref mc 3) (aref mc 6))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +166,12 @@ fn oracle_prop_vector_ops_comp_sort_vectors() {
   ;; Sort by absolute value using a wrapper
   (let ((v (vector -3 1 -5 2 -1 4)))
     (sort v (lambda (a b) (< (abs a) (abs b)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([1 2 3 4 5 6 7 8 9] [\"apple\" \"banana\" \"cherry\" \"date\"] [50 40 30 20 10] (3 [1 2 3]) ([42] []) [1 1 3 3 5 5] [1 -1 2 -3 4 -5])""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +205,10 @@ fn oracle_prop_vector_ops_comp_cl_coerce_roundtrip() {
     ;; vector -> vector (identity)
     (let ((v [1 2 3]))
       (equal v (cl-coerce v 'vector)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +244,10 @@ fn oracle_prop_vector_ops_comp_seq_map_filter_reduce() {
                 0)
     ;; On empty vectors
     (list (seq-map #'1+ []) (seq-filter #'cl-evenp []) (seq-reduce #'+ [] 0))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +277,10 @@ fn oracle_prop_vector_ops_comp_seq_into_conversions() {
     (seq-into (seq-filter #'cl-evenp '(1 2 3 4 5 6)) 'vector)
     ;; Mapped result into list from vector
     (seq-into (seq-map #'1+ [10 20 30]) 'list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +310,10 @@ fn oracle_prop_vector_ops_comp_cl_map_result_type_vector() {
       sum)
     ;; cl-map 'string
     (cl-map 'string #'upcase "hello")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +343,10 @@ fn oracle_prop_vector_ops_comp_cl_substitute() {
       (list v2 (equal v v2)))
     ;; Substitute strings
     (cl-substitute "NEW" "old" ["old" "keep" "old" "stay"] :test #'string=)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -348,7 +380,10 @@ fn oracle_prop_vector_ops_comp_equality_comparison() {
   (list (vectorp [1 2 3]) (vectorp '(1 2 3)) (vectorp "abc")
         (arrayp [1 2 3]) (arrayp "abc") (arrayp '(1 2))
         (sequencep [1]) (sequencep '(1)) (sequencep "a"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t t nil nil nil t t (t nil nil t t nil t t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -384,5 +419,8 @@ fn oracle_prop_vector_ops_comp_nesting_and_higher_order() {
           ;; Nested vector modification
           (progn (aset (aref matrix 0) 0 100)
                  (aref (aref matrix 0) 0)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }

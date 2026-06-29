@@ -7,13 +7,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_byte_compile_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((src (lambda (x) (+ x 1)))
         (compiled (byte-compile src)))
   (list (compiled-function-p compiled)
         (funcall compiled 5)
         (funcall compiled 0)
         (funcall compiled -1))) ",
+        expect_test::expect![[r#""OK (t 6 1 0)""#]],
     );
 }
 
@@ -21,13 +22,14 @@ fn divergence_byte_compile_lambda() {
 fn divergence_byte_compile_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (defun test-bc-fn-xxx (a b) (+ a (* b 2)))
   (list (test-bc-fn-xxx 3 4)
         (test-bc-fn-xxx 0 0)
         (test-bc-fn-xxx -1 5)
         (compiled-function-p (symbol-function 'test-bc-fn-xxx)))) ",
+        expect_test::expect![[r#""OK (11 0 9 nil)""#]],
     );
 }
 
@@ -35,12 +37,13 @@ fn divergence_byte_compile_defun() {
 fn divergence_byte_compile_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((env '((x . 10)))
         (fn (eval '\\`(lambda (y) (+ x y)) lexical-binding)))
   (list (compiled-function-p fn)
         (funcall fn 5)
         (funcall fn 0))) ",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments eval 3)""#]],
     );
 }
 
@@ -48,7 +51,7 @@ fn divergence_byte_compile_closure() {
 fn divergence_byte_compile_recursive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (defun test-bc-fact-xxx (n)
     (if (<= n 1) 1 (* n (test-bc-fact-xxx (1- n)))))
@@ -56,6 +59,7 @@ fn divergence_byte_compile_recursive() {
         (test-bc-fact-xxx 1)
         (test-bc-fact-xxx 5)
         (test-bc-fact-xxx 10))) ",
+        expect_test::expect![[r#""OK (1 1 120 3628800)""#]],
     );
 }
 
@@ -63,10 +67,11 @@ fn divergence_byte_compile_recursive() {
 fn divergence_byte_code_object() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((fn (make-byte-code 514 \"\\300\\301\\042\" [1 2] 2)))
   (list (byte-code-function-p fn)
         (compiled-function-p fn))) ",
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -74,13 +79,14 @@ fn divergence_byte_code_object() {
 fn divergence_disassemble_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (defun test-dis-fn-xxx (x) (list x (1+ x)))
   (let ((dis (with-output-to-string
                (disassemble 'test-dis-fn-xxx))))
     (list (> (length dis) 0)
           (string-match \"byte-code\" dis)))) ",
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
@@ -88,11 +94,14 @@ fn divergence_disassemble_function() {
 fn divergence_macroexp_macroexpand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (macroexp--expand-all '(when t 'yes))
   (macroexp--expand-all '(unless nil 'ok))
   (macroexp--expand-all '(progn (setq x 1) (setq x 2)))) ",
+        expect_test::expect![[
+            r#""OK ((if t (progn 'yes)) (if nil nil 'ok) (progn (setq x 1) (setq x 2)))""#
+        ]],
     );
 }
 
@@ -100,13 +109,14 @@ fn divergence_macroexp_macroexpand() {
 fn divergence_eval_lexical_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((lexical-binding t))
   (list (eval '(let ((x 5))
                 (funcall (lambda () x)))))
   (list (eval '(let ((x 5))
                 (let ((f (lambda () x)))
                   (funcall f)))))) ",
+        expect_test::expect![[r#""OK (5)""#]],
     );
 }
 
@@ -114,11 +124,12 @@ fn divergence_eval_lexical_binding() {
 fn divergence_closure_print_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((fn (let ((x 42)) (lambda () x)))
         (printed (prin1-to-string fn)))
   (list (stringp printed)
         (string-match \"closure\" printed))) ",
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
@@ -126,7 +137,7 @@ fn divergence_closure_print_read() {
 fn divergence_optimized_integer_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (defun test-opt-add-xxx () (+ 1 2 3 4 5))
   (defun test-opt-mul-xxx () (* 2 3 4))
@@ -135,5 +146,6 @@ fn divergence_optimized_integer_arithmetic() {
         (test-opt-mul-xxx)
         (test-opt-concat-xxx)
         (compiled-function-p (symbol-function 'test-opt-add-xxx)))) ",
+        expect_test::expect![[r#""OK (15 24 \"abc\" nil)""#]],
     );
 }

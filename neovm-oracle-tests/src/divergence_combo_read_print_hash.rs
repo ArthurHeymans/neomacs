@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_read_print_hash_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
     (puthash 'a 1 ht)
@@ -23,6 +23,7 @@ fn divergence_read_print_hash_table() {
             (= count 3)
             (stringp printed)
             (> (length printed) 0))))) "#,
+        expect_test::expect![[r#""OK (1 2 3 t t t t t)""#]],
     );
 }
 
@@ -30,7 +31,7 @@ fn divergence_read_print_hash_table() {
 fn divergence_hash_table_weak_references() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :weakness t :test 'equal)))
     (puthash 'key1 (list 1 2 3) ht)
@@ -43,6 +44,7 @@ fn divergence_hash_table_weak_references() {
           (hash-table-count ht)
           (= (hash-table-count ht) 1)
           (null (gethash 'key1 ht))))) "#,
+        expect_test::expect![[r#""OK (2 t (1 2 3) t nil 1 t t)""#]],
     );
 }
 
@@ -50,7 +52,7 @@ fn divergence_hash_table_weak_references() {
 fn divergence_read_backquote_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((x 10)
         (y '(a b c)))
@@ -60,6 +62,7 @@ fn divergence_read_backquote_complex() {
           (equal (eval (read "`(list ,(+ 1 2))")) '(list 3))
           (eval (read "`(,@y more)"))
           (equal (eval (read "`(,@y more)")) '(a b c more))))) "#,
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
     );
 }
 
@@ -67,7 +70,7 @@ fn divergence_read_backquote_complex() {
 fn divergence_print_circle_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((x (list 1 2 3)))
     (nconc x x)
@@ -77,6 +80,7 @@ fn divergence_print_circle_objects() {
               (> (length printed) 0)
               (string-match "a" printed)
               (string-match "b" printed)))))) "#,
+        expect_test::expect![[r#""OK (t t 1 20)""#]],
     );
 }
 
@@ -84,7 +88,7 @@ fn divergence_print_circle_objects() {
 fn divergence_hash_table_as_obarray_cache() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((cache (make-hash-table :test 'eq :size 100)))
     (dolist (name '("alpha" "beta" "gamma" "delta" "epsilon"))
@@ -96,6 +100,7 @@ fn divergence_hash_table_as_obarray_cache() {
           (string= (gethash (intern "alpha") cache) "alpha")
           (maphash (lambda (k v) (equal (symbol-name k) v)) cache)
           (hash-table-test cache)))) "#,
+        expect_test::expect![[r#""OK (5 t \"alpha\" t nil eq)""#]],
     );
 }
 
@@ -103,7 +108,7 @@ fn divergence_hash_table_as_obarray_cache() {
 fn divergence_print_read_consistency_numbers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((values (list 0 1 -1 42 most-positive-fixnum
                        1.5 -2.7 0.0 -0.0
@@ -116,6 +121,7 @@ fn divergence_print_read_consistency_numbers() {
             (= (cadr values) 1)
             (= (nth 2 values) -1)
             (= (nth 3 values) 42))))) "#,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
@@ -123,7 +129,7 @@ fn divergence_print_read_consistency_numbers() {
 fn divergence_read_vector_array() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((v1 (read "[1 2 3]"))
         (v2 (read "[a b c]"))
@@ -136,6 +142,7 @@ fn divergence_read_vector_array() {
           (vectorp v3)
           (= (length v3) 0)
           (equal (read "(1 2 3)") '(1 2 3))))) "#,
+        expect_test::expect![[r#""OK (t t 3 t t t t t)""#]],
     );
 }
 
@@ -143,7 +150,7 @@ fn divergence_read_vector_array() {
 fn divergence_hash_table_iterate_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
     (dotimes (i 10) (puthash i (* i i) ht))
@@ -160,6 +167,7 @@ fn divergence_hash_table_iterate_modify() {
             (= (gethash 5 ht) 25)
             (gethash 9 ht)
             (= (gethash 9 ht) 81))))) "#,
+        expect_test::expect![[r#""OK (t t t 25 t 81 t)""#]],
     );
 }
 
@@ -167,7 +175,7 @@ fn divergence_hash_table_iterate_modify() {
 fn divergence_print_length_depth_truncation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((deep (list 'a (list 'b (list 'c (list 'd (list 'e))))))
         (long (number-sequence 1 100)))
@@ -179,6 +187,7 @@ fn divergence_print_length_depth_truncation() {
             (string-match "e" print-depth)
             (string-match "1" print-len)
             (string-match "5" print-len))))) "#,
+        expect_test::expect![[r#""OK (t t 1 nil 1 9)""#]],
     );
 }
 
@@ -186,7 +195,7 @@ fn divergence_print_length_depth_truncation() {
 fn divergence_read_special_forms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((forms (mapcar 'read
                        '("(quote foo)" "'foo"
@@ -202,5 +211,6 @@ fn divergence_read_special_forms() {
           (null (nth 6 forms))
           (eq (nth 7 forms) t)
           (null (nth 8 forms))))) "#,
+        expect_test::expect![[r#""OK (t t t t t t t t t)""#]],
     );
 }

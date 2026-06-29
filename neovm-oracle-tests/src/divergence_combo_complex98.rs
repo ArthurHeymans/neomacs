@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx98_image_type_availability_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (image-type-available-p 'png)
@@ -19,13 +19,14 @@ fn div_cx98_image_type_availability_matrix() {
           (image-type-available-p 'tiff))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx98_image_metadata_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((img (create-image "non-existent.png" 'png nil)))
@@ -35,13 +36,14 @@ fn div_cx98_image_metadata_creation() {
             (plist-get (cdr img) :file)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t image png \"non-existent.png\")""#]],
     );
 }
 
 #[test]
 fn div_cx98_image_size_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((img (create-image "non-existent.xpm" 'xpm nil :ascent 'center)))
@@ -51,13 +53,14 @@ fn div_cx98_image_size_query() {
             (image-size img)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx98_fringe_bitmap_availability_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (mapcar (lambda (b)
@@ -67,13 +70,16 @@ fn div_cx98_fringe_bitmap_availability_matrix() {
               question-mark exclamation-mark))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((left-arrow 3) (right-arrow 4) (up-arrow 5) (down-arrow 6) (filled-square 20) (hollow-square 21) (left-triangle 10) (right-triangle 11) (question-mark 1) (exclamation-mark 2))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx98_fringe_bitmaps_at_pos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -86,13 +92,14 @@ fn div_cx98_fringe_bitmaps_at_pos() {
   (list (get-text-property 5 'display)
         (get-text-property 7 'display)))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx98_svg_creation_simple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -105,13 +112,14 @@ fn div_cx98_svg_creation_simple() {
                   (plist-get (cdr xml) :type)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t image svg)""#]],
     );
 }
 
 #[test]
 fn div_cx98_image_scale_factor_and_multipliers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((img (create-image "non-existent.png" 'png nil :scale 2)))
@@ -119,13 +127,14 @@ fn div_cx98_image_scale_factor_and_multipliers() {
             (plist-get (cdr img) :scale)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t 2)""#]],
     );
 }
 
 #[test]
 fn div_cx98_image_format_available_p_per_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'image-transforms-p)
@@ -135,13 +144,14 @@ fn div_cx98_image_format_available_p_per_format() {
           (fboundp 'image-animate))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx98_put_text_property_with_image_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "before PIC after")
@@ -151,13 +161,16 @@ fn div_cx98_put_text_property_with_image_display() {
         (get-text-property 1 'display)
         (get-text-property 12 'display)))
 "##,
+        expect_test::expect![[
+            r#""OK ((image :type png :file \"non-existent.png\" :scale default) nil nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx98_image_animated_p_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((img (create-image "non-existent.gif" 'gif nil)))
@@ -165,13 +178,14 @@ fn div_cx98_image_animated_p_predicate() {
             (condition-case err (image-animated-p img) (error :err))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t :err)""#]],
     );
 }
 
 #[test]
 fn div_cx98_image_with_marker_overlay_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((img (create-image "non-existent.png" 'png nil)))
@@ -198,5 +212,6 @@ fn div_cx98_image_with_marker_overlay_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

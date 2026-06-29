@@ -36,7 +36,12 @@ fn oracle_prop_with_output_to_string_dynamic_output_buffer_contract() {
    (eq (current-buffer) outer-buffer)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"alpha(beta \\\"gamma\\\")\" (t t (\" *string-output*\" \"\" 1 1 nil nil)) :body-result t)""#
+        ]],
+    );
 }
 
 #[test]
@@ -62,7 +67,10 @@ fn oracle_prop_with_output_to_string_kills_temp_buffer_on_error() {
            (get-buffer captured-name)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (error \"boom\" t nil nil)""#]],
+    );
 }
 
 #[test]
@@ -94,5 +102,10 @@ fn oracle_prop_with_output_to_string_nested_capture_isolated() {
    (get-buffer inner-buffer-name)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"outer-a::outer-b\" \"inner\" \"outer-a:\" \"outer-a:\" nil)""#
+        ]],
+    );
 }

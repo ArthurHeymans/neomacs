@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_fold_indirect_deep_edit_font_lock_regression_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -173,6 +173,7 @@ fn org_fold_indirect_deep_edit_font_lock_regression_combo() {
                          (point-min) (point-max)))))
             (when (buffer-live-p clone)
                (kill-buffer clone))))))))"##,
+        expect_test::expect![[r#""ERR (void-variable visibility)""#]],
     );
 }
 
@@ -180,7 +181,7 @@ fn org_fold_indirect_deep_edit_font_lock_regression_combo() {
 fn org_fold_startup_content_drawer_deep_cycle_hidden_edit_regression_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -344,6 +345,7 @@ fn org_fold_startup_content_drawer_deep_cycle_hidden_edit_regression_combo() {
                      "***** TODO Beta fifth"))
                    (buffer-substring-no-properties
                     (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p nil)""#]],
     );
 }
 
@@ -351,7 +353,7 @@ fn org_fold_startup_content_drawer_deep_cycle_hidden_edit_regression_combo() {
 fn org_fold_indirect_buffer_decouple_edit_font_regression_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -429,5 +431,8 @@ fn org_fold_indirect_buffer_decouple_edit_font_regression_combo() {
                         (search-forward "Inserted under hidden L5" nil t)
                         clone-final
                         base-final))))))))))"##,
+        expect_test::expect![[
+            r#""OK (nil nil nil \"* TODO Root\nRoot body.\n** TODO Alpha\nAlpha body.\n*** TODO Alpha child\nAlpha child body.\n**** TODO Alpha L4\nAlpha L4 body.\n***** DONE Alpha L5\n***** TODO Inserted under hidden L5\nInserted body.\n\nAlpha L5 body.\n** TODO Beta\nBeta body.\n* Tail\nTail body.\n\" \"* TODO Root\nRoot body.\n** TODO Alpha\nAlpha body.\n*** TODO Alpha child\nAlpha child body.\n**** TODO Alpha L4\nAlpha L4 body.\n***** DONE Alpha L5\n***** TODO Inserted under hidden L5\nInserted body.\n\nAlpha L5 body.\n** TODO Beta\nBeta body.\n* Tail\nTail body.\n\")""#
+        ]],
     );
 }

@@ -137,7 +137,10 @@ fn oracle_prop_lexer_basic_tokens() {
       (funcall 'neovm--lex-tokenize "x = 42 + y")
     (fmakunbound 'neovm--lex-tokenize)
     (makunbound 'neovm--lex-keywords)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable neovm--lex-keywords)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +284,10 @@ fn oracle_prop_lexer_string_literals() {
        (funcall 'neovm--lex2-tokenize "print(\"result\", 42)"))
     (fmakunbound 'neovm--lex2-tokenize)
     (makunbound 'neovm--lex2-keywords)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable neovm--lex2-keywords)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -383,7 +389,10 @@ fn oracle_prop_lexer_multiline_tracking() {
            (car (last tokens)))))
     (fmakunbound 'neovm--lex3-tokenize)
     (makunbound 'neovm--lex3-keywords)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable neovm--lex3-keywords)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -523,7 +532,10 @@ fn oracle_prop_lexer_with_comments() {
            (nth 2 (car (last tokens))))))
     (fmakunbound 'neovm--lex4-tokenize)
     (makunbound 'neovm--lex4-keywords)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable neovm--lex4-keywords)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -645,7 +657,10 @@ fn oracle_prop_lexer_token_analysis() {
     (fmakunbound 'neovm--lex5-count-types)
     (fmakunbound 'neovm--lex5-find-identifiers)
     (makunbound 'neovm--lex5-keywords)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable neovm--lex5-keywords)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -731,7 +746,12 @@ fn oracle_prop_lexer_regexp_based() {
            (nth 2 (car (last tokens))))))
     (fmakunbound 'neovm--lex6-token-specs)
     (fmakunbound 'neovm--lex6-tokenize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (14 ((KEYWORD \"let\" 1 1) (IDENT \"x\" 1 5) (OP \"=\" 1 7) (FLOAT \"3.14\" 1 9) (SEMI \";\" 1 13) (KEYWORD \"if\" 2 1) (IDENT \"x\" 2 4) (OP \">\" 2 6) (INT \"2\" 2 8) (LBRACE \"{\" 2 10) (KEYWORD \"return\" 3 3) (IDENT \"x\" 3 10) (INT \"2\" 3 14) (RBRACE \"}\" 4 1)) \"3.14\" 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -873,5 +893,8 @@ fn oracle_prop_lexer_full_pipeline() {
     (fmakunbound 'neovm--lex7-tokenize)
     (fmakunbound 'neovm--lex7-stats)
     (makunbound 'neovm--lex7-keywords)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable neovm--lex7-keywords)""#]],
+    );
 }

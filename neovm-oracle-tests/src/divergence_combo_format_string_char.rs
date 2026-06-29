@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_format_complex_specs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (format "%d + %d = %d" 1 2 3)
         (format "%05d" 42)
@@ -19,6 +19,9 @@ fn divergence_format_complex_specs() {
         (format "%c" 65)
         (format "%s has %d items" "list" 5)
         (format "%%100"))) "#,
+        expect_test::expect![[
+            r#""OK (\"1 + 2 = 3\" \"00042\" \"hello     |\" \"     hello|\" \"3.142\" \"ff\" \"10\" \"A\" \"list has 5 items\" \"%100\")""#
+        ]],
     );
 }
 
@@ -26,7 +29,7 @@ fn divergence_format_complex_specs() {
 fn divergence_string_props_after_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let* ((s1 "hello world")
          (s2 (format "%s %d" s1 42))
@@ -39,6 +42,7 @@ fn divergence_string_props_after_format() {
           (= (length s2) 14)
           (length s3)
           (= (length s3) 14)))) "#,
+        expect_test::expect![[r#""OK (t t 11 t 14 t 14 t)""#]],
     );
 }
 
@@ -46,7 +50,7 @@ fn divergence_string_props_after_format() {
 fn divergence_string_multibyte_concat_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((a "abc")
         (b "\xc3\xa9\xc3\xa0"))
@@ -62,6 +66,7 @@ fn divergence_string_multibyte_concat_props() {
             (= (length d) 5)
             (substring c 3 5)
             (string= (substring c 3 5) b))))) "#,
+        expect_test::expect![[r#""OK (3 t 4 nil 7 nil 7 nil \"\\303\\251\" nil)""#]],
     );
 }
 
@@ -69,7 +74,7 @@ fn divergence_string_multibyte_concat_props() {
 fn divergence_replace_regex_in_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (replace-regexp-in-string "[0-9]+" "NUM" "abc123def456")
         (string= (replace-regexp-in-string "[0-9]+" "NUM" "abc123def456")
@@ -83,6 +88,9 @@ fn divergence_replace_regex_in_string() {
         (replace-regexp-in-string "x" "y" "no match")
         (string= (replace-regexp-in-string "x" "y" "no match")
                  "no match"))) "#,
+        expect_test::expect![[
+            r#""OK (\"abcNUMdefNUM\" t \"hello-X world-X\" t \"(abc) (def)\" t \"no match\" t)""#
+        ]],
     );
 }
 
@@ -90,7 +98,7 @@ fn divergence_replace_regex_in_string() {
 fn divergence_string_search_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (string-match "world" "hello world")
         (= (string-match "world" "hello world") 6)
@@ -102,6 +110,7 @@ fn divergence_string_search_various() {
         (null (string-match "world" "hello world" 7))
         (match-string 0 "hello world")
         (string= (match-string 0 "hello world") "world"))) "#,
+        expect_test::expect![[r#""OK (6 t nil t 6 t nil t \"world\" t)""#]],
     );
 }
 
@@ -109,7 +118,7 @@ fn divergence_string_search_various() {
 fn divergence_split_string_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (split-string "  a  b  c  " " +" t)
         (equal (split-string "  a  b  c  " " +" t) '("a" "b" "c"))
@@ -119,6 +128,9 @@ fn divergence_split_string_boundary() {
         (equal (split-string "a,b,,c" "," t) '("a" "b" "c"))
         (split-string "" ",")
         (equal (split-string "" ",") '("")))) "#,
+        expect_test::expect![[
+            r#""OK ((\"a\" \"b\" \"c\") t (\"a\" \"b\" \"\" \"c\") t (\"a\" \"b\" \"c\") t (\"\") t)""#
+        ]],
     );
 }
 
@@ -126,7 +138,7 @@ fn divergence_split_string_boundary() {
 fn divergence_string_case_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (upcase "hello World")
         (string= (upcase "hello World") "HELLO WORLD")
@@ -136,6 +148,9 @@ fn divergence_string_case_operations() {
         (string= (capitalize "hello world") "Hello World")
         (upcase-initials "hello world foo")
         (string= (upcase-initials "hello world foo") "Hello World Foo"))) "#,
+        expect_test::expect![[
+            r#""OK (\"HELLO WORLD\" t \"hello world\" t \"Hello World\" t \"Hello World Foo\" t)""#
+        ]],
     );
 }
 
@@ -143,7 +158,7 @@ fn divergence_string_case_operations() {
 fn divergence_string_pad_trim() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (string-pad "hello" 10)
         (string= (string-pad "hello" 10) "hello     ")
@@ -155,6 +170,9 @@ fn divergence_string_pad_trim() {
         (string= (string-trim-left "  hello  ") "hello  ")
         (string-trim-right "  hello  ")
         (string= (string-trim-right "  hello  ") "  hello"))) "#,
+        expect_test::expect![[
+            r#""OK (\"hello     \" t \"hello\" t \"hello\" t \"hello  \" t \"  hello\" t)""#
+        ]],
     );
 }
 
@@ -162,7 +180,7 @@ fn divergence_string_pad_trim() {
 fn divergence_string_reverse_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (string-reverse "abc")
         (string= (string-reverse "abc") "cba")
@@ -172,6 +190,7 @@ fn divergence_string_reverse_multibyte() {
         (string= (string-reverse "hello") "olleh")
         (string-reverse "")
         (string= (string-reverse "") ""))) "#,
+        expect_test::expect![[r#""OK (\"cba\" t 4 nil \"olleh\" t \"\" t)""#]],
     );
 }
 
@@ -179,7 +198,7 @@ fn divergence_string_reverse_multibyte() {
 fn divergence_string_bytes_vs_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((s "\xc3\xa9\xc3\xa0\xc3\xb9"))
     (list (length s)
@@ -191,5 +210,6 @@ fn divergence_string_bytes_vs_chars() {
           (= (string-bytes "abc") 3)
           (= (length "abc") 3)
           (= (string-bytes s) (* (length s) 2))))) "#,
+        expect_test::expect![[r#""OK (6 nil 6 t t t t t nil)""#]],
     );
 }

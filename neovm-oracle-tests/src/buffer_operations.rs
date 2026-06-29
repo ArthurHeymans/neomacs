@@ -17,7 +17,7 @@ fn oracle_prop_bobp_eobp() {
 
     let form = r#"(with-temp-buffer
                     (list (bobp) (eobp)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (t t)""#]);
 }
 
 #[test]
@@ -30,7 +30,10 @@ fn oracle_prop_bobp_eobp_with_content() {
                       (goto-char (point-min))
                       (let ((at-start (list (bobp) (eobp))))
                         (list at-start at-end))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((t nil) (nil t))""#],
+    );
 }
 
 #[test]
@@ -54,7 +57,10 @@ fn oracle_prop_bolp_eolp() {
                       (forward-char 2)
                       (setq results (cons (list (bolp) (eolp)) results))
                       (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((t nil) (nil t) (t nil) (nil nil))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +78,10 @@ fn oracle_prop_char_before() {
                           (char-before 1)
                           (char-before 3)
                           (char-before 7)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (99 nil 98 102)""#],
+    );
 }
 
 #[test]
@@ -84,7 +93,7 @@ fn oracle_prop_following_preceding_char() {
                     (goto-char 3)
                     (list (following-char)
                           (preceding-char)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (108 101)""#]);
 }
 
 #[test]
@@ -98,7 +107,7 @@ fn oracle_prop_following_char_at_boundaries() {
                       (goto-char (point-max))
                       (let ((at-end (following-char)))
                         (list at-start at-end))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (97 0)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +123,7 @@ fn oracle_prop_buffer_size() {
                       (insert "hello world")
                       (let ((with-content (buffer-size)))
                         (list empty-size with-content))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (0 11)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +141,10 @@ fn oracle_prop_buffer_substring_no_properties() {
                           (buffer-substring-no-properties 1 6)
                           (buffer-substring-no-properties
                            (point-min) (point-max))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (#(\"hello\" 0 5 (face bold)) \"hello\" \"hello world\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +161,7 @@ fn oracle_prop_erase_buffer() {
                       (erase-buffer)
                       (list before (buffer-size)
                             (point) (point-min) (point-max))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (12 0 1 1 1)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +184,10 @@ fn oracle_prop_buffer_word_extraction() {
                                            start (match-beginning 0))))
                               (setq words (split-string region))))))
                       words))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"alpha\" \"beta\" \"gamma\")""#]],
+    );
 }
 
 #[test]
@@ -200,7 +215,10 @@ fn oracle_prop_buffer_line_operations() {
                                       count (1+ count))))))
                         (forward-line 1))
                       (list (nreverse lines) count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"line 1\" \"line 3\" \"line 4\") 3)""#]],
+    );
 }
 
 #[test]
@@ -228,7 +246,10 @@ fn oracle_prop_buffer_insert_and_navigate() {
                             (funcall extract-value "age")
                             (funcall extract-value "role")
                             (funcall extract-value "missing"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"Alice\" \"30\" \"engineer\" nil)""#]],
+    );
 }
 
 #[test]
@@ -254,5 +275,10 @@ fn oracle_prop_buffer_search_replace_multipass() {
                       (while (re-search-forward "^TODO:" nil t)
                         (replace-match "IN-PROGRESS:"))
                       (list todos dones (buffer-string))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""\n        OK (3 2 \"IN-PROGRESS: fix bug\n        DONE: write tests\n        IN-PROGRESS: refactor\n        DONE: deploy\n        IN-PROGRESS: review\n        \")""#
+        ]],
+    );
 }

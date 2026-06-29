@@ -40,7 +40,12 @@ fn oracle_prop_if_cond_if_with_without_else() {
     (if (progn (setq x 10) (> x 5))
         (+ x 100)
       (+ x 200))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (yes no nil 3 c truthy truthy truthy truthy outer-false 110)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +83,12 @@ fn oracle_prop_if_cond_multi_clause() {
   (cond (nil 1) (nil 2) (nil 3))
   ;; cond returning last body form
   (cond (t (+ 1 2) (+ 3 4) (+ 5 6))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((number 42) (string 5) (symbol \"foo\") (list 3)) 42 (third) nil 11)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +122,10 @@ fn oracle_prop_if_cond_when_unless_special_cases() {
   ;; unless equivalence: (unless P B) == (if (not P) (progn B))
   (equal (unless nil 'yes) (if (not nil) (progn 'yes)))
   (equal (unless t 'yes) (if (not t) (progn 'yes))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 nil c nil 15 100 t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +166,10 @@ fn oracle_prop_if_cond_and_or_short_circuit() {
    (or nil 'fallback)
    ;; Nested and/or
    (and (or nil t) (or nil nil 'deep))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 nil t 42 nil nil nil nil big fallback deep)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -202,7 +218,12 @@ fn oracle_prop_if_cond_cl_case_forms() {
      (string 'its-a-string)
      (cons 'its-a-list)
      (t 'other))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (fruit-b medium default nil its-an-integer its-a-string its-a-list)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +258,10 @@ fn oracle_prop_if_cond_short_circuit_side_effects() {
         (and (progn (push 'k log) t)
              (progn (push 'l log) 'done)))
    (nreverse log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil (a b c) nil found (e f g) nil done (i j k l))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +297,12 @@ fn oracle_prop_if_cond_deeply_nested() {
    (funcall classify "")
    (funcall classify nil)
    (funcall classify '(a b))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (large-positive small-positive zero small-negative large-negative positive-float non-positive-float non-empty-string empty-string nil-value other)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +343,12 @@ fn oracle_prop_if_cond_with_side_effects_cleanup() {
          neovm--test-cond-counter))
     (fmakunbound 'neovm--test-cond-process)
     (makunbound 'neovm--test-cond-counter)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((small . 5) (medium . 25) (big . 75) (text . 2) (empty . 0) (other . 6) (big . 100) (small . 0) (text . 10) (medium . 15)) 10)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -357,7 +391,12 @@ fn oracle_prop_if_cond_type_dispatch_pattern() {
        (funcall 'neovm--test-serialize [10 20 30])
        (funcall 'neovm--test-serialize '(1 (2 3) . 4)))
     (fmakunbound 'neovm--test-serialize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"null\" \"true\" \"int:42\" \"float:3.14\" \"str:\\\"hello\\\"\" \"sym:world\" \"(int:1 . int:2)\" \"[int:10,int:20,int:30]\" \"(int:1 . ((int:2 . (int:3 . null)) . int:4))\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -393,5 +432,10 @@ fn oracle_prop_if_cond_mixed_conditionals() {
    (funcall evaluate 72)
    (funcall evaluate 65)
    (funcall evaluate 45)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:score 95 :grade A :passing t :honors with-honors :warning nil :description \"Excellent\") (:score 85 :grade B :passing t :honors nil :warning nil :description \"Good\") (:score 72 :grade C :passing t :honors nil :warning nil :description \"Satisfactory\") (:score 65 :grade D :passing t :honors nil :warning nil :description \"Needs improvement\") (:score 45 :grade F :passing nil :honors nil :warning academic-warning :description \"Needs improvement\"))""#
+        ]],
+    );
 }

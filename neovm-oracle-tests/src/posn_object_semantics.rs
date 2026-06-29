@@ -28,5 +28,10 @@ fn oracle_prop_gnu_posn_object_accessors_are_list_contracts() {
    (posn-object-width-height string-pos)
    (posn-string plain-pos)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((image :type xpm) (\"display\" . 2) nil (1 . 2) (30 . 40) (5 . 6) (70 . 80) nil)""#
+        ]],
+    );
 }

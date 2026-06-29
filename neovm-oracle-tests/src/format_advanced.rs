@@ -21,7 +21,10 @@ fn oracle_prop_format_integer_specs() {
                         (format "%X" 255)
                         (format "%o" 8)
                         (format "%o" 255))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"42\" \"-42\" \"0\" \"ff\" \"FF\" \"10\" \"377\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -38,7 +41,12 @@ fn oracle_prop_format_width_padding() {
                         (format "%10s" "hello")
                         (format "%-10s" "hello")
                         (format "%5d" 123456))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"        42\" \"42        \" \"0000000042\" \"     hello\" \"hello     \" \"123456\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -56,7 +64,12 @@ fn oracle_prop_format_float_specs() {
                         (format "%.2e" 12345.6789)
                         (format "%g" 0.00001)
                         (format "%g" 12345.0))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"3.141590\" \"3.14\" \"3\" \"1.234568e+04\" \"1.23e+04\" \"1e-05\" \"12345\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -66,7 +79,10 @@ fn oracle_prop_format_float_width() {
     let form = r#"(list (format "%10.2f" 3.14)
                         (format "%-10.2f" 3.14)
                         (format "%010.2f" 3.14))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"      3.14\" \"3.14      \" \"0000003.14\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +97,10 @@ fn oracle_prop_format_char() {
                         (format "%c" ?a)
                         (format "%c" ?Z)
                         (format "%c%c%c" ?H ?i ?!))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"A\" \"a\" \"Z\" \"Hi!\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +119,12 @@ fn oracle_prop_format_s_vs_S() {
                         (format "%S" '(a b c))
                         (format "%s" nil)
                         (format "%S" nil))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello\" \"\\\"hello\\\"\" \"42\" \"42\" \"(a b c)\" \"(a b c)\" \"nil\" \"nil\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +140,12 @@ fn oracle_prop_format_multiple_args() {
                     (format "[%5d] %-20s %6.2f" 1 "item" 9.99)
                     (format "%s + %s = %s" 1 2 (+ 1 2))
                     (format "0x%04X = %d = 0%o" 255 255 255))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Alice is 30 years old\" \"[    1] item                   9.99\" \"1 + 2 = 3\" \"0x00FF = 255 = 0377\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +159,10 @@ fn oracle_prop_format_literal_percent() {
     let form = r#"(list (format "100%%")
                         (format "%d%%" 42)
                         (format "%%s is not a format"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"100%\" \"42%\" \"%s is not a format\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +191,12 @@ fn oracle_prop_format_table() {
                                  (append (list header sep)
                                          formatted-rows)
                                  "\n")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK \"Name            Age      Score\n------------------------------\nAlice            30       95.5\nBob              25       87.2\nCarol            35       92.8\"""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -184,5 +221,10 @@ fn oracle_prop_format_number_formatter() {
                     (mapcar format-bytes
                             '(42 1024 1536 1048576 1073741824
                               5368709120)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"42 B\" \"1.0 KB\" \"1.5 KB\" \"1.0 MB\" \"1.0 GB\" \"5.0 GB\")""#
+        ]],
+    );
 }

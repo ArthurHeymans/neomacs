@@ -41,7 +41,12 @@ fn oracle_prop_subr_ops_subrp_comprehensive() {
   (subrp '(1 2 3))
   (subrp (make-hash-table))
   (subrp [1 2 3]))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t t t t t t t t t t nil nil nil nil nil nil nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +79,12 @@ fn oracle_prop_subr_ops_subr_name() {
   (condition-case err
       (subr-name (lambda (x) x))
     (wrong-type-argument (list 'error (car err)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"+\" \"car\" \"cdr\" \"cons\" \"list\" \"length\" \"concat\" \"format\" \"eq\" \"equal\" \"if\" \"progn\" \"let\" t (error wrong-type-argument))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +122,10 @@ fn oracle_prop_subr_ops_subr_arity_all_patterns() {
   (condition-case err
       (subr-arity 42)
     (wrong-type-argument (list 'error (car err)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument subrp null)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +163,10 @@ fn oracle_prop_subr_ops_commandp_comprehensive() {
   ;; Verify commandp implies functionp for lambdas
   (let ((f (lambda () (interactive) 42)))
     (list (commandp f) (functionp f))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil t t nil nil nil nil nil t t t (t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +206,12 @@ fn oracle_prop_subr_ops_functionp_types() {
   (functionp (make-hash-table))
   ;; Void symbol
   (functionp 'nonexistent-function-xyz-12345))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t t t t t nil nil nil nil nil nil nil nil nil nil nil nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +248,12 @@ fn oracle_prop_subr_ops_special_form_p() {
   (special-form-p (lambda (x) x))
   (special-form-p nil)
   (special-form-p 42))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t t t t t t t t t t t nil nil nil nil nil nil nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -259,7 +285,10 @@ fn oracle_prop_subr_ops_function_classification_matches_gnu_subr_el() {
     (fmakunbound 'neovm--autoload-fn))
   results)
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil (macro t) nil (macro t) nil t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +324,10 @@ fn oracle_prop_subr_ops_closurep() {
   (let ((outer 1))
     (let ((inner 2))
       (closurep (lambda () (+ outer inner))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t nil nil nil nil nil nil nil nil t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +366,12 @@ fn oracle_prop_subr_ops_predicate_matrix() {
         ;; number
         (funcall 'neovm--classify-callable 42))
     (fmakunbound 'neovm--classify-callable)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((functionp t) (subrp nil) (special-form-p nil) (closurep t) (commandp nil)) ((functionp t) (subrp t) (special-form-p nil) (closurep nil) (commandp nil)) ((functionp t) (subrp t) (special-form-p nil) (closurep nil) (commandp nil)) ((functionp nil) (subrp t) (special-form-p t) (closurep nil) (commandp nil)) ((functionp nil) (subrp t) (special-form-p t) (closurep nil) (commandp nil)) ((functionp t) (subrp nil) (special-form-p nil) (closurep t) (commandp t)) ((functionp nil) (subrp nil) (special-form-p nil) (closurep nil) (commandp nil)) ((functionp nil) (subrp nil) (special-form-p nil) (closurep nil) (commandp nil)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -377,7 +414,12 @@ fn oracle_prop_subr_ops_introspection_pipeline() {
         ;; Return sorted by symbol name for stable comparison
         (nreverse results))
     (fmakunbound 'neovm--subr-info)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((+ (bound t) (subr t) (name \"+\") (min-args 0) (max-args many) (special nil) (functionp t)) (- (bound t) (subr t) (name \"-\") (min-args 0) (max-args many) (special nil) (functionp t)) (* (bound t) (subr t) (name \"*\") (min-args 0) (max-args many) (special nil) (functionp t)) (/ (bound t) (subr t) (name \"/\") (min-args 1) (max-args many) (special nil) (functionp t)) (= (bound t) (subr t) (name \"=\") (min-args 1) (max-args many) (special nil) (functionp t)) (< (bound t) (subr t) (name \"<\") (min-args 1) (max-args many) (special nil) (functionp t)) (> (bound t) (subr t) (name \">\") (min-args 1) (max-args many) (special nil) (functionp t)) (<= (bound t) (subr t) (name \"<=\") (min-args 1) (max-args many) (special nil) (functionp t)) (>= (bound t) (subr t) (name \">=\") (min-args 1) (max-args many) (special nil) (functionp t)) (car (bound t) (subr t) (name \"car\") (min-args 1) (max-args 1) (special nil) (functionp t)) (cdr (bound t) (subr t) (name \"cdr\") (min-args 1) (max-args 1) (special nil) (functionp t)) (cons (bound t) (subr t) (name \"cons\") (min-args 2) (max-args 2) (special nil) (functionp t)) (list (bound t) (subr t) (name \"list\") (min-args 0) (max-args many) (special nil) (functionp t)) (length (bound t) (subr t) (name \"length\") (min-args 1) (max-args 1) (special nil) (functionp t)) (nth (bound t) (subr t) (name \"nth\") (min-args 2) (max-args 2) (special nil) (functionp t)) (concat (bound t) (subr t) (name \"concat\") (min-args 0) (max-args many) (special nil) (functionp t)) (substring (bound t) (subr t) (name \"substring\") (min-args 1) (max-args 3) (special nil) (functionp t)) (format (bound t) (subr t) (name \"format\") (min-args 1) (max-args many) (special nil) (functionp t)) (if (bound t) (subr t) (name \"if\") (min-args 2) (max-args unevalled) (special t) (functionp nil)) (let (bound t) (subr t) (name \"let\") (min-args 1) (max-args unevalled) (special t) (functionp nil)) (progn (bound t) (subr t) (name \"progn\") (min-args 0) (max-args unevalled) (special t) (functionp nil)) (setq (bound t) (subr t) (name \"setq\") (min-args 0) (max-args unevalled) (special t) (functionp nil)) (quote (bound t) (subr t) (name \"quote\") (min-args 1) (max-args unevalled) (special t) (functionp nil)) (cond (bound t) (subr t) (name \"cond\") (min-args 0) (max-args unevalled) (special t) (functionp nil)) (while (bound t) (subr t) (name \"while\") (min-args 1) (max-args unevalled) (special t) (functionp nil)) (not (bound t) (subr nil) (name nil) (min-args nil) (max-args nil) (special nil) (functionp t)) (null (bound t) (subr t) (name \"null\") (min-args 1) (max-args 1) (special nil) (functionp t)) (eq (bound t) (subr t) (name \"eq\") (min-args 2) (max-args 2) (special nil) (functionp t)) (equal (bound t) (subr t) (name \"equal\") (min-args 2) (max-args 2) (special nil) (functionp t)) (apply (bound t) (subr t) (name \"apply\") (min-args 1) (max-args many) (special nil) (functionp t)) (funcall (bound t) (subr t) (name \"funcall\") (min-args 1) (max-args many) (special nil) (functionp t)) (mapcar (bound t) (subr t) (name \"mapcar\") (min-args 2) (max-args 2) (special nil) (functionp t)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -430,5 +472,10 @@ fn oracle_prop_subr_ops_arity_validation() {
         ;; lambda: unknown arity
         (funcall 'neovm--check-arity (lambda (x) x) 1))
     (fmakunbound 'neovm--check-arity)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((too-few 1 1) (ok 1 1) (too-many 1 1) (too-few 2 2) (too-few 2 2) (ok 2 2) (too-many 2 2) (ok 0 many) (ok 0 many) (ok 0 many) (too-few 1 3) (ok 1 3) (ok 1 3) (ok 1 3) (unknown nil nil))""#
+        ]],
+    );
 }

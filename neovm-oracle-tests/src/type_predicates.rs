@@ -15,12 +15,27 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 fn oracle_prop_booleanp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(booleanp t)");
-    assert_oracle_parity("(booleanp nil)");
-    assert_oracle_parity("(booleanp 0)");
-    assert_oracle_parity("(booleanp 1)");
-    assert_oracle_parity("(booleanp 'hello)");
-    assert_oracle_parity("(booleanp '())");
+    crate::common::assert_oracle_parity_expect("(booleanp t)", expect_test::expect![[r#""OK t""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(booleanp nil)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(booleanp 0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(booleanp 1)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(booleanp 'hello)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(booleanp '())",
+        expect_test::expect![[r#""OK t""#]],
+    );
 }
 
 #[test]
@@ -31,7 +46,7 @@ fn oracle_prop_booleanp_expressions() {
     let form = "(list (booleanp (= 1 1))
                       (booleanp (null nil))
                       (booleanp (not 42)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -42,15 +57,42 @@ fn oracle_prop_booleanp_expressions() {
 fn oracle_prop_characterp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(characterp ?a)");
-    assert_oracle_parity("(characterp ?Z)");
-    assert_oracle_parity("(characterp ?\\n)");
-    assert_oracle_parity("(characterp 65)");
-    assert_oracle_parity("(characterp 0)");
-    assert_oracle_parity("(characterp -1)");
-    assert_oracle_parity("(characterp nil)");
-    assert_oracle_parity(r#"(characterp "a")"#);
-    assert_oracle_parity("(characterp 'a)");
+    crate::common::assert_oracle_parity_expect(
+        "(characterp ?a)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(characterp ?Z)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(characterp ?\\n)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(characterp 65)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(characterp 0)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(characterp -1)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(characterp nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(characterp "a")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(characterp 'a)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 #[test]
@@ -58,9 +100,15 @@ fn oracle_prop_characterp_large_codepoint() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Max valid Unicode codepoint
-    assert_oracle_parity("(characterp #x10ffff)");
+    crate::common::assert_oracle_parity_expect(
+        "(characterp #x10ffff)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     // Beyond max
-    assert_oracle_parity("(characterp #x110000)");
+    crate::common::assert_oracle_parity_expect(
+        "(characterp #x110000)",
+        expect_test::expect![[r#""OK t""#]],
+    );
 }
 
 #[test]
@@ -94,7 +142,12 @@ fn oracle_prop_char_or_string_p_boundaries_and_arity() {
      (char-or-string-p ?A "A")
    (error (list (car err) (cdr err)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t nil nil t t t nil nil nil nil nil nil (wrong-number-of-arguments (char-or-string-p 0)) (wrong-number-of-arguments (char-or-string-p 2)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -105,13 +158,34 @@ fn oracle_prop_char_or_string_p_boundaries_and_arity() {
 fn oracle_prop_functionp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(functionp 'car)");
-    assert_oracle_parity("(functionp (lambda (x) x))");
-    assert_oracle_parity("(functionp #'car)");
-    assert_oracle_parity("(functionp nil)");
-    assert_oracle_parity("(functionp 42)");
-    assert_oracle_parity("(functionp '(1 2 3))");
-    assert_oracle_parity(r#"(functionp "hello")"#);
+    crate::common::assert_oracle_parity_expect(
+        "(functionp 'car)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(functionp (lambda (x) x))",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(functionp #'car)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(functionp nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(functionp 42)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(functionp '(1 2 3))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(functionp "hello")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 #[test]
@@ -121,7 +195,8 @@ fn oracle_prop_functionp_closures() {
     let form = "(let ((x 10))
                   (let ((f (lambda () x)))
                     (functionp f)))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK t""#]]);
     assert_ok_eq("t", &o, &n);
 }
 
@@ -133,13 +208,31 @@ fn oracle_prop_functionp_closures() {
 fn oracle_prop_keywordp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(keywordp :test)");
-    assert_oracle_parity("(keywordp :hello)");
-    assert_oracle_parity("(keywordp :)");
-    assert_oracle_parity("(keywordp 'test)");
-    assert_oracle_parity("(keywordp nil)");
-    assert_oracle_parity("(keywordp 42)");
-    assert_oracle_parity(r#"(keywordp ":test")"#);
+    crate::common::assert_oracle_parity_expect(
+        "(keywordp :test)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(keywordp :hello)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(keywordp :)", expect_test::expect![[r#""OK t""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(keywordp 'test)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(keywordp nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(keywordp 42)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(keywordp ":test")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -150,13 +243,28 @@ fn oracle_prop_keywordp_basic() {
 fn oracle_prop_nlistp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(nlistp nil)");
-    assert_oracle_parity("(nlistp '(1 2 3))");
-    assert_oracle_parity("(nlistp '(a . b))");
-    assert_oracle_parity("(nlistp 42)");
-    assert_oracle_parity(r#"(nlistp "hello")"#);
-    assert_oracle_parity("(nlistp [1 2 3])");
-    assert_oracle_parity("(nlistp t)");
+    crate::common::assert_oracle_parity_expect(
+        "(nlistp nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(nlistp '(1 2 3))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(nlistp '(a . b))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(nlistp 42)", expect_test::expect![[r#""OK t""#]]);
+    crate::common::assert_oracle_parity_expect(
+        r#"(nlistp "hello")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(nlistp [1 2 3])",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(nlistp t)", expect_test::expect![[r#""OK t""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -167,12 +275,30 @@ fn oracle_prop_nlistp_basic() {
 fn oracle_prop_string_or_null_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(string-or-null-p "hello")"#);
-    assert_oracle_parity(r#"(string-or-null-p "")"#);
-    assert_oracle_parity("(string-or-null-p nil)");
-    assert_oracle_parity("(string-or-null-p 42)");
-    assert_oracle_parity("(string-or-null-p 'hello)");
-    assert_oracle_parity("(string-or-null-p t)");
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-or-null-p "hello")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-or-null-p "")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(string-or-null-p nil)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(string-or-null-p 42)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(string-or-null-p 'hello)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(string-or-null-p t)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +326,10 @@ fn oracle_prop_list_of_strings_p_subr_contract() {
    (setcdr x (list 1))
    (list-of-strings-p x)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t nil nil t nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,12 +340,30 @@ fn oracle_prop_list_of_strings_p_subr_contract() {
 fn oracle_prop_integer_or_null_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(integer-or-null-p 42)");
-    assert_oracle_parity("(integer-or-null-p 0)");
-    assert_oracle_parity("(integer-or-null-p -7)");
-    assert_oracle_parity("(integer-or-null-p nil)");
-    assert_oracle_parity("(integer-or-null-p 3.14)");
-    assert_oracle_parity(r#"(integer-or-null-p "42")"#);
+    crate::common::assert_oracle_parity_expect(
+        "(integer-or-null-p 42)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(integer-or-null-p 0)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(integer-or-null-p -7)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(integer-or-null-p nil)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(integer-or-null-p 3.14)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(integer-or-null-p "42")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +402,12 @@ fn oracle_prop_type_dispatch_complex() {
                           (funcall describe (lambda () nil))
                           (funcall describe [1 2 3])
                           (funcall describe '(a b c))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"null\" \"boolean\" \"int:42\" \"float\" \"str:5\" \"keyword\" \"symbol\" \"function\" \"vec:3\" \"cons:3\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -273,7 +425,12 @@ fn oracle_prop_type_coercion_pipeline() {
                          (t (prin1-to-string val))))))
                     (let ((values '(42 3.14 hello nil "already" (1 2) [3 4])))
                       (mapcar to-string values)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"42\" \"3.14\" \"hello\" \"nil\" \"already\" \"(1 2)\" \"[3 4]\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -299,5 +456,10 @@ fn oracle_prop_type_predicate_exhaustive() {
                           (funcall classify [1 2])
                           (funcall classify nil)
                           (funcall classify t)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((integer) (float) (string) (symbol) (cons) (vector) (symbol) (symbol))""#
+        ]],
+    );
 }

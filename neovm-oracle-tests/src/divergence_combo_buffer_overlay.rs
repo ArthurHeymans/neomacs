@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_overlay_textprop_priority_conflict() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (put-text-property 1 11 'face 'default)
@@ -22,6 +22,9 @@ fn divergence_overlay_textprop_priority_conflict() {
       (dotimes (i 10)
         (push (get-text-property (1+ i) 'face) faces))
       (nreverse faces)))) ",
+        expect_test::expect![[
+            r#""ABCDEFGHIJOK (default default bold bold bold bold bold default default default)""#
+        ]],
     );
 }
 
@@ -29,7 +32,7 @@ fn divergence_overlay_textprop_priority_conflict() {
 fn divergence_overlay_props_after_insert_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((ov (make-overlay 3 7)))
@@ -43,6 +46,7 @@ fn divergence_overlay_props_after_insert_delete() {
             (overlay-end ov)
             (overlay-get ov 'test)
             (buffer-string))))) ",
+        expect_test::expect![[r#""AB12EFGHIJOK ((3 10 original) 3 7 original \"AB12EFGHIJ\")""#]],
     );
 }
 
@@ -50,7 +54,7 @@ fn divergence_overlay_props_after_insert_delete() {
 fn divergence_textprop_survive_replace_in_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"foo X-MARKER-HERE bar baz\")
   (put-text-property 1 26 'category 'test-cat)
@@ -68,6 +72,7 @@ fn divergence_textprop_survive_replace_in_overlay() {
           (overlay-get ov 'intangible)
           (overlay-start ov)
           (overlay-end ov)))) ",
+        expect_test::expect![[r#""foo REPLACED bar bazERR (args-out-of-range 23 23)""#]],
     );
 }
 
@@ -75,7 +80,7 @@ fn divergence_textprop_survive_replace_in_overlay() {
 fn divergence_narrow_overlay_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"AAA-BBBB-CCCC-DDDD\")
   (let ((ov (make-overlay 5 9)))
@@ -90,6 +95,7 @@ fn divergence_narrow_overlay_interaction() {
     (list (buffer-string)
           (point-min) (point-max)
           (overlay-start ov) (overlay-end ov)))) ",
+        expect_test::expect![[r#""BBBB-CCCCERR (args-out-of-range 1 1)""#]],
     );
 }
 
@@ -97,7 +103,7 @@ fn divergence_narrow_overlay_interaction() {
 fn divergence_invisible_overlay_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"before HIDDEN-TEXT after\")
   (let ((ov (make-overlay 8 19)))
@@ -109,6 +115,9 @@ fn divergence_invisible_overlay_search() {
             (when pos (match-end 0))
             (point)
             (buffer-substring-no-properties 1 (point-max)))))) ",
+        expect_test::expect![[
+            r#""before HIDDEN-TEXT afterOK (19 8 19 19 \"before HIDDEN-TEXT after\")""#
+        ]],
     );
 }
 
@@ -116,7 +125,7 @@ fn divergence_invisible_overlay_search() {
 fn divergence_copy_region_with_props_to_new_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"AAA BBB CCC DDD\")
   (put-text-property 1 4 'weight 'heavy)
@@ -132,6 +141,7 @@ fn divergence_copy_region_with_props_to_new_buffer() {
                              (get-text-property 4 'weight))))
         (kill-buffer dst)
         (list src-props dst-props (buffer-string)))))) ",
+        expect_test::expect![[r#""AAA BBB CCC DDDERR (args-out-of-range 5 12)""#]],
     );
 }
 
@@ -139,7 +149,7 @@ fn divergence_copy_region_with_props_to_new_buffer() {
 fn divergence_overlay_evaporation_on_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"AABBCCDD\")
   (let ((ov (make-overlay 3 5)))
@@ -151,6 +161,7 @@ fn divergence_overlay_evaporation_on_empty() {
           (overlay-end ov)
           (overlay-get ov 'test)
           (length (overlays-in 1 7))))) ",
+        expect_test::expect![[r#""AACCDDOK (\"AACCDD\" nil nil evap 0)""#]],
     );
 }
 
@@ -158,7 +169,7 @@ fn divergence_overlay_evaporation_on_empty() {
 fn divergence_overlay_chain_insert_behind_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (defvar test-hook-log-xxx nil)
   (insert \"FRONT-MIDDLE-BACK\")
@@ -176,6 +187,7 @@ fn divergence_overlay_chain_insert_behind_hooks() {
     (list (buffer-string)
           (length test-hook-log-xxx)
           (>= (length test-hook-log-xxx) 2)))) ",
+        expect_test::expect![[r#""FRONT-XXMIDDLEYY-BACKOK (\"FRONT-XXMIDDLEYY-BACK\" 4 t)""#]],
     );
 }
 
@@ -183,7 +195,7 @@ fn divergence_overlay_chain_insert_behind_hooks() {
 fn divergence_multiple_overlays_face_merging() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((ov1 (make-overlay 1 6))
@@ -202,6 +214,7 @@ fn divergence_multiple_overlays_face_merging() {
             (overlay-get ov1 'priority)
             (overlay-get ov2 'priority)
             (overlay-get ov3 'priority))))) ",
+        expect_test::expect![[r#""ABCDEFGHIJOK (3 t 1 10 5)""#]],
     );
 }
 
@@ -209,7 +222,7 @@ fn divergence_multiple_overlays_face_merging() {
 fn divergence_textprop_field_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"field1\\tfield2\\tfield3\\n\")
   (insert \"data1\\tdata2\\tdata3\")
@@ -227,5 +240,8 @@ fn divergence_textprop_field_properties() {
           (list f1 f2 f3 f4
                 (text-property-any 1 22 'field 'col2)
                 (text-property-not-all 1 22 'field 'col1))))))) ",
+        expect_test::expect![[
+            r#""field1\tfield2\tfield3\ndata1\tdata2\tdata3OK (col1 col2 nil nil 8 7)""#
+        ]],
     );
 }

@@ -49,7 +49,12 @@ fn oracle_prop_cons_car_cdr_dotted_vs_proper() {
           (consp x)))
   ;; car/cdr of nil
   (list (car nil) (cdr nil) (car-safe 5) (cdr-safe 5)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (a b t t a (b c) (a . b) (c . d) a b c d (1 . 2) (1) (1 2 3) (1 2 3 nil t t) (nil nil nil nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +93,12 @@ fn oracle_prop_append_multi_args_with_nil() {
              (length orig) (length result))))
    ;; Nested lists in append
    (append '((a 1) (b 2)) '((c 3)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5) (1 2 3 4 5) nil (1 2) (1 2) (1 2 . 3) (1 2 . 3) nil ((x y) (x y z) nil 2 3) ((a 1) (b 2) (c 3)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +136,10 @@ fn oracle_prop_nconc_vs_append_behavior() {
    ;; Append result
    app-result
    nconc-result))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t 2 4 t t (a b c d) (a b c d) (a b c d))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +183,12 @@ fn oracle_prop_member_memq_assoc_assq_differences() {
                     (y . ((c . 3) (d . 4))))))
      (list (cdr (assq 'a (cdr (assq 'x nested))))
            (cdr (assq 'd (cdr (assq 'y nested))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((c d e) nil (c d e) nil (\"foo\" \"bar\" \"baz\") (3 4 5) (3 4 5) (b . 2) nil (b . 2) nil (\"key\" . 4) (1 4))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -206,7 +224,12 @@ fn oracle_prop_sort_with_lambda_predicate() {
             (if (eq a-even b-even)
                 (< a b)
               a-even)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((-1 -2 3 4 -5) (\"a\" \"fig\" \"kiwi\" \"cherry\" \"banana\") ((b . 1) (c . 2) (a . 3)) (5 4 3 2 1) ((y 10) (z 20) (x 30)) (2 4 6 8 1 3 5 7))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +261,12 @@ fn oracle_prop_mapcar_mapconcat_mapc_pipeline() {
   (list squared big joined nums total
         ;; Verify roundtrip
         (equal nums big)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 4 9 16 25 36 49 64 81 100) (16 25 36 49 64 81 100) \"16, 25, 36, 49, 64, 81, 100\" (16 25 36 49 64 81 100) 371 t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +335,12 @@ fn oracle_prop_list_set_operations() {
     (fmakunbound 'neovm--set-union)
     (fmakunbound 'neovm--set-intersect)
     (fmakunbound 'neovm--set-diff)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7) (3 4 5) (1 2) (6 7) (5) (1 2 3 4 5 6 7 8 9) (1 2 6 7) (1 2 3 4 5) nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -392,5 +425,8 @@ fn oracle_prop_alist_database() {
     (fmakunbound 'neovm--db-update-field)
     (fmakunbound 'neovm--db-delete)
     (fmakunbound 'neovm--db-query)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"Alice\" \"designer\" nil 26 (carol alice) nil 2)""#]],
+    );
 }

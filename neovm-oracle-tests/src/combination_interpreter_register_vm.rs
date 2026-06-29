@@ -74,7 +74,12 @@ fn oracle_prop_regvm_register_file() {
     (fmakunbound 'neovm--regvm-set)
     (fmakunbound 'neovm--regvm-dump)
     (fmakunbound 'neovm--regvm-copy)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil ((0 . 42) (3 . -17) (7 . 999)) ((3 . -17) (5 . 100) (7 . 999)) ((0 . 42) (3 . -17) (7 . 999)) 42 -17 999 0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +175,10 @@ fn oracle_prop_regvm_alu_instructions() {
                           (nth 1 vm)))))))))
     (fmakunbound 'neovm--regvm-make-vm)
     (fmakunbound 'neovm--regvm-exec-one)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (30 10 600 -1 0 1 15 30 10)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +272,12 @@ fn oracle_prop_regvm_conditional_jumps() {
                          '(HALT))         ;; 5: done
                  '((0 . 5)) 200))
     (fmakunbound 'neovm--regvm2-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((42 0 0 0 0 0 0 0) 2 t) ((10 5 1 0 0 0 0 0) 4 t) ((3 5 0 0 0 0 0 0) 5 t) ((0 5 0 0 0 0 0 0) 28 t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -378,7 +391,12 @@ fn oracle_prop_regvm_call_stack() {
                          '(HALT))          ;; 5
                  nil 100))
     (fmakunbound 'neovm--regvm3-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((14 14 0 0 0 0 0 0) 6 t 0 0) ((26 0 26 0 0 0 0 0) 9 t 0 0) ((100 999 0 0 0 0 0 0) 6 t 0 0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -455,7 +473,12 @@ fn oracle_prop_regvm_fibonacci() {
             (setq results (cons (car (funcall 'neovm--regvm-fib-run n)) results)))
           (nreverse results)))
     (fmakunbound 'neovm--regvm-fib-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 11) (0 21) (1 14) (2 21) (5 35) (21 56) (55 70) (610 105) (0 0 1 2 3 5 8 13 21 34 55))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -515,7 +538,12 @@ fn oracle_prop_regvm_factorial() {
         (mapcar (lambda (n) (car (funcall 'neovm--regvm-fact-run n)))
                 '(0 1 2 3 4 5 6 7 8 9 10)))
     (fmakunbound 'neovm--regvm-fact-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 4) (1 8) (2 12) (6 16) (120 24) (5040 32) (3628800 44) (1 1 2 6 24 120 720 5040 40320 362880 3628800))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -592,5 +620,10 @@ fn oracle_prop_regvm_instruction_encoding() {
     (fmakunbound 'neovm--regvm-encode)
     (fmakunbound 'neovm--regvm-decode)
     (makunbound 'neovm--regvm-opcodes)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((MOV-IMM 0 0 42) (ADD 3 5 0) (CMP 2 7 0) (JMP 0 0 100) (HALT 0 0 0) (ADD-IMM 1 0 -1) (ADD-IMM 2 0 -100) (4 (MOV-IMM MOV-IMM ADD HALT)))""#
+        ]],
+    );
 }

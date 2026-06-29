@@ -33,7 +33,10 @@ fn oracle_prop_err_adv_retry_exponential_backoff() {
                             (setq result (format "ok-on-%d" attempt)))
                         (error nil)))
                     (list result attempt (nreverse delays)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"ok-on-4\" 4 (1 2 4))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +75,12 @@ fn oracle_prop_err_adv_circuit_breaker() {
                                 (setq log (cons (list idx 'failed) log)))))))
                         (setq idx (1+ idx))))
                     (list state failure-count (nreverse log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (open 3 ((0 failed) (1 failed) (2 failed) (3 fast-fail) (4 fast-fail)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +115,12 @@ fn oracle_prop_err_adv_aggregate_all_errors() {
                            (setq errors
                                  (cons (list a b (car (cdr err))) errors))))))
                     (list (nreverse results) (nreverse errors)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((10 2 5) (15 3 5) (100 5 20)) ((10 0 div-by-zero) (7 0 div-by-zero) (0 0 div-by-zero)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -141,7 +154,10 @@ fn oracle_prop_err_adv_timeout_simulation() {
                                     count (1+ count)))
                             (setq result (cons (cons i count) result)))
                           (setq i (1+ i))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (timed-out 11 ((1 . 0) (2 . 1)))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +199,12 @@ fn oracle_prop_err_adv_fallback_chain() {
                         (funcall try-all 12 strategies)   ; A fails, B succeeds (even)
                         (funcall try-all 15 strategies)   ; A,B fail, C catches
                         (funcall try-all 8 strategies)))) ; A succeeds"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((strategy-a 10) (strategy-b 36) (strategy-c 15) (strategy-a 16))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -236,7 +257,12 @@ fn oracle_prop_err_adv_resource_pool() {
                           (funcall release r1)))
                       ;; Return: pool should be fully restored, log in order
                       (list (length pool) (length in-use) (nreverse log))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 0 ((acquire r1) (use r1 ok) (release r1) (acquire r1) (use r1 about-to-fail) (release r1) (acquire r1) (acquire r2) (use-both r1 r2) (release r2) (release r1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -296,5 +322,8 @@ fn oracle_prop_err_adv_transaction_savepoints() {
                       (funcall do-op 'queue-email)
                       (funcall commit)
                       committed))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (insert-payment insert-order insert-user queue-email)""#]],
+    );
 }

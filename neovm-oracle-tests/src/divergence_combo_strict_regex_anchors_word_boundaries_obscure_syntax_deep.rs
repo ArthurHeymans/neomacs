@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_s1_regex_anchors_and_word_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (list (string-match-p "\\`" "text")
       (string-match-p "\\'" "text")
@@ -21,13 +21,14 @@ fn div_s1_regex_anchors_and_word_boundaries() {
       (string-match-p "\\<" "  word")
       (string-match-p "\\>" "word  "))
 "####,
+        expect_test::expect![[r#""OK (0 4 t 2 2 2 4)""#]],
     );
 }
 
 #[test]
 fn div_s1_regex_charset_multibyte_ranges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (list (string-match-p "[あ-ん]" "ほ")
       (string-match-p "[^あ-ん]" "A")
@@ -35,13 +36,14 @@ fn div_s1_regex_charset_multibyte_ranges() {
       (string-match-p "[\\x41-\\x5a]+" "HELLO")
       (and (string-match "[ぁ-ゖ]+" "ひらがな") (match-string 0)))
 "####,
+        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 4)""#]],
     );
 }
 
 #[test]
 fn div_s1_regex_many_capture_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (let ((pat (apply #'concat (mapcar (lambda (i) (format "\\(.\\)" i)) (number-sequence 1 9))))
       (s "abcdefghi"))
@@ -51,13 +53,14 @@ fn div_s1_regex_many_capture_groups() {
              (match-string 9 s)
              (length (match-data t)))))
 "####,
+        expect_test::expect![[r#""OK (\"abcdefghi\" \"a\" \"i\" 20)""#]],
     );
 }
 
 #[test]
 fn div_s1_compare_buffer_substrings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (list (with-temp-buffer
         (insert "hello")
@@ -72,13 +75,14 @@ fn div_s1_compare_buffer_substrings() {
           (kill-buffer b1)
           (kill-buffer b2))))
 "####,
+        expect_test::expect![[r#""OK (0 -3)""#]],
     );
 }
 
 #[test]
 fn div_s1_string_lessp_mixed_unibyte_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (list (string-lessp "abc" "abd")
       (string-lessp "abc" "abc")
@@ -88,5 +92,6 @@ fn div_s1_string_lessp_mixed_unibyte_multibyte() {
       (string-version-lessp "file2" "file10")
       (string-version-lessp "1.0.0" "1.0.1"))
 "####,
+        expect_test::expect![[r#""OK (t nil nil t nil t t)""#]],
     );
 }

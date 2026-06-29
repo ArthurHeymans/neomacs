@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_e6_format_time_more_flags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((t0 (encode-time 5 30 9 4 7 2025 0)))
   (list (format-time-string "%k" t0 0)
@@ -27,25 +27,29 @@ fn div_e6_format_time_more_flags() {
         (format-time-string "%n" t0 0)
         (format-time-string "%t" t0 0)))
 "##,
+        expect_test::expect![[
+            r#""OK (\" 9\" \" 9\" \" 4\" \"am\" \"20\" \"07/04/25\" \"2025-07-04\" \"09:30\" \"09:30:05\" \"Jul\" \"\n\" \"\t\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_e6_current_time_zone_fixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (current-time-zone (encode-time 0 0 12 1 1 2025 0) 0)
       (current-time-zone (encode-time 0 0 0 1 7 2025 0) 7200)
       (current-time-zone (encode-time 0 0 0 1 7 2025 0) -28800))
 "##,
+        expect_test::expect![[r#""OK ((0 \"GMT\") (7200 \"+02\") (-28800 \"-08\"))""#]],
     );
 }
 
 #[test]
 fn div_e6_skip_chars_and_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "aaabbb123ccc")
@@ -59,13 +63,14 @@ fn div_e6_skip_chars_and_syntax() {
           (progn (goto-char 1) (skip-syntax-forward "w") (point))
           (progn (skip-syntax-forward "_") (point)))))
 "##,
+        expect_test::expect![[r#""OK (7 10 10 13 13)""#]],
     );
 }
 
 #[test]
 fn div_e6_char_motion_under_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -82,13 +87,14 @@ fn div_e6_char_motion_under_narrow() {
         (point-min)
         (point-max)))
 "##,
+        expect_test::expect![[r#""OK (98 99 99 98 nil nil nil nil 2 5)""#]],
     );
 }
 
 #[test]
 fn div_e6_number_sequence_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (number-sequence 1 5)
       (number-sequence 1 10 2)
@@ -97,13 +103,16 @@ fn div_e6_number_sequence_edges() {
       (number-sequence 1 1)
       (number-sequence 1 0))
 "##,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5) (1 3 5 7 9) (5 4 3 2 1) (0 0.25 0.5 0.75 1.0) (1) nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_e6_obarray_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ob (make-obarray 11)))
   (intern "foo" ob)
@@ -118,13 +127,14 @@ fn div_e6_obarray_operations() {
           (intern-soft "bar" ob)
           (eq (intern "foo" ob) (intern "foo" ob)))))
 "##,
+        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
     );
 }
 
 #[test]
 fn div_e6_copy_sequence_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (copy-sequence "abc")
       (copy-sequence [1 2 3])
@@ -134,5 +144,6 @@ fn div_e6_copy_sequence_types() {
       (equal (copy-sequence "abc") "abc")
       (length (copy-sequence (make-bool-vector 8 nil))))
 "##,
+        expect_test::expect![[r#""OK (\"abc\" [1 2 3] (1 2 3) #&4\"\u{f}\" nil t 8)""#]],
     );
 }

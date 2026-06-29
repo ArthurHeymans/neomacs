@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_pcase_destructuring_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((data '((:user "Alice" :age 30 :roles (admin editor))
                 (:user "Bob" :age 25 :roles (viewer))
@@ -23,6 +23,9 @@ fn divergence_pcase_destructuring_nested() {
             (= (nth 1 (car results)) 30)
             (= (nth 2 (cadr results)) 1)
             (= (nth 2 (caddr results)) 3))))) "#,
+        expect_test::expect![[
+            r#""ERR (error \"Unknown list pattern: (list :user name :age age :roles (and rolenames (pred consp)))\")""#
+        ]],
     );
 }
 
@@ -30,7 +33,7 @@ fn divergence_pcase_destructuring_nested() {
 fn divergence_pcase_guard_and_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((classify (lambda (x)
                     (pcase x
@@ -49,6 +52,7 @@ fn divergence_pcase_guard_and_pattern() {
           (eq (funcall classify nil) 'nil)
           (eq (funcall classify '(1 2)) 'cons)
           (eq (funcall classify 'sym) 'other)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 18 50)""##]],
     );
 }
 
@@ -56,7 +60,7 @@ fn divergence_pcase_guard_and_pattern() {
 fn divergence_thread_first_last() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (thread-first 5
           (* 2)
@@ -79,6 +83,7 @@ fn divergence_thread_first_last() {
                                (string-upcase)
                                (string-reverse))
                  "DLROW OLLEH"))) #"#,
+        expect_test::expect![[r#""ERR (void-function thread-first)""#]],
     );
 }
 
@@ -86,7 +91,7 @@ fn divergence_thread_first_last() {
 fn divergence_pcase_with_app_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((process (lambda (data)
                    (pcase data
@@ -102,6 +107,7 @@ fn divergence_pcase_with_app_pattern() {
           (equal (funcall process '((a b) c)) '(list-first (a b)))
           (funcall process nil)
           (eq (funcall process nil) 'empty)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 15 48)""##]],
     );
 }
 
@@ -109,7 +115,7 @@ fn divergence_pcase_with_app_pattern() {
 fn divergence_cl_typep_with_various_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-typep 42 'integer)
         (cl-typep 3.14 'float)
@@ -123,6 +129,7 @@ fn divergence_cl_typep_with_various_types() {
         (not (cl-typep 42 'string))
         (cl-typep '(1 2 3) 'list)
         (cl-typep (make-vector 5 0) 'vector))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 13 48)""##]],
     );
 }
 
@@ -130,7 +137,7 @@ fn divergence_cl_typep_with_various_types() {
 fn divergence_pcase_lexical_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((data '(:result (ok "success" 42) :status done)))
     (pcase data
@@ -140,6 +147,7 @@ fn divergence_pcase_lexical_binding() {
              (= val 42)
              (eq status 'done)))
       (_ 'no-match))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 9 23)""##]],
     );
 }
 
@@ -147,7 +155,7 @@ fn divergence_pcase_lexical_binding() {
 fn divergence_thread_with_hash_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
     (thread-first ht
@@ -164,6 +172,7 @@ fn divergence_thread_with_hash_table() {
           (= (gethash 'c ht) 3)
           (hash-table-keys ht)
           (= (length (hash-table-keys ht)) 3)))) #"#,
+        expect_test::expect![[r#""ERR (void-function thread-first)""#]],
     );
 }
 
@@ -171,7 +180,7 @@ fn divergence_thread_with_hash_table() {
 fn divergence_pcase_recursive_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-depth-xxx (tree)
     (pcase tree
@@ -190,6 +199,7 @@ fn divergence_pcase_recursive_pattern() {
         (= (test-depth-xxx '(a (b c) d)) 3)
         (test-depth-xxx '((a (b)) (c d)))
         (= (test-depth-xxx '((a (b)) (c d))) 3))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 18 51)""##]],
     );
 }
 
@@ -197,7 +207,7 @@ fn divergence_pcase_recursive_pattern() {
 fn divergence_cl_destructuring_bind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-destructuring-bind (a (b c) &rest rest)
       '(1 (2 3) 4 5 6)
@@ -207,6 +217,7 @@ fn divergence_cl_destructuring_bind() {
           (= c 3)
           (equal rest '(4 5 6))
           (= (length rest) 3)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 9 34)""##]],
     );
 }
 
@@ -214,7 +225,7 @@ fn divergence_cl_destructuring_bind() {
 fn rx_pattern_matching() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "foo123bar456baz789")
   (goto-char 1)
@@ -229,5 +240,6 @@ fn rx_pattern_matching() {
           (equal (nreverse matches) '("foo123" "bar456" "baz789"))
           (buffer-string)
           (= (buffer-size) 15)))) #"#,
+        expect_test::expect![[r##""foo123bar456baz789ERR (invalid-read-syntax \"#\" 14 35)""##]],
     );
 }

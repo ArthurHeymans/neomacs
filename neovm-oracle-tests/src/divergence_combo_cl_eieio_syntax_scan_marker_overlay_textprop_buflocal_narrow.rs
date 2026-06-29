@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_scan_lists_paren_balancing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass paren-pos ()
     ((depth :initarg :depth :accessor pp-depth :initform 0)
@@ -71,6 +71,7 @@ fn combo_eieio_scan_lists_paren_balancing() {
                   (buffer-string)
                   my-positions))))
     (kill-buffer buf)))))"#,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 62 25)""#]],
     );
 }
 
@@ -78,7 +79,7 @@ fn combo_eieio_scan_lists_paren_balancing() {
 fn combo_eieio_forward_backward_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass syntax-jump ()
     ((from :initarg :from :accessor sj-from :initform 1)
@@ -130,6 +131,7 @@ fn combo_eieio_forward_backward_syntax() {
                 (buffer-string)
                 my-jumps))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -137,7 +139,7 @@ fn combo_eieio_forward_backward_syntax() {
 fn combo_eieio_syntax_narrow_scan_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-scan ()
     ((region :initarg :region :accessor ns-region :initform "")
@@ -188,6 +190,7 @@ fn combo_eieio_syntax_narrow_scan_boundaries() {
                   (buffer-string)
                   my-scans)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -195,7 +198,7 @@ fn combo_eieio_syntax_narrow_scan_boundaries() {
 fn combo_eieio_parse_partial_sexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass parse-state ()
     ((pos :initarg :pos :accessor ps-pos :initform 1)
@@ -242,6 +245,7 @@ fn combo_eieio_parse_partial_sexp() {
                 (buffer-string)
                 my-states))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -249,7 +253,7 @@ fn combo_eieio_parse_partial_sexp() {
 fn combo_eieio_syntax_table_modify_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass syntax-change ()
     ((char :initarg :char :accessor sc-char :initform nil)
@@ -314,5 +318,6 @@ fn combo_eieio_syntax_table_modify_restore() {
                 (buffer-string)
                 my-changes))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-variable words)""#]],
     );
 }

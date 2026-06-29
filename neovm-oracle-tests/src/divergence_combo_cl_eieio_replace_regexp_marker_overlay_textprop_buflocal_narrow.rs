@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_replace_string_overlay_marker_track() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass repl-snap ()
     ((step :initarg :step :accessor rs-step :initform "")
@@ -90,6 +90,7 @@ fn combo_eieio_replace_string_overlay_marker_track() {
               (overlay-start ov) (overlay-end ov)
               repl-hook-count my-repl-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range 31 36)""#]],
     );
 }
 
@@ -97,7 +98,7 @@ fn combo_eieio_replace_string_overlay_marker_track() {
 fn combo_eieio_replace_regexp_narrow_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass rrepl-snap ()
     ((step :initarg :step :accessor rrs-step :initform "")
@@ -160,6 +161,7 @@ fn combo_eieio_replace_regexp_narrow_overlay() {
               (overlay-start ov) (overlay-end ov)
               my-rrepl-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range 49 54)""#]],
     );
 }
 
@@ -167,7 +169,7 @@ fn combo_eieio_replace_regexp_narrow_overlay() {
 fn combo_eieio_replace_invisible_overlay_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass repl-inv-snap ()
     ((step :initarg :step :accessor ris-step :initform "")
@@ -246,6 +248,7 @@ fn combo_eieio_replace_invisible_overlay_interaction() {
               (overlay-start ov3) (overlay-end ov3)
               buffer-invisibility-spec my-ri-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -253,7 +256,7 @@ fn combo_eieio_replace_invisible_overlay_interaction() {
 fn combo_eieio_replace_with_marker_insertion_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass repl-mtype-snap ()
     ((step :initarg :step :accessor rms-step :initform "")
@@ -312,6 +315,7 @@ fn combo_eieio_replace_with_marker_insertion_types() {
               (overlay-start ov) (overlay-end ov)
               my-rm-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -319,7 +323,7 @@ fn combo_eieio_replace_with_marker_insertion_types() {
 fn combo_eieio_replace_multi_step_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass repl-chain-snap ()
     ((step :initarg :step :accessor rcs-step :initform "")
@@ -401,5 +405,6 @@ fn combo_eieio_replace_multi_step_undo_chain() {
               (overlay-start ov) (overlay-end ov)
               my-rc-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

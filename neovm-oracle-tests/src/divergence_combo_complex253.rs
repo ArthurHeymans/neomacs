@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx253_syntax_ppss_comment_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "(defun foo ()\n  \"docstring\"\n  (body)) ; comment\n")
@@ -18,13 +18,14 @@ fn div_cx253_syntax_ppss_comment_state() {
         (nth 4 (syntax-ppss 50))
         (nth 8 (syntax-ppss 50))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 50)""#]],
     )
 }
 
 #[test]
 fn div_cx253_comment_start_end_per_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -36,13 +37,14 @@ fn div_cx253_comment_start_end_per_mode() {
               (list comment-start comment-end comment-start-skip))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK ((nil \"\" nil) (\"/* \" \" */\" \"/\\\\*+[ \t]*\"))""#]],
     )
 }
 
 #[test]
 fn div_cx253_forward_comment_line_and_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "code1\n; line comment\ncode2\n/* block\nmultiline */ code3")
@@ -54,13 +56,14 @@ fn div_cx253_forward_comment_line_and_block() {
       (forward-comment 1)
       (list p1 p2 (point) (char-after)))))
 "##,
+        expect_test::expect![[r#""OK (9 9 9 108)""#]],
     )
 }
 
 #[test]
 fn div_cx253_comment_syntax_classes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (set-syntax-table (make-syntax-table))
@@ -73,13 +76,14 @@ fn div_cx253_comment_syntax_classes() {
         (char-syntax ?/)
         (char-syntax ?*)))
 "##,
+        expect_test::expect![[r#""OK (60 62 46 46)""#]],
     )
 }
 
 #[test]
 fn div_cx253_parse_partial_sexp_in_block_comment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "before /* comment\nmultiline\n */ after")
@@ -88,13 +92,14 @@ fn div_cx253_parse_partial_sexp_in_block_comment() {
         (nth 4 (parse-partial-sexp 1 35))
         (nth 4 (parse-partial-sexp 1 40))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 40)""#]],
     )
 }
 
 #[test]
 fn div_cx253_comment_functions_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'comment-region)
       (fboundp 'uncomment-region)
@@ -104,13 +109,14 @@ fn div_cx253_comment_functions_availability() {
       (boundp 'comment-style)
       (boundp 'comment-column))
 "##,
+        expect_test::expect![[r#""OK (t t t t t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx253_syntax_table_with_string_escapes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "\"string with \\\"escapes\\\"\" rest")
@@ -119,13 +125,14 @@ fn div_cx253_syntax_table_with_string_escapes() {
         (nth 3 (syntax-ppss 30))
         (nth 8 (syntax-ppss 30))))
 "##,
+        expect_test::expect![[r#""OK (nil 34 nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx253_comment_search_forward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "code1\n; first comment\ncode2\n; second comment\ncode3")
@@ -133,13 +140,14 @@ fn div_cx253_comment_search_forward() {
   (list (comment-search-forward 30 t)
         (comment-search-forward 60 t)))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 30 60)""#]],
     )
 }
 
 #[test]
 fn div_cx253_indent_for_comment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'indent-for-comment)
@@ -147,13 +155,14 @@ fn div_cx253_indent_for_comment() {
           (boundp 'comment-inline-offset))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx253_comment_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -177,5 +186,6 @@ fn div_cx253_comment_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

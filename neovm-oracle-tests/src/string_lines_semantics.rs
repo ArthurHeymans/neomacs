@@ -24,5 +24,10 @@ fn oracle_prop_gnu_subr_string_lines_contracts() {
    (mapcar (lambda (s)
              (list s (text-properties-at 0 s)))
            (string-lines props nil t))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"\") nil (\"a\" \"b\") (\"a\" \"b\") (\"a\" \"b\") (\"a\n\" \"b\") (\"a\n\" \"\n\" \"b\") t ((#(\"a\n\" 0 2 (face bold)) (face bold)) (#(\"b\n\" 0 2 (face bold)) (face bold))))""#
+        ]],
+    );
 }

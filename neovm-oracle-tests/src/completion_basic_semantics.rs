@@ -25,7 +25,10 @@ fn oracle_prop_try_completion_list_and_alist_cases() {
    (try-completion "alpha" '((alpha . 1) ("alpine" . 2) ("beta" . 3)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"foo\" \"foo\" t nil \"alp\" \"alp\" t)""#]],
+    );
 }
 
 #[test]
@@ -50,7 +53,12 @@ fn oracle_prop_all_completions_predicate_and_regexp_filter() {
      (sort (copy-sequence (all-completions "ap" collection)) #'string<))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"apple\" \"apricot\") (\"ape\" \"apple\") (\"application\" \"apricot\"))""#
+        ]],
+    );
 }
 
 #[test]
@@ -77,7 +85,12 @@ fn oracle_prop_hash_table_completion_predicate_gets_key_and_value() {
    (try-completion "ali" table)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"al\" (\"alias\" \"alpha\" \"alpine\") (\"alpine\") \"alias\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -101,5 +114,8 @@ fn oracle_prop_function_completion_table_actions() {
    (nreverse calls)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable calls)""#]],
+    );
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx224_thing_at_point_word_and_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "my_symbol_name and word_here")
@@ -18,13 +18,14 @@ fn div_cx224_thing_at_point_word_and_symbol() {
         (bounds-of-thing-at-point 'word)
         (bounds-of-thing-at-point 'symbol)))
 "##,
+        expect_test::expect![[r#""OK (\"my\" \"my_symbol_name\" (1 . 3) (1 . 15))""#]],
     );
 }
 
 #[test]
 fn div_cx224_thing_at_point_line_and_sentence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "First sentence.  Second sentence.  Third.\nSecond line.\n")
@@ -33,13 +34,16 @@ fn div_cx224_thing_at_point_line_and_sentence() {
         (thing-at-point 'line)
         (bounds-of-thing-at-point 'sentence)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"First sentence.\" \"First sentence.  Second sentence.  Third.\n\" (1 . 16))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx224_thing_at_point_list_and_sexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "(alpha beta (gamma delta) epsilon)")
@@ -48,13 +52,14 @@ fn div_cx224_thing_at_point_list_and_sexp() {
         (thing-at-point 'sexp)
         (bounds-of-thing-at-point 'list)))
 "##,
+        expect_test::expect![[r#""OK (\"(gamma delta)\" \"gamma\" (13 . 26))""#]],
     );
 }
 
 #[test]
 fn div_cx224_thing_at_point_filename_and_url() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "see /home/user/file.txt and https://example.com/path?q=1 for details")
@@ -66,13 +71,16 @@ fn div_cx224_thing_at_point_filename_and_url() {
             (bounds-of-thing-at-point 'filename)
             (bounds-of-thing-at-point 'url)))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"/home/user/file.txt\" \"https://example.com/path?q=1\" (29 . 53) (29 . 57))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx224_thing_at_point_email() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "contact user@example.com for info")
@@ -80,13 +88,14 @@ fn div_cx224_thing_at_point_email() {
   (list (thing-at-point 'email)
         (bounds-of-thing-at-point 'email)))
 "##,
+        expect_test::expect![[r#""OK (\"user@example.com\" (9 . 25))""#]],
     );
 }
 
 #[test]
 fn div_cx224_thing_at_point_paragraph_and_page() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "Para one line A.\nPara one line B.\n\nPara two line A.\nPara two line B.\n")
@@ -94,13 +103,14 @@ fn div_cx224_thing_at_point_paragraph_and_page() {
   (list (thing-at-point 'paragraph)
         (bounds-of-thing-at-point 'paragraph)))
 "##,
+        expect_test::expect![[r#""OK (\"Para one line A.\nPara one line B.\n\" (1 . 35))""#]],
     );
 }
 
 #[test]
 fn div_cx224_thing_at_point_defun_in_elisp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -112,13 +122,14 @@ fn div_cx224_thing_at_point_defun_in_elisp() {
               (> (length (or defun-str "")) 0))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx224_thing_at_point_whitespace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "word1    \t   word2")
@@ -126,13 +137,14 @@ fn div_cx224_thing_at_point_whitespace() {
   (list (thing-at-point 'whitespace)
         (bounds-of-thing-at-point 'whitespace)))
 "##,
+        expect_test::expect![[r#""OK (\"    \t   \" (6 . 14))""#]],
     );
 }
 
 #[test]
 fn div_cx224_thing_at_point_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -142,13 +154,14 @@ fn div_cx224_thing_at_point_number() {
             (thing-at-point 'whitespace)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (42 nil)""#]],
     );
 }
 
 #[test]
 fn div_cx224_thing_at_point_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -179,5 +192,6 @@ fn div_cx224_thing_at_point_with_marker_overlay_undo_narrow_mega() {
                     (overlay-start ov) (overlay-end ov)
                     (text-properties-at 1))))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_r7_regex_matching_semantics_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (list (string-match-p "a*" "text")
       (string-match-p "^$" "")
@@ -22,13 +22,14 @@ fn div_r7_regex_matching_semantics_edge() {
       (string-match-p "\\ca" "abc")
       (string-match-p "\\bword\\b" "a word here"))
 "####,
+        expect_test::expect![[r#""OK (0 0 0 0 0 0 0 0 2)""#]],
     );
 }
 
 #[test]
 fn div_r7_regex_syntax_classes_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (list (string-match-p "\\sw" "café")
       (string-match-p "\\sw" "日本")
@@ -36,13 +37,14 @@ fn div_r7_regex_syntax_classes_multibyte() {
       (string-match-p "\\s(" "(")
       (string-match-p "\\s)" ")"))
 "####,
+        expect_test::expect![[r#""OK (0 0 3 0 0)""#]],
     );
 }
 
 #[test]
 fn div_r7_regex_greedy_vs_lazy_matching() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (let ((s "<a><b><c>"))
   (list (and (string-match "<.+>" s) (match-string 0 s))
@@ -50,5 +52,6 @@ fn div_r7_regex_greedy_vs_lazy_matching() {
         (and (string-match "<[^>]+>" s) (match-string 0 s))
         (and (string-match "<\\(.+?\\)>" s) (match-string 1 s))))
 "####,
+        expect_test::expect![[r#""OK (\"<a><b><c>\" \"<a>\" \"<a>\" \"a\")""#]],
     );
 }

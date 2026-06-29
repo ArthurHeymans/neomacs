@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_checkbox_statistics_nested_ctrl_c_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -33,6 +33,9 @@ fn org_checkbox_statistics_nested_ctrl_c_combo() {
                 (save-excursion
                   (goto-char (org-element-property :contents-begin item))
                   (line-end-position)))))))))"##,
+        expect_test::expect![[
+            r#""OK (\"* Project [2/3] [66%]\n- [X] One\n- [X] Two [2/2]\n  - [X] Two A\n  - [X] Two B\n- [ ] Three\n\" ((on \"One\") (on \"Two [2/2]\") (on \"Two A\") (on \"Two B\") (off \"Three\")))""#
+        ]],
     );
 }
 
@@ -40,7 +43,7 @@ fn org_checkbox_statistics_nested_ctrl_c_combo() {
 fn org_list_move_sort_cycle_bullet_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -67,6 +70,9 @@ fn org_list_move_sort_cycle_bullet_combo() {
               after-sort
               (buffer-substring-no-properties (point-min) (point-max))
               (org-list-to-lisp))))))"##,
+        expect_test::expect![[
+            r#""OK (\"- apple\n  - child b\n  - child a\n- zebra\n- mango\n\" \"- apple\n  - child b\n  - child a\n- mango\n- zebra\n\" \"1) apple\n   - child b\n   - child a\n2) mango\n3) zebra\n\" (ordered (\"apple\" (unordered (\"child b\") (\"child a\"))) (\"mango\") (\"zebra\")))""#
+        ]],
     );
 }
 
@@ -74,7 +80,7 @@ fn org_list_move_sort_cycle_bullet_combo() {
 fn org_list_to_generic_html_org_delete_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -98,6 +104,9 @@ fn org_list_to_generic_html_org_delete_combo() {
             (not (null (string-match-p "@enumerate" texinfo)))
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""OK ((ordered (\"[X] Alpha :: definition line\ncontinuation\") (\"[ ] Beta\" (ordered (\"nested one\") (\"nested two\")))) t t \"1. [X] Alpha :: definition line\n  continuation\n1. [ ] Beta\n  1. nested one\n  1. nested two\" t \"\")""#
+        ]],
     );
 }
 
@@ -105,7 +114,7 @@ fn org_list_to_generic_html_org_delete_combo() {
 fn org_list_indent_outdent_checkbox_repair_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -143,6 +152,7 @@ fn org_list_indent_outdent_checkbox_repair_combo() {
               (org-list-to-lisp)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -150,7 +160,7 @@ fn org_list_indent_outdent_checkbox_repair_combo() {
 fn org_insert_delete_move_description_items_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -181,6 +191,7 @@ fn org_insert_delete_move_description_items_combo() {
               (org-list-to-lisp)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -188,7 +199,7 @@ fn org_insert_delete_move_description_items_combo() {
 fn org_ordered_alpha_list_sort_renumber_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -225,6 +236,7 @@ fn org_ordered_alpha_list_sort_renumber_combo() {
               (org-list-to-lisp)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -232,7 +244,7 @@ fn org_ordered_alpha_list_sort_renumber_combo() {
 fn org_list_descriptive_generic_roundtrip_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -284,6 +296,9 @@ fn org_list_descriptive_generic_roundtrip_combo() {
             subtree
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""OK ((descriptive (\"[X] Term *A* :: First line\ncontinuation with =code=\" (ordered (\"[@3] child three\") (\"[ ] child off\"))) (\"[-] Term B :: second line\")) \"<dl depth=1>\n<item type=descriptive depth=1>{X}<dt>Term *A*</dt><dd>[descriptive]First line\ncontinuation with =code=\n<ol depth=2>\n<item type=ordered depth=2 count=3>[ordered]child three</item>\n|\n<item type=ordered depth=2>{ }[ordered]child off</item>\n</ol></dd></item>\n|\n<item type=descriptive depth=1>{-}<dt>Term B</dt><dd>[descriptive]second line</dd></item>\n</dl>\" (0 52 139) \"- [X] Term *A* :: First line\n  continuation with =code=\n  1. [@3] child three\n  1. [ ] child off\n- [-] Term B :: second line\" \"** DONE  Term *A* First line\ncontinuation with =code=\n*** child three\n*** TODO child off\n** TODO  Term B second line\" \"- [X] Term *A* :: First line\n  continuation with =code=\n  1. [@3] child three\n  1. [ ] child off\n- [-] Term B :: second line\")""#
+        ]],
     );
 }
 
@@ -291,7 +306,7 @@ fn org_list_descriptive_generic_roundtrip_combo() {
 fn org_list_checkbox_table_fold_element_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -418,6 +433,7 @@ fn org_list_checkbox_table_fold_element_lifecycle_combo() {
                 (org-list-to-lisp)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -425,7 +441,7 @@ fn org_list_checkbox_table_fold_element_lifecycle_combo() {
 fn org_list_nested_counter_checkbox_repair_cycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -513,6 +529,7 @@ fn org_list_nested_counter_checkbox_repair_cycle_combo() {
                      :ifmt (lambda (_type contents) contents)))
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -520,7 +537,7 @@ fn org_list_nested_counter_checkbox_repair_cycle_combo() {
 fn org_list_struct_write_visibility_apply_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -618,6 +635,7 @@ fn org_list_struct_write_visibility_apply_combo() {
               (org-list-to-lisp)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -625,7 +643,7 @@ fn org_list_struct_write_visibility_apply_combo() {
 fn org_list_make_subtree_checkbox_counter_roundtrip_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -693,6 +711,7 @@ fn org_list_make_subtree_checkbox_counter_roundtrip_combo() {
                   converted
                   roundtrip-list
                   after-level-edits))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -700,7 +719,7 @@ fn org_list_make_subtree_checkbox_counter_roundtrip_combo() {
 fn org_list_checkbox_dependency_sort_visibility_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -819,6 +838,7 @@ fn org_list_checkbox_dependency_sort_visibility_combo() {
                            (org-element-property :tag el))))))
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -826,7 +846,7 @@ fn org_list_checkbox_dependency_sort_visibility_combo() {
 fn org_list_send_item_struct_navigation_kill_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -976,6 +996,7 @@ fn org_list_send_item_struct_navigation_kill_combo() {
                           (org-element-property :end item))))
                 (buffer-substring-no-properties
                  (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
     );
 }
 
@@ -983,7 +1004,7 @@ fn org_list_send_item_struct_navigation_kill_combo() {
 fn org_checkbox_toggle_counter_stats_toggle_cycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -1043,6 +1064,7 @@ fn org_checkbox_toggle_counter_stats_toggle_cycle_combo() {
                         after-b
                         after-c-cycle
                           after-stats)))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 59 48)""#]],
     );
 }
 
@@ -1050,7 +1072,7 @@ fn org_checkbox_toggle_counter_stats_toggle_cycle_combo() {
 fn org_list_structure_indent_outdent_renumber_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -1107,6 +1129,7 @@ fn org_list_structure_indent_outdent_renumber_deep_state_combo() {
                       after-toggle
                       after-count
                       after-sort))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 42)""#]],
     );
 }
 
@@ -1114,7 +1137,7 @@ fn org_list_structure_indent_outdent_renumber_deep_state_combo() {
 fn org_list_checkbox_toggle_update_sort_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-list)
@@ -1159,5 +1182,6 @@ fn org_list_checkbox_toggle_update_sort_edit_deep() {
                         after-sort
                         after-edit
                         after-replace))))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 48)""#]],
     );
 }

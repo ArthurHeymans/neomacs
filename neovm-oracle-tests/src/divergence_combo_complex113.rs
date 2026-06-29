@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx113_unread_command_events_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((unread-command-events (list ?a ?b ?c)))
@@ -16,13 +16,14 @@ fn div_cx113_unread_command_events_basic() {
             (read-char)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (97 98 99)""#]],
     );
 }
 
 #[test]
 fn div_cx113_this_command_and_last_command() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list this-command
       last-command
@@ -30,13 +31,14 @@ fn div_cx113_this_command_and_last_command() {
       (boundp 'real-this-command)
       (boundp 'real-last-command))
 "##,
+        expect_test::expect![[r#""OK (nil nil t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx113_read_key_sequence_with_kbd() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((unread-command-events (listify-key-sequence (kbd "C-x C-f"))))
@@ -46,13 +48,14 @@ fn div_cx113_read_key_sequence_with_kbd() {
               (length keys))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (\"\u{18}\u{6}\" \"C-x C-f\" 2)""#]],
     );
 }
 
 #[test]
 fn div_cx113_event_start_and_posn_decomposition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((event (list 'mouse-1
@@ -67,13 +70,14 @@ fn div_cx113_event_start_and_posn_decomposition() {
             (posn-window (event-start event))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx113_kbd_parse_special_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (mapcar (lambda (s)
@@ -84,13 +88,16 @@ fn div_cx113_kbd_parse_special_keys() {
               "C-M-a" "M-x" "C-c C-c" "C-u M-x"))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((\"RET\" \"RET\" 1) (\"TAB\" \"TAB\" 1) (\"ESC\" \"ESC\" 1) (\"DEL\" \"DEL\" 1) (\"SPC\" \"SPC\" 1) (\"NUL\" \"C-@\" 1) (\"<f1>\" \"<f1>\" 1) (\"<f12>\" \"<f12>\" 1) (\"<home>\" \"<home>\" 1) (\"<end>\" \"<end>\" 1) (\"<prior>\" \"<prior>\" 1) (\"<next>\" \"<next>\" 1) (\"<up>\" \"<up>\" 1) (\"<down>\" \"<down>\" 1) (\"<left>\" \"<left>\" 1) (\"<right>\" \"<right>\" 1) (\"C-M-a\" \"C-M-a\" 1) (\"M-x\" \"M-x\" 1) (\"C-c C-c\" \"C-c C-c\" 2) (\"C-u M-x\" \"C-u M-x\" 2))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx113_recent_keys_and_key_history() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((rk (recent-keys)))
@@ -98,13 +105,14 @@ fn div_cx113_recent_keys_and_key_history() {
             (arrayp rk)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx113_input_method_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'current-input-method)
@@ -113,13 +121,14 @@ fn div_cx113_input_method_predicate() {
           (boundp 'input-method-verbose-flag))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx113_translate_key_via_key_translation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((tbl (make-sparse-keymap)))
@@ -128,26 +137,28 @@ fn div_cx113_translate_key_via_key_translation() {
             (lookup-key tbl [?\C-x])))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK ([24] nil)""#]],
     );
 }
 
 #[test]
 fn div_cx113_recursive_minibuffer_depth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (minibuffer-depth)
           (>= (minibuffer-depth) 0))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (0 t)""#]],
     );
 }
 
 #[test]
 fn div_cx113_input_method_activate_deactivate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'activate-input-method)
@@ -156,13 +167,14 @@ fn div_cx113_input_method_activate_deactivate() {
           (boundp 'input-method-function))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx113_mouse_position_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((mp (mouse-position)))
@@ -171,13 +183,14 @@ fn div_cx113_mouse_position_query() {
             (consp (cddr mp))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t #<frame F1 0x555555b46708> nil)""#]],
     );
 }
 
 #[test]
 fn div_cx113_set_transient_map_and_overriding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((map (make-sparse-keymap)))
@@ -187,13 +200,14 @@ fn div_cx113_set_transient_map_and_overriding() {
             (keymapp map)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (neo-cx113-cmd t)""#]],
     );
 }
 
 #[test]
 fn div_cx113_input_event_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -218,5 +232,6 @@ fn div_cx113_input_event_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

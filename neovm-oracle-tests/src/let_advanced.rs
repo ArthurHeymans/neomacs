@@ -30,7 +30,10 @@ fn oracle_prop_let_many_bindings() {
        ;; Use all in a single expression
        (+ (* a b) (* c d) (* e f) (* g h)
           (* i j) (* k l) (* m n) o)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (15 40 65 750 14 24 519)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -47,7 +50,10 @@ fn oracle_prop_let_parallel_binding_order() {
       ;; In let, both rhs computed before any binding takes effect
       (let ((x y) (y x))
         (list x y)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (20 10)""#]],
+    );
     assert_ok_eq("(20 10)", &oracle, &neovm);
 }
 
@@ -63,7 +69,10 @@ fn oracle_prop_let_parallel_binding_complex() {
         (let ((sum (+ new-a new-b new-c))  ;; 12
               (orig-sum (+ a b c)))         ;; still 6 from outer
           (list new-a new-b new-c sum orig-sum))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 4 3 12 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +88,10 @@ fn oracle_prop_let_nil_bindings() {
       (list a b c d e
             (null a) (null b) (null c) (null e)
             (not (null d))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil nil 42 nil t t t t t)""#]],
+    );
 }
 
 #[test]
@@ -93,7 +105,10 @@ fn oracle_prop_let_nil_binding_then_setq() {
         (setq count (1+ count))
         (setq result (cons (* i i) result)))
       (list (nreverse result) count))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 1 4 9 16) 5)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +132,12 @@ fn oracle_prop_let_shadowing_deep() {
       ;; After middle let, x is back to 'outer
       (setq log (cons (list 'back-to-0 x) log))
       (nreverse log))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((level-0 outer) (level-1 middle) (level-2 inner) (back-to-1 middle) (back-to-0 outer))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +162,7 @@ fn oracle_prop_let_closure_scope_capture() {
                   (cons (lambda () val) makers)))))
       ;; Call all closures and collect results
       (mapcar #'funcall (nreverse makers)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (10 20 30)""#]]);
 }
 
 #[test]
@@ -160,7 +180,10 @@ fn oracle_prop_let_adder_factory() {
          (mapcar (lambda (f) (funcall f 0)) fns)
          (mapcar (lambda (f) (funcall f 42)) fns)
          (mapcar (lambda (f) (funcall f -10)) fns))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 5 10 100) (43 47 52 142) (-9 -5 0 90))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +217,12 @@ fn oracle_prop_let_complex_init_expressions() {
          (/ sum count)
          (- max-val min-val)
          (apply #'+ squares))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 1 2 3 4 5 6 9) 31 (9 1 16 1 25 81 4 36) 8 t (4 5 9 6) 9 1 3 8 173)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -253,5 +281,8 @@ fn oracle_prop_let_state_encapsulation() {
            (funcall send c2 'get)
            (funcall send c1 'history)
            (funcall send c2 'history)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (12 100 (0 1 2 3 13) (100 99 98 48))""#]],
+    );
 }

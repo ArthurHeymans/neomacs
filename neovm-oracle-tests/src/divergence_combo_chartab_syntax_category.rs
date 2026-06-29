@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_char_table_basic_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ct (make-char-table 'syntax-table nil)))
     (aset ct ?A 'word)
@@ -23,6 +23,7 @@ fn divergence_char_table_basic_operations() {
           (null (aref ct ?Z))
           (char-table-p ct)
           (char-table-type ct)))) "#,
+        expect_test::expect![[r#""ERR (void-function char-table-type)""#]],
     );
 }
 
@@ -30,7 +31,7 @@ fn divergence_char_table_basic_operations() {
 fn divergence_syntax_table_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((st (syntax-table)))
     (list (char-syntax ?a)
@@ -43,6 +44,7 @@ fn divergence_syntax_table_access() {
           (eq (char-syntax ?)) ?\))
           (char-syntax ?\")
           (eq (char-syntax ?\") ?\")))) "#,
+        expect_test::expect![[r#""OK (119 t 32 t 40 t 41 t 34 t)""#]],
     );
 }
 
@@ -50,7 +52,7 @@ fn divergence_syntax_table_access() {
 fn divergence_modify_syntax_entry_effect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((st (copy-syntax-table (syntax-table))))
     (with-syntax-table st
@@ -60,6 +62,7 @@ fn divergence_modify_syntax_entry_effect() {
             (eq (char-syntax ?$) ?')
             (char-syntax ?%)
             (eq (char-syntax ?%) ?_))))) "#,
+        expect_test::expect![[r#""OK (39 t 95 t)""#]],
     );
 }
 
@@ -67,7 +70,7 @@ fn divergence_modify_syntax_entry_effect() {
 fn divergence_category_table_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ct (category-table)))
     (define-category ?1 "test cat 1" ct)
@@ -84,6 +87,7 @@ fn divergence_category_table_operations() {
           (memq ?2 (aref (category-table) ?B))
           (category-docstring ?1 ct)
           (string= (category-docstring ?1 ct) "test cat 1")))) "#,
+        expect_test::expect![[r#""ERR (error \"Category ‘1’ is already defined\")""#]],
     );
 }
 
@@ -91,7 +95,7 @@ fn divergence_category_table_operations() {
 fn divergence_char_table_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ct (make-char-table 'test-ct-xxx nil)))
     (set-char-table-range ct ?A ?Z 'letter)
@@ -106,6 +110,7 @@ fn divergence_char_table_range() {
           (eq (char-table-range ct ?A) 'letter)
           (char-table-range ct ?0)
           (eq (char-table-range ct ?0) 'digit)))) "#,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments set-char-table-range 4)""#]],
     );
 }
 
@@ -113,7 +118,7 @@ fn divergence_char_table_range() {
 fn divergence_syntax_class_of_various_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (char-syntax ?a)
         (eq (char-syntax ?a) ?w)
@@ -129,6 +134,7 @@ fn divergence_syntax_class_of_various_chars() {
         (eq (char-syntax ?:) ?.)
         (char-syntax ?\;)
         (eq (char-syntax ?\;) ?<))) "#,
+        expect_test::expect![[r#""OK (119 t 119 t 32 t 32 t 95 t 46 t 46 nil)""#]],
     );
 }
 
@@ -136,7 +142,7 @@ fn divergence_syntax_class_of_various_chars() {
 fn divergence_parse_partial_sexp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(foo (bar baz) quux)")
   (let ((p1 (scan-lists 1 1 0))
@@ -147,6 +153,9 @@ fn divergence_parse_partial_sexp_basic() {
           (buffer-string)
           (scan-lists 6 1 0)
           (= (scan-lists 6 1 0) 14)))) "#,
+        expect_test::expect![[
+            r#""(foo (bar baz) quux)ERR (wrong-type-argument number-or-marker-p nil)""#
+        ]],
     );
 }
 
@@ -154,7 +163,7 @@ fn divergence_parse_partial_sexp_basic() {
 fn divergence_forward_comment_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert ";; comment 1\ncode\n;; comment 2\nmore code")
   (goto-char 1)
@@ -167,6 +176,9 @@ fn divergence_forward_comment_navigation() {
               (or (null c1) (/= c1 59))
               (= (point) 1)
               (>= (point) 1)))))) "#,
+        expect_test::expect![[
+            r#"";; comment 1\ncode\n;; comment 2\nmore codeOK (nil 1 59 nil nil nil t)""#
+        ]],
     );
 }
 
@@ -174,7 +186,7 @@ fn divergence_forward_comment_navigation() {
 fn divergence_syntax_text_property_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "abc-def ghi")
   (let ((st (copy-syntax-table)))
@@ -188,6 +200,7 @@ fn divergence_syntax_text_property_override() {
               (string= w1 "abc-def")
               (>= p1 7)
               (buffer-substring 1 p1)))))) "#,
+        expect_test::expect![[r#""abc-def ghiERR (void-variable p1)""#]],
     );
 }
 
@@ -195,7 +208,7 @@ fn divergence_syntax_text_property_override() {
 fn divergence_char_table_parent_extra_slot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((parent (make-char-table 'test-ct-parent-xxx nil))
         (child (make-char-table 'test-ct-child-xxx nil)))
@@ -210,5 +223,8 @@ fn divergence_char_table_parent_extra_slot() {
           (null (aref child ?Z))
           (char-table-parent child)
           (eq (char-table-parent child) parent)))) "#,
+        expect_test::expect![[
+            r#""OK (from-parent t from-child t nil t #^[nil nil test-ct-parent-xxx #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil from-parent nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] #^^[1 0 #^^[2 0 #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil from-parent nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] t)""#
+        ]],
     );
 }

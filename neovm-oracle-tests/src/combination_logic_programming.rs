@@ -95,7 +95,10 @@ fn oracle_prop_logic_prog_facts_and_queries() {
     (fmakunbound 'neovm--lp-lookup)
     (fmakunbound 'neovm--lp-unify)
     (fmakunbound 'neovm--lp-apply-subst)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 58 36)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +214,10 @@ fn oracle_prop_logic_prog_conjunction_backtracking() {
     (fmakunbound 'neovm--lp-apply-subst)
     (fmakunbound 'neovm--lp-query-goal)
     (fmakunbound 'neovm--lp-query-conj)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil nil 0 nil nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +372,10 @@ fn oracle_prop_logic_prog_rules() {
     (fmakunbound 'neovm--lp-rename-vars)
     (fmakunbound 'neovm--lp-prove)
     (fmakunbound 'neovm--lp-prove-conj)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 117 64)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -507,7 +516,10 @@ fn oracle_prop_logic_prog_list_operations() {
     (fmakunbound 'neovm--lp-apply-subst)
     (fmakunbound 'neovm--lp-append-query)
     (fmakunbound 'neovm--lp-member-query)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\\?r) (a b) (x y z) t nil t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -667,7 +679,10 @@ fn oracle_prop_logic_prog_arithmetic_constraints() {
     (fmakunbound 'neovm--lp-is)
     (fmakunbound 'neovm--lp-check)
     (fmakunbound 'neovm--lp-range-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 111 42)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -756,7 +771,12 @@ fn oracle_prop_logic_prog_path_finding() {
     (fmakunbound 'neovm--lp-get-edges)
     (fmakunbound 'neovm--lp-find-paths)
     (fmakunbound 'neovm--lp-shortest-path)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((((a b c d) 4) ((a c d) 5) ((a b d) 6)) ((a b c d) 4) (((a b c d e) 7) ((a c d e) 8) ((a b d e) 9)) ((a b c d e) 7) nil ((a b) 1) (a b c d e))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -867,5 +887,10 @@ fn oracle_prop_logic_prog_constraint_satisfaction() {
     (fmakunbound 'neovm--lp-queens-safe-p)
     (fmakunbound 'neovm--lp-nqueens)
     (fmakunbound 'neovm--lp-nq-solve)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 2 3) (1 3 4) (1 4 5) (1 5 6) (2 1 3) (2 3 5) (2 4 6) (3 1 4) (3 2 5) (4 1 5) (4 2 6) (5 1 6)) 6 6 2 10 nil t nil t)""#
+        ]],
+    );
 }

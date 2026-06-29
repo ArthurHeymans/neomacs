@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_setf_char_at_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "scu")))
     (with-current-buffer buf
@@ -36,6 +36,7 @@ fn combo_setf_char_at_marker_overlay_undo() {
                 (marker-position m)
                 (get-text-property 1 'seg)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
     );
 }
 
@@ -43,7 +44,7 @@ fn combo_setf_char_at_marker_overlay_undo() {
 fn combo_setf_marker_overlay_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "smt")))
     (with-current-buffer buf
@@ -71,6 +72,7 @@ fn combo_setf_marker_overlay_textprop() {
                 (overlay-start ov)
                 (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -78,7 +80,7 @@ fn combo_setf_marker_overlay_textprop() {
 fn combo_setf_narrow_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "snu")))
     (with-current-buffer buf
@@ -105,6 +107,7 @@ fn combo_setf_narrow_marker_undo() {
                 (buffer-string)
                 (marker-position m)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
     );
 }
 
@@ -112,7 +115,7 @@ fn combo_setf_narrow_marker_undo() {
 fn combo_setf_buffer_substring_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "sbs")))
     (with-current-buffer buf
@@ -139,6 +142,7 @@ fn combo_setf_buffer_substring_overlay() {
                 (overlay-start ov)
                 (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -146,7 +150,7 @@ fn combo_setf_buffer_substring_overlay() {
 fn combo_setf_textprop_overlay_clone() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "sto")))
     (with-current-buffer buf
@@ -177,5 +181,6 @@ fn combo_setf_textprop_overlay_clone() {
                   (overlay-end ov)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

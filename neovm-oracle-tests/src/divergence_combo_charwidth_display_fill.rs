@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_char_width_various_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (char-width ?A)
         (= (char-width ?A) 1)
@@ -21,6 +21,7 @@ fn divergence_char_width_various_chars() {
         (= (string-width "hello") 5)
         (string-width "abc\ndef")
         (= (string-width "abc\ndef") 6))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 13 43)""##]],
     );
 }
 
@@ -28,7 +29,7 @@ fn divergence_char_width_various_chars() {
 fn divergence_truncate_string_to_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (truncate-string-to-width "hello world" 5)
         (string= (truncate-string-to-width "hello world" 5) "hello")
@@ -38,6 +39,7 @@ fn divergence_truncate_string_to_width() {
         (string= (truncate-string-to-width "hi" 5) "hi   ")
         (truncate-string-to-width "hello" 3 t)
         (string= (truncate-string-to-width "hello" 3 t) "hel"))) #"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p t)""#]],
     );
 }
 
@@ -45,7 +47,7 @@ fn divergence_truncate_string_to_width() {
 fn divergence_string_pad_alignment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (format "%-10s" "left")
         (string= (format "%-10s" "left") "left      ")
@@ -55,6 +57,7 @@ fn divergence_string_pad_alignment() {
         (string= (format "%-5d" 42) "42   ")
         (format "%05d" 42)
         (string= (format "%05d" 42) "00042"))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 9 48)""##]],
     );
 }
 
@@ -62,7 +65,7 @@ fn divergence_string_pad_alignment() {
 fn divergence_buffer_display_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (let ((w1 (string-width (buffer-string)))
@@ -78,6 +81,7 @@ fn divergence_buffer_display_width() {
             (= bs2 21)
             (buffer-string)
             (string= (buffer-string) "Hello Beautiful World"))))) "#,
+        expect_test::expect![[r#""HelloBeautiful  WorldERR (void-variable bs1)""#]],
     );
 }
 
@@ -85,7 +89,7 @@ fn divergence_buffer_display_width() {
 fn divergence_string_make_multibyte_unibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ascii "hello")
         (multi "\xc3\xa9\xc3\xa0"))
@@ -100,6 +104,7 @@ fn divergence_string_make_multibyte_unibyte() {
           (>= (string-bytes multi) 2)
           (length multi)
           (= (length multi) 2)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 14 35)""##]],
     );
 }
 
@@ -107,13 +112,14 @@ fn divergence_string_make_multibyte_unibyte() {
 fn divergence_string_composition_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (compose-region-p 1 1)
         (null (compose-region-p 1 1))
         (stringp (buffer-string))
         (buffer-string)
         (= (buffer-size) 0))) #"#,
+        expect_test::expect![[r#""ERR (void-function compose-region-p)""#]],
     );
 }
 
@@ -121,7 +127,7 @@ fn divergence_string_composition_check() {
 fn divergence_char_charset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (charsetp 'ascii)
         (charsetp 'unicode)
@@ -132,6 +138,7 @@ fn divergence_char_charset() {
         (= (decode-char 'unicode 65) 65)
         (decode-char 'unicode 233)
         (= (decode-char 'unicode 233) 233))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 10 46)""##]],
     );
 }
 
@@ -139,7 +146,7 @@ fn divergence_char_charset() {
 fn divergence_fill_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "This is a long line of text that should be filled at the fill column boundary for testing purposes.")
   (let ((fill-column 30))
@@ -150,6 +157,9 @@ fn divergence_fill_region_basic() {
           (buffer-string)
           (> (buffer-size) 50)
           (= (length lines) (length lines))))) #"#,
+        expect_test::expect![[
+            r#""This is a long line of text\nthat should be filled at the\nfill column boundary for\ntesting purposes.ERR (void-function every)""#
+        ]],
     );
 }
 
@@ -157,7 +167,7 @@ fn divergence_fill_region_basic() {
 fn divergence_indent_rigidly_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "    line1\n    line2\n    line3\n")
   (indent-rigidly 1 30 -2)
@@ -170,6 +180,7 @@ fn divergence_indent_rigidly_negative() {
             s2
             (string-match "line1" s2)
             (= (string-match "line1" s2) 0))))) #"#,
+        expect_test::expect![[r##""line1\nline2\nline3\nERR (invalid-read-syntax \"#\" 12 49)""##]],
     );
 }
 
@@ -177,7 +188,7 @@ fn divergence_indent_rigidly_negative() {
 fn divergence_current_column_with_tabs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello\tworld")
   (goto-char 6)
@@ -193,5 +204,6 @@ fn divergence_current_column_with_tabs() {
               (> col3 col1)
               (buffer-string)
               (= (buffer-size) 11)))))) #"#,
+        expect_test::expect![[r##""hello\tworldERR (invalid-read-syntax \"#\" 15 41)""##]],
     );
 }

@@ -15,7 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_kill_region_yank_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-kry")))
     (with-current-buffer buf
@@ -69,6 +69,7 @@ fn combo_kill_region_yank_marker_overlay_undo() {
                                   (get-text-property 21 'grp))))
               (kill-buffer buf)
               (list after-kill after-yank restored)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -76,7 +77,7 @@ fn combo_kill_region_yank_marker_overlay_undo() {
 fn combo_copy_region_as_kill_yank_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-cray")))
     (with-current-buffer buf
@@ -116,6 +117,7 @@ fn combo_copy_region_as_kill_yank_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -123,7 +125,7 @@ fn combo_copy_region_as_kill_yank_marker_overlay_undo() {
 fn combo_kill_yank_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-kyn")))
     (with-current-buffer buf
@@ -168,6 +170,7 @@ fn combo_kill_yank_narrow_marker_overlay_undo() {
                                 (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -175,7 +178,7 @@ fn combo_kill_yank_narrow_marker_overlay_undo() {
 fn combo_kill_yank_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-kybl")))
     (with-current-buffer buf
@@ -219,6 +222,7 @@ fn combo_kill_yank_buffer_local_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -226,7 +230,7 @@ fn combo_kill_yank_buffer_local_marker_overlay_undo() {
 fn combo_kill_ring_save_yank_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-krs")))
     (with-current-buffer buf
@@ -269,5 +273,6 @@ fn combo_kill_ring_save_yank_marker_overlay_undo() {
                                 (get-text-property 21 'grp))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

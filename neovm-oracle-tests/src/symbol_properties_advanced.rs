@@ -33,7 +33,10 @@ fn oracle_prop_symbol_props_get_put_roundtrip() {
               (get 'neovm--test-spa-rt 'float-val)
               (get 'neovm--test-spa-rt 'nonexistent)))
     (setplist 'neovm--test-spa-rt nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 \"hello world\" some-symbol (a b c) nil 3.14 nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +72,10 @@ fn oracle_prop_symbol_props_plist_reflects_mutations() {
         (setq results (cons (length (symbol-plist 'neovm--test-spa-mut)) results))
         (nreverse results))
     (setplist 'neovm--test-spa-mut nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil 2 6 1 2 3 100 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +109,10 @@ fn oracle_prop_symbol_props_setplist_replace() {
                     after-x after-new-a after-new-b after-len
                     empty-pl)))))
     (setplist 'neovm--test-spa-repl nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 6 nil 111 222 4 nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +148,10 @@ fn oracle_prop_symbol_props_multiple_independent_updates() {
               (length (car snapshots))    ;; should be 4 (2 entries = 4 elts)
               (length (cadr snapshots)))) ;; should be 2 (1 entry = 2 elts)
     (setplist 'neovm--test-spa-multi nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (a B-UPDATED c D-UPDATED e 4 2)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +173,10 @@ fn oracle_prop_symbol_props_put_return_value() {
             (equal (put 'neovm--test-spa-retv 'd 'sym)
                    (get 'neovm--test-spa-retv 'd)))
     (setplist 'neovm--test-spa-retv nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 \"string-val\" (1 2 3) 99 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +258,12 @@ fn oracle_prop_symbol_props_metadata_system() {
                  neovm--test-meta-fn-mul
                  neovm--test-meta-fn-old-div))
       (setplist s nil))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 ((neovm--test-meta-fn-old-div neovm--test-meta-fn-safe-div \"0.5\")) \"Add two numbers\" \"2.0\" t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -327,7 +347,12 @@ fn oracle_prop_symbol_props_method_dispatch_with_inheritance() {
                  neovm--test-dispatch-dog
                  neovm--test-dispatch-puppy))
       (setplist s nil))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Rex barks: Woof!\" \"Animal: Rex (age 5)\" \"Rex fetches the ball\" \"Tiny yips!\" \"Animal: Tiny (age 1)\" \"Tiny fetches the stick\" \"No method swim on neovm--test-dispatch-dog\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -394,5 +419,10 @@ fn oracle_prop_symbol_props_property_diff() {
           (let ((snap2 (funcall snapshot-plist 'neovm--test-spa-diff)))
             (funcall diff-plists snap1 snap2 plist-keys))))
     (setplist 'neovm--test-spa-diff nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:added ((shape . circle)) :removed ((weight . 50)) :changed ((color red blue)))""#
+        ]],
+    );
 }

@@ -44,5 +44,10 @@ fn oracle_directory_files_listing_filter_full_count_and_errors() {
     (delete-directory dir t)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\".\" \"..\" \".hidden\" \"alpha.txt\" \"beta.el\" \"sub\" \"zeta.txt\") (\"alpha.txt\" \"zeta.txt\") (\".\" \"..\" \".hidden\") (\"alpha.txt\" \"zeta.txt\") (t t) (\".\" \"..\" \".hidden\" \"alpha.txt\" \"beta.el\" \"sub\" \"zeta.txt\") nil 1 (wrong-type-argument (stringp 42)) (wrong-type-argument (wholenump -1)) (wrong-type-argument (stringp 42)))""#
+        ]],
+    );
 }

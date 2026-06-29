@@ -59,7 +59,12 @@ fn oracle_prop_read_print_comprehensive_prin1_all_types() {
   (prin1-to-string ?A)
   (prin1-to-string ?\n)
   (prin1-to-string ?\\))"##;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"42\" \"-100\" \"0\" \"3.14\" \"-0.001\" \"10000000000.0\" \"\\\"hello world\\\"\" \"\\\"line1\nline2\\\"\" \"\\\"tab\there\\\"\" \"\\\"quote\\\\\\\"inside\\\"\" \"\\\"backslash\\\\\\\\here\\\"\" \"foo\" \"nil\" \"t\" \":keyword\" \"(1 2 3)\" \"(a . b)\" \"(1 (2 (3)))\" \"nil\" \"[1 2 3]\" \"[]\" \"[a \\\"b\\\" 3]\" \"65\" \"10\" \"92\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +84,10 @@ fn oracle_prop_read_print_comprehensive_round_trips() {
              (read-back (car (read-from-string printed))))
         (equal v read-back)))
     test-values))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +119,12 @@ fn oracle_prop_read_print_comprehensive_read_from_string_positions() {
 
   ;; Read vector with mixed types
   (car (read-from-string "[1 \"two\" three (4 . 5)]")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (42 5 ((+ 1 2) (* 3 4) done) ((((a . b) . c) . d) . e) (1 2 3) [1 \"two\" three (4 . 5)])""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +152,12 @@ fn oracle_prop_read_print_comprehensive_print_escape_newlines() {
   ;; Combination: string with both newlines and tabs
   (let ((print-escape-newlines t))
     (prin1-to-string "a\nb\tc\nd")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\\\"line1\\\\nline2\\\\nline3\\\"\" \"\\\"line1\nline2\\\"\" \"\\\"col1\tcol2\\\"\" \"\\\"a\\\\nb\tc\\\\nd\\\"\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +193,12 @@ fn oracle_prop_read_print_comprehensive_print_length() {
   ;; print-length on nested lists applies per level
   (let ((print-length 2))
     (prin1-to-string '((1 2 3) (4 5 6) (7 8 9)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"(1 2 3 ...)\" \"(...)\" \"(1 2 3 4 5)\" \"[a b ...]\" \"(x y z)\" \"((1 2 ...) (4 5 ...) ...)\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +234,12 @@ fn oracle_prop_read_print_comprehensive_print_level() {
   ;; Combined print-level and print-length
   (let ((print-level 2) (print-length 2))
     (prin1-to-string '((1 2 3 4) (5 (6 7) 8 9) (10 11)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"(a ...)\" \"(a (b ...))\" \"...\" \"(a (b (c (d (e)))))\" \"[a [b [c]]]\" \"((1 2 ...) (5 ... ...) ...)\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +279,12 @@ fn oracle_prop_read_print_comprehensive_print_circle() {
     (let ((cell (cons nil nil)))
       (setcar cell cell)
       (prin1-to-string cell))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r##""OK (\"(#1=(a b c) #1#)\" \"(#1=(1 2) mid #1#)\" \"(a (b c) d)\" \"#1=(1 2 3 . #1#)\" \"#1=(#1#)\")""##
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +316,12 @@ fn oracle_prop_read_print_comprehensive_print_quoted() {
   ;; backquote forms
   (let ((print-quoted t))
     (prin1-to-string ''(a b c))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r##""OK (\"'foo\" \"(quote foo)\" \"#'bar\" \"''baz\" \"'(a b c)\")""##
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -317,7 +355,12 @@ fn oracle_prop_read_print_comprehensive_format_percent_S() {
   ;; %S with special characters in strings
   (format "%S" "has\"quote")
   (format "%S" "has\\backslash"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\\\"hello\\\"\" \"42\" \"foo\" \"(1 2 3)\" \"[a b c]\" \"nil\" \"t\" \"hello\" (\"test\" \"\\\"test\\\"\") \"a=1 b=\\\"two\\\" c=three\" \"\\\"has\\\\\\\"quote\\\"\" \"\\\"has\\\\\\\\backslash\\\"\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -353,5 +396,8 @@ fn oracle_prop_read_print_comprehensive_reader_macros() {
   (let ((print-circle t))
     (let ((obj (car (read-from-string "(#1=(x y) #1#)"))))
       (eq (car obj) (cadr obj)))))"##;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (#'car (t nil) (t t) (a t) t)""#]],
+    );
 }

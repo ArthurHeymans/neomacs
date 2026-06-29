@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx11_encode_region_latin1_vs_string_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "café"))
   (list (append (encode-coding-string s 'latin-1) nil)
@@ -19,13 +19,14 @@ fn div_cx11_encode_region_latin1_vs_string_consistency() {
           (encode-coding-region (point-min) (point-max) 'latin-1)
           (append (buffer-string) nil))))
 "##,
+        expect_test::expect![[r#""OK ((99 97 102 233) (99 97 102 4194281))""#]],
     );
 }
 
 #[test]
 fn div_cx11_process_stderr_exit_code_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((err-buf (generate-new-buffer " *neo-cx11-err*")))
@@ -34,37 +35,40 @@ fn div_cx11_process_stderr_exit_code_combined() {
                    (with-current-buffer err-buf (buffer-string)))
         (kill-buffer err-buf)))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp #<buffer  *neo-cx11-err*>)""#]],
     );
 }
 
 #[test]
 fn div_cx11_coding_system_plist_safe_charsets() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (coding-system-get 'utf-8 :safe-charsets)
       (coding-system-get 'latin-1 :safe-charsets)
       (coding-system-get 'utf-8 :ascii-compatible-p))
 "##,
+        expect_test::expect![[r#""OK (nil nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx11_string_make_unibyte_data_loss() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((orig "café世界")
        (u (string-make-unibyte orig)))
   (list (append orig nil) (append u nil) (length u) (string-bytes u)))
 "##,
+        expect_test::expect![[r#""OK ((99 97 102 233 19990 30028) (99 97 102 233 22 76) 6 6)""#]],
     );
 }
 
 #[test]
 fn div_cx11_read_from_string_position_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((input "(a b) (c d) (e f)")
        (r1 (read-from-string input))
@@ -72,23 +76,25 @@ fn div_cx11_read_from_string_position_tracking() {
        (r3 (read-from-string input (cdr r2))))
   (list (car r1) (cdr r1) (car r2) (cdr r2) (car r3) (cdr r3)))
 "##,
+        expect_test::expect![[r#""OK ((a b) 5 (c d) 11 (e f) 17)""#]],
     );
 }
 
 #[test]
 fn div_cx11_cl_subst_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-subst 'new 'old '(a old (b old) ((old . c) . old)))
 "##,
+        expect_test::expect![[r#""OK (a new (b new) ((new . c) . new))""#]],
     );
 }
 
 #[test]
 fn div_cx11_hash_table_rehash_after_resize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal :size 2 :rehash-size 2.0)))
   (dotimes (i 100) (puthash (number-to-string i) (* i i) ht))
@@ -97,13 +103,14 @@ fn div_cx11_hash_table_rehash_after_resize() {
         (gethash "99" ht)
         (> (hash-table-size ht) 10)))
 "##,
+        expect_test::expect![[r#""OK (100 2500 9801 t)""#]],
     );
 }
 
 #[test]
 fn div_cx11_narrow_save_excursion_marker_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDEF")
@@ -116,13 +123,14 @@ fn div_cx11_narrow_save_excursion_marker_nested() {
         (insert "X")))
     (list (point) (point-min) (point-max) (marker-position m))))
 "##,
+        expect_test::expect![[r#""OK (13 3 13 8)""#]],
     );
 }
 
 #[test]
 fn div_cx11_overlay_evaporate_undo_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -136,26 +144,28 @@ fn div_cx11_overlay_evaporate_undo_restore() {
       (undo)
       (list alive-before (overlay-start ov) (overlay-end ov)))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx11_encode_char_decode_char_non_unicode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((c (make-char 'japanese-jisx0208 36 34)))
   (list (encode-char c 'japanese-jisx0208)
         (decode-char 'japanese-jisx0208 (encode-char c 'japanese-jisx0208))
         (char-charset c)))
 "##,
+        expect_test::expect![[r#""OK (9250 12354 unicode-bmp)""#]],
     );
 }
 
 #[test]
 fn div_cx11_set_buffer_multibyte_undo_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -168,48 +178,52 @@ fn div_cx11_set_buffer_multibyte_undo_overlays() {
       (set-buffer-multibyte t)
       (list before (length (buffer-string)) (overlay-start ov) (buffer-string)))))
 "##,
+        expect_test::expect![[r#""OK ((5 2) 4 2 \"café\")""#]],
     );
 }
 
 #[test]
 fn div_cx11_cl_map_into_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v [1 2 3 4]))
   (cl-map-into v #'* v v)
   v)
 "##,
+        expect_test::expect![[r#""ERR (void-function cl-map-into)""#]],
     );
 }
 
 #[test]
 fn div_cx11_decode_coding_string_multibyte_flag() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((d (decode-coding-string (unibyte-string 195 169) 'utf-8)))
   (list (multibyte-string-p d) (unibyte-string-p d)
         (append d nil) (length d) (string-bytes d)))
 "##,
+        expect_test::expect![[r#""ERR (void-function unibyte-string-p)""#]],
     );
 }
 
 #[test]
 fn div_cx11_string_lessp_collate_compare() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((words '("apple" "éclair" "zebra" "café" "世界")))
   (sort (copy-sequence words) #'string-lessp))
 "##,
+        expect_test::expect![[r#""OK (\"apple\" \"café\" \"zebra\" \"éclair\" \"世界\")""#]],
     );
 }
 
 #[test]
 fn div_cx11_process_kill_buffer_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"
 (let ((buf (get-buffer-create " *neo-cx11-pkb*")))
   (with-current-buffer buf (insert "preexisting"))
@@ -225,7 +239,7 @@ fn div_cx11_process_kill_buffer_cleanup() {
 #[test]
 fn div_cx11_char_table_range_cons_range_intersect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'cx11 nil)))
   (set-char-table-range ct '(?a . ?z) :lower)
@@ -234,13 +248,14 @@ fn div_cx11_char_table_range_cons_range_intersect() {
         (char-table-range ct ?n)
         (char-table-range ct ?z)))
 "##,
+        expect_test::expect![[r#""OK (:lower :mid :lower)""#]],
     );
 }
 
 #[test]
 fn div_cx11_undo_after_delete_text_property_sticky() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -253,26 +268,28 @@ fn div_cx11_undo_after_delete_text_property_sticky() {
     (undo)
     (list after (buffer-string) (text-properties-at 1) (text-properties-at 5))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 5 5)""#]],
     );
 }
 
 #[test]
 fn div_cx11_format_mode_line_mode_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (list (format-mode-line mode-name)
         (format-mode-line "%m")))
 "##,
+        expect_test::expect![[r#""OK (\"\" \"\")""#]],
     );
 }
 
 #[test]
 fn div_cx11_encode_coding_region_big5_non_cjk() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "中"))
   (list (append (encode-coding-string s 'big5) nil)
@@ -281,13 +298,14 @@ fn div_cx11_encode_coding_region_big5_non_cjk() {
           (encode-coding-region (point-min) (point-max) 'big5)
           (append (buffer-string) nil))))
 "##,
+        expect_test::expect![[r#""OK ((164 164) (4194212 4194212))""#]],
     );
 }
 
 #[test]
 fn div_cx11_process_filter_accumulate_concat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx11-fa*")))
   (with-current-buffer buf (erase-buffer))
@@ -300,17 +318,21 @@ fn div_cx11_process_filter_accumulate_concat() {
   (prog1 (with-current-buffer buf (buffer-string))
     (kill-buffer buf)))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp 1)""#]],
     );
 }
 
 #[test]
 fn div_cx11_coding_system_mutually_compatible_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (coding-system-p 'utf-8-auto)
       (coding-system-plist 'utf-8-auto)
       (coding-system-type 'utf-8-auto))
 "##,
+        expect_test::expect![[
+            r#""OK (t (:ascii-compatible-p nil :category coding-category-utf-8-auto :name utf-8-auto :docstring \"UTF-8 (auto-detect signature (BOM))\" :coding-type utf-8 :mnemonic 85 :charset-list (unicode) :bom (utf-8-with-signature . utf-8)) utf-8)""#
+        ]],
     );
 }

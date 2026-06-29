@@ -55,5 +55,10 @@ fn oracle_make_empty_file_edges() {
     (ignore-errors (delete-directory root t))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil t 0 (file-already-exists (\"File exists\" \"plain.txt\")) nil nil \"\" (file-missing (\"Creating directory\" \"No such file or directory\" \"x/y/\")) nil t t (wrong-number-of-arguments ((1 . 2) 0)) (wrong-type-argument (stringp 42)))""#
+        ]],
+    );
 }

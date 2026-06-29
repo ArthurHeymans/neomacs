@@ -9,7 +9,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo65_clock_report_time_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-clock)
@@ -26,13 +26,14 @@ fn combo65_clock_report_time_range() {
       (push (list :report-created t) r)
       (push (list :tables (length (org-element-map (org-element-parse-buffer) 'table #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK ((:report-created t) (:tables 1))""#]],
     );
 }
 
 #[test]
 fn combo65_element_deep_content_replacement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-element)
@@ -61,13 +62,16 @@ fn combo65_element_deep_content_replacement() {
         (push (list :re-paras (length (org-element-map reparsed 'paragraph #'identity))) r)
         (push (list :re-tables (length (org-element-map reparsed 'table #'identity))) r)))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:before-paras 1) (:after-paras 1) (:after-tables 1) (:re-paras 1) (:re-tables 1))""#
+        ]],
     );
 }
 
 #[test]
 fn combo65_export_option_toggle_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-ascii)
@@ -88,13 +92,14 @@ fn combo65_export_option_toggle_cycle() {
         (let ((out (org-export-as 'ascii nil nil t)))
           (push (list :without-numbers (and out (string-match-p "Head$" out))) r)))
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK ((:with-toc nil) (:without-toc t) (:without-numbers 0))""#]],
     );
 }
 
 #[test]
 fn combo65_agenda_sort_strategies() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-agenda)
@@ -115,13 +120,14 @@ fn combo65_agenda_sort_strategies() {
                            (lambda () (org-get-heading t t t t))
                            "TODO=\"TODO\"")) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp 1)""#]],
     );
 }
 
 #[test]
 fn combo65_babel_dir_header() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-sh)
@@ -134,13 +140,16 @@ fn combo65_babel_dir_header() {
         (error (push (list :dir-error (car e)) r)))
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"ob-sh\")""#
+        ]],
     );
 }
 
 #[test]
 fn combo65_font_lock_basic_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'font-lock)
@@ -158,13 +167,16 @@ fn combo65_font_lock_basic_interaction() {
                (push (list :font-lock-defaults-set t) r))
       (error (push (list :font-lock-error t) r)))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:font-lock-fbound t) (:fontify-fbound nil) (:fontify-like-fbound t) (:font-lock-defaults-set t))""#
+        ]],
     );
 }
 
 #[test]
 fn combo65_babel_results_drawer_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -177,13 +189,14 @@ fn combo65_babel_results_drawer_type() {
       (push (list :drawer-count (length (org-element-map (org-element-parse-buffer) 'drawer
                                          (lambda (d) (when (equal "RESULTS" (org-element-property :drawer-name d)) d))))) r)
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK (300 (:drawer-count 0))""#]],
     );
 }
 
 #[test]
 fn combo65_export_with_creator_and_email() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-ascii)
@@ -198,13 +211,14 @@ fn combo65_export_with_creator_and_email() {
         ;; creator contains version string - just check it's a non-empty string
         (push (list :creator-is-string (stringp (plist-get info :creator))) r))
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK ((:email \"test@example.com\") (:creator-is-string t))""#]],
     );
 }
 
 #[test]
 fn combo65_org_todo_cycle_simple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO Task\n")
@@ -224,13 +238,16 @@ fn combo65_org_todo_cycle_simple() {
     (org-todo 'left)
     (push (list :after-left (org-get-todo-state)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init \"TODO\") (:after-1 #(\"DONE\" 0 4 (org-todo-head \"TODO\"))) (:after-2 nil) (:after-right #(\"TODO\" 0 4 (org-todo-head \"TODO\"))) (:after-left nil))""#
+        ]],
     );
 }
 
 #[test]
 fn combo65_org_show_setting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** B\n** C\n* D\n")
@@ -243,5 +260,6 @@ fn combo65_org_show_setting() {
     ;; after showing, headlines should be parseable
     (push (list :headlines (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:headlines 4))""#]],
     );
 }

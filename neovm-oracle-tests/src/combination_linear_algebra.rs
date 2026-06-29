@@ -134,7 +134,12 @@ fn oracle_prop_linear_algebra_basic_ops() {
     (fmakunbound 'neovm--la-mul)
     (fmakunbound 'neovm--la-scale)
     (fmakunbound 'neovm--la-eye)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((6 8) (10 12)) ((-4 -4) (-4 -4)) t ((19 22) (43 50)) t t ((1 4) (2 5) (3 6)) t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +203,12 @@ fn oracle_prop_linear_algebra_gaussian_elimination() {
     (fmakunbound 'neovm--la-ge-ref)
     (fmakunbound 'neovm--la-ge-set)
     (fmakunbound 'neovm--la-ge)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 2 3) (0 4 5) (0 0 6)) ((2 1 -1) (0 1 1) (0 0 -2)) ((1 2 3) (0 -3 -6) (0 0 0)) ((1 0 0) (0 1 0) (0 0 1)) ((1 1 1 6) (0 2 5 -4) (0 0 -21 42)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +291,12 @@ fn oracle_prop_linear_algebra_lu_decomposition() {
     (fmakunbound 'neovm--la-lu-set)
     (fmakunbound 'neovm--la-lu-make-zero)
     (fmakunbound 'neovm--la-lu)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t t 1 1 1 ((1 0 0) (-1 1 0) (0 -2 1)) ((2 -1 0) (0 3 -2) (0 0 8)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +384,12 @@ fn oracle_prop_linear_algebra_matrix_inverse() {
     (fmakunbound 'neovm--la-inv-set)
     (fmakunbound 'neovm--la-inv-augment)
     (fmakunbound 'neovm--la-inv)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (40 ((24 -28) (-2 4)) 125 ((3000 -2250 -625) (-500 375 100) (25 -20 -5)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -470,7 +490,10 @@ fn oracle_prop_linear_algebra_solve_system() {
     (fmakunbound 'neovm--la-solve-fwd)
     (fmakunbound 'neovm--la-solve-back)
     (fmakunbound 'neovm--la-solve)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((-4 10 6 2) (-12 -6 -6) (36 24 12))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -547,7 +570,7 @@ fn oracle_prop_linear_algebra_power_iteration() {
     (fmakunbound 'neovm--la-pi-matvec)
     (fmakunbound 'neovm--la-pi-max-abs)
     (fmakunbound 'neovm--la-power-iter)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -626,5 +649,8 @@ fn oracle_prop_linear_algebra_rank() {
     (fmakunbound 'neovm--la-rank-set)
     (fmakunbound 'neovm--la-rank-echelon)
     (fmakunbound 'neovm--la-rank)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 2 1 0 2 2 2)""#]],
+    );
 }

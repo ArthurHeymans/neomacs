@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_habit_parse_urgency_faces_graph_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-habit)
@@ -44,6 +44,9 @@ fn org_habit_parse_urgency_faces_graph_combo() {
                          (get-text-property i 'face graph)
                          (get-text-property i 'help-echo graph)))
                  (number-sequence 0 (1- (length graph)))))))))"#,
+        expect_test::expect![[
+            r#""OK ((739760 2 739763 5 (739756 739759) \".+\") 1180 ((org-habit-clear-face . org-habit-clear-future-face) (org-habit-ready-face . org-habit-ready-future-face) (org-habit-alert-face . org-habit-alert-future-face) (org-habit-overdue-face . org-habit-overdue-future-face) (org-habit-overdue-face . org-habit-overdue-future-face)) #(\" *   !    \" 0 1 (face org-habit-ready-future-face help-echo \"<2026-05-22 Fri>\") 1 2 (face org-habit-ready-face help-echo \"<2026-05-23 Sat> DONE\") 2 3 (face org-habit-ready-future-face help-echo \"<2026-05-24 Sun>\") 3 4 (face org-habit-ready-future-face help-echo \"<2026-05-25 Mon>\") 4 5 (face org-habit-ready-future-face help-echo \"<2026-05-26 Tue>\") 5 6 (face org-habit-alert-face help-echo \"<2026-05-27 Wed>\") 6 7 (face org-habit-overdue-future-face help-echo \"<2026-05-28 Thu>\") 7 8 (face org-habit-overdue-future-face help-echo \"<2026-05-29 Fri>\") 8 9 (face org-habit-overdue-future-face help-echo \"<2026-05-30 Sat>\")) ((32 org-habit-ready-future-face \"<2026-05-22 Fri>\") (42 org-habit-ready-face \"<2026-05-23 Sat> DONE\") (32 org-habit-ready-future-face \"<2026-05-24 Sun>\") (32 org-habit-ready-future-face \"<2026-05-25 Mon>\") (32 org-habit-ready-future-face \"<2026-05-26 Tue>\") (33 org-habit-alert-face \"<2026-05-27 Wed>\") (32 org-habit-overdue-future-face \"<2026-05-28 Thu>\") (32 org-habit-overdue-future-face \"<2026-05-29 Fri>\") (32 org-habit-overdue-future-face \"<2026-05-30 Sat>\") (32 nil nil)))""#
+        ]],
     );
 }
 
@@ -51,7 +54,7 @@ fn org_habit_parse_urgency_faces_graph_combo() {
 fn org_habit_repeater_types_shift_graph_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-habit)
@@ -89,6 +92,9 @@ fn org_habit_repeater_types_shift_graph_combo() {
                   out))
           (forward-line 1))
         (nreverse out)))))"#,
+        expect_test::expect![[
+            r#""OK ((\"Plus\" (739756 3 739759 6 (739757 739761) \"+\") 1460 #(\"   *!   \" 0 1 (face org-habit-overdue-face help-echo \"<2026-05-22 Fri>\") 1 2 (face org-habit-overdue-face help-echo \"<2026-05-23 Sat>\") 2 3 (face org-habit-overdue-face help-echo \"<2026-05-24 Sun>\") 3 4 (face org-habit-overdue-face help-echo \"<2026-05-25 Mon> DONE\") 4 5 (face org-habit-overdue-face help-echo \"<2026-05-26 Tue>\") 5 6 (face org-habit-overdue-future-face help-echo \"<2026-05-27 Wed>\") 6 7 (face org-habit-overdue-future-face help-echo \"<2026-05-28 Thu>\")) (org-habit-overdue-face org-habit-overdue-face org-habit-overdue-face org-habit-overdue-face org-habit-overdue-face org-habit-overdue-future-face org-habit-overdue-future-face nil)) (\"Double\" (739756 3 739759 6 (739757 739761) \"++\") 1460 #(\"   *!   \" 0 1 (face org-habit-clear-future-face help-echo \"<2026-05-22 Fri>\") 1 2 (face org-habit-ready-future-face help-echo \"<2026-05-23 Sat>\") 2 3 (face org-habit-ready-future-face help-echo \"<2026-05-24 Sun>\") 3 4 (face org-habit-ready-face help-echo \"<2026-05-25 Mon> DONE\") 4 5 (face org-habit-overdue-face help-echo \"<2026-05-26 Tue>\") 5 6 (face org-habit-overdue-future-face help-echo \"<2026-05-27 Wed>\") 6 7 (face org-habit-overdue-future-face help-echo \"<2026-05-28 Thu>\")) (org-habit-clear-future-face org-habit-ready-future-face org-habit-ready-future-face org-habit-ready-face org-habit-overdue-face org-habit-overdue-future-face org-habit-overdue-future-face nil)))""#
+        ]],
     );
 }
 
@@ -96,7 +102,7 @@ fn org_habit_repeater_types_shift_graph_combo() {
 fn org_habit_invalid_repeater_errors_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-habit)
@@ -120,6 +126,9 @@ fn org_habit_invalid_repeater_errors_combo() {
          out)
         (forward-line 1))
       (nreverse out))))"#,
+        expect_test::expect![[
+            r#""OK ((\"Missing schedule\" (error \"Habit Missing schedule has no scheduled date\")) (\"Missing repeat\" (error \"Habit ‘Missing repeat’ has no scheduled repeat period or has an incorrect one\")) (\"Bad deadline\" (error \"Habit Bad deadline deadline repeat period is less than or equal to scheduled (.+2d/2d)\")))""#
+        ]],
     );
 }
 
@@ -127,7 +136,7 @@ fn org_habit_invalid_repeater_errors_combo() {
 fn org_habit_agenda_graph_toggle_redo_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-agenda)
@@ -229,6 +238,9 @@ fn org_habit_agenda_graph_toggle_redo_combo() {
           (kill-buffer org-agenda-buffer-name))
         (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
         (delete-file file)))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Habits:       Scheduled:  TODO Normal scheduled                         :plain:\" nil \"led                         :plain:\" ((108 org-scheduled-previously) (101 org-scheduled-previously) (100 org-scheduled-previously) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (58 (org-tag org-scheduled-previously)) (112 (org-tag org-scheduled-previously)) (108 (org-tag org-scheduled-previously)) (97 (org-tag org-scheduled-previously)) (105 (org-tag org-scheduled-previously)) (110 (org-tag org-scheduled-previously)) (58 (org-tag org-scheduled-previously))) \"past-scheduled\" 1099)) ((\"Habits:       Scheduled:  TODO Normal scheduled                         :plain:\" nil \"led                         :plain:\" ((108 org-scheduled-previously) (101 org-scheduled-previously) (100 org-scheduled-previously) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (58 (org-tag org-scheduled-previously)) (112 (org-tag org-scheduled-previously)) (108 (org-tag org-scheduled-previously)) (97 (org-tag org-scheduled-previously)) (105 (org-tag org-scheduled-previously)) (110 (org-tag org-scheduled-previously)) (58 (org-tag org-scheduled-previously))) \"past-scheduled\" 1099)) nil t ((\"Habits:       Scheduled:  TODO Normal scheduled                         :plain:\" nil \"led                         :plain:\" ((108 org-scheduled-previously) (101 org-scheduled-previously) (100 org-scheduled-previously) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (32 nil) (58 (org-tag org-scheduled-previously)) (112 (org-tag org-scheduled-previously)) (108 (org-tag org-scheduled-previously)) (97 (org-tag org-scheduled-previously)) (105 (org-tag org-scheduled-previously)) (110 (org-tag org-scheduled-previously)) (58 (org-tag org-scheduled-previously))) \"past-scheduled\" 1099)))""#
+        ]],
     );
 }
 
@@ -236,7 +248,7 @@ fn org_habit_agenda_graph_toggle_redo_combo() {
 fn org_habit_repeat_done_mutation_graph_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(progn
   (require 'org)
   (require 'org-habit)
@@ -323,7 +335,7 @@ fn org_habit_repeat_done_mutation_graph_combo() {
 fn org_habit_agenda_past_delay_all_today_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-agenda)
@@ -454,6 +466,9 @@ fn org_habit_agenda_past_delay_all_today_combo() {
           (kill-buffer org-agenda-buffer-name))
         (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
         (delete-file file)))))"##,
+        expect_test::expect![[
+            r#""OK ((default nil nil t nil) (habit-past-window 10 nil t nil) (all-today nil t t nil) (future-with-habits nil nil nil ((\"HabitPast: 0:05 TODO Future stretch                 !                  :future:\" (739765 1 739767 3 nil \".+\") \"    !                  :future:\" ((32 org-habit-overdue-face habit-date) (32 org-habit-overdue-face habit-date) (32 org-habit-overdue-face habit-date) (32 org-habit-overdue-face habit-date) (33 org-habit-overdue-face habit-date) (32 org-habit-overdue-future-face habit-date) (32 org-habit-overdue-future-face habit-date) (32 nil nil) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (32 nil agenda-jump) (58 (org-tag org-scheduled) agenda-jump) (102 (org-tag org-scheduled) agenda-jump) (117 (org-tag org-scheduled) agenda-jump) (116 (org-tag org-scheduled) agenda-jump) (117 (org-tag org-scheduled) agenda-jump) (114 (org-tag org-scheduled) agenda-jump) (101 (org-tag org-scheduled) agenda-jump) (58 (org-tag org-scheduled) agenda-jump)) \"past-scheduled\" 739765 1000 5.0))))""#
+        ]],
     );
 }
 
@@ -461,7 +476,7 @@ fn org_habit_agenda_past_delay_all_today_combo() {
 fn org_habit_graph_properties_text_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-habit)
@@ -534,6 +549,7 @@ fn org_habit_graph_properties_text_deep_state_combo() {
       (when (get-buffer org-agenda-buffer-name)
         (kill-buffer org-agenda-buffer-name))
       (delete-file file))))"##,
+        expect_test::expect![[r#""ERR (void-variable root)""#]],
     );
 }
 
@@ -541,7 +557,7 @@ fn org_habit_graph_properties_text_deep_state_combo() {
 fn org_habit_done_toggle_graph_urgency_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-habit)
@@ -591,5 +607,6 @@ fn org_habit_done_toggle_graph_urgency_deep_state_combo() {
       (when (get-buffer org-agenda-buffer-name)
         (kill-buffer org-agenda-buffer-name))
       (delete-file file))))"##,
+        expect_test::expect![[r#""ERR (void-variable root)""#]],
     );
 }

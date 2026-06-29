@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_deep_undo_edit_overlay_tp_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-chain-snap ()
     ((step :initarg :step :accessor ucs-step :initform "")
@@ -84,6 +84,7 @@ fn combo_eieio_deep_undo_edit_overlay_tp_chain() {
               (overlay-get ov 'face)
               my-uc-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -91,7 +92,7 @@ fn combo_eieio_deep_undo_edit_overlay_tp_chain() {
 fn combo_eieio_deep_undo_narrow_interleave() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-narrow-snap ()
     ((step :initarg :step :accessor uns-step :initform "")
@@ -167,6 +168,7 @@ fn combo_eieio_deep_undo_narrow_interleave() {
               (overlay-start ov) (overlay-end ov)
               my-un-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -174,7 +176,7 @@ fn combo_eieio_deep_undo_narrow_interleave() {
 fn combo_eieio_deep_undo_multi_ov_evaporate_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-evap-snap ()
     ((step :initarg :step :accessor ues-step :initform "")
@@ -268,6 +270,7 @@ fn combo_eieio_deep_undo_multi_ov_evaporate_chain() {
               (overlay-live-p ov1) (overlay-live-p ov2) (overlay-live-p ov3)
               my-ue-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
     );
 }
 
@@ -275,7 +278,7 @@ fn combo_eieio_deep_undo_multi_ov_evaporate_chain() {
 fn combo_eieio_deep_undo_buflocal_tp_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-buflocal-snap ()
     ((step :initarg :step :accessor ubs-step :initform "")
@@ -348,6 +351,7 @@ fn combo_eieio_deep_undo_buflocal_tp_restore() {
               (overlay-start ov) (overlay-end ov)
               tab-width my-ubl-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -355,7 +359,7 @@ fn combo_eieio_deep_undo_buflocal_tp_restore() {
 fn combo_eieio_deep_undo_marker_advance_stay_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-mtype-snap ()
     ((step :initarg :step :accessor ums-step :initform "")
@@ -439,5 +443,6 @@ fn combo_eieio_deep_undo_marker_advance_stay_chain() {
               (overlay-start ov) (overlay-end ov)
               my-umt-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

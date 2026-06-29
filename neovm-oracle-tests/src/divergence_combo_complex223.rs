@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx223_yasnippet_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'yasnippet)
@@ -17,13 +17,14 @@ fn div_cx223_yasnippet_availability() {
           (boundp 'yas-snippet-dirs))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx223_tempo_template_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -33,13 +34,14 @@ fn div_cx223_tempo_template_availability() {
             (boundp 'tempo-tags)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx223_skeleton_template_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -49,13 +51,14 @@ fn div_cx223_skeleton_template_availability() {
             (boundp 'skeleton-further-elements)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx223_auto_insert_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -65,13 +68,14 @@ fn div_cx223_auto_insert_availability() {
             (boundp 'auto-insert-query)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx223_tempo_define_and_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -83,13 +87,14 @@ fn div_cx223_tempo_define_and_expand() {
             (consp tempo-tags)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx223_skeleton_define_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -102,39 +107,42 @@ fn div_cx223_skeleton_define_basic() {
             (fboundp 'define-skeleton)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx223_auto_capitalize_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'auto-capitalize)
           (fboundp 'auto-capitalize-mode))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx223_auto_compile_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'auto-compile)
           (fboundp 'auto-compile-on-save-mode))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx223_abbrev_expansion_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((table (make-abbrev-table)))
@@ -144,13 +152,14 @@ fn div_cx223_abbrev_expansion_hooks() {
             (abbrev-symbol "neo" table)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t \"neocx223-expanded\" neo)""#]],
     );
 }
 
 #[test]
 fn div_cx223_template_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -180,5 +189,6 @@ fn div_cx223_template_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

@@ -11,16 +11,20 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_catch_returns_body_when_no_throw() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(catch 'tag 42)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(catch 'tag 42)",
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_catch_catches_throw() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(catch 'my-tag
          (throw 'my-tag 'thrown-value))"#,
+        expect_test::expect![[r#""OK thrown-value""#]],
     );
     assert_ok_eq("thrown-value", &oracle, &neovm);
 }
@@ -28,12 +32,13 @@ fn oracle_catch_catches_throw() {
 #[test]
 fn oracle_catch_nested_inner_caught_first() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(catch 'outer
          (list 'before
                (catch 'inner
                  (throw 'inner 'inner-caught))
                'after))"#,
+        expect_test::expect![[r#""OK (before inner-caught after)""#]],
     );
     assert_ok_eq("(before inner-caught after)", &oracle, &neovm);
 }
@@ -41,11 +46,12 @@ fn oracle_catch_nested_inner_caught_first() {
 #[test]
 fn oracle_catch_throw_passes_through_to_outer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(catch 'outer
          (catch 'inner
            (throw 'outer 'from-inner))
          'never-reached)"#,
+        expect_test::expect![[r#""OK from-inner""#]],
     );
     assert_ok_eq("from-inner", &oracle, &neovm);
 }
@@ -53,9 +59,10 @@ fn oracle_catch_throw_passes_through_to_outer() {
 #[test]
 fn oracle_catch_throw_value_is_evaluated() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(catch 'tag
          (throw 'tag (+ 1 2 3)))"#,
+        expect_test::expect![[r#""OK 6""#]],
     );
     assert_ok_eq("6", &oracle, &neovm);
 }
@@ -63,7 +70,7 @@ fn oracle_catch_throw_value_is_evaluated() {
 #[test]
 fn oracle_catch_unwind_protect_runs_before_throw() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (defvar neovm--test-ct-uwp-log '())
   (catch 'exit
@@ -73,6 +80,7 @@ fn oracle_catch_unwind_protect_runs_before_throw() {
           (throw 'exit 'result))
       (setq neovm--test-ct-uwp-log (cons 'cleanup neovm--test-ct-uwp-log))))
   neovm--test-ct-uwp-log)"#,
+        expect_test::expect![[r#""OK (cleanup body)""#]],
     );
     assert_ok_eq("(cleanup body)", &oracle, &neovm);
 }
@@ -81,10 +89,11 @@ fn oracle_catch_unwind_protect_runs_before_throw() {
 fn oracle_catch_tag_must_match_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // GNU: catch tags are compared with eq.
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(list
    (catch 'x (throw 'x 1))
    (catch 'y 42))"#,
+        expect_test::expect![[r#""OK (1 42)""#]],
     );
     assert_ok_eq("(1 42)", &oracle, &neovm);
 }
@@ -92,10 +101,11 @@ fn oracle_catch_tag_must_match_symbol() {
 #[test]
 fn oracle_throw_without_catch_is_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(condition-case err
          (throw 'no-such-tag 42)
        (error 'uncaught-throw-signaled))"#,
+        expect_test::expect![[r#""OK uncaught-throw-signaled""#]],
     );
     assert_ok_eq("uncaught-throw-signaled", &oracle, &neovm);
 }

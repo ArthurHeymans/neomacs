@@ -13,7 +13,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn strong_export_full_document() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -52,6 +52,7 @@ Body with *bold* and /italic/.
                              (org-export-get-relative-level h info)
                              (org-export-numbered-headline-p h info)))
                  (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -62,7 +63,7 @@ Body with *bold* and /italic/.
 #[test]
 fn strong_export_backend_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let (org-export-registered-backends)
@@ -80,6 +81,9 @@ fn strong_export_backend_inheritance() {
      (let ((all (org-export-get-all-transcoders 'child)))
        (list (cdr (assq 'headline all))
              (cdr (assq 'section all)))))))"##,
+        expect_test::expect![[
+            r#""OK ((parent) t nil ((lambda (h c i) (format \"C: %s\" (org-element-property :raw-value h))) (lambda (s c i) c)))""#
+        ]],
     );
 }
 
@@ -90,7 +94,7 @@ fn strong_export_backend_inheritance() {
 #[test]
 fn strong_export_filter_chain_behavior() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (list
@@ -110,6 +114,7 @@ fn strong_export_filter_chain_behavior() {
     (list (lambda (_ &rest _) "")
           (lambda (v &rest _) (concat "2" v)))
     "0" nil)))"##,
+        expect_test::expect![[r#""OK (\"210\" \"20\" \"0\" \"\")""#]],
     );
 }
 
@@ -120,7 +125,7 @@ fn strong_export_filter_chain_behavior() {
 #[test]
 fn strong_export_footnote_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -139,6 +144,7 @@ fn strong_export_footnote_edge_cases() {
                  (org-element-map tree 'footnote-reference #'identity))
          (mapcar (lambda (r) (org-export-footnote-first-reference-p r info))
                  (org-element-map tree 'footnote-reference #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -149,7 +155,7 @@ fn strong_export_footnote_edge_cases() {
 #[test]
 fn strong_export_caption_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -167,6 +173,9 @@ fn strong_export_caption_handling() {
               (table (car (org-element-map tree 'table #'identity))))
          (list (org-export-get-caption table)
                (org-export-get-caption table t)))))))"##,
+        expect_test::expect![[
+            r#""OK ((#(\"Long caption\" 0 12 (:parent (#(\"Long caption\" 0 12 (:parent #4)))))) ((#(\"Long caption\" 0 12 (:parent (#(\"Long caption\" 0 12 (:parent #5)))))) (#(\"short\" 0 5 (:parent (#(\"short\" 0 5 (:parent #5))))))))""#
+        ]],
     );
 }
 
@@ -177,7 +186,7 @@ fn strong_export_caption_handling() {
 #[test]
 fn strong_export_read_attribute_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -194,6 +203,7 @@ fn strong_export_read_attribute_edge() {
       :attr_html
       (with-temp-buffer (org-mode) (insert "#+ATTR_HTML: :a nil\nP")
         (goto-char (point-min)) (org-element-at-point))))))"##,
+        expect_test::expect![[r#""OK ((:a \"1\" :b \"2\") nil (:a nil))""#]],
     );
 }
 
@@ -204,7 +214,7 @@ fn strong_export_read_attribute_edge() {
 #[test]
 fn strong_export_optional_title() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -218,6 +228,7 @@ fn strong_export_optional_title() {
                     (org-export--collect-tree-properties tree (org-export-get-environment))))
              (hl (car (org-element-map tree 'headline #'identity))))
         (org-export-get-optional-title hl info)))))"##,
+        expect_test::expect![[r#""ERR (void-function org-export-get-optional-title)""#]],
     );
 }
 
@@ -228,7 +239,7 @@ fn strong_export_optional_title() {
 #[test]
 fn strong_export_node_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -239,6 +250,7 @@ fn strong_export_node_property() {
              (hl (car (org-element-map tree 'headline #'identity))))
         (list (org-export-get-node-property :CUSTOM_ID hl)
               (org-export-get-node-property :EFFORT hl))))))"##,
+        expect_test::expect![[r#""OK (\"myid\" \"2h\")""#]],
     );
 }
 
@@ -249,7 +261,7 @@ fn strong_export_node_property() {
 #[test]
 fn strong_cjk_content_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -262,6 +274,7 @@ fn strong_cjk_content_parsing() {
                  (org-element-map tree 'headline #'identity))
          (length (org-element-map tree 'paragraph #'identity))
          (substring-no-properties (org-element-interpret-data tree))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -272,7 +285,7 @@ fn strong_cjk_content_parsing() {
 #[test]
 fn special_chars_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -284,6 +297,7 @@ fn special_chars_parsing() {
          (length (org-element-map tree 'entity #'identity))
          (length (org-element-map tree 'latex-fragment #'identity))
          (length (org-element-map tree 'latex-environment #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -294,7 +308,7 @@ fn special_chars_parsing() {
 #[test]
 fn complex_list_nesting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -309,6 +323,7 @@ fn complex_list_nesting() {
                  (org-element-map tree 'plain-list #'identity))
          (mapcar (lambda (i) (org-element-property :checkbox i))
                  (org-element-map tree 'item #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -319,7 +334,7 @@ fn complex_list_nesting() {
 #[test]
 fn complex_table_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -332,6 +347,7 @@ fn complex_table_structure() {
          (length (org-element-map tree 'table-cell #'identity))
          (length (org-element-map tree 'bold #'identity))
          (length (org-element-map tree 'italic #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -342,7 +358,7 @@ fn complex_table_structure() {
 #[test]
 fn complex_timestamp_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -355,6 +371,9 @@ fn complex_timestamp_parsing() {
          (length ts)
          (mapcar (lambda (t) (org-element-property :type t)) ts)
          (mapcar (lambda (t) (org-element-property :range-type t)) ts))))))"##,
+        expect_test::expect![[
+            r#""OK (6 (active inactive active active-range active-range diary) (nil nil nil daterange timerange nil))""#
+        ]],
     );
 }
 
@@ -365,7 +384,7 @@ fn complex_timestamp_parsing() {
 #[test]
 fn citation_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'oc)
@@ -379,6 +398,7 @@ fn citation_parsing() {
          (length (org-element-map tree 'citation-reference #'identity))
          (mapcar (lambda (c) (org-element-property :style c))
                  (org-element-map tree 'citation #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -389,7 +409,7 @@ fn citation_parsing() {
 #[test]
 fn clock_in_logbook_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -402,6 +422,7 @@ fn clock_in_logbook_parsing() {
          (length clocks)
          (mapcar (lambda (c) (org-element-property :status c)) clocks)
          (mapcar (lambda (c) (org-element-property :duration c)) clocks))))))"##,
+        expect_test::expect![[r#""OK (2 (closed closed) (\"1:30\" \"2:00\"))""#]],
     );
 }
 
@@ -412,7 +433,7 @@ fn clock_in_logbook_parsing() {
 #[test]
 fn drawer_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -425,6 +446,7 @@ fn drawer_parsing() {
          (length (org-element-map tree 'drawer #'identity))
          (mapcar (lambda (d) (org-element-property :drawer-name d))
                  (org-element-map tree 'drawer #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -435,7 +457,7 @@ fn drawer_parsing() {
 #[test]
 fn dynamic_block_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -445,6 +467,7 @@ fn dynamic_block_parsing() {
       (let* ((tree (org-element-parse-buffer)))
         (mapcar (lambda (b) (org-element-property :block-name b))
                 (org-element-map tree 'dynamic-block #'identity))))))"##,
+        expect_test::expect![[r#""OK (\"clocktable\" \"myblock\")""#]],
     );
 }
 
@@ -455,7 +478,7 @@ fn dynamic_block_parsing() {
 #[test]
 fn inlinetask_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-inlinetask)
@@ -470,6 +493,7 @@ fn inlinetask_parsing() {
          (mapcar (lambda (i) (list (org-element-property :todo-keyword i)
                              (org-element-property :tags i)))
                  (org-element-map tree 'inlinetask #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -480,7 +504,7 @@ fn inlinetask_parsing() {
 #[test]
 fn export_snippet_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -492,6 +516,9 @@ fn export_snippet_parsing() {
                   (list (org-element-property :back-end s)
                         (substring-no-properties (org-element-property :value s))))
                 (org-element-map tree 'export-snippet #'identity))))))"##,
+        expect_test::expect![[
+            r#""OK ((\"html\" \"<b>bold</b>\") (\"latex\" \"\\\\textbf{bold}\"))""#
+        ]],
     );
 }
 
@@ -502,7 +529,7 @@ fn export_snippet_parsing() {
 #[test]
 fn statistics_cookie_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -512,6 +539,7 @@ fn statistics_cookie_parsing() {
       (let* ((tree (org-element-parse-buffer)))
         (mapcar (lambda (c) (substring-no-properties (org-element-property :value c)))
                 (org-element-map tree 'statistics-cookie #'identity))))))"##,
+        expect_test::expect![[r#""OK (\"[1/3]\" \"[50%]\")""#]],
     );
 }
 
@@ -522,7 +550,7 @@ fn statistics_cookie_parsing() {
 #[test]
 fn radio_target_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -531,6 +559,7 @@ fn radio_target_parsing() {
       (goto-char (point-min))
       (let* ((tree (org-element-parse-buffer)))
         (length (org-element-map tree 'radio-target #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -541,7 +570,7 @@ fn radio_target_parsing() {
 #[test]
 fn diary_sexp_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -550,6 +579,7 @@ fn diary_sexp_parsing() {
       (goto-char (point-min))
       (let* ((tree (org-element-parse-buffer)))
         (length (org-element-map tree 'diary-sexp #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -560,7 +590,7 @@ fn diary_sexp_parsing() {
 #[test]
 fn horizontal_rule_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -569,6 +599,7 @@ fn horizontal_rule_parsing() {
       (goto-char (point-min))
       (let* ((tree (org-element-parse-buffer)))
         (length (org-element-map tree 'horizontal-rule #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -579,7 +610,7 @@ fn horizontal_rule_parsing() {
 #[test]
 fn line_break_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -588,6 +619,7 @@ fn line_break_parsing() {
       (goto-char (point-min))
       (let* ((tree (org-element-parse-buffer)))
         (length (org-element-map tree 'line-break #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -598,7 +630,7 @@ fn line_break_parsing() {
 #[test]
 fn macro_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -608,6 +640,7 @@ fn macro_parsing() {
       (let* ((tree (org-element-parse-buffer)))
         (mapcar (lambda (m) (substring-no-properties (org-element-property :value m)))
                 (org-element-map tree 'macro #'identity))))))"##,
+        expect_test::expect![[r#""OK (\"{{{greet}}}\" \"{{{greet(Beautiful)}}}\")""#]],
     );
 }
 
@@ -618,7 +651,7 @@ fn macro_parsing() {
 #[test]
 fn entity_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -628,6 +661,9 @@ fn entity_parsing() {
       (let* ((tree (org-element-parse-buffer)))
         (mapcar (lambda (e) (org-element-property :name e))
                 (org-element-map tree 'entity #'identity))))))"##,
+        expect_test::expect![[
+            r#""OK (\"alpha\" \"beta\" \"gamma\" \"delta\" \"epsilon\" \"omega\")""#
+        ]],
     );
 }
 
@@ -638,7 +674,7 @@ fn entity_parsing() {
 #[test]
 fn latex_fragment_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -648,6 +684,9 @@ fn latex_fragment_parsing() {
       (let* ((tree (org-element-parse-buffer)))
         (mapcar (lambda (f) (substring-no-properties (org-element-property :value f)))
                 (org-element-map tree 'latex-fragment #'identity))))))"##,
+        expect_test::expect![[
+            r#""OK (\"$x^2$\" \"$E=mc^2$\" \"$$\\\\int_0^1 f(x)dx$$\" \"\\\\(y\\\\)\" \"\\\\[z\\\\]\")""#
+        ]],
     );
 }
 
@@ -658,7 +697,7 @@ fn latex_fragment_parsing() {
 #[test]
 fn latex_environment_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -668,6 +707,9 @@ fn latex_environment_parsing() {
       (let* ((tree (org-element-parse-buffer)))
         (mapcar (lambda (e) (substring-no-properties (org-element-property :value e)))
                 (org-element-map tree 'latex-environment #'identity))))))"##,
+        expect_test::expect![[
+            r#""OK (\"\\\\begin{equation}\nx^2 + y^2 = z^2\n\\\\end{equation}\n\" \"\\\\begin{align}\na &= 1\nb &= 2\n\\\\end{align}\")""#
+        ]],
     );
 }
 
@@ -678,7 +720,7 @@ fn latex_environment_parsing() {
 #[test]
 fn target_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -687,6 +729,7 @@ fn target_parsing() {
       (goto-char (point-min))
       (let* ((tree (org-element-parse-buffer)))
         (length (org-element-map tree 'target #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -697,7 +740,7 @@ fn target_parsing() {
 #[test]
 fn all_inline_markup_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -712,6 +755,7 @@ fn all_inline_markup_parsing() {
          (length (org-element-map tree 'verbatim #'identity))
          (length (org-element-map tree 'code #'identity))
          (length (org-element-map tree 'strike-through #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -722,7 +766,7 @@ fn all_inline_markup_parsing() {
 #[test]
 fn links_various_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -732,6 +776,7 @@ fn links_various_positions() {
       (let* ((tree (org-element-parse-buffer)))
         (mapcar (lambda (l) (org-element-property :type l))
                 (org-element-map tree 'link #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -742,7 +787,7 @@ fn links_various_positions() {
 #[test]
 fn footnote_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -754,6 +799,7 @@ fn footnote_parsing() {
          (mapcar (lambda (r) (org-element-property :type r))
                  (org-element-map tree 'footnote-reference #'identity))
          (length (org-element-map tree 'footnote-definition #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -764,7 +810,7 @@ fn footnote_parsing() {
 #[test]
 fn property_inheritance_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let* ((gc (org-element-create 'gc '(:shared 3 :own-gc "gc")))
@@ -777,6 +823,7 @@ fn property_inheritance_chain() {
      (org-element-property-inherited :own-p gc 'with-self 'accumulate)
      (org-element-property-inherited :own-c gc 'with-self 'accumulate)
      (org-element-property-inherited :own-gc gc 'with-self 'accumulate))))"##,
+        expect_test::expect![[r#""OK (2 3 (1 2 3) (\"p\") (\"c\") (\"gc\"))""#]],
     );
 }
 
@@ -787,7 +834,7 @@ fn property_inheritance_chain() {
 #[test]
 fn element_operations_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let* ((doc (org-element-create 'org-data nil))
@@ -801,6 +848,7 @@ fn element_operations_chain() {
       (let ((after-extract (substring-no-properties (org-element-interpret-data doc))))
         (list after-adopt after-extract
               (org-element-property :parent h2))))))"##,
+        expect_test::expect![[r#""OK (\"* \nP1.\n* \nP2.\n\" \"* \nP1.\n\" nil)""#]],
     );
 }
 
@@ -811,7 +859,7 @@ fn element_operations_chain() {
 #[test]
 fn deferred_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (list
@@ -833,6 +881,9 @@ fn deferred_chain() {
    (let ((el (org-element-create 'd `(:foo ,(org-element-deferred-create-list
                               (list 1 2 (org-element-deferred-create nil (lambda (_) 3))))))))
      (org-element-property :foo el))))"##,
+        expect_test::expect![[
+            r#""OK ((bar nil) bar (bar bar) (bar [org-element-deferred (closure (t) (_) 'bar) nil nil] bar bar) (1 1) (1 2 3))""#
+        ]],
     );
 }
 
@@ -843,7 +894,7 @@ fn deferred_chain() {
 #[test]
 fn parse_interpret_roundtrips() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -855,13 +906,16 @@ fn parse_interpret_roundtrips() {
      (funcall f "=text=") (funcall f "_text_") (funcall f "+target+")
      (funcall f "a_b") (funcall f "a_{b}") (funcall f "a^b") (funcall f "a^{b}")
      (funcall f "\\alpha text") (funcall f "\\alpha{}text"))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"*text*\n\" 1 5 (:parent (bold (:standard-properties [1 nil 2 6 7 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 7 7 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 7 7 0 nil first-section nil nil nil 1 7 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 7 7 0 nil org-data nil nil nil 3 7 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #3)]) #(\"text\" 0 4 (:parent #3))))) #(\"/text/\n\" 1 5 (:parent (italic (:standard-properties [1 nil 2 6 7 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 7 7 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 7 7 0 nil first-section nil nil nil 1 7 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 7 7 0 nil org-data nil nil nil 3 7 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #3)]) #(\"text\" 0 4 (:parent #3))))) \"~text~\n\" \"=text=\n\" #(\"_text_\n\" 1 5 (:parent (underline (:standard-properties [1 nil 2 6 7 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 7 7 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 7 7 0 nil first-section nil nil nil 1 7 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 7 7 0 nil org-data nil nil nil 3 7 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #3)]) #(\"text\" 0 4 (:parent #3))))) #(\"+target+\n\" 1 7 (:parent (strike-through (:standard-properties [1 nil 2 8 9 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 9 9 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 9 9 0 nil first-section nil nil nil 1 9 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 9 9 0 nil org-data nil nil nil 3 9 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #3)]) #(\"target\" 0 6 (:parent #3))))) #(\"a_b\n\" 0 1 (:parent (paragraph (:standard-properties [1 1 1 4 4 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 4 4 0 nil first-section nil nil nil 1 4 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 4 4 0 nil org-data nil nil nil 3 4 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)]) #3)]) #(\"a\" 0 1 (:parent #3)) (subscript (:standard-properties [2 nil 3 4 4 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #3] :use-brackets-p nil) #(\"b\" 0 1 (:parent #4))))) 2 3 (:parent (subscript (:standard-properties [2 nil 3 4 4 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 4 4 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 4 4 0 nil first-section nil nil nil 1 4 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 4 4 0 nil org-data nil nil nil 3 4 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #(\"a\" 0 1 (:parent #6)) #3)] :use-brackets-p nil) #(\"b\" 0 1 (:parent #3))))) #(\"a_{b}\n\" 0 1 (:parent (paragraph (:standard-properties [1 1 1 6 6 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 6 6 0 nil first-section nil nil nil 1 6 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 6 6 0 nil org-data nil nil nil 3 6 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)]) #3)]) #(\"a\" 0 1 (:parent #3)) (subscript (:standard-properties [2 nil 4 5 6 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #3] :use-brackets-p t) #(\"b\" 0 1 (:parent #4))))) 3 4 (:parent (subscript (:standard-properties [2 nil 4 5 6 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 6 6 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 6 6 0 nil first-section nil nil nil 1 6 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 6 6 0 nil org-data nil nil nil 3 6 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #(\"a\" 0 1 (:parent #6)) #3)] :use-brackets-p t) #(\"b\" 0 1 (:parent #3))))) #(\"a^b\n\" 0 1 (:parent (paragraph (:standard-properties [1 1 1 4 4 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 4 4 0 nil first-section nil nil nil 1 4 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 4 4 0 nil org-data nil nil nil 3 4 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)]) #3)]) #(\"a\" 0 1 (:parent #3)) (superscript (:standard-properties [2 nil 3 4 4 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #3] :use-brackets-p nil) #(\"b\" 0 1 (:parent #4))))) 2 3 (:parent (superscript (:standard-properties [2 nil 3 4 4 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 4 4 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 4 4 0 nil first-section nil nil nil 1 4 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 4 4 0 nil org-data nil nil nil 3 4 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #(\"a\" 0 1 (:parent #6)) #3)] :use-brackets-p nil) #(\"b\" 0 1 (:parent #3))))) #(\"a^{b}\n\" 0 1 (:parent (paragraph (:standard-properties [1 1 1 6 6 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 6 6 0 nil first-section nil nil nil 1 6 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 6 6 0 nil org-data nil nil nil 3 6 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)]) #3)]) #(\"a\" 0 1 (:parent #3)) (superscript (:standard-properties [2 nil 4 5 6 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #3] :use-brackets-p t) #(\"b\" 0 1 (:parent #4))))) 3 4 (:parent (superscript (:standard-properties [2 nil 4 5 6 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 6 6 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 6 6 0 nil first-section nil nil nil 1 6 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 6 6 0 nil org-data nil nil nil 3 6 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #(\"a\" 0 1 (:parent #6)) #3)] :use-brackets-p t) #(\"b\" 0 1 (:parent #3))))) #(\"\\\\alpha text\n\" 7 11 (:parent (paragraph (:standard-properties [1 1 1 12 12 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 12 12 0 nil first-section nil nil nil 1 12 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 12 12 0 nil org-data nil nil nil 3 12 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)]) #3)]) (entity (:standard-properties [1 nil nil nil 8 1 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #3] :name \"alpha\" :latex \"\\\\alpha\" :latex-math-p t :html \"&alpha;\" :ascii \"alpha\" :latin1 \"alpha\" :utf-8 \"α\" :use-brackets-p nil)) #(\"text\" 0 4 (:parent #3))))) #(\"\\\\alpha{}text\n\" 8 12 (:parent (paragraph (:standard-properties [1 1 1 13 13 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 13 13 0 nil first-section nil nil nil 1 13 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 13 13 0 nil org-data nil nil nil 3 13 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)]) #3)]) (entity (:standard-properties [1 nil nil nil 9 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #3] :name \"alpha\" :latex \"\\\\alpha\" :latex-math-p t :html \"&alpha;\" :ascii \"alpha\" :latin1 \"alpha\" :utf-8 \"α\" :use-brackets-p t)) #(\"text\" 0 4 (:parent #3))))))""#
+        ]],
     );
 }
 
 #[test]
 fn link_roundtrips() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -876,13 +930,16 @@ fn link_roundtrips() {
      (funcall f "[[#id]]")
      (funcall f "https://orgmode.org")
      (funcall f "<https://orgmode.org>"))))"##,
+        expect_test::expect![[
+            r#""OK (\"[[https://orgmode.org]]\n\" #(\"[[https://orgmode.org][Org mode]]\n\" 23 31 (:parent (link (:standard-properties [1 nil 24 32 34 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 34 34 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 34 34 0 nil first-section nil nil nil 1 34 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 34 34 0 nil org-data nil nil nil 3 34 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #3)] :type \"https\" :type-explicit-p t :path \"//orgmode.org\" :format bracket :raw-link \"https://orgmode.org\" :application nil :search-option nil) #(\"Org mode\" 0 8 (:parent #3))))) \"[[file:todo.org::*task]]\n\" \"[[id:aaaa]]\n\" \"[[#id]]\n\" \"https://orgmode.org\n\" \"<https://orgmode.org>\n\")""#
+        ]],
     );
 }
 
 #[test]
 fn footnote_roundtrips() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -892,13 +949,16 @@ fn footnote_roundtrips() {
     (list
      (funcall f "Text[fn:1]") (funcall f "Text[fn:label]")
      (funcall f "Text[fn:label:def]") (funcall f "Text[fn::def]"))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"Text[fn:1]\n\" 0 4 (:parent (paragraph (:standard-properties [1 1 1 11 11 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 11 11 0 nil first-section nil nil nil 1 11 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 11 11 0 nil org-data nil nil nil 3 11 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)]) #3)]) #(\"Text\" 0 4 (:parent #3)) (footnote-reference (:standard-properties [5 nil nil nil 11 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #3] :label \"1\" :type standard))))) #(\"Text[fn:label]\n\" 0 4 (:parent (paragraph (:standard-properties [1 1 1 15 15 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 15 15 0 nil first-section nil nil nil 1 15 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 15 15 0 nil org-data nil nil nil 3 15 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)]) #3)]) #(\"Text\" 0 4 (:parent #3)) (footnote-reference (:standard-properties [5 nil nil nil 15 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #3] :label \"label\" :type standard))))) #(\"Text[fn:label:def]\n\" 0 4 (:parent (paragraph (:standard-properties [1 1 1 19 19 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 19 19 0 nil first-section nil nil nil 1 19 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 19 19 0 nil org-data nil nil nil 3 19 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)]) #3)]) #(\"Text\" 0 4 (:parent #3)) (footnote-reference (:standard-properties [5 nil 15 18 19 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #3] :label \"label\" :type inline) #(\"def\" 0 3 (:parent #4))))) 14 17 (:parent (footnote-reference (:standard-properties [5 nil 15 18 19 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 19 19 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 19 19 0 nil first-section nil nil nil 1 19 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 19 19 0 nil org-data nil nil nil 3 19 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #(\"Text\" 0 4 (:parent #6)) #3)] :label \"label\" :type inline) #(\"def\" 0 3 (:parent #3))))) #(\"Text[fn::def]\n\" 0 4 (:parent (paragraph (:standard-properties [1 1 1 14 14 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 14 14 0 nil first-section nil nil nil 1 14 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 14 14 0 nil org-data nil nil nil 3 14 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)]) #3)]) #(\"Text\" 0 4 (:parent #3)) (footnote-reference (:standard-properties [5 nil 10 13 14 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #3] :label nil :type inline) #(\"def\" 0 3 (:parent #4))))) 9 12 (:parent (footnote-reference (:standard-properties [5 nil 10 13 14 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 14 14 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 14 14 0 nil first-section nil nil nil 1 14 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 14 14 0 nil org-data nil nil nil 3 14 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #(\"Text\" 0 4 (:parent #6)) #3)] :label nil :type inline) #(\"def\" 0 3 (:parent #3))))))""#
+        ]],
     );
 }
 
 #[test]
 fn block_roundtrips() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil) (org-src-preserve-indentation t)
@@ -911,13 +971,16 @@ fn block_roundtrips() {
      (funcall f "#+BEGIN_EXAMPLE\nTest\n#+END_EXAMPLE")
      (funcall f "#+BEGIN_EXPORT HTML\n<p>Text</p>\n#+END_EXPORT")
      (funcall f "#+BEGIN_VERSE\nTest\n#+END_VERSE"))))"##,
+        expect_test::expect![[
+            r##""OK (#(\"#+begin_center\nText\n#+end_center\n\" 15 20 (:parent (paragraph (:standard-properties [16 16 16 21 21 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (center-block (:standard-properties [1 1 16 21 33 0 nil top-comment nil nil nil 16 21 nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 33 33 0 nil first-section nil nil nil 1 33 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 33 33 0 nil org-data nil nil nil 3 33 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #3)]) #(\"Text\n\" 0 5 (:parent #3))))) #(\"#+begin_quote\nText\n#+end_quote\n\" 14 19 (:parent (paragraph (:standard-properties [15 15 15 20 20 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (quote-block (:standard-properties [1 1 15 20 31 0 nil top-comment nil nil nil 15 20 nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 31 31 0 nil first-section nil nil nil 1 31 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 31 31 0 nil org-data nil nil nil 3 31 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #3)]) #(\"Text\n\" 0 5 (:parent #3))))) \"#+begin_example\nTest\n#+end_example\n\" \"#+begin_export HTML\n<p>Text</p>\n#+end_export\n\" #(\"#+begin_verse\nTest\n#+end_verse\n\" 14 19 (:parent (verse-block (:standard-properties [1 1 15 20 31 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 31 31 0 nil first-section nil nil nil 1 31 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 31 31 0 nil org-data nil nil nil 3 31 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)]) #3)]) #(\"Test\n\" 0 5 (:parent #3))))))""##
+        ]],
     );
 }
 
 #[test]
 fn inline_roundtrips() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -932,13 +995,16 @@ fn inline_roundtrips() {
      (funcall f "[0/1]") (funcall f "[66%]")
      (funcall f "<<target>>") (funcall f "<<<some text>>>")
      (funcall f "{{{test}}}") (funcall f "{{{test(arg1,arg2)}}}"))))"##,
+        expect_test::expect![[
+            r#""OK (\"call_test()\n\" \"call_test(x=2)\n\" \"src_emacs-lisp{(+ 1 1)}\n\" \"@@backend:contents@@\n\" \"\\\\command{}\n\" \"$x$\n\" \"$$x+y$$\n\" \"\\\\(x+y\\\\)\n\" \"\\\\[x+y\\\\]\n\" \"[0/1]\n\" \"[66%]\n\" \"<<target>>\n\" #(\"<<<some text>>>\n\" 3 12 (:parent (radio-target (:standard-properties [1 nil 4 13 16 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 16 16 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 16 16 0 nil first-section nil nil nil 1 16 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 16 16 0 nil org-data nil nil nil 3 16 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #9)]) #6)]) #3)] :value \"some text\") #(\"some text\" 0 9 (:parent #3))))) \"{{{test}}}\n\" \"{{{test(arg1,arg2)}}}\n\")""#
+        ]],
     );
 }
 
 #[test]
 fn table_roundtrips() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -948,13 +1014,16 @@ fn table_roundtrips() {
     (list
      (funcall f "| a | b |\n| c | d |")
      (funcall f "| a | b |\n|---+---|\n| c | d |"))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"| a | b |\n| c | d |\n\" 2 3 (:parent (table-cell (:standard-properties [2 nil 3 4 6 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (table-row (:standard-properties [1 1 2 10 11 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil (table (:standard-properties [1 1 1 20 20 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 20 20 0 nil first-section nil nil nil 1 20 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 20 20 0 nil org-data nil nil nil 3 20 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #12)]) #9)] :type org :tblfm nil :value nil) #6 (table-row (:standard-properties [11 11 12 20 20 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #9] :type standard) (table-cell (:standard-properties [12 nil 13 14 16 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"c\" 0 1 (:parent #11))) (table-cell (:standard-properties [16 nil 17 18 20 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"d\" 0 1 (:parent #11)))))] :type standard) #3 (table-cell (:standard-properties [6 nil 7 8 10 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #6]) #(\"b\" 0 1 (:parent #7))))]) #(\"a\" 0 1 (:parent #3)))) 6 7 (:parent (table-cell (:standard-properties [6 nil 7 8 10 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (table-row (:standard-properties [1 1 2 10 11 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil (table (:standard-properties [1 1 1 20 20 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 20 20 0 nil first-section nil nil nil 1 20 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 20 20 0 nil org-data nil nil nil 3 20 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #12)]) #9)] :type org :tblfm nil :value nil) #6 (table-row (:standard-properties [11 11 12 20 20 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #9] :type standard) (table-cell (:standard-properties [12 nil 13 14 16 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"c\" 0 1 (:parent #11))) (table-cell (:standard-properties [16 nil 17 18 20 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"d\" 0 1 (:parent #11)))))] :type standard) (table-cell (:standard-properties [2 nil 3 4 6 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #6]) #(\"a\" 0 1 (:parent #7))) #3)]) #(\"b\" 0 1 (:parent #3)))) 12 13 (:parent (table-cell (:standard-properties [12 nil 13 14 16 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (table-row (:standard-properties [11 11 12 20 20 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil (table (:standard-properties [1 1 1 20 20 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 20 20 0 nil first-section nil nil nil 1 20 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 20 20 0 nil org-data nil nil nil 3 20 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #12)]) #9)] :type org :tblfm nil :value nil) (table-row (:standard-properties [1 1 2 10 11 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #9] :type standard) (table-cell (:standard-properties [2 nil 3 4 6 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"a\" 0 1 (:parent #11))) (table-cell (:standard-properties [6 nil 7 8 10 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"b\" 0 1 (:parent #11)))) #6)] :type standard) #3 (table-cell (:standard-properties [16 nil 17 18 20 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #6]) #(\"d\" 0 1 (:parent #7))))]) #(\"c\" 0 1 (:parent #3)))) 16 17 (:parent (table-cell (:standard-properties [16 nil 17 18 20 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (table-row (:standard-properties [11 11 12 20 20 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil (table (:standard-properties [1 1 1 20 20 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 20 20 0 nil first-section nil nil nil 1 20 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 20 20 0 nil org-data nil nil nil 3 20 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #12)]) #9)] :type org :tblfm nil :value nil) (table-row (:standard-properties [1 1 2 10 11 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #9] :type standard) (table-cell (:standard-properties [2 nil 3 4 6 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"a\" 0 1 (:parent #11))) (table-cell (:standard-properties [6 nil 7 8 10 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"b\" 0 1 (:parent #11)))) #6)] :type standard) (table-cell (:standard-properties [12 nil 13 14 16 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #6]) #(\"c\" 0 1 (:parent #7))) #3)]) #(\"d\" 0 1 (:parent #3))))) #(\"| a | b |\n|---+---|\n| c | d |\n\" 2 3 (:parent (table-cell (:standard-properties [2 nil 3 4 6 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (table-row (:standard-properties [1 1 2 10 11 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil (table (:standard-properties [1 1 1 30 30 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 30 30 0 nil first-section nil nil nil 1 30 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 30 30 0 nil org-data nil nil nil 3 30 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #12)]) #9)] :type org :tblfm nil :value nil) #6 (table-row (:standard-properties [11 11 nil nil 21 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #9] :type rule)) (table-row (:standard-properties [21 21 22 30 30 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #9] :type standard) (table-cell (:standard-properties [22 nil 23 24 26 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"c\" 0 1 (:parent #11))) (table-cell (:standard-properties [26 nil 27 28 30 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"d\" 0 1 (:parent #11)))))] :type standard) #3 (table-cell (:standard-properties [6 nil 7 8 10 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #6]) #(\"b\" 0 1 (:parent #7))))]) #(\"a\" 0 1 (:parent #3)))) 6 7 (:parent (table-cell (:standard-properties [6 nil 7 8 10 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (table-row (:standard-properties [1 1 2 10 11 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil (table (:standard-properties [1 1 1 30 30 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 30 30 0 nil first-section nil nil nil 1 30 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 30 30 0 nil org-data nil nil nil 3 30 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #12)]) #9)] :type org :tblfm nil :value nil) #6 (table-row (:standard-properties [11 11 nil nil 21 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #9] :type rule)) (table-row (:standard-properties [21 21 22 30 30 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #9] :type standard) (table-cell (:standard-properties [22 nil 23 24 26 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"c\" 0 1 (:parent #11))) (table-cell (:standard-properties [26 nil 27 28 30 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"d\" 0 1 (:parent #11)))))] :type standard) (table-cell (:standard-properties [2 nil 3 4 6 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #6]) #(\"a\" 0 1 (:parent #7))) #3)]) #(\"b\" 0 1 (:parent #3)))) 22 23 (:parent (table-cell (:standard-properties [22 nil 23 24 26 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (table-row (:standard-properties [21 21 22 30 30 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil (table (:standard-properties [1 1 1 30 30 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 30 30 0 nil first-section nil nil nil 1 30 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 30 30 0 nil org-data nil nil nil 3 30 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #12)]) #9)] :type org :tblfm nil :value nil) (table-row (:standard-properties [1 1 2 10 11 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #9] :type standard) (table-cell (:standard-properties [2 nil 3 4 6 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"a\" 0 1 (:parent #11))) (table-cell (:standard-properties [6 nil 7 8 10 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"b\" 0 1 (:parent #11)))) (table-row (:standard-properties [11 11 nil nil 21 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #9] :type rule)) #6)] :type standard) #3 (table-cell (:standard-properties [26 nil 27 28 30 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #6]) #(\"d\" 0 1 (:parent #7))))]) #(\"c\" 0 1 (:parent #3)))) 26 27 (:parent (table-cell (:standard-properties [26 nil 27 28 30 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (table-row (:standard-properties [21 21 22 30 30 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil (table (:standard-properties [1 1 1 30 30 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 30 30 0 nil first-section nil nil nil 1 30 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 30 30 0 nil org-data nil nil nil 3 30 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #12)]) #9)] :type org :tblfm nil :value nil) (table-row (:standard-properties [1 1 2 10 11 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #9] :type standard) (table-cell (:standard-properties [2 nil 3 4 6 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"a\" 0 1 (:parent #11))) (table-cell (:standard-properties [6 nil 7 8 10 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #10]) #(\"b\" 0 1 (:parent #11)))) (table-row (:standard-properties [11 11 nil nil 21 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #9] :type rule)) #6)] :type standard) (table-cell (:standard-properties [22 nil 23 24 26 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #6]) #(\"c\" 0 1 (:parent #7))) #3)]) #(\"d\" 0 1 (:parent #3))))))""#
+        ]],
     );
 }
 
 #[test]
 fn timestamp_roundtrips() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -967,13 +1036,14 @@ fn timestamp_roundtrips() {
      (string-match "<2012-03-29 .* 16:40-16:41>" (funcall f "<2012-03-29 thu. 16:40-16:41>"))
      (string-match "<2012-03-29 .* \\+1y>" (funcall f "<2012-03-29 thu. +1y>"))
      (equal "<%%(diary-float t 4 2)>\n" (funcall f "<%%(diary-float t 4 2)>"))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn keyword_comment_roundtrips() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -985,13 +1055,16 @@ fn keyword_comment_roundtrips() {
      (funcall f "#+BEGIN_COMMENT\nTest\n#+END_COMMENT")
      (funcall f ": Test") (funcall f "-------")
      (funcall f "\\begin{equation}\n1+1=2\n\\end{equation}"))))"##,
+        expect_test::expect![[
+            r##""OK (\"#+keyword: value\n\" \"# Comment\n\" \"#+begin_comment\nTest\n#+end_comment\n\" \": Test\n\" \"-----\n\" \"\\\\begin{equation}\n1+1=2\n\\\\end{equation}\n\")""##
+        ]],
     );
 }
 
 #[test]
 fn citation_roundtrips() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'oc)
@@ -1003,6 +1076,9 @@ fn citation_roundtrips() {
      (funcall f "[cite:@key]") (funcall f "[cite/style:@key]")
      (funcall f "[cite:pre @key]") (funcall f "[cite:@key post]")
      (funcall f "[cite:@a;@b;@c]"))))"##,
+        expect_test::expect![[
+            r#""OK (\"[cite:@key]\n\" \"[cite/style:@key]\n\" #(\"[cite:pre @key]\n\" 6 10 (:parent (citation-reference (:standard-properties [7 nil nil nil 15 0 (:prefix :suffix) nil nil nil nil nil nil nil #<killed buffer> nil nil (citation (:standard-properties [1 nil 7 15 16 0 (:prefix :suffix) nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 16 16 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 16 16 0 nil first-section nil nil nil 1 16 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 16 16 0 nil org-data nil nil nil 3 16 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #12)]) #9)]) #6)] :style nil) #3)] :key \"key\" :prefix (#(\"pre \" 0 4 (:parent #3))))))) #(\"[cite:@key post]\n\" 10 15 (:parent (citation-reference (:standard-properties [7 nil nil nil 16 0 (:prefix :suffix) nil nil nil nil nil nil nil #<killed buffer> nil nil (citation (:standard-properties [1 nil 7 16 17 0 (:prefix :suffix) nil nil nil nil nil nil nil #<killed buffer> nil nil (paragraph (:standard-properties [1 1 1 17 17 0 nil top-comment nil nil nil nil nil nil #<killed buffer> nil nil (section (:standard-properties [1 1 1 17 17 0 nil first-section nil nil nil 1 17 nil #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 17 17 0 nil org-data nil nil nil 3 17 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #12)]) #9)]) #6)] :style nil) #3)] :key \"key\" :suffix (#(\" post\" 0 5 (:parent #3))))))) \"[cite:@a;@b;@c]\n\")""#
+        ]],
     );
 }
 
@@ -1013,7 +1089,7 @@ fn citation_roundtrips() {
 #[test]
 fn export_options_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -1028,6 +1104,9 @@ fn export_options_parsing() {
         (list (plist-get info :title) (plist-get info :author)
               (plist-get info :email) (plist-get info :headline-levels)
               (plist-get info :section-numbers) (plist-get info :with-toc))))))"##,
+        expect_test::expect![[
+            r#""OK ((#(\"Test\" 0 4 (:parent (#(\"Test\" 0 4 (:parent #4)))))) (#(\"Author\" 0 6 (:parent (#(\"Author\" 0 6 (:parent #4)))))) \"e@e.org\" 3 t t)""#
+        ]],
     );
 }
 
@@ -1038,7 +1117,7 @@ fn export_options_parsing() {
 #[test]
 fn export_headline_features() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -1057,6 +1136,9 @@ fn export_headline_features() {
          (mapcar (lambda (h) (org-element-property :tags h)) hls)
          (mapcar (lambda (h) (org-export-get-headline-number h info)) hls)
          (mapcar (lambda (h) (org-export-get-relative-level h info)) hls))))))"##,
+        expect_test::expect![[
+            r#""OK ((\"TODO\" \"DONE\" nil) (65 66 nil) ((\"tag1\") nil nil) ((1) (2) (3)) (1 1 1))""#
+        ]],
     );
 }
 
@@ -1067,7 +1149,7 @@ fn export_headline_features() {
 #[test]
 fn export_sibling_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -1078,6 +1160,7 @@ fn export_sibling_detection() {
              (hls (org-element-map tree 'headline #'identity)))
         (list (mapcar #'org-export-first-sibling-p hls)
               (mapcar #'org-export-last-sibling-p hls))))))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 1)""#]],
     );
 }
 
@@ -1088,7 +1171,7 @@ fn export_sibling_detection() {
 #[test]
 fn export_tag_filtering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil) (org-export-exclude-tags '("noexport")))
@@ -1102,6 +1185,7 @@ fn export_tag_filtering() {
                     (org-export--collect-tree-properties tree (org-export-get-environment)))))
         (mapcar (lambda (h) (substring-no-properties (org-element-property :raw-value h)))
                 (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK (\"H1\" \"H2\" \"H3\")""#]],
     );
 }
 
@@ -1112,7 +1196,7 @@ fn export_tag_filtering() {
 #[test]
 fn map_entries_various_matchers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -1130,6 +1214,7 @@ fn map_entries_various_matchers() {
      (with-temp-buffer (org-mode)
        (insert "* H1\n:PROPERTIES:\n:TEST: 1\n:END:\n* H2\n:PROPERTIES:\n:TEST: 2\n:END:")
        (goto-char (point-min)) (org-map-entries #'point "TEST=1")))))"##,
+        expect_test::expect![[r#""OK ((1 11) (1) (6) (11) (1) (1))""#]],
     );
 }
 
@@ -1140,7 +1225,7 @@ fn map_entries_various_matchers() {
 #[test]
 fn entry_blocked_p_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -1155,6 +1240,7 @@ fn entry_blocked_p_various() {
        (goto-char (point-min)) (org-entry-blocked-p))
      (with-temp-buffer (org-mode) (insert "* DONE Blocked\n** TODO one")
        (goto-char (point-min)) (org-entry-blocked-p)))))"##,
+        expect_test::expect![[r#""OK (t nil nil nil)""#]],
     );
 }
 
@@ -1165,7 +1251,7 @@ fn entry_blocked_p_various() {
 #[test]
 fn find_olp_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -1180,5 +1266,8 @@ fn find_olp_various() {
        (org-find-olp '("Headline" "headline6") t)
        (org-find-olp '("Headline" "headline7") t)
        (org-find-olp '("Headline" "headline8") t)))))"##,
+        expect_test::expect![[
+            r#""OK (#<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer>)""#
+        ]],
     );
 }

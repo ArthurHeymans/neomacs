@@ -52,7 +52,12 @@ fn oracle_prop_type_of_all_basic_types() {
   (unwind-protect
       (funcall 'neovm--test-type-catalog)
     (fmakunbound 'neovm--test-type-catalog)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (integer integer integer integer integer float float float string string string symbol symbol cons cons cons vector vector hash-table char-table)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +94,10 @@ fn oracle_prop_type_of_nil_t_keywords() {
   (unwind-protect
       (funcall 'neovm--test-special-symbols)
     (fmakunbound 'neovm--test-special-symbols)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (symbol symbol symbol symbol t t t t nil nil t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +133,12 @@ fn oracle_prop_type_of_subrs() {
   (unwind-protect
       (funcall 'neovm--test-subr-types)
     (fmakunbound 'neovm--test-subr-types)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (subr subr subr subr subr t t subr subr subr subr nil nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -167,7 +180,12 @@ fn oracle_prop_type_of_lambdas_closures() {
   (unwind-protect
       (funcall 'neovm--test-lambda-types)
     (fmakunbound 'neovm--test-lambda-types)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (interpreted-function interpreted-function t t 11 15 6 interpreted-function)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +231,12 @@ fn oracle_prop_type_of_char_tables_bool_vectors() {
   (unwind-protect
       (funcall 'neovm--test-special-container-types)
     (fmakunbound 'neovm--test-special-container-types)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (char-table char-table bool-vector bool-vector bool-vector t t t t nil nil nil nil 8 16 0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -266,7 +289,10 @@ fn oracle_prop_type_of_construction_consistency() {
   (unwind-protect
       (funcall 'neovm--test-type-consistency)
     (fmakunbound 'neovm--test-type-consistency)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t nil nil nil integer string cons vector)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +399,12 @@ fn oracle_prop_type_of_dispatch_system() {
     (fmakunbound 'neovm--test-serialize)
     (fmakunbound 'neovm--test-deserialize)
     (makunbound 'neovm--test-dispatch-table)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((int 42) (flt 3.14) (str \"hello\") (sym world) (lst ((int 1) (int 2) (int 3))) (vec ((int 4) (int 5) (int 6)))) t t 1 1 1 1 1 1)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -420,5 +451,10 @@ fn oracle_prop_type_of_heterogeneous_mapping() {
                (total-items (apply #'+ (mapcar (lambda (g) (nth 1 g)) grouped))))
           (list types-list unique-types grouped total-items)))
     (fmakunbound 'neovm--test-classify-collection)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((integer integer integer string string symbol symbol symbol float float cons cons vector vector) (cons float integer string symbol vector) ((cons 2 ((p q) (r s t))) (float 2 (3.14 2.71)) (integer 3 (1 2 3)) (string 2 (\"a\" \"b\")) (symbol 3 (x y z)) (vector 2 ([1 2] [3]))) 14)""#
+        ]],
+    );
 }

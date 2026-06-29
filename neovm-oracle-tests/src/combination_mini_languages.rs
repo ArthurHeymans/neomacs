@@ -95,7 +95,12 @@ fn oracle_prop_mini_forth_interpreter() {
        ;; Factorial of 5 via repeated multiply: 1*2*3*4*5
        (funcall 'neovm--test-forth "1 2 * 3 * 4 * 5 *"))
     (fmakunbound 'neovm--test-forth)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((14) (25) (10 20) (2 1 3) (-1 0 -1) (12) (3 3 2 1) (120))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +169,10 @@ fn oracle_prop_mini_brainfuck() {
        ;; Loop counting to 5: output 5
        (funcall 'neovm--test-bf "+++++."))
     (fmakunbound 'neovm--test-bf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((65) (72 73) (1 2 3) (5))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +239,12 @@ fn oracle_prop_mini_logo_turtle() {
        (funcall 'neovm--test-turtle
                 '((fd . 50) (bk . 25) (rt . 90) (fd . 30))))
     (fmakunbound 'neovm--test-turtle)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((pos 0 . 0) (angle . 0) (path (0 . 0) (0 . 100) (100 . 100) (100 . 0) (0 . 0))) ((pos 0 . 50) (angle . 0) (path (0 . 0) (0 . 50) (0 . 50) (0 . 50))) ((pos 10 . 50) (angle . 90) (path (0 . 0) (0 . 30) (0 . 50) (10 . 50))) ((pos 30 . 25) (angle . 90) (path (0 . 0) (0 . 50) (0 . 25) (30 . 25))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -338,7 +351,10 @@ fn oracle_prop_mini_lisp_metacircular() {
          ;; Quote
          (funcall 'neovm--test-meval '(quote (a b c)) builtins)))
     (fmakunbound 'neovm--test-meval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 30 42 100 15 (a b c))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -439,7 +455,12 @@ fn oracle_prop_mini_calculator() {
                   (print m) (print n))))
     (fmakunbound 'neovm--test-calc-eval)
     (fmakunbound 'neovm--test-calc-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((((x . 10) (y . 20) (z . 30)) ((z . 30) (y . 20) (x . 10))) (((q . 14) (r . 2) 100) ((r . 2) (q . 14) (b . 7) (a . 100))) (((counter . 3) (result . 9)) ((result . 9) (counter . 3))) (((m . 8) (n . -8)) ((n . -8) (m . 8) (c . -8) (b . 3) (a . -5))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -547,5 +568,10 @@ fn oracle_prop_mini_pattern_rule_engine() {
                   '(or (lit 1) (lit 2) (lit 3)) 5 nil)))
     (fmakunbound 'neovm--test-pmatch2)
     (fmakunbound 'neovm--test-rule-apply)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""ERR (invalid-function (\\, (lambda (bindings) (> (cdr (assq 'a bindings)) 10))))""#
+        ]],
+    );
 }

@@ -20,7 +20,7 @@ fn oracle_prop_count_lines_basic() {
                     (list (count-lines (point-min) (point-max))
                           (count-lines 1 6)
                           (count-lines 1 1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (4 1 0)""#]);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn oracle_prop_count_lines_no_trailing_newline() {
                     (insert "line1\nline2\nline3")
                     (list (count-lines (point-min) (point-max))
                           (count-lines 1 (point-max))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (3 3)""#]);
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn oracle_prop_count_lines_accepts_marker_bounds_like_gnu() {
         (end (copy-marker (point-max))))
     (list (count-lines start end)
           (count-lines end start))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (4 4)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +67,7 @@ fn oracle_prop_line_number_at_pos() {
                      (line-number-at-pos 8)
                      (line-number-at-pos 9)
                      (line-number-at-pos (point-max))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (1 1 2 2 3 5)""#]);
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn oracle_prop_line_number_at_pos_no_arg() {
                       (forward-line 2)
                       (let ((at-third (line-number-at-pos)))
                         (list at-start at-third))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (1 3)""#]);
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn oracle_prop_line_number_at_pos_accepts_marker_like_gnu() {
   (insert "one\ntwo\nthree\n")
   (let ((m (copy-marker 6)))
     (line-number-at-pos m)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK 2""#]);
 }
 
 #[test]
@@ -108,7 +108,12 @@ fn oracle_prop_line_number_at_pos_bignum_position_error_like_gnu() {
     let form = r#"(with-temp-buffer
   (insert "one\ntwo\n")
   (line-number-at-pos 1000000000000000000000000000000))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""ERR (wrong-type-argument fixnump 1000000000000000000000000000000)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +134,10 @@ fn oracle_prop_line_beginning_position() {
                           (line-beginning-position 2)
                           (line-end-position 0)
                           (line-end-position 2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (13 20 1 21 12 28)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +160,7 @@ fn oracle_prop_current_column() {
                       (goto-char 15) ;; after "  " indent
                       (setq cols (cons (current-column) cols))
                       (nreverse cols)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (0 5 0 2)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +176,7 @@ fn oracle_prop_move_to_column_basic() {
                     (goto-char (point-min))
                     (let ((result (move-to-column 6)))
                       (list result (current-column) (point))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (6 6 7)""#]);
 }
 
 #[test]
@@ -181,7 +189,7 @@ fn oracle_prop_move_to_column_past_end() {
                     (goto-char (point-min))
                     (let ((result (move-to-column 100)))
                       (list result (current-column) (point))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (5 5 6)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +238,12 @@ fn oracle_prop_buffer_position_align_columns() {
                                         records))))
                         (forward-line 1))
                       (nreverse records)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"Alice\" 30 \"Boston\") (\"Bob\" 25 \"NYC\") (\"Carol\" 35 \"London\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -269,5 +282,8 @@ fn oracle_prop_buffer_position_line_operations() {
                                   max-line (nth 0 m))))
                         (list (nreverse metrics)
                               (list 'longest max-line max-len)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (((5 3 nil)) (longest 4 36))""#],
+    );
 }

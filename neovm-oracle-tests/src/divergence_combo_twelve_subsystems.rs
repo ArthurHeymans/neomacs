@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_twelve_marker_overlay_textprop_buflocal_clone_narrow_setf_replace_undo_multi_undo_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "t1a"))
         (b2 (generate-new-buffer "t1b")))
@@ -101,6 +101,7 @@ fn combo_twelve_marker_overlay_textprop_buflocal_clone_narrow_setf_replace_undo_
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
     );
 }
 
@@ -108,7 +109,7 @@ fn combo_twelve_marker_overlay_textprop_buflocal_clone_narrow_setf_replace_undo_
 fn combo_twelve_multi_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "t2a"))
         (b2 (generate-new-buffer "t2b")))
@@ -211,6 +212,7 @@ fn combo_twelve_multi_overlay_undo() {
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
     );
 }
 
@@ -218,7 +220,7 @@ fn combo_twelve_multi_overlay_undo() {
 fn combo_twelve_textprop_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "t3a"))
         (b2 (generate-new-buffer "t3b")))
@@ -315,6 +317,7 @@ fn combo_twelve_textprop_replace_undo() {
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
     );
 }
 
@@ -322,7 +325,7 @@ fn combo_twelve_textprop_replace_undo() {
 fn combo_twelve_setf_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "t4a"))
         (b2 (generate-new-buffer "t4b")))
@@ -415,6 +418,7 @@ fn combo_twelve_setf_replace_undo() {
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
     );
 }
 
@@ -422,7 +426,7 @@ fn combo_twelve_setf_replace_undo() {
 fn combo_twelve_replace_setf_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "t5a"))
         (b2 (generate-new-buffer "t5b")))
@@ -519,5 +523,6 @@ fn combo_twelve_replace_setf_undo() {
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
     );
 }

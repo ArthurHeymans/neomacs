@@ -27,7 +27,10 @@ fn oracle_dbus_inhibitor_lock_argument_checks_and_initial_registry() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-function dbus-registered-inhibitor-locks)""#]],
+    );
 }
 
 #[test]
@@ -55,5 +58,8 @@ fn oracle_dbus_inhibitor_lock_registry_and_call_arguments() {
     (list lock1 lock2 calls reg1 reg2 copy-mutability close1 reg3 close2)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-function dbus-make-inhibitor-lock)""#]],
+    );
 }

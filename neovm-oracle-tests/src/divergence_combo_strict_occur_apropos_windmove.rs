@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_n5_occur_line_matching() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((source-buf (generate-new-buffer " *probe-occur-src*")))
   (unwind-protect
@@ -27,13 +27,16 @@ fn div_n5_occur_line_matching() {
     (when (buffer-live-p source-buf) (kill-buffer source-buf))
     (when (get-buffer "*Occur*") (kill-buffer "*Occur*"))))
 "##,
+        expect_test::expect![[
+            r#""OK (t #(\"3 matches for \\\"foo\\\" in buffer:  *probe-occur-src*\n      1:foo\n      3:foo\n      5:foobar\n\" 0 50 (face underline read-only t) 50 58 (occur-prefix t front-sticky t rear-nonsticky t read-only t occur-target ((#<marker in no buffer> . #<marker in no buffer>)) follow-link t help-echo \"mouse-2: go to this occurrence\" mouse-face highlight) 58 61 (occur-target ((#<marker in no buffer> . #<marker in no buffer>)) follow-link t help-echo \"mouse-2: go to this occurrence\" face match occur-match t mouse-face highlight) 61 62 (occur-target ((#<marker in no buffer> . #<marker in no buffer>))) 62 70 (occur-prefix t front-sticky t rear-nonsticky t read-only t occur-target ((#<marker in no buffer> . #<marker in no buffer>)) follow-link t help-echo \"mouse-2: go to this occurrence\" mouse-face highlight) 70 73 (occur-target ((#<marker in no buffer> . #<marker in no buffer>)) follow-link t help-echo \"mouse-2: go to this occurrence\" face match occur-match t mouse-face highlight) 73 74 (occur-target ((#<marker in no buffer> . #<marker in no buffer>))) 74 82 (occur-prefix t front-sticky t rear-nonsticky t read-only t occur-target ((#<marker in no buffer> . #<marker in no buffer>)) follow-link t help-echo \"mouse-2: go to this occurrence\" mouse-face highlight) 82 85 (occur-target ((#<marker in no buffer> . #<marker in no buffer>)) follow-link t help-echo \"mouse-2: go to this occurrence\" face match occur-match t mouse-face highlight) 85 88 (occur-target ((#<marker in no buffer> . #<marker in no buffer>)) follow-link t help-echo \"mouse-2: go to this occurrence\" mouse-face highlight) 88 89 (occur-target ((#<marker in no buffer> . #<marker in no buffer>)))))""#
+        ]],
     );
 }
 
 #[test]
 fn div_n5_apropos_internal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (member 'defun (apropos-internal "^defun\\'"))
       (member 'car (apropos-internal "^car\\'"))
@@ -41,13 +44,14 @@ fn div_n5_apropos_internal() {
       (> (length (apropos-internal "string")) 10)
       (= (length (apropos-internal "^zzz-nonexistent-xyz\\'")) 0))
 "##,
+        expect_test::expect![[r#""OK ((defun) (car) (cons) t t)""#]],
     );
 }
 
 #[test]
 fn div_n5_windmove_find_other_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (get-buffer-create " *probe-wm-a*"))
       (b2 (get-buffer-create " *probe-wm-b*")))
@@ -65,13 +69,14 @@ fn div_n5_windmove_find_other_window() {
     (when (buffer-live-p b2) (kill-buffer b2))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""ERR (void-function windmove-find-other-window)""#]],
     );
 }
 
 #[test]
 fn div_n5_occur_count_nlines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((source-buf (generate-new-buffer " *probe-occur-count*")))
   (unwind-protect
@@ -87,5 +92,6 @@ fn div_n5_occur_count_nlines() {
     (when (buffer-live-p source-buf) (kill-buffer source-buf))
     (when (get-buffer "*Occur*") (kill-buffer "*Occur*"))))
 "##,
+        expect_test::expect![[r#""OK 6""#]],
     );
 }

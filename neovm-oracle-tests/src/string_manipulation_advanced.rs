@@ -16,28 +16,64 @@ fn oracle_prop_substring_negative_indices() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Negative FROM counts from end
-    assert_oracle_parity(r#"(substring "hello world" -5)"#);
-    assert_oracle_parity(r#"(substring "hello world" -5 -1)"#);
-    assert_oracle_parity(r#"(substring "abcdef" -3)"#);
-    assert_oracle_parity(r#"(substring "abcdef" -4 -1)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(substring "hello world" -5)"#,
+        expect_test::expect![[r#""OK \"world\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(substring "hello world" -5 -1)"#,
+        expect_test::expect![[r#""OK \"worl\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(substring "abcdef" -3)"#,
+        expect_test::expect![[r#""OK \"def\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(substring "abcdef" -4 -1)"#,
+        expect_test::expect![[r#""OK \"cde\"""#]],
+    );
 
     // Negative TO only
-    assert_oracle_parity(r#"(substring "hello world" 0 -1)"#);
-    assert_oracle_parity(r#"(substring "hello world" 0 -6)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(substring "hello world" 0 -1)"#,
+        expect_test::expect![[r#""OK \"hello worl\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(substring "hello world" 0 -6)"#,
+        expect_test::expect![[r#""OK \"hello\"""#]],
+    );
 
     // Both negative
-    assert_oracle_parity(r#"(substring "abcdefgh" -6 -2)"#);
-    assert_oracle_parity(r#"(substring "abcdefgh" -1)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(substring "abcdefgh" -6 -2)"#,
+        expect_test::expect![[r#""OK \"cdef\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(substring "abcdefgh" -1)"#,
+        expect_test::expect![[r#""OK \"h\"""#]],
+    );
 
     // Edge: last char
-    assert_oracle_parity(r#"(substring "x" -1)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(substring "x" -1)"#,
+        expect_test::expect![[r#""OK \"x\"""#]],
+    );
 
     // Combining positive start with negative end
-    assert_oracle_parity(r#"(substring "hello world" 3 -3)"#);
-    assert_oracle_parity(r#"(substring "abcdef" 1 -1)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(substring "hello world" 3 -3)"#,
+        expect_test::expect![[r#""OK \"lo wo\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(substring "abcdef" 1 -1)"#,
+        expect_test::expect![[r#""OK \"bcde\"""#]],
+    );
 
     // Full string via negative
-    assert_oracle_parity(r#"(substring "test" -4)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(substring "test" -4)"#,
+        expect_test::expect![[r#""OK \"test\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -49,31 +85,58 @@ fn oracle_prop_concat_many_args_with_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Basic multi-arg concat
-    assert_oracle_parity(r#"(concat "a" "b" "c" "d" "e")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(concat "a" "b" "c" "d" "e")"#,
+        expect_test::expect![[r#""OK \"abcde\"""#]],
+    );
 
     // Mix strings and empty strings
-    assert_oracle_parity(r#"(concat "" "hello" "" " " "" "world" "")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(concat "" "hello" "" " " "" "world" "")"#,
+        expect_test::expect![[r#""OK \"hello world\"""#]],
+    );
 
     // Concat with nil (nil is ignored in concat)
-    assert_oracle_parity(r#"(concat "a" nil "b" nil "c")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(concat "a" nil "b" nil "c")"#,
+        expect_test::expect![[r#""OK \"abc\"""#]],
+    );
 
     // Concat with lists of chars
-    assert_oracle_parity(r#"(concat '(72 101 108 108 111))"#);
-    assert_oracle_parity(r#"(concat "He" '(108 108) "o")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(concat '(72 101 108 108 111))"#,
+        expect_test::expect![[r#""OK \"Hello\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(concat "He" '(108 108) "o")"#,
+        expect_test::expect![[r#""OK \"Hello\"""#]],
+    );
 
     // Concat with vectors of chars
-    assert_oracle_parity(r#"(concat [72 101 108 108 111])"#);
-    assert_oracle_parity(r#"(concat "He" [108 108] "o")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(concat [72 101 108 108 111])"#,
+        expect_test::expect![[r#""OK \"Hello\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(concat "He" [108 108] "o")"#,
+        expect_test::expect![[r#""OK \"Hello\"""#]],
+    );
 
     // Many small strings
     let form = r####"(let ((parts nil))
                     (dotimes (i 10)
                       (setq parts (cons (number-to-string i) parts)))
                     (apply #'concat (nreverse parts)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"0123456789\"""#]],
+    );
 
     // Zero args
-    assert_oracle_parity(r#"(concat)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(concat)"#,
+        expect_test::expect![[r#""OK \"\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -85,34 +148,64 @@ fn oracle_prop_split_string_full_params() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Default separator (whitespace)
-    assert_oracle_parity(r#"(split-string "  hello   world  ")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(split-string "  hello   world  ")"#,
+        expect_test::expect![[r#""OK (\"hello\" \"world\")""#]],
+    );
 
     // Custom separator
-    assert_oracle_parity(r#"(split-string "a,b,,c,d" ",")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(split-string "a,b,,c,d" ",")"#,
+        expect_test::expect![[r#""OK (\"a\" \"b\" \"\" \"c\" \"d\")""#]],
+    );
 
     // OMIT-NULLS = nil (keep empty strings)
-    assert_oracle_parity(r#"(split-string "a,,b,,c" "," nil)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(split-string "a,,b,,c" "," nil)"#,
+        expect_test::expect![[r#""OK (\"a\" \"\" \"b\" \"\" \"c\")""#]],
+    );
 
     // OMIT-NULLS = t (remove empty strings)
-    assert_oracle_parity(r#"(split-string "a,,b,,c" "," t)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(split-string "a,,b,,c" "," t)"#,
+        expect_test::expect![[r#""OK (\"a\" \"b\" \"c\")""#]],
+    );
 
     // TRIM parameter
-    assert_oracle_parity(r#"(split-string " a , b , c " "," t " ")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(split-string " a , b , c " "," t " ")"#,
+        expect_test::expect![[r#""OK (\"a\" \"b\" \"c\")""#]],
+    );
 
     // Multi-character separator regex
-    assert_oracle_parity(r#"(split-string "one--two--three" "--")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(split-string "one--two--three" "--")"#,
+        expect_test::expect![[r#""OK (\"one\" \"two\" \"three\")""#]],
+    );
 
     // Splitting on newlines
-    assert_oracle_parity(r#"(split-string "line1\nline2\nline3" "\n")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(split-string "line1\nline2\nline3" "\n")"#,
+        expect_test::expect![[r#""OK (\"line1\" \"line2\" \"line3\")""#]],
+    );
 
     // No matches for separator
-    assert_oracle_parity(r#"(split-string "hello" ",")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(split-string "hello" ",")"#,
+        expect_test::expect![[r#""OK (\"hello\")""#]],
+    );
 
     // Empty string
-    assert_oracle_parity(r#"(split-string "" ",")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(split-string "" ",")"#,
+        expect_test::expect![[r#""OK (\"\")""#]],
+    );
 
     // Separator at edges
-    assert_oracle_parity(r#"(split-string ",a,b,c," "," nil)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(split-string ",a,b,c," "," nil)"#,
+        expect_test::expect![[r#""OK (\"\" \"a\" \"b\" \"c\" \"\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -124,25 +217,46 @@ fn oracle_prop_string_join_advanced() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Various separators
-    assert_oracle_parity(r#"(string-join '("a" "b" "c") ", ")"#);
-    assert_oracle_parity(r#"(string-join '("x" "y" "z") " -> ")"#);
-    assert_oracle_parity(r#"(string-join '("1" "2" "3") "")"#);
-    assert_oracle_parity(r#"(string-join '("one") "--")"#);
-    assert_oracle_parity(r#"(string-join nil ",")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-join '("a" "b" "c") ", ")"#,
+        expect_test::expect![[r#""OK \"a, b, c\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-join '("x" "y" "z") " -> ")"#,
+        expect_test::expect![[r#""OK \"x -> y -> z\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-join '("1" "2" "3") "")"#,
+        expect_test::expect![[r#""OK \"123\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-join '("one") "--")"#,
+        expect_test::expect![[r#""OK \"one\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-join nil ",")"#,
+        expect_test::expect![[r#""OK \"\"""#]],
+    );
 
     // Join with newline separator
-    assert_oracle_parity(r#"(string-join '("line1" "line2" "line3") "\n")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-join '("line1" "line2" "line3") "\n")"#,
+        expect_test::expect![[r#""OK \"line1\nline2\nline3\"""#]],
+    );
 
     // Roundtrip: split then join
     let form = r####"(string-join (split-string "a-b-c" "-") "+")"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK \"a+b+c\"""#]]);
 
     // Join many elements
     let form2 = r#"(let ((items nil))
                      (dotimes (i 8)
                        (setq items (cons (format "item%d" i) items)))
                      (string-join (nreverse items) "|"))"#;
-    assert_oracle_parity(form2);
+    crate::common::assert_oracle_parity_expect(
+        form2,
+        expect_test::expect![[r#""OK \"item0|item1|item2|item3|item4|item5|item6|item7\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -154,32 +268,74 @@ fn oracle_prop_string_trim_custom_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Default trim (whitespace)
-    assert_oracle_parity(r#"(string-trim " \t\n hello \t\n ")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim " \t\n hello \t\n ")"#,
+        expect_test::expect![[r#""OK \"hello\"""#]],
+    );
 
     // Custom trim chars
-    assert_oracle_parity(r#"(string-trim "---hello---" "-")"#);
-    assert_oracle_parity(r#"(string-trim "***hello***" "*")"#);
-    assert_oracle_parity(r#"(string-trim "//path//" "/")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim "---hello---" "-")"#,
+        expect_test::expect![[r#""OK \"--hello---\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim "***hello***" "*")"#,
+        expect_test::expect![[r#""OK \"**hello***\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim "//path//" "/")"#,
+        expect_test::expect![[r#""OK \"/path//\"""#]],
+    );
 
     // Trim-left only
-    assert_oracle_parity(r#"(string-trim-left ">>>hello<<<" ">")"#);
-    assert_oracle_parity(r#"(string-trim-left "  hello  ")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim-left ">>>hello<<<" ">")"#,
+        expect_test::expect![[r#""OK \">>hello<<<\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim-left "  hello  ")"#,
+        expect_test::expect![[r#""OK \"hello  \"""#]],
+    );
 
     // Trim-right only
-    assert_oracle_parity(r#"(string-trim-right ">>>hello<<<" "<")"#);
-    assert_oracle_parity(r#"(string-trim-right "hello..."  ".")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim-right ">>>hello<<<" "<")"#,
+        expect_test::expect![[r#""OK \">>>hello<<\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim-right "hello..."  ".")"#,
+        expect_test::expect![[r#""OK \"hello..\"""#]],
+    );
 
     // Multiple custom chars in trim set
-    assert_oracle_parity(r#"(string-trim "+-=hello=-+" "+-=")"#);
-    assert_oracle_parity(r#"(string-trim-left "+-=hello=-+" "+-=")"#);
-    assert_oracle_parity(r#"(string-trim-right "+-=hello=-+" "+-=")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim "+-=hello=-+" "+-=")"#,
+        expect_test::expect![[r#""OK \"hello=-+\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim-left "+-=hello=-+" "+-=")"#,
+        expect_test::expect![[r#""OK \"hello=-+\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim-right "+-=hello=-+" "+-=")"#,
+        expect_test::expect![[r#""OK \"+-=hello=-+\"""#]],
+    );
 
     // Nothing to trim
-    assert_oracle_parity(r#"(string-trim "hello" "x")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim "hello" "x")"#,
+        expect_test::expect![[r#""OK \"hello\"""#]],
+    );
 
     // Entire string is trim chars
-    assert_oracle_parity(r#"(string-trim "---" "-")"#);
-    assert_oracle_parity(r#"(string-trim "" "-")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim "---" "-")"#,
+        expect_test::expect![[r#""OK \"--\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-trim "" "-")"#,
+        expect_test::expect![[r#""OK \"\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -191,30 +347,78 @@ fn oracle_prop_string_prefix_suffix_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Prefix checks
-    assert_oracle_parity(r#"(string-prefix-p "hel" "hello")"#);
-    assert_oracle_parity(r#"(string-prefix-p "hello" "hello")"#);
-    assert_oracle_parity(r#"(string-prefix-p "" "hello")"#);
-    assert_oracle_parity(r#"(string-prefix-p "world" "hello")"#);
-    assert_oracle_parity(r#"(string-prefix-p "hello!" "hello")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-prefix-p "hel" "hello")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-prefix-p "hello" "hello")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-prefix-p "" "hello")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-prefix-p "world" "hello")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-prefix-p "hello!" "hello")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
 
     // Suffix checks
-    assert_oracle_parity(r#"(string-suffix-p "llo" "hello")"#);
-    assert_oracle_parity(r#"(string-suffix-p "hello" "hello")"#);
-    assert_oracle_parity(r#"(string-suffix-p "" "hello")"#);
-    assert_oracle_parity(r#"(string-suffix-p "world" "hello")"#);
-    assert_oracle_parity(r#"(string-suffix-p "hello!" "hello")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-suffix-p "llo" "hello")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-suffix-p "hello" "hello")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-suffix-p "" "hello")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-suffix-p "world" "hello")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-suffix-p "hello!" "hello")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
 
     // Case-insensitive prefix
-    assert_oracle_parity(r#"(string-prefix-p "HEL" "hello" t)"#);
-    assert_oracle_parity(r#"(string-prefix-p "HEL" "hello" nil)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-prefix-p "HEL" "hello" t)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-prefix-p "HEL" "hello" nil)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
 
     // Case-insensitive suffix
-    assert_oracle_parity(r#"(string-suffix-p "LLO" "hello" t)"#);
-    assert_oracle_parity(r#"(string-suffix-p "LLO" "hello" nil)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-suffix-p "LLO" "hello" t)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-suffix-p "LLO" "hello" nil)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
 
     // With empty string
-    assert_oracle_parity(r#"(string-prefix-p "" "")"#);
-    assert_oracle_parity(r#"(string-suffix-p "" "")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-prefix-p "" "")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(string-suffix-p "" "")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -225,18 +429,48 @@ fn oracle_prop_string_prefix_suffix_p() {
 fn oracle_prop_upcase_initials() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(upcase-initials "hello world")"#);
-    assert_oracle_parity(r#"(upcase-initials "hello")"#);
-    assert_oracle_parity(r#"(upcase-initials "HELLO WORLD")"#);
-    assert_oracle_parity(r#"(upcase-initials "hELLO wORLD")"#);
-    assert_oracle_parity(r#"(upcase-initials "")"#);
-    assert_oracle_parity(r#"(upcase-initials "a")"#);
-    assert_oracle_parity(r#"(upcase-initials "hello-world")"#);
-    assert_oracle_parity(r#"(upcase-initials "one two three four")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(upcase-initials "hello world")"#,
+        expect_test::expect![[r#""OK \"Hello World\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(upcase-initials "hello")"#,
+        expect_test::expect![[r#""OK \"Hello\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(upcase-initials "HELLO WORLD")"#,
+        expect_test::expect![[r#""OK \"HELLO WORLD\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(upcase-initials "hELLO wORLD")"#,
+        expect_test::expect![[r#""OK \"HELLO WORLD\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(upcase-initials "")"#,
+        expect_test::expect![[r#""OK \"\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(upcase-initials "a")"#,
+        expect_test::expect![[r#""OK \"A\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(upcase-initials "hello-world")"#,
+        expect_test::expect![[r#""OK \"Hello-World\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(upcase-initials "one two three four")"#,
+        expect_test::expect![[r#""OK \"One Two Three Four\"""#]],
+    );
 
     // With non-alpha separators
-    assert_oracle_parity(r#"(upcase-initials "foo_bar_baz")"#);
-    assert_oracle_parity(r#"(upcase-initials "foo.bar.baz")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(upcase-initials "foo_bar_baz")"#,
+        expect_test::expect![[r#""OK \"Foo_Bar_Baz\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(upcase-initials "foo.bar.baz")"#,
+        expect_test::expect![[r#""OK \"Foo.Bar.Baz\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -301,5 +535,10 @@ fn oracle_prop_string_path_manipulation() {
                      (funcall path-normalize "/usr/local/../share/./emacs")
                      (funcall path-normalize "/a/b/c/../../d")
                      (funcall path-normalize "/a/./b/./c")))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"usr\" \"local\" \"bin\" \"emacs\") \"/usr/local/bin\" \"/usr/local/bin\" \"/\" \"emacs\" \"\" \"txt\" nil \"/usr/share/emacs\" \"/a/d\" \"/a/b/c\")""#
+        ]],
+    );
 }

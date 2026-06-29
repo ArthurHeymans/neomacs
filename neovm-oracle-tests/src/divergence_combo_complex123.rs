@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx123_frame_parameters_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (frame-parameter frame 'name)
@@ -19,13 +19,14 @@ fn div_cx123_frame_parameters_query() {
         (frame-parameter frame 'background-mode)
         (frame-parameter frame 'display-type)))
 "##,
+        expect_test::expect![[r#""OK (\"F1\" nil nil 80 25 dark mono)""#]],
     );
 }
 
 #[test]
 fn div_cx123_frame_total_size_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (frame-root-window frame)
@@ -34,13 +35,16 @@ fn div_cx123_frame_total_size_query() {
         (frame-parameter frame 'minibuffer)
         (eq frame (window-frame (selected-window)))))
 "##,
+        expect_test::expect![[
+            r#""OK (#<window 1 on *scratch*> #<window 1 on *scratch*> #<window 1 on *scratch*> t t)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx123_display_color_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (display-color-cells frame)
@@ -50,13 +54,14 @@ fn div_cx123_display_color_attributes() {
         (display-mm-width frame)
         (display-mm-height frame)))
 "##,
+        expect_test::expect![[r#""OK (0 nil 80 25 nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx123_monitor_attributes_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((monitors (display-monitor-attributes-list)))
@@ -66,26 +71,28 @@ fn div_cx123_monitor_attributes_query() {
             (assq 'workarea (car monitors))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil (mm-size nil nil) (workarea 0 0 80 25))""#]],
     );
 }
 
 #[test]
 fn div_cx123_frame_live_and_visible_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (frame-live-p frame)
         (frame-visible-p frame)
         (eq frame (selected-frame))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx123_modify_frame_parameters_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (let ((before (frame-parameter frame 'neo-cx123-custom)))
@@ -96,13 +103,14 @@ fn div_cx123_modify_frame_parameters_round_trip() {
         (modify-frame-parameters frame '((neo-cx123-custom)))  ; remove
         (list before v1 v2 (frame-parameter frame 'neo-cx123-custom)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx123_frame_pixel_size_vs_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (frame-parameter frame 'width)
@@ -111,13 +119,14 @@ fn div_cx123_frame_pixel_size_vs_size() {
         (frame-pixel-width frame)
         (frame-pixel-height frame)))
 "##,
+        expect_test::expect![[r#""OK (80 80 25 80 25)""#]],
     );
 }
 
 #[test]
 fn div_cx123_window_buffer_pixel_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (list (window-pixel-width win)
@@ -127,13 +136,14 @@ fn div_cx123_window_buffer_pixel_size() {
         (window-text-width win)
         (window-text-height win)))
 "##,
+        expect_test::expect![[r#""ERR (void-function window-text-pixel-width)""#]],
     );
 }
 
 #[test]
 fn div_cx123_frame_char_width_height() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (frame-char-width frame)
@@ -141,13 +151,14 @@ fn div_cx123_frame_char_width_height() {
         (frame-column-width frame)
         (frame-line-height frame)))
 "##,
+        expect_test::expect![[r#""ERR (void-function frame-column-width)""#]],
     );
 }
 
 #[test]
 fn div_cx123_frame_font_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (frame-parameter frame 'font)
@@ -155,13 +166,14 @@ fn div_cx123_frame_font_query() {
         (frame-parameter frame 'line-spacing)
         (assq 'font (frame-parameters frame))))
 "##,
+        expect_test::expect![[r#""OK (\"tty\" nil 0 (font . \"tty\"))""#]],
     );
 }
 
 #[test]
 fn div_cx123_window_total_size_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (list (window-total-width win)
@@ -171,13 +183,14 @@ fn div_cx123_window_total_size_query() {
         (window-new-total win)
         (window-new-pixel win)))
 "##,
+        expect_test::expect![[r#""OK (80 24 80 23 0 0)""#]],
     );
 }
 
 #[test]
 fn div_cx123_frame_window_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (modify-frame-parameters frame '((neo-cx123-mega . "value-1")))
@@ -204,5 +217,6 @@ fn div_cx123_frame_window_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

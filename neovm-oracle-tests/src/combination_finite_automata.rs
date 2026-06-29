@@ -82,7 +82,12 @@ fn oracle_prop_fa_dfa_div_by_3() {
     (fmakunbound 'neovm--fa-d3-run)
     (fmakunbound 'neovm--fa-d3-check)
     (makunbound 'neovm--fa-d3-trans)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t 0 ((0 0 0))) (t 0 ((0 1 1) (1 1 0))) (t 0 ((0 1 1) (1 1 0) (0 0 0))) (nil 2 ((0 1 1) (1 0 2))) (nil 1 ((0 1 1) (1 1 0) (0 1 1))) (t 0 ((0 1 1) (1 0 2) (2 0 1) (1 1 0))) ((0 t t t) (1 nil nil t) (2 nil nil t) (3 t t t) (4 nil nil t) (5 nil nil t) (6 t t t) (7 nil nil t) (8 nil nil t) (9 t t t) (10 nil nil t) (11 nil nil t) (12 t t t) (15 t t t) (21 t t t) (42 t t t) (99 t t t) (100 nil nil t)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +183,10 @@ fn oracle_prop_fa_nfa_epsilon() {
     (fmakunbound 'neovm--fa-nfa-run)
     (makunbound 'neovm--fa-nfa-trans)
     (makunbound 'neovm--fa-nfa-eps)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t nil nil nil nil nil nil t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -265,7 +273,12 @@ fn oracle_prop_fa_quoted_string_parser() {
         ;; Unterminated
         (funcall 'neovm--fa-parse-strings "broken \"string"))
     (fmakunbound 'neovm--fa-parse-strings)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"hello\" \"world\") nil t) ((\"C:\\\\Users\\\\test\") nil t) ((\"line1\nline2\") nil t) ((\"s \") (\"unterminated string\") nil) ((\"double\" \"single\") nil t) ((\"\" \"\") nil t) ((\"he said \\\"hi\\\"\") nil t) (nil nil t) (nil (\"unterminated string\") nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -430,7 +443,12 @@ fn oracle_prop_fa_regex_to_nfa() {
     (fmakunbound 'neovm--fa-rx-move)
     (fmakunbound 'neovm--fa-rx-match)
     (makunbound 'neovm--fa-rx-next-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t nil nil t nil nil t t nil nil t t t nil t t t t nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -511,7 +529,12 @@ fn oracle_prop_fa_moore_sequence_detector() {
     (fmakunbound 'neovm--fa-moore-run)
     (makunbound 'neovm--fa-moore-trans)
     (makunbound 'neovm--fa-moore-output)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 0 1) 1 (1 2 3)) ((0 0 1 0 1) 2 (1 2 3 2 3)) ((0 0 1 0 1 0 1) 3 (1 2 3 2 3 2 3)) ((0 0 0 0 0 0 1) 1 (1 1 2 0 1 2 3)) ((0 0 0 0) 0 (0 0 0 0)) ((0 0 0 0) 0 (1 1 1 1)) (nil 0 nil) (4 12))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -600,7 +623,12 @@ fn oracle_prop_fa_mealy_protocol() {
     (fmakunbound 'neovm--fa-mealy-run)
     (makunbound 'neovm--fa-mealy-trans)
     (makunbound 'neovm--fa-mealy-out)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((idle (\"SYN_SENT\" \"ACK_RECEIVED\" \"DATA_QUEUED\" \"DATA_CONFIRMED\" \"FIN_SENT\") ((idle connect \"SYN_SENT\" connecting) (connecting connected \"ACK_RECEIVED\" connected) (connected send \"DATA_QUEUED\" transmitting) (transmitting ack \"DATA_CONFIRMED\" connected) (connected disconnect \"FIN_SENT\" idle))) (connected (\"SYN_SENT\" \"CONN_FAILED\" \"SYN_SENT\" \"ACK_RECEIVED\") ((idle connect \"SYN_SENT\" connecting) (connecting error \"CONN_FAILED\" idle) (idle connect \"SYN_SENT\" connecting) (connecting connected \"ACK_RECEIVED\" connected))) (idle (\"SYN_SENT\" \"ACK_RECEIVED\" \"DATA_QUEUED\" \"DATA_CONFIRMED\" \"DATA_QUEUED\" \"DATA_CONFIRMED\" \"DATA_QUEUED\" \"DATA_CONFIRMED\" \"FIN_SENT\") ((idle connect \"SYN_SENT\" connecting) (connecting connected \"ACK_RECEIVED\" connected) (connected send \"DATA_QUEUED\" transmitting) (transmitting ack \"DATA_CONFIRMED\" connected) (connected send \"DATA_QUEUED\" transmitting) (transmitting ack \"DATA_CONFIRMED\" connected) (connected send \"DATA_QUEUED\" transmitting) (transmitting ack \"DATA_CONFIRMED\" connected) (connected disconnect \"FIN_SENT\" idle))) (idle (\"SYN_SENT\" \"ACK_RECEIVED\" \"DATA_QUEUED\" \"RETRANSMIT\" \"DATA_QUEUED\" \"DATA_CONFIRMED\" \"FIN_SENT\") ((idle connect \"SYN_SENT\" connecting) (connecting connected \"ACK_RECEIVED\" connected) (connected send \"DATA_QUEUED\" transmitting) (transmitting error \"RETRANSMIT\" connected) (connected send \"DATA_QUEUED\" transmitting) (transmitting ack \"DATA_CONFIRMED\" connected) (connected disconnect \"FIN_SENT\" idle))) (idle (\"INVALID\") ((idle send \"INVALID\" idle))) (connected (\"SYN_SENT\" \"ACK_RECEIVED\" \"DATA_QUEUED\" \"HARD_RESET\" \"SYN_SENT\" \"ACK_RECEIVED\") ((idle connect \"SYN_SENT\" connecting) (connecting connected \"ACK_RECEIVED\" connected) (connected send \"DATA_QUEUED\" transmitting) (transmitting reset \"HARD_RESET\" idle) (idle connect \"SYN_SENT\" connecting) (connecting connected \"ACK_RECEIVED\" connected))) (idle (\"ALREADY_IDLE\" \"ALREADY_IDLE\") ((idle disconnect \"ALREADY_IDLE\" idle) (idle disconnect \"ALREADY_IDLE\" idle))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -691,5 +719,10 @@ fn oracle_prop_fa_dpda_nested_structures() {
                    (open . "li") (open . "a") (close . "a") (close . "li")
                    (open . "li") (close . "li") (close . "ul"))))
     (fmakunbound 'neovm--fa-dpda-validate)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t 1 ((\"div\" . 1))) (t 3 ((\"div\" . 1) (\"p\" . 1) (\"span\" . 1))) (t 1 ((\"p\" . 2))) (nil \"mismatch: expected div got span\" ((\"div\" . 1))) (nil \"unclosed: div\" ((\"div\" . 1) (\"p\" . 1))) (t 0 nil) (t 4 ((\"a\" . 1) (\"b\" . 1) (\"c\" . 1) (\"d\" . 1))) (t 3 ((\"a\" . 1) (\"li\" . 3) (\"ul\" . 1))))""#
+        ]],
+    );
 }

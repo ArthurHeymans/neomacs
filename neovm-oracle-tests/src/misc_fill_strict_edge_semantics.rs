@@ -8,55 +8,79 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_proper_list_p_true() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(proper-list-p '(a b c))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(proper-list-p '(a b c))"#,
+        expect_test::expect![[r#""OK 3""#]],
+    );
     assert_ok_eq("3", &o, &n);
 }
 
 #[test]
 fn oracle_proper_list_p_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(proper-list-p nil)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(proper-list-p nil)"#,
+        expect_test::expect![[r#""OK 0""#]],
+    );
     assert_ok_eq("0", &o, &n);
 }
 
 #[test]
 fn oracle_proper_list_p_dotted() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(proper-list-p '(a b . c))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(proper-list-p '(a b . c))"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_consp_on_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(consp '(a . b))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(consp '(a . b))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_consp_on_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(consp nil)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(consp nil)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_listp_on_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(listp '(a b c))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(listp '(a b c))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_listp_on_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(listp nil)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(listp nil)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_nlistp_on_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(nlistp nil)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(nlistp nil)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }

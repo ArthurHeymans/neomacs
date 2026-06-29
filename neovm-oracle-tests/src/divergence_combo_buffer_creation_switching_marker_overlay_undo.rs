@@ -15,7 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_with_temp_buffer_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((results nil))
     (with-temp-buffer
@@ -47,6 +47,7 @@ fn combo_with_temp_buffer_marker_overlay_undo() {
                     (get-text-property 11 'zone))
               results)))
     (list (nreverse results)))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -54,7 +55,7 @@ fn combo_with_temp_buffer_marker_overlay_undo() {
 fn combo_generate_new_buffer_switch_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (generate-new-buffer " combo-gnb1"))
         (buf2 (generate-new-buffer " combo-gnb2"))
@@ -104,6 +105,7 @@ fn combo_generate_new_buffer_switch_marker_overlay_undo() {
     (kill-buffer buf1)
     (kill-buffer buf2)
     (list (nreverse results)))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -111,7 +113,7 @@ fn combo_generate_new_buffer_switch_marker_overlay_undo() {
 fn combo_get_buffer_create_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (get-buffer-create " combo-gbc"))
         (results nil))
@@ -146,6 +148,7 @@ fn combo_get_buffer_create_marker_overlay_undo() {
               results)))
     (kill-buffer buf)
     (list (nreverse results)))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -153,7 +156,7 @@ fn combo_get_buffer_create_marker_overlay_undo() {
 fn combo_multi_buffer_isolation_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq multi-iso 'global)
   (let ((b1 (generate-new-buffer " combo-iso1"))
@@ -203,6 +206,7 @@ fn combo_multi_buffer_isolation_marker_overlay_undo() {
     (kill-buffer b2)
     (kill-buffer b3)
     (list (nreverse results) multi-iso))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -210,7 +214,7 @@ fn combo_multi_buffer_isolation_marker_overlay_undo() {
 fn combo_set_buffer_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-sbn"))
         (results nil))
@@ -258,5 +262,6 @@ fn combo_set_buffer_narrow_marker_overlay_undo() {
     (when (get-buffer " combo-sbn-tmp")
       (kill-buffer " combo-sbn-tmp"))
     (list (nreverse results)))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

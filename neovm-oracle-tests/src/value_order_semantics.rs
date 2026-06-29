@@ -26,5 +26,5 @@ fn oracle_value_lt_orders_nil_against_lists_like_gnu() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil nil)""#]]);
 }

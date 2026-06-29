@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_element_ast_adopt_extract_set_interpret_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-element)
@@ -52,6 +52,7 @@ fn org_element_ast_adopt_extract_set_interpret_combo() {
                                   (org-element-contents headline))))
                   (org-element-map doc 'headline #'identity))
           (org-element-interpret-data doc)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -59,7 +60,7 @@ fn org_element_ast_adopt_extract_set_interpret_combo() {
 fn org_element_parse_lineage_skip_affiliated_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-element)
@@ -98,6 +99,9 @@ fn org_element_parse_lineage_skip_affiliated_combo() {
             first-child
             (substring-no-properties
              (org-element-interpret-data tree))))))"##,
+        expect_test::expect![[
+            r##""OK ((table italic link) ((\"https\" \"//example.org\" (link nil)) (\"custom-id\" \"tbl\" (link paragraph section headline headline org-data))) \"Child\" \"#+caption: A *caption* with [[https://example.org][link]]\n#+name: tbl\n| A | B |\n| 1 | 2 |\n\n* Parent\n** Child\nParagraph with /italic/ and [[#tbl][table link]].\n\")""##
+        ]],
     );
 }
 
@@ -105,7 +109,7 @@ fn org_element_parse_lineage_skip_affiliated_combo() {
 fn org_element_buffer_context_swap_refresh_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-element)
@@ -142,6 +146,7 @@ fn org_element_buffer_context_swap_refresh_combo() {
                 (org-element-type (org-element-context))
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -149,7 +154,7 @@ fn org_element_buffer_context_swap_refresh_combo() {
 fn org_element_visible_only_lineage_inherited_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -290,6 +295,9 @@ fn org_element_visible_only_lineage_inherited_combo() {
             interpreted
              (buffer-substring-no-properties
               (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r##""OK ((((1 \"Visible\" (\"keep\") \"visible\") (2 \"Hidden\" (\"skip\") nil) (2 \"Visible Child\" nil nil) (1 \"Tail\" nil nil)) ((table 32 79) (bold 150 190) (link 156 188) (macro 194 210) (quote-block 212 259) (italic 233 242) (planning 276 308) (drawer 308 364) (link 386 417) (src-block 429 485) (underline 534 541) (footnote-definition 566 624) (link 598 622))) (((1 \"Visible\") (2 \"Hidden\") (2 \"Visible Child\") (1 \"Tail\")) (org-data section keyword table table-row table-cell plain-text table-cell plain-text table-row table-cell plain-text table-cell plain-text headline plain-text section property-drawer node-property paragraph plain-text bold plain-text link plain-text plain-text macro plain-text quote-block paragraph plain-text italic plain-text plain-text headline plain-text headline plain-text section paragraph plain-text footnote-reference plain-text underline plain-text plain-text headline plain-text section paragraph plain-text footnote-definition paragraph plain-text link plain-text plain-text)) ((link bold paragraph section headline org-data) headline ((bold nil) (paragraph nil) (section nil) (headline \"Visible\") (org-data nil)) \"Visible\") ((document bold-object) (bold-object) (document bold-object) (document)) (link \"https\" \"//example.org\" (link bold paragraph section headline org-data)) ((org-data section keyword table headline plain-text section property-drawer paragraph quote-block headline plain-text section planning drawer paragraph src-block headline plain-text section paragraph headline plain-text section paragraph footnote-definition) (org-data section keyword table table-row table-row headline plain-text section property-drawer node-property paragraph quote-block paragraph headline plain-text section planning drawer plain-list item paragraph paragraph src-block headline plain-text section paragraph headline plain-text section paragraph footnote-definition paragraph)) \"#+title: Parser visibility mix\n#+name: intro-table\n| Key | Value |\n| a   |     1 |\n\n* Visible                                                              :keep:\n:PROPERTIES:\n:CUSTOM_ID: visible\n:END:\nParagraph with *bold [[https://example.org][Example]]* and {{{macro(arg)}}}.\n#+begin_quote\nquoted /italic/ text\n#+end_quote\n** Hidden                                                              :skip:\nSCHEDULED: <2026-06-01 Mon +1w>\n:LOGBOOK:\n- State \\\"TODO\\\" from \\\"\\\" [2026-05-27 Wed]\n:END:\nHidden paragraph with [[#intro-table][table target]] and =code=.\n#+begin_src emacs-lisp :results value\n  (+ 1 2)\n#+end_src\n** Visible Child\nChild paragraph with [fn:1] and _under_.\n* Tail\nTail paragraph.\n[fn:1] Footnote definition with [[https://gnu.org][GNU]].\n\" \"#+TITLE: Parser visibility mix\n#+NAME: intro-table\n| Key | Value |\n| a | 1 |\n\n* Visible :keep:\n:PROPERTIES:\n:CUSTOM_ID: visible\n:END:\nParagraph with *bold [[https://example.org][Example]]* and {{{macro(arg)}}}.\n#+begin_quote\nquoted /italic/ text\n#+end_quote\n** Hidden :skip:\nSCHEDULED: <2026-06-01 Mon +1w>\n:LOGBOOK:\n- State \\\"TODO\\\" from \\\"\\\" [2026-05-27 Wed]\n:END:\nHidden paragraph with [[#intro-table][table target]] and =code=.\n#+begin_src emacs-lisp :results value\n(+ 1 2)\n#+end_src\n** Visible Child\nChild paragraph with [fn:1] and _under_.\n* Tail\nTail paragraph.\n[fn:1] Footnote definition with [[https://gnu.org][GNU]].\n\")""##
+        ]],
     );
 }
 
@@ -297,7 +305,7 @@ fn org_element_visible_only_lineage_inherited_combo() {
 fn org_element_full_ast_dump_with_properties_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -390,6 +398,9 @@ fn org_element_full_ast_dump_with_properties_combo() {
             (org-element-property :author tree)
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r##""OK (((1 \"TODO\" \"Alpha\" (\"work\" \"urgent\") nil) (2 \"DONE\" \"Sub A1\" (\"deep\") nil) (3 nil \"WAIT Sub A1a\" nil nil) (2 \"TODO\" \"Sub A2\" nil nil) (1 nil \"Beta\" (\"home\") nil)) ((\"<2026-05-27 Wed 09:00>\" nil nil) (nil nil \"[2026-05-26 Mon 15:00]\") (\"<2026-05-28 Thu>\" nil nil)) nil ((\"1:30\" closed)) ((\"emacs-lisp\" \"(+ 1 2)\n\")) ((org nil)) ((\"https\" \"//example.org\" \"https://example.org\")) ((\"1\")) (org-data section keyword keyword headline plain-text section planning paragraph plain-text timestamp plain-text drawer paragraph plain-text drawer clock paragraph plain-text bold plain-text plain-text italic plain-text plain-text headline plain-text section planning paragraph plain-text headline plain-text section planning paragraph plain-text src-block table table-row table-cell plain-text table-cell plain-text table-row table-row table-cell plain-text table-cell plain-text table-row table-cell plain-text table-cell plain-text headline plain-text section paragraph link plain-text plain-text headline plain-text section paragraph plain-text footnote-reference plain-text footnote-definition paragraph plain-text) nil nil \"#+TITLE: AST Probe\n#+AUTHOR: Tester\n\n* TODO Alpha :work:urgent:\nSCHEDULED: <2026-05-27 Wed 09:00>\nDEADLINE: <2026-05-29 Fri>\n:PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:ID: alpha-id-1\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-26 Mon 10:00]--[2026-05-26 Mon 11:30] =>  1:30\n:END:\nAlpha body with *bold* and /italic/.\n\n** DONE Sub A1 :deep:\nCLOSED: [2026-05-26 Mon 15:00]\nSub A1 body.\n*** WAIT Sub A1a\nSCHEDULED: <2026-05-28 Thu>\nSub A1a body.\n\n#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n\n| Name | Val |\n|------+-----|\n| foo | 1 |\n| bar | 2 |\n\n** TODO Sub A2\n[[https://example.org][Example Link]]\n\n* Beta :home:\nBeta body with footnote[fn:1].\n\n[fn:1] Footnote definition.\n\")""##
+        ]],
     );
 }
 
@@ -397,7 +408,7 @@ fn org_element_full_ast_dump_with_properties_combo() {
 fn org_element_parse_clock_property_planning_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -439,6 +450,9 @@ fn org_element_parse_clock_property_planning_edit_deep() {
       (list headlines properties tags
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r##""OK (((\"Alpha\" 1 \"TODO\" (\"work\") nil) (\"WAIT Gamma\" 3 nil (\"urgent\") nil) (\"Beta\" 2 \"DONE\" (\"home\") nil)) (((\"Effort\" \"2h30m\") (\"CUSTOM_ID\" \"alpha\")) ((\"Effort\" \"0h45m\")) ((\"Effort\" \"1h\") (\"CUSTOM_ID\" \"beta\"))) ((\"work\") (\"urgent\") (\"home\")) \"#+TITLE: DeepParseTest\n#+AUTHOR: Oracle\n\n* TODO Alpha :work:\n:PROPERTIES:\n:Effort: 2h30m\n:CUSTOM_ID: alpha\n:END:\nBody text under alpha.\n*** WAIT Gamma :urgent:\n:PROPERTIES:\n:Effort: 0h45m\n:END:\nBody under gamma.\n\n\n** DONE Beta :home:\n:PROPERTIES:\n:Effort: 1h\n:CUSTOM_ID: beta\n:END:\nBody text under beta.\n\n\")""##
+        ]],
     );
 }
 
@@ -446,7 +460,7 @@ fn org_element_parse_clock_property_planning_edit_deep() {
 fn org_element_parse_scheduled_deadline_clock_divergence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -472,6 +486,9 @@ fn org_element_parse_scheduled_deadline_clock_divergence() {
       (list headlines properties
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Alpha\" 1 \"TODO\")) (((\"Effort\" \"1h\"))) \"* TODO Alpha\nSCHEDULED: <2026-05-28 Wed>\n:PROPERTIES:\n:Effort: 1h\n:END:\nBody.\n\n\")""#
+        ]],
     );
 }
 
@@ -479,7 +496,7 @@ fn org_element_parse_scheduled_deadline_clock_divergence() {
 fn org_element_parse_clock_line_divergence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -505,6 +522,9 @@ fn org_element_parse_clock_line_divergence() {
       (list headlines properties
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Alpha\" 1 \"TODO\")) (((\"Effort\" \"1h\"))) \"* TODO Alpha\n:PROPERTIES:\n:Effort: 1h\n:END:\nCLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 11:00] =>  2:00\nBody.\n\n\")""#
+        ]],
     );
 }
 
@@ -512,7 +532,7 @@ fn org_element_parse_clock_line_divergence() {
 fn org_element_parse_scheduled_deadline_closed_clock_divergence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -541,6 +561,9 @@ fn org_element_parse_scheduled_deadline_closed_clock_divergence() {
       (list headlines properties
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Alpha\" 1 \"TODO\")) nil \"* TODO Alpha\nSCHEDULED: <2026-05-28 Wed>\nDEADLINE: <2026-06-01 Mon>\nCLOSED: [2026-05-27 Tue 14:30]\n:PROPERTIES:\n:Effort: 1h\n:END:\nCLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 11:00] =>  2:00\nBody.\n\n\")""#
+        ]],
     );
 }
 
@@ -548,7 +571,7 @@ fn org_element_parse_scheduled_deadline_closed_clock_divergence() {
 fn org_element_parse_single_scheduled_single_deadline_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -578,6 +601,7 @@ fn org_element_parse_single_scheduled_single_deadline_deep() {
       (list headlines planning
             (buffer-substring-no-properties
              (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 29 42)""#]],
     );
 }
 
@@ -585,7 +609,7 @@ fn org_element_parse_single_scheduled_single_deadline_deep() {
 fn org_element_parse_property_drawer_set_delete_reparse_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -629,6 +653,7 @@ fn org_element_parse_property_drawer_set_delete_reparse_deep() {
             (list initial after-set after-delete
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 43 51)""#]],
     );
 }
 
@@ -636,7 +661,7 @@ fn org_element_parse_property_drawer_set_delete_reparse_deep() {
 fn org_element_parse_scheduled_deadline_no_closed_no_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -663,6 +688,9 @@ fn org_element_parse_scheduled_deadline_no_closed_no_clock() {
       (list headlines properties
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Alpha\" 1 \"TODO\")) nil \"* TODO Alpha\nSCHEDULED: <2026-05-28 Wed>\nDEADLINE: <2026-06-01 Mon>\n:PROPERTIES:\n:Effort: 1h\n:END:\nBody.\n\n\")""#
+        ]],
     );
 }
 
@@ -670,7 +698,7 @@ fn org_element_parse_scheduled_deadline_no_closed_no_clock() {
 fn org_element_parse_scheduled_deadline_closed_no_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -698,6 +726,9 @@ fn org_element_parse_scheduled_deadline_closed_no_clock() {
       (list headlines properties
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Alpha\" 1 \"TODO\")) nil \"* TODO Alpha\nSCHEDULED: <2026-05-28 Wed>\nDEADLINE: <2026-06-01 Mon>\nCLOSED: [2026-05-27 Tue 14:30]\n:PROPERTIES:\n:Effort: 1h\n:END:\nBody.\n\n\")""#
+        ]],
     );
 }
 
@@ -705,7 +736,7 @@ fn org_element_parse_scheduled_deadline_closed_no_clock() {
 fn org_element_parse_scheduled_deadline_clock_no_closed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -733,6 +764,9 @@ fn org_element_parse_scheduled_deadline_clock_no_closed() {
       (list headlines properties
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Alpha\" 1 \"TODO\")) nil \"* TODO Alpha\nSCHEDULED: <2026-05-28 Wed>\nDEADLINE: <2026-06-01 Mon>\n:PROPERTIES:\n:Effort: 1h\n:END:\nCLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 11:00] =>  2:00\nBody.\n\n\")""#
+        ]],
     );
 }
 
@@ -740,7 +774,7 @@ fn org_element_parse_scheduled_deadline_clock_no_closed() {
 fn org_element_parse_tag_property_drawer_edit_reparse_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -786,6 +820,7 @@ fn org_element_parse_tag_property_drawer_edit_reparse_deep() {
           (list initial after-edit
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 48)""#]],
     );
 }
 
@@ -793,7 +828,7 @@ fn org_element_parse_tag_property_drawer_edit_reparse_deep() {
 fn org_element_parse_separate_scheduled_deadline_clock_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -847,6 +882,7 @@ fn org_element_parse_separate_scheduled_deadline_clock_edit() {
             (list initial after-tag after-prop
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 53 51)""#]],
     );
 }
 
@@ -854,7 +890,7 @@ fn org_element_parse_separate_scheduled_deadline_clock_edit() {
 fn org_element_parse_clock_logbook_edit_reparse_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -898,6 +934,7 @@ fn org_element_parse_clock_logbook_edit_reparse_deep() {
           (list initial after-edit
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 43 48)""#]],
     );
 }
 
@@ -905,7 +942,7 @@ fn org_element_parse_clock_logbook_edit_reparse_deep() {
 fn org_element_parse_multi_heading_tag_prop_edit_reparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -955,6 +992,7 @@ fn org_element_parse_multi_heading_tag_prop_edit_reparse() {
           (list initial after-edit
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 48)""#]],
     );
 }
 
@@ -962,7 +1000,7 @@ fn org_element_parse_multi_heading_tag_prop_edit_reparse() {
 fn org_element_parse_four_heading_tag_prop_edit_reparse_v2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -1012,6 +1050,7 @@ fn org_element_parse_four_heading_tag_prop_edit_reparse_v2() {
           (list initial after-edit
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 48)""#]],
     );
 }
 
@@ -1019,7 +1058,7 @@ fn org_element_parse_four_heading_tag_prop_edit_reparse_v2() {
 fn org_element_parse_five_heading_tag_prop_edit_reparse_v3() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -1075,6 +1114,7 @@ fn org_element_parse_five_heading_tag_prop_edit_reparse_v3() {
           (list initial after-edit
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 55 48)""#]],
     );
 }
 
@@ -1082,7 +1122,7 @@ fn org_element_parse_five_heading_tag_prop_edit_reparse_v3() {
 fn org_element_parse_six_heading_tag_prop_edit_reparse_v4() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -1141,6 +1181,7 @@ fn org_element_parse_six_heading_tag_prop_edit_reparse_v4() {
           (list initial after-edit
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 58 48)""#]],
     );
 }
 
@@ -1148,7 +1189,7 @@ fn org_element_parse_six_heading_tag_prop_edit_reparse_v4() {
 fn org_element_parse_seven_heading_tag_prop_edit_reparse_v5() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -1210,6 +1251,7 @@ fn org_element_parse_seven_heading_tag_prop_edit_reparse_v5() {
           (list initial after-edit
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 61 48)""#]],
     );
 }
 
@@ -1217,7 +1259,7 @@ fn org_element_parse_seven_heading_tag_prop_edit_reparse_v5() {
 fn org_element_parse_eight_heading_tag_prop_edit_reparse_v6() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -1282,6 +1324,7 @@ fn org_element_parse_eight_heading_tag_prop_edit_reparse_v6() {
           (list initial after-edit
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 64 48)""#]],
     );
 }
 
@@ -1289,7 +1332,7 @@ fn org_element_parse_eight_heading_tag_prop_edit_reparse_v6() {
 fn org_element_parse_nine_heading_tag_prop_edit_reparse_v7() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -1357,6 +1400,7 @@ fn org_element_parse_nine_heading_tag_prop_edit_reparse_v7() {
           (list initial after-edit
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 67 48)""#]],
     );
 }
 
@@ -1364,7 +1408,7 @@ fn org_element_parse_nine_heading_tag_prop_edit_reparse_v7() {
 fn org_element_parse_ten_heading_tag_prop_edit_reparse_v8() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (with-temp-buffer
@@ -1435,5 +1479,6 @@ fn org_element_parse_ten_heading_tag_prop_edit_reparse_v8() {
           (list initial after-edit
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 70 48)""#]],
     );
 }

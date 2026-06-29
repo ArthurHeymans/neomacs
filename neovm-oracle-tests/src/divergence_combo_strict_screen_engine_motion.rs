@@ -18,7 +18,7 @@ fn div_f1_vertical_motion_negative_wrapped() {
     // (to ~char 160) then 1 back (to 80); Neomacs never leaves point 1.
     // (line-move visual, compute-motion and move-to-column DO wrap — only
     // vertical-motion and count-screen-lines lack wrapping.)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-vmn*")))
   (unwind-protect
@@ -34,13 +34,14 @@ fn div_f1_vertical_motion_negative_wrapped() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (159 80 80)""#]],
     );
 }
 
 #[test]
 fn div_f1_line_move_visual_wrapped() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-lmv*")))
   (unwind-protect
@@ -54,13 +55,14 @@ fn div_f1_line_move_visual_wrapped() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""ERR (end-of-buffer)""#]],
     );
 }
 
 #[test]
 fn div_f1_pos_visible_partial_coordinates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-pvp2*")))
   (unwind-protect
@@ -78,13 +80,14 @@ fn div_f1_pos_visible_partial_coordinates() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (nil nil 1 911)""#]],
     );
 }
 
 #[test]
 fn div_f1_compute_motion_wide_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-cm*")))
   (unwind-protect
@@ -97,13 +100,14 @@ fn div_f1_compute_motion_wide_line() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument consp 23)""#]],
     );
 }
 
 #[test]
 fn div_f1_column_over_wide_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-col*")))
   (unwind-protect
@@ -118,6 +122,7 @@ fn div_f1_column_over_wide_line() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (0 100 50)""#]],
     );
 }
 
@@ -129,7 +134,7 @@ fn div_f1_count_screen_lines_various_widths() {
     // Neomacs:   OK (3 80 23)
     // count-screen-lines does not wrap the 250-char line into multiple
     // screen lines; GNU counts 6 (wrapped), Neomacs counts 3.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-csw*")))
   (unwind-protect
@@ -147,5 +152,6 @@ fn div_f1_count_screen_lines_various_widths() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (6 80 23)""#]],
     );
 }

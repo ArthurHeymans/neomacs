@@ -102,7 +102,10 @@ fn oracle_prop_deductive_db_fact_assertion_query() {
     (fmakunbound 'neovm--ddb-unify)
     (fmakunbound 'neovm--ddb-query)
     (fmakunbound 'neovm--ddb-binding-val)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 68 73)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +226,10 @@ fn oracle_prop_deductive_db_rules_forward_chaining() {
     (fmakunbound 'neovm--ddb2-eval-body)
     (fmakunbound 'neovm--ddb2-apply-rule)
     (fmakunbound 'neovm--ddb2-forward-chain)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil iterations)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -345,7 +351,10 @@ fn oracle_prop_deductive_db_recursive_transitive_closure() {
     (fmakunbound 'neovm--ddb3-eval-body)
     (fmakunbound 'neovm--ddb3-apply-rule)
     (fmakunbound 'neovm--ddb3-fixpoint)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 nil nil nil t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -470,7 +479,12 @@ fn oracle_prop_deductive_db_stratified_negation() {
     (fmakunbound 'neovm--ddb4-query-1)
     (fmakunbound 'neovm--ddb4-subst)
     (fmakunbound 'neovm--ddb4-exists-p)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"alice\" \"bob\") (\"alice\" \"bob\") (\"eve\") nil (\"math\" \"physics\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -585,7 +599,12 @@ fn oracle_prop_deductive_db_magic_sets() {
     (fmakunbound 'neovm--ddb5-query-1)
     (fmakunbound 'neovm--ddb5-subst)
     (fmakunbound 'neovm--ddb5-magic-ancestor)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"alice\" \"bob\" \"charlie\" \"dave\" \"eve\" \"frank\" \"grace\") (\"alice->bob\" \"alice->charlie\" \"alice->dave\" \"alice->eve\" \"alice->frank\" \"alice->grace\" \"bob->charlie\" \"bob->dave\" \"bob->eve\" \"charlie->dave\" \"charlie->eve\" \"dave->eve\" \"frank->grace\") t t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -720,7 +739,10 @@ fn oracle_prop_deductive_db_complex_query_bindings() {
     (fmakunbound 'neovm--ddb6-query-1)
     (fmakunbound 'neovm--ddb6-subst)
     (fmakunbound 'neovm--ddb6-join-query)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 69 43)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -813,5 +835,8 @@ fn oracle_prop_deductive_db_aggregation_grouping() {
     (fmakunbound 'neovm--ddb7-unify)
     (fmakunbound 'neovm--ddb7-query-1)
     (fmakunbound 'neovm--ddb7-group-by)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 48 59)""#]],
+    );
 }

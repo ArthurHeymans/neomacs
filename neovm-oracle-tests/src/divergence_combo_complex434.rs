@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx434_org_table_formula() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-table)
   (with-temp-buffer
     (org-mode)
@@ -19,6 +19,7 @@ fn div_cx434_org_table_formula() {
     (org-table-iterate)
     (buffer-string)))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"Not at a table\")""#]],
     );
 }
 
@@ -26,7 +27,7 @@ fn div_cx434_org_table_formula() {
 #[test]
 fn div_cx434_org_archive_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-archive)
   (with-temp-buffer
     (org-mode)
@@ -34,6 +35,7 @@ fn div_cx434_org_archive_ops() {
     (list (fboundp 'org-archive-subtree)
           (fboundp 'org-archive-to-archive-sibling))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -41,13 +43,14 @@ fn div_cx434_org_archive_ops() {
 #[test]
 fn div_cx434_org_map_entries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
     (org-mode)
     (insert "* H1\n** H2\n*** H3\n")
     (org-map-entries (lambda () (insert "!")))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
@@ -55,7 +58,7 @@ fn div_cx434_org_map_entries() {
 #[test]
 fn div_cx434_org_sort_entries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
     (org-mode)
@@ -63,6 +66,7 @@ fn div_cx434_org_sort_entries() {
     (org-sort-entries t ?a)
     (buffer-string)))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"Nothing to sort\")""#]],
     );
 }
 
@@ -70,7 +74,7 @@ fn div_cx434_org_sort_entries() {
 #[test]
 fn div_cx434_org_properties_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
     (org-mode)
@@ -78,6 +82,7 @@ fn div_cx434_org_properties_ops() {
     (org-back-to-heading)
     (org-entry-get nil "CUSTOM_ID")))
 "##,
+        expect_test::expect![[r#""OK \"test\"""#]],
     );
 }
 
@@ -85,7 +90,7 @@ fn div_cx434_org_properties_ops() {
 #[test]
 fn div_cx434_org_drawers_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
     (org-mode)
@@ -94,6 +99,7 @@ fn div_cx434_org_drawers_ops() {
     (org-flag-drawer (point-min) (point-max) t)
     (outline-invisible-p 20)))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -101,11 +107,12 @@ fn div_cx434_org_drawers_ops() {
 #[test]
 fn div_cx434_org_date_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (list (fboundp 'org-time-string-to-seconds)
         (fboundp 'org-days-to-time)))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -113,7 +120,7 @@ fn div_cx434_org_date_range() {
 #[test]
 fn div_cx434_org_effort_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
     (org-mode)
@@ -121,6 +128,7 @@ fn div_cx434_org_effort_ops() {
     (org-back-to-heading)
     (org-entry-get nil "Effort")))
 "##,
+        expect_test::expect![[r#""OK \"2:00\"""#]],
     );
 }
 
@@ -128,7 +136,7 @@ fn div_cx434_org_effort_ops() {
 #[test]
 fn div_cx434_org_repeat_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
     (org-mode)
@@ -136,6 +144,7 @@ fn div_cx434_org_repeat_ops() {
     (org-back-to-heading)
     (org-get-scheduled-time (point) "\\+")))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -143,7 +152,7 @@ fn div_cx434_org_repeat_ops() {
 #[test]
 fn div_cx434_org_columns_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-colview)
   (with-temp-buffer
     (org-mode)
@@ -151,6 +160,7 @@ fn div_cx434_org_columns_ops() {
     (list (fboundp 'org-columns)
           (fboundp 'org-columns-edit-value))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -158,7 +168,7 @@ fn div_cx434_org_columns_ops() {
 #[test]
 fn div_cx434_org_id_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-id)
   (with-temp-buffer
     (org-mode)
@@ -166,6 +176,7 @@ fn div_cx434_org_id_ops() {
     (org-id-get-create)
     (org-id-get)))
 "##,
+        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]],
     );
 }
 
@@ -173,7 +184,7 @@ fn div_cx434_org_id_ops() {
 #[test]
 fn div_cx434_org_habit_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-habit)
   (with-temp-buffer
     (org-mode)
@@ -181,6 +192,7 @@ fn div_cx434_org_habit_ops() {
     (list (fboundp 'org-habit-parse-todo)
           (fboundp 'org-habit-build-graph))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -188,7 +200,7 @@ fn div_cx434_org_habit_ops() {
 #[test]
 fn div_cx434_org_inlinetask_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-inlinetask)
   (with-temp-buffer
     (org-mode)
@@ -197,6 +209,7 @@ fn div_cx434_org_inlinetask_ops() {
       (list (fboundp 'org-inlinetask-insert-task)
             (org-inlinetask-at-task-p))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -204,12 +217,13 @@ fn div_cx434_org_inlinetask_ops() {
 #[test]
 fn div_cx434_org_entities_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-entities)
   (list (org-entities-get "agrave")
         (org-entities-get "copy")
         (fboundp 'org-entities-display)))
 "##,
+        expect_test::expect![[r#""ERR (void-function org-entities-get)""#]],
     );
 }
 
@@ -217,12 +231,13 @@ fn div_cx434_org_entities_ops() {
 #[test]
 fn div_cx434_org_attach_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-attach)
   (list (fboundp 'org-attach-attach)
         (fboundp 'org-attach-reveal)
         (boundp 'org-attach-id-dir)))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -230,10 +245,11 @@ fn div_cx434_org_attach_ops() {
 #[test]
 fn div_cx434_org_timer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-timer)
   (list (fboundp 'org-timer-set-timer)
         (fboundp 'org-timer-pause-or-continue)))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }

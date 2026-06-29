@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo4_modify_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\nBody1\n* H2\nBody2")
@@ -33,6 +33,9 @@ fn combo4_modify_export() {
                                                   (org-element-property :raw-value h)
                                                   (org-element-property :todo-keyword h))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init-html 154) (:after-html 167) (:after-level ((1 \"* TODO H1\" \"TODO\") (2 \"H2\" nil))))""#
+        ]],
     );
 }
 
@@ -43,7 +46,7 @@ fn combo4_modify_export() {
 #[test]
 fn combo4_table_formula() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| x | y |\n| 1 |   |\n| 2 |   |\n| 3 |   |\n#+TBLFM: $2=$1*10")
@@ -62,6 +65,7 @@ fn combo4_table_formula() {
     (forward-line)
     (push (list :cell3 (org-table-get "3" "2")) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (user-error \"Not at a table\")""#]],
     );
 }
 
@@ -72,7 +76,7 @@ fn combo4_table_formula() {
 #[test]
 fn combo4_full_heading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO [#A] Heading :tag1:tag2:\n:PROPERTIES:\n:CUSTOM_ID: myid\n:EFFORT: 2h\n:END:\nBody text")
@@ -103,6 +107,9 @@ fn combo4_full_heading() {
     ;; verify buffer
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:todo \"TODO\") (:priority \"A\") (:tags \":tag1:tag2:\") (:custom-id \"myid\") (:effort \"2h\") (:el-level 1) (:el-todo \"TODO\") (:el-priority 65) (:el-tags (\"tag1\" \"tag2\")) (:el-raw \"Heading\") (:after-todo \"DONE\") (:after-tag (\"tag1\" \"tag2\" \"newtag\")) (:after-prop \"3h\") (:content #(\"* DONE [#A] Heading                                        :tag1:tag2:newtag:\n:PROPERTIES:\n:CUSTOM_ID: myid\n:EFFORT:   3h\n:END:\nBody text\" 0 77 (org-todo-head \"TODO\"))))""#
+        ]],
     );
 }
 
@@ -113,7 +120,7 @@ fn combo4_full_heading() {
 #[test]
 fn combo4_list_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T [0/3]\n- [ ] A\n- [ ] B\n- [ ] C")
@@ -147,6 +154,9 @@ fn combo4_list_checkbox() {
                                 (lambda (i) (list (org-element-property :level i)
                                                   (org-element-property :checkbox i))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init ((off \"A\") (off \"B\") (off \"C\"))) (:after-a (on off off)) (:after-b (on on off)) (:stats \"* T [2/3]\") (:after-indent ((nil on) (nil on) (nil off))))""#
+        ]],
     );
 }
 
@@ -157,7 +167,7 @@ fn combo4_list_checkbox() {
 #[test]
 fn combo4_src_results() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_SRC emacs-lisp :results value\n(+ 1 2)\n#+END_SRC")
@@ -189,7 +199,7 @@ fn combo4_src_results() {
 #[test]
 fn combo4_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** B\n*** C\n** D\n* E\n** F\n*** G")
@@ -218,6 +228,7 @@ fn combo4_navigation() {
     (org-end-of-subtree)
     (push (list :end (point)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 2) 0)""#]],
     );
 }
 
@@ -228,7 +239,7 @@ fn combo4_navigation() {
 #[test]
 fn combo4_visibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub")
@@ -255,6 +266,9 @@ fn combo4_visibility() {
     (widen)
     (push (list :widened (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:overview \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\") (:content \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\") (:all \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\") (:narrowed \"*** H3\nBody\") (:context \"*** H3\nBody\") (:widened \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\"))""#
+        ]],
     );
 }
 
@@ -265,7 +279,7 @@ fn combo4_visibility() {
 #[test]
 fn combo4_clock_planning() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO T\nSCHEDULED: <2026-01-15>\nDEADLINE: <2026-01-20>\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\n:END:\nBody")
@@ -289,6 +303,7 @@ fn combo4_clock_planning() {
     ;; clock string
     (push (list :clock-string (org-clock-get-clock-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (error \"Invalid date: \")""#]],
     );
 }
 
@@ -299,7 +314,7 @@ fn combo4_clock_planning() {
 #[test]
 fn combo4_cache() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nBody")
@@ -320,6 +335,7 @@ fn combo4_cache() {
     (let ((s (org-element-cache-status)))
       (push (list :after-reset (plist-get s :size)) r))
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (void-function org-element-cache-status)""#]],
     );
 }
 
@@ -330,7 +346,7 @@ fn combo4_cache() {
 #[test]
 fn combo4_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\nBody\n** H2\nSub\n*** H3\nDeep")
@@ -356,6 +372,7 @@ fn combo4_indent() {
         (forward-line))
       (push (list :buffer-indents (nreverse indents)) r))
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -366,7 +383,7 @@ fn combo4_indent() {
 #[test]
 fn combo4_lint() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nSCHEDULED: <invalid>\nBody [[broken]]")
@@ -376,5 +393,6 @@ fn combo4_lint() {
     ;; verify buffer unchanged
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }

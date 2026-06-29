@@ -14,7 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eval_buffer_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-evb")))
     (with-current-buffer buf
@@ -50,6 +50,7 @@ fn combo_eval_buffer_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (void-variable AAAA-BBBB-CCCC-DDDD)""#]],
     );
 }
 
@@ -57,7 +58,7 @@ fn combo_eval_buffer_marker_overlay_undo() {
 fn combo_eval_region_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-evr")))
     (with-current-buffer buf
@@ -91,6 +92,7 @@ fn combo_eval_region_marker_overlay_undo() {
                                 (get-text-property 17 'code))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -98,7 +100,7 @@ fn combo_eval_region_marker_overlay_undo() {
 fn combo_eval_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-evn")))
     (with-current-buffer buf
@@ -137,6 +139,7 @@ fn combo_eval_narrow_marker_overlay_undo() {
                                 (get-text-property 24 'sect))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (args-out-of-range 24 28)""#]],
     );
 }
 
@@ -144,7 +147,7 @@ fn combo_eval_narrow_marker_overlay_undo() {
 fn combo_eval_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-evbl")))
     (with-current-buffer buf
@@ -175,6 +178,7 @@ fn combo_eval_buffer_local_marker_overlay_undo() {
                                 (get-text-property 1 'code))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -182,7 +186,7 @@ fn combo_eval_buffer_local_marker_overlay_undo() {
 fn combo_eval_multi_sexpr_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-evms")))
     (with-current-buffer buf
@@ -228,5 +232,6 @@ fn combo_eval_multi_sexpr_marker_overlay_undo() {
                                 (get-text-property 26 'expr))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (void-function eval-sexp-add-defvar-result)""#]],
     );
 }

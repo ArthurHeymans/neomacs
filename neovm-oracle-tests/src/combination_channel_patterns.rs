@@ -86,7 +86,12 @@ fn oracle_prop_channel_bounded_send_receive() {
       (funcall drain)
       ;; Stats
       (funcall stats))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t 0) (t t t) (t 3) nil ((a . t) (b . t)) (nil 1) t t (c x y) ((sent . 5) (recv . 5) (dropped . 1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +149,12 @@ fn oracle_prop_channel_fan_out() {
           (funcall (cdr (assq :drain c1)))
           (funcall (cdr (assq :drain c2)))
           (funcall (cdr (assq :drain c3))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 40 70) (20 50 80) (30 60 90) ((broadcast-1 broadcast-2) (broadcast-1 broadcast-2) (broadcast-1 broadcast-2)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +229,12 @@ fn oracle_prop_channel_fan_in() {
                   r)
                 (lambda (a b) (string< (symbol-name (car a))
                                        (symbol-name (car b))))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (14 ((P1 1) (P1 4) (P1 9) (P1 16) (P1 25) (P2 1) (P2 8) (P2 27) (P3 0) (P3 1) (P3 1) (P3 2) (P3 3) (P3 5)) 0 ((P1 . 2) (P2 . 2) (P3 . 1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +314,12 @@ fn oracle_prop_channel_request_reply() {
                     (cons (funcall call-server 'add (list i (* i 10)))
                           results)))
             (nreverse results)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((result . 60) (op . add)) ((result . 24) (op . mul)) ((result . 11) (op . len)) ((result . \"HELLO\") (op . upper)) ((result error unknown-op unknown) (op . unknown)) (((result . 0) (op . add)) ((result . 11) (op . add)) ((result . 22) (op . add)) ((result . 33) (op . add)) ((result . 44) (op . add))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -403,7 +423,12 @@ fn oracle_prop_channel_pub_sub() {
     (fmakunbound 'neovm--ps-receive-topic)
     (makunbound 'neovm--ps-subscriptions)
     (makunbound 'neovm--ps-mailboxes)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 2 2 3 0) ((news . \"Breaking news!\") (sports . \"Game results\") (news . \"More news\")) ((news . \"Breaking news!\") (tech . \"New release\") (news . \"More news\")) ((news . \"Breaking news!\") (news . \"More news\")) ((sports . \"Game results\") (tech . \"New release\")) nil 0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -514,7 +539,10 @@ fn oracle_prop_channel_pipeline() {
               (let ((out2 (funcall (cdr (assq :drain ch3)))))
                 ;; All should pass filter since 20*2+5=45, 30*2+5=65, 40*2+5=85
                 out2))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10 10 10) (19 23 17 21 25) 5 (0 0 0 0) (45 65 85))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -610,5 +638,5 @@ fn oracle_prop_channel_multiplexer() {
         (list (funcall (cdr (assq :size urgent)))
               (funcall (cdr (assq :size normal)))
               (funcall (cdr (assq :size low)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }

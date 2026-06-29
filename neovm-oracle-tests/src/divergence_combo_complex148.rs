@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx148_process_mark_position_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx148-mark*"))
        (p (make-process :name "neo-cx148-mark"
@@ -21,13 +21,14 @@ fn div_cx148_process_mark_position_query() {
                  (eq (marker-buffer mark) buf))
       (kill-buffer buf))))
 "##,
+        expect_test::expect![[r#""OK (t 37 t)""#]],
     );
 }
 
 #[test]
 fn div_cx148_process_list_after_multiple_make() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((procs-before (process-list)))
   (let ((p1 (make-process :name "neo-cx148-p1" :command '("echo" "1")))
@@ -42,13 +43,14 @@ fn div_cx148_process_list_after_multiple_make() {
     (when (string-prefix-p "neo-cx148-p" (process-name p))
       (delete-process p))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx148_process_query_before_exit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx148-query"
                         :command '("sh" "-c" "sleep 0.1"))))
@@ -56,13 +58,14 @@ fn div_cx148_process_query_before_exit() {
         (eq (process-status p) 'run)
         (memq (process-status p) '(run exit signal)))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx148_process_filter_vs_buffer_append() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((filter-collected nil)
        (buf (get-buffer-create " *neo-cx148-flt*"))
@@ -77,13 +80,14 @@ fn div_cx148_process_filter_vs_buffer_append() {
     (list buf-content
           (apply #'concat (nreverse filter-collected)))))
 "##,
+        expect_test::expect![[r#""OK (\"\nProcess neo-cx148-flt finished\n\" \"via-filter\n\")""#]],
     );
 }
 
 #[test]
 fn div_cx148_process_default_filter_appends_to_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx148-defflt*"))
        (p (make-process :name "neo-cx148-defflt"
@@ -95,13 +99,14 @@ fn div_cx148_process_default_filter_appends_to_buffer() {
     (kill-buffer buf)
     content))
 "##,
+        expect_test::expect![[r#""OK \"default-filter\n\nProcess neo-cx148-defflt finished\"""#]],
     );
 }
 
 #[test]
 fn div_cx148_set_process_buffer_change_after_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf-a (get-buffer-create " *neo-cx148-a*"))
        (buf-b (get-buffer-create " *neo-cx148-b*"))
@@ -121,13 +126,16 @@ fn div_cx148_set_process_buffer_change_after_creation() {
       (kill-buffer buf-b)
       (list in-a in-a-after in-b-after))))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"Process neo-cx148-switchbuf not running: finished\n\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx148_process_stderr_separate_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((err-buf (get-buffer-create " *neo-cx148-err*"))
@@ -145,13 +153,16 @@ fn div_cx148_process_stderr_separate_capture() {
         (list out err)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"OUT\n\nProcess neo-cx148-stderr finished\" \"ERR\n\nProcess neo-cx148-stderr stderr finished\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx148_process_stderr_to_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let (stderr-data)
@@ -168,13 +179,14 @@ fn div_cx148_process_stderr_to_filter() {
           (list out err))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
     );
 }
 
 #[test]
 fn div_cx148_process_plist_set_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx148-plist" :command '("echo" "p"))))
   (process-put p 'neo-cx148-custom :val)
@@ -183,13 +195,14 @@ fn div_cx148_process_plist_set_get() {
     (delete-process p)
     (list got missing)))
 "##,
+        expect_test::expect![[r#""OK (:val nil)""#]],
     );
 }
 
 #[test]
 fn div_cx148_process_connection_type_pipe_vs_pty_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((p-pipe (make-process :name "neo-cx148-pipe"
@@ -209,13 +222,14 @@ fn div_cx148_process_connection_type_pipe_vs_pty_query() {
         (delete-process p-pty)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx148_process_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx148-mega*")))
   (with-current-buffer buf
@@ -242,5 +256,6 @@ fn div_cx148_process_with_marker_overlay_undo_narrow_mega() {
         (kill-buffer buf)
         (list state (buffer-string))))))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     );
 }

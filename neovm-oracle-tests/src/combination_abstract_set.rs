@@ -105,7 +105,12 @@ fn oracle_prop_abstract_set_basic_operations() {
     (fmakunbound 'neovm--as-intersect)
     (fmakunbound 'neovm--as-diff)
     (fmakunbound 'neovm--as-sym-diff)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 3 5 7 9) (2 3 5 8 11) (1 2 3 5 7 8 9 11) (3 5) (1 7 9) (2 8 11) (1 2 7 8 9 11) (1 3 5 7 9) (1 3 5 7 9) nil (1 3 5 7 9) nil (1 3 5 7 9) t t nil nil (5 5 8 2))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +188,10 @@ fn oracle_prop_abstract_set_power_set() {
     (fmakunbound 'neovm--as-power-set)
     (fmakunbound 'neovm--as-sort-set-of-sets)
     (fmakunbound 'neovm--as-sort-compare)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 2 4 8 16 (nil) (nil (1)) (nil (1) (1 2) (2)) t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +254,12 @@ fn oracle_prop_abstract_set_cartesian_product() {
             (nreverse diag))))
     (fmakunbound 'neovm--as-cartesian)
     (fmakunbound 'neovm--as-cartesian-3)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . 10) (1 . 20) (2 . 10) (2 . 20) (3 . 10) (3 . 20)) t ((10 . 1) (10 . 2) (10 . 3) (20 . 1) (20 . 2) (20 . 3)) nil nil t ((1 3 5) (1 3 6) (1 4 5) (1 4 6) (2 3 5) (2 3 6) (2 4 5) (2 4 6)) t ((1 . 1) (1 . 2) (2 . 1) (2 . 2)) ((1 . 1) (2 . 2) (3 . 3)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +352,12 @@ fn oracle_prop_abstract_set_algebra_laws() {
     (fmakunbound 'neovm--as2-intersect)
     (fmakunbound 'neovm--as2-diff)
     (fmakunbound 'neovm--as2-complement)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t (8 9 10) (8 9 10)) (t (1 2 6 7 8 9 10) (1 2 6 7 8 9 10)) (t (3 4 5) (3 4 5)) (t (1 2 3 4 5 6 7) (1 2 3 4 5 6 7)) t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -422,7 +440,12 @@ fn oracle_prop_abstract_set_relation_composition() {
     (fmakunbound 'neovm--as-rel-compose)
     (fmakunbound 'neovm--as-rel-reflexive-closure)
     (fmakunbound 'neovm--as-rel-symmetric-closure)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . 5) (2 . 6) (3 . 7)) ((1 . 3) (2 . 4)) ((1 . 4)) ((1 . 1) (1 . 2) (2 . 2) (2 . 3) (3 . 3) (3 . 4) (4 . 4)) ((1 . 2) (2 . 1) (2 . 3) (3 . 2) (3 . 4) (4 . 3)) t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -525,5 +548,10 @@ fn oracle_prop_abstract_set_transitive_closure() {
     (fmakunbound 'neovm--as3-rel-union)
     (fmakunbound 'neovm--as3-transitive-closure)
     (fmakunbound 'neovm--as3-is-transitive)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . 2) (1 . 3) (1 . 4) (2 . 3) (2 . 4) (3 . 4)) ((1 . 1) (1 . 2) (1 . 3) (2 . 1) (2 . 2) (2 . 3) (3 . 1) (3 . 2) (3 . 3)) ((1 . 2) (1 . 3) (1 . 4) (2 . 4)) ((1 . 1)) t t nil t t)""#
+        ]],
+    );
 }

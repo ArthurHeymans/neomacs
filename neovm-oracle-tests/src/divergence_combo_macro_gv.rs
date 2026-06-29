@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_defmacro_backquote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defmacro test-macro-swap (a b)
     "(let ((tmp ,a))
@@ -19,6 +19,9 @@ fn deficiency_defmacro_backquote() {
           y (= y 10)
           (macroexpand '(test-macro-swap x y))
           (listp (macroexpand '(test-macro-swap x y)))))) "#,
+        expect_test::expect![[
+            r#""OK (10 nil 20 nil \"(let ((tmp ,a))\n       (setq ,a ,b)\n       (setq ,b tmp)))\" nil)""#
+        ]],
     );
 }
 
@@ -26,7 +29,7 @@ fn deficiency_defmacro_backquote() {
 fn deficiency_defmacro_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defmacro test-macro-with (place val)
     "(setf ,place ,val)")
@@ -44,6 +47,7 @@ fn deficiency_defmacro_with_props() {
                 (string= s "MODIFIED-ORIGINAL")
                 (= (buffer-size) 16))))))
     (kill-buffer buf))) "#,
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -51,7 +55,7 @@ fn deficiency_defmacro_with_props() {
 fn deficiency_cl_defmacro_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defmacro test-cl-dstruct ((a b &optional c) &rest body)
     "(list ,a ,b ,c (progn ,@body)))
@@ -59,6 +63,7 @@ fn deficiency_cl_defmacro_destructuring() {
         (equal (test-cl-dstruct (1 2) "extra") '(1 2 nil "extra"))
         (test-cl-dstruct (10 20 30) "more" "stuff")
         (equal (test-cl-dstruct (10 20 30) "more" "stuff") '(10 20 30 ("more" "stuff"))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -66,7 +71,7 @@ fn deficiency_cl_defmacro_destructuring() {
 fn deficiency_gv_generalized_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-gv-list '(a b c d e))
   (setf (nth 2 test-gv-list) 'X)
@@ -78,6 +83,7 @@ fn deficiency_gv_generalized_vars() {
           (setf (gethash "key" h) 99)
           (list (gethash "key" h) (= (gethash "key" h) 99)
                 (hash-table-count h) (= (hash-table-count h) 1))))) "#,
+        expect_test::expect![[r#""OK ((a b X d Y) t (99 t 1 t))""#]],
     );
 }
 
@@ -85,7 +91,7 @@ fn deficiency_gv_generalized_vars() {
 fn deficiency_gv_with_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "HELLO WORLD")
   (put-text-property 1 5 'case 'upper)
@@ -100,6 +106,9 @@ fn deficiency_gv_with_buffer() {
               s2 (string= s2 "BYE PLANET")
               (= (buffer-size) 10)
               (overlay-get ov 'lang) (eq (overlay-get ov 'lang) 'en)))))) "#,
+        expect_test::expect![[
+            r#""BYEO PLANETOK (#(\"BYEO WORLD\" 5 9 (case upper)) nil \"BYEO PLANET\" nil nil en t)""#
+        ]],
     );
 }
 
@@ -107,7 +116,7 @@ fn deficiency_gv_with_buffer() {
 fn deficiency_eval_and_inline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-inline-helper (x) (+ x 1))
   (defmacro test-inline-macro (x)
@@ -115,6 +124,9 @@ fn deficiency_eval_and_inline() {
   (list (test-inline-macro 5) (= (test-inline-macro 5) 16)
         (test-inline-macro 10) (= (test-inline-macro 10) 21)
         (test-inline-macro 0) (= (test-inline-macro 0) 11)))) "#,
+        expect_test::expect![[
+            r#""ERR (wrong-type-argument number-or-marker-p \"(funcall (lambda (y) (+ y (test-inline-helper ,x))) 10)\")""#
+        ]],
     );
 }
 
@@ -122,7 +134,7 @@ fn deficiency_eval_and_inline() {
 fn deficiency_cl_letf_with_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "BEFORE")
   (put-text-property 1 6 'stage 'initial)
@@ -134,6 +146,7 @@ fn deficiency_cl_letf_with_buffer() {
     (list (buffer-string) (string= (buffer-string) "BEFORE")
           (get-text-property 1 'stage) (eq (get-text-property 1 'stage) 'initial)
           (overlay-get ov 'phase) (= (overlay-get ov 'phase) 1)))) "#,
+        expect_test::expect![[r#""BEFOREERR (wrong-type-argument listp \"DURING\")""#]],
     );
 }
 
@@ -141,7 +154,7 @@ fn deficiency_cl_letf_with_buffer() {
 fn deficiency_compiled_vs_interpreted_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((x 10)
         (f1 (lambda (n) (+ n x)))
@@ -150,6 +163,7 @@ fn deficiency_compiled_vs_interpreted_closure() {
           (funcall f2 5) (= (funcall f2 5) 15)
           (functionp f1) (functionp f2)
           (eq (type-of f1) (type-of f2))))) "#,
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
     );
 }
 
@@ -157,7 +171,7 @@ fn deficiency_compiled_vs_interpreted_closure() {
 fn deficiency_backquote_nested_splice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((a '(1 2 3))
         (b '(4 5))
@@ -168,6 +182,9 @@ fn deficiency_backquote_nested_splice() {
             (= (length result) 10)
             (equal (nth 0 result) 'begin)
             (equal (last result) '(end)))))) "#,
+        expect_test::expect![[
+            r#""OK ((begin (\\,@ a) middle (\\,@ b) (\\,@ c) end) nil nil t t)""#
+        ]],
     );
 }
 
@@ -175,7 +192,7 @@ fn deficiency_backquote_nested_splice() {
 fn deficiency_macroexpand_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defmacro test-mx-when (cond &rest body)
     "(if ,cond (progn ,@body)))
@@ -187,5 +204,6 @@ fn deficiency_macroexpand_all() {
           (eq (car w) 'if)
           (let ((u (macroexpand-all '(test-mx-unless nil (princ 3)))))
             (list u (listp u) (eq (car u) 'if)))))) "#,
+        expect_test::expect![[r#""ERR (void-function \\,)""#]],
     );
 }

@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_marker_types_overlay_undo_narrow_regex_bufswitch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf-a (generate-new-buffer " combo-mtoa"))
         (buf-b (generate-new-buffer " combo-mtob")))
@@ -70,6 +70,7 @@ fn combo_marker_types_overlay_undo_narrow_regex_bufswitch() {
                       sect-at-1 sect-at-5
                       restored m-nil-restored m-t-restored m-nil2-restored
                       b-sect))))))))) "#,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }
 
@@ -77,7 +78,7 @@ fn combo_marker_types_overlay_undo_narrow_regex_bufswitch() {
 fn combo_marker_types_multi_insert_delete_undo_evaporate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAAAAAAAAAAAAAAAAAAAAAAAAAA")
   (let ((m1 (copy-marker 5 nil))
@@ -121,6 +122,9 @@ fn combo_marker_types_multi_insert_delete_undo_evaporate() {
                     (get-text-property 1 'half)
                     (get-text-property 16 'half))))
         (list state-after-delete state-after-undo))))) "#,
+        expect_test::expect![[
+            r#""AAAA-TEXTAAAAAAAAAAAAAAAAAAAERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -128,7 +132,7 @@ fn combo_marker_types_multi_insert_delete_undo_evaporate() {
 fn combo_marker_types_narrow_regex_match_data_prop_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "alpha:100 beta:200 gamma:300 delta:400 epsilon:500")
   (let ((m-alpha (copy-marker 1 t))
@@ -173,6 +177,9 @@ fn combo_marker_types_narrow_regex_match_data_prop_chain() {
               (prop-at-end (get-text-property 37 'word)))
           (list results marker-positions marker-types
                 overlay-range prop-at-start prop-at-end)))))) "#,
+        expect_test::expect![[
+            r#""alpha:100 beta:200 gamma:300 delta:400 epsilon:500OK (((#(\"beta\" 0 4 (word beta)) #(\"200\" 0 2 (word beta)) 11 19) (#(\"gamma\" 0 5 (word gamma)) #(\"300\" 0 1 (word gamma) 2 3 (word delta)) 20 29)) (1 10 19 28 37) (t nil t nil t) (10 36) alpha epsilon)""#
+        ]],
     );
 }
 
@@ -180,7 +187,7 @@ fn combo_marker_types_narrow_regex_match_data_prop_chain() {
 fn combo_marker_types_cross_buffer_copy_props_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((src (generate-new-buffer " combo-cpsrc"))
         (dst (generate-new-buffer " combo-cpdst")))
@@ -214,6 +221,7 @@ fn combo_marker_types_cross_buffer_copy_props_overlay_undo() {
                   (list dst-tag-1 dst-tag-6 dst-tag-11 dst-tag-16
                         src-m1 src-m2
                         dst-after-insert dst-after-undo))))))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -221,7 +229,7 @@ fn combo_marker_types_cross_buffer_copy_props_overlay_undo() {
 fn combo_marker_types_let_binding_buffer_local_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq combo-global 'default)
   (let ((buf (generate-new-buffer " combo-bl")))
@@ -261,5 +269,6 @@ fn combo_marker_types_let_binding_buffer_local_overlay_undo() {
                 (kill-buffer buf)
                 (list in-let after-delete after-undo
                       (default-value 'combo-global))))))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

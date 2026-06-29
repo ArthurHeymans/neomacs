@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx247_set_process_filter_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx247-flt"
                         :command '("echo" "test")
@@ -23,13 +23,14 @@ fn div_cx247_set_process_filter_round_trip() {
           (delete-process p)
           (kill-buffer (process-buffer p))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx247_set_process_sentinel_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx247-sent"
                         :command '("echo" "test"))))
@@ -42,13 +43,14 @@ fn div_cx247_set_process_sentinel_round_trip() {
                      (null after-clear))
           (delete-process p)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx247_process_plist_set_get_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx247-plist" :command '("echo" "test"))))
   (process-put p 'neo-cx247-key1 :val1)
@@ -61,13 +63,14 @@ fn div_cx247_process_plist_set_get_round_trip() {
     (delete-process p)
     (list v1 v2 v3 missing)))
 "##,
+        expect_test::expect![[r#""OK (:val1 :val2 99 nil)""#]],
     );
 }
 
 #[test]
 fn div_cx247_process_query_before_and_after_exit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx247-q"
                         :command '("sh" "-c" "echo start; exit 5"))))
@@ -80,13 +83,16 @@ fn div_cx247_process_query_before_and_after_exit() {
         (process-status p)
         (process-exit-status p)))
 "##,
+        expect_test::expect![[
+            r#""OK ((run open listen connect stop) \"neo-cx247-q\" (\"sh\" \"-c\" \"echo start; exit 5\") t t nil exit 5)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx247_process_type_and_connection_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx247-type" :command '("echo" "test"))))
   (list (processp p)
@@ -95,13 +101,14 @@ fn div_cx247_process_type_and_connection_query() {
         (process-contact p))
   (delete-process p))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx247_process_list_and_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((before (length (process-list))))
   (let ((p1 (make-process :name "neo-cx247-l1" :command '("echo" "1")))
@@ -114,13 +121,14 @@ fn div_cx247_process_list_and_count() {
               (>= after-add (+ 3 before))
               (>= (1- after-add) after-del)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx247_process_coding_system_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx247-cs*"))
        (p (make-process :name "neo-cx247-cs"
@@ -132,13 +140,14 @@ fn div_cx247_process_coding_system_query() {
     (kill-buffer buf)
     cs))
 "##,
+        expect_test::expect![[r#""OK (utf-8-unix . utf-8-unix)""#]],
     );
 }
 
 #[test]
 fn div_cx247_process_mark_position_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx247-mark*"))
        (p (make-process :name "neo-cx247-mark"
@@ -153,13 +162,14 @@ fn div_cx247_process_mark_position_query() {
       (delete-process p)
       (kill-buffer buf))))
 "##,
+        expect_test::expect![[r#""OK (t 39 t)""#]],
     );
 }
 
 #[test]
 fn div_cx247_send_string_and_eof_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx247-eof*"))
        (p (make-process :name "neo-cx247-eof"
@@ -174,13 +184,14 @@ fn div_cx247_send_string_and_eof_round_trip() {
     (kill-buffer buf)
     content))
 "##,
+        expect_test::expect![[r#""OK \"alpha beta gamma\n\nProcess neo-cx247-eof finished\"""#]],
     );
 }
 
 #[test]
 fn div_cx247_process_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx247-mega*")))
   (with-current-buffer buf
@@ -209,5 +220,6 @@ fn div_cx247_process_with_marker_overlay_undo_narrow_mega() {
         (kill-buffer buf)
         (list state (buffer-string)))))))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     );
 }

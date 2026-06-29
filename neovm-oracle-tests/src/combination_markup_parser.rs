@@ -118,7 +118,12 @@ fn oracle_prop_markup_parse_inline() {
         ;; Empty
         (funcall 'neovm--test-mp-parse-inline ""))
     (fmakunbound 'neovm--test-mp-parse-inline)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((text \"hello world\")) ((text \"hello \") (bold \"bold\") (text \" world\")) ((text \"hello \") (italic \"italic\") (text \" world\")) ((text \"use \") (code \"code\") (text \" here\")) ((text \"a \") (bold \"bold\") (text \" and \") (italic \"italic\") (text \" and \") (code \"code\") (text \" end\")) ((bold \"bold\") (italic \"italic\")) ((text \"hello \") (text \"**unclosed\")) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +217,12 @@ fn oracle_prop_markup_parse_blocks() {
         (funcall 'neovm--test-mp-parse-blocks ""))
     (fmakunbound 'neovm--test-mp-split-lines)
     (fmakunbound 'neovm--test-mp-parse-blocks)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((header 1 \"Title\") (header 2 \"Subtitle\") (header 3 \"Sub-sub\")) ((list-item \"first\") (list-item \"second\") (list-item \"third\")) ((paragraph \"Hello world more text\") (paragraph \"New paragraph\")) ((header 1 \"My Doc\") (paragraph \"Intro paragraph with two lines\") (header 2 \"Section\") (list-item \"item one\") (list-item \"item two\") (paragraph \"Conclusion\")) ((paragraph \"just text\")) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +305,12 @@ fn oracle_prop_markup_parse_links() {
         ;; Link with path
         (funcall 'neovm--test-mp-parse-links "See [docs](/path/to/docs)"))
     (fmakunbound 'neovm--test-mp-parse-links)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((link \"click here\" \"http://example.com\")) ((text \"Visit \") (link \"Example\" \"http://example.com\") (text \" now\")) ((link \"a\" \"http://a.com\") (text \" and \") (link \"b\" \"http://b.com\")) ((text \"just plain text\")) ((text \"[text](no-close\")) ((text \"[just bracket] text\")) ((link \"a\" \"x\") (link \"b\" \"y\")) ((text \"See \") (link \"docs\" \"/path/to/docs\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -435,7 +450,12 @@ fn oracle_prop_markup_full_document_parse() {
     (fmakunbound 'neovm--test-mf-split-lines)
     (fmakunbound 'neovm--test-mf-parse-inline)
     (fmakunbound 'neovm--test-mf-parse-document)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((header 1 ((text \"Hello\"))) (paragraph ((text \"This is a \") (bold \"bold\") (text \" paragraph.\")))) ((header 1 ((text \"Title\"))) (paragraph ((text \"Intro text.\"))) (header 2 ((text \"Section 1\"))) (paragraph ((text \"Some \") (italic \"italic\") (text \" text.\"))) (header 2 ((text \"Section 2\"))) (list-item ((text \"item with \") (code \"code\"))) (list-item ((text \"plain item\")))) ((header 1 ((text \"A \") (bold \"bold\") (text \" title\"))) (paragraph ((text \"Normal text.\")))) ((list-item ((text \"first\"))) (list-item ((bold \"second\"))) (list-item ((italic \"third\")))) ((paragraph ((text \"Hello \") (bold \"bold\") (text \" world and \") (italic \"italic\") (text \" text\"))) (paragraph ((text \"New paragraph\")))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -514,7 +534,12 @@ fn oracle_prop_markup_render_plaintext() {
     (fmakunbound 'neovm--test-mr-render-inline)
     (fmakunbound 'neovm--test-mr-render-block)
     (fmakunbound 'neovm--test-mr-render-document)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r##""OK (\"# My Title\nHello world and more\n## Section\n  * item with code\n  * plain item\" \"Just text\nAll bold\" \"# Bold Header\n  * italic item\" \"\" \"abc\")""##
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -624,7 +649,12 @@ fn oracle_prop_markup_visitor_pattern() {
     (fmakunbound 'neovm--test-mv-visit-inline)
     (fmakunbound 'neovm--test-mv-visit-document)
     (makunbound 'neovm--test-mv-stats)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (7 3 1 (\"emacs\" \"lisp\" \"second\") 3 ((1 \"Introduction\") (2 \"Details\")) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -708,7 +738,12 @@ fn oracle_prop_markup_ast_transformer() {
             transformed)))
     (fmakunbound 'neovm--test-mt-transform-inline)
     (fmakunbound 'neovm--test-mt-transform-document)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (6 (paragraph paragraph paragraph paragraph paragraph paragraph) ((paragraph ((bold \"Title\"))) (paragraph ((text \"Hello \") (code \"[world]\"))) (paragraph ((bold \"Items\"))) (paragraph ((text \"1. \") (text \"apple\"))) (paragraph ((text \"2. \") (code \"[banana]\") (text \" fruit\"))) (paragraph ((text \"3. \") (text \"cherry\")))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -847,5 +882,10 @@ fn oracle_prop_markup_end_to_end_pipeline() {
     (fmakunbound 'neovm--test-me-parse)
     (fmakunbound 'neovm--test-me-upcase-transform)
     (fmakunbound 'neovm--test-me-render)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r##""OK (5 (header paragraph header list-item list-item) \"# Welcome\nHello world today.\n## Items\n- first\n- second\" \"# WELCOME\nHELLO WORLD TODAY.\n## ITEMS\n- FIRST\n- SECOND\" t t)""##
+        ]],
+    );
 }

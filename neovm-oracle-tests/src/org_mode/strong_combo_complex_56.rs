@@ -12,7 +12,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo56_table_all_functions_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| a | b | c | d | e |\n|---+---+---+---+---|\n")
@@ -54,13 +54,14 @@ fn combo56_table_all_functions_combined() {
     (goto-char (point-min))
     (push (list :to-lisp (org-table-to-lisp)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \"a\")""#]],
     );
 }
 
 #[test]
 fn combo56_element_adopt_extract_deep_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-element)
@@ -90,13 +91,14 @@ fn combo56_element_adopt_extract_deep_cycle() {
       ;; interpret the final tree
       (push (list :interpret-ok (> (length (substring-no-properties (org-element-interpret-data tree))) 0)) r))
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (void-function org-element-adopt-element)""#]],
     );
 }
 
 #[test]
 fn combo56_deep_structural_mutations_verify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** B\n** C\n* D\n** E\n* F\n")
@@ -124,13 +126,16 @@ fn combo56_deep_structural_mutations_verify() {
                         (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""ERR (user-error \"Cannot move past superior level or buffer limit\")""#
+        ]],
     );
 }
 
 #[test]
 fn combo56_export_all_backends_no_corruption() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-ascii)
@@ -156,13 +161,16 @@ fn combo56_export_all_backends_no_corruption() {
       (push (list :buffer-unchanged
                   (equal orig (buffer-substring-no-properties (point-min) (point-max)))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:ok t) (:ok t) (:ok t) (:ok t) (:ok t) (:ok t) (:ok nil) (:buffer-unchanged t))""#
+        ]],
     );
 }
 
 #[test]
 fn combo56_org_lint_specific_checkers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-lint)
@@ -181,13 +189,16 @@ fn combo56_org_lint_specific_checkers() {
       (error (push (list :lint-error t) r)))
     (push (list :lint-fbound (fboundp 'org-lint)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:report-count 3) (:first-type [#(\"3\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate CUSTOM_ID property \\\"dup\\\"\" #s(org-lint-checker duplicate-custom-id \"Report duplicate CUSTOM_ID properties\" org-lint-duplicate-custom-id nil (link))]) (:lint-fbound t))""#
+        ]],
     );
 }
 
 #[test]
 fn combo56_multi_layer_property_global_inherit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+PROPERTY: Header-Args :eval never-export\n")
@@ -209,13 +220,16 @@ fn combo56_multi_layer_property_global_inherit() {
     (push (list :l3-var (org-entry-get nil "var" t)) r)
     (push (list :l3-header-args (org-entry-get nil "Header-Args" t)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:l1-var \"y=2\") (:l1-header-args nil) (:l2-var \"z=3\") (:l3-var \"y=2 z=3\") (:l3-header-args nil))""#
+        ]],
     );
 }
 
 #[test]
 fn combo56_babel_multi_level_noweb() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -235,13 +249,14 @@ fn combo56_babel_multi_level_noweb() {
       (search-forward "#+begin_src emacs-lisp") (push (org-babel-execute-src-block) r)
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[r#""ERR (void-variable wrapper-result)""#]],
     );
 }
 
 #[test]
 fn combo56_macro_all_params_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+MACRO: greet Hello, $1!\n")
@@ -264,13 +279,16 @@ fn combo56_macro_all_params_expansion() {
             (push (list :no-macros (not (string-match-p "{{{" interpreted))) r))
         (error (push (list :interpret-error t) r))))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:macro-count 3) (:has-greet 121) (:has-sum nil) (:has-mult nil) (:no-macros nil))""#
+        ]],
     );
 }
 
 #[test]
 fn combo56_document_lifecycle_create_edit_export_reedit_reexport() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-ascii)
@@ -311,13 +329,16 @@ fn combo56_document_lifecycle_create_edit_export_reedit_reexport() {
         (push (list :export3-no-B (and e3 (not (string-match-p "Content B" e3)))) r)
         (push (list :export3-has-A (and e3 (string-match-p "Content A" e3))) r))
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:create-headlines (\"Doc\" \"Section A\" \"Section B\")) (:export1-has-A 44) (:export1-has-B 88) (:edit-headlines (\"Doc\" \"Section A\" \"Section X\" \"Section B\")) (:export2-has-X 61) (:export2-has-A 44) (:export3-no-B t) (:export3-has-A 44))""#
+        ]],
     );
 }
 
 #[test]
 fn combo56_clock_persistence_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-clock)
@@ -344,5 +365,8 @@ fn combo56_clock_persistence_stress() {
                                       (lambda (d) (when (equal "LOGBOOK" (org-element-property :drawer-name d)) d))))) r)
       (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:total-clocks 3) (:a-sum 0) (:b-sum 0) (:c-sum 0) (:logbooks 3) (:buffer \"* A\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\n* B\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\n* C\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\n\"))""#
+        ]],
     );
 }

@@ -20,7 +20,12 @@ fn oracle_prop_url_parse_args_case_quotes_and_missing_values() {
    (url-parse-args "broken=\"unterminated tail; next=ok")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"flag\") (\"boundary\" . \"abc def\") (\"charset\" . \"utf-8\") (\"text/html\")) ((\"flag\") (\"boundary\" . \"abc def\") (\"charset\" . \"utf-8\") (\"TEXT/html\")) ((\"bare\") (\"c\" . \"three four\") (\"b\" . \"two words\") (\"a\" . \"1\")) ((\"next\" . \"ok\") (\"tail\") (\"broken\" . \"unterminated\")))""#
+        ]],
+    );
 }
 
 #[test]
@@ -39,7 +44,12 @@ fn oracle_prop_url_entities_and_normalize_url() {
    (url-normalize-url "www.example.com/path#keep")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"a&amp;b&lt;c&gt;d&quot;e\" \"plain\" \"http://example.com/a/b?x=1\" \"http://example.com:81/a/b\" \"mailto:USER@example.com#keep\" \"www.example.com/path\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -65,7 +75,12 @@ fn oracle_prop_url_file_directory_nondirectory_and_extension() {
    (url-basepath "/root/file.el")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\" \"\" \"/a/b/\" \"c.txt\" \"/a%2Fb%2F\" \"c.txt\" nil \"noslash\" \".gz\" \"c.tar\" \"\" \"noext\" \"/root/\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -82,5 +97,10 @@ fn oracle_prop_url_truncate_url_for_viewing() {
    (url-truncate-url-for-viewing "http://example.com/a/b/c/d/e/file.txt" 18)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"http://example.com/short\" \"http://example.com/.../to/file?...\" \"http://example.com/.../file.txt\" \"http://example.com/.../file.txt\")""#
+        ]],
+    );
 }

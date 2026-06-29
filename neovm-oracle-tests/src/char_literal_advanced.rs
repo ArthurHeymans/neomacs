@@ -27,7 +27,10 @@ fn oracle_prop_char_literal_all_escape_sequences() {
                         (= ?\e 27)
                         (= ?\d 127)
                         (= ?\s 32))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (10 9 13 0 7 12 11 27 127 32 t t t t t t t t t t)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +66,10 @@ fn oracle_prop_char_literal_control_chars_full_alphabet() {
                           (= ?\C-m 13)   ;; CR (same as ?\r)
                           (= ?\C-[ 27))) ;; ESC (same as ?\e)
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (t t t t t t t t)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +101,12 @@ fn oracle_prop_char_literal_meta_and_combined_modifiers() {
                       ctrl-meta-a
                       ;; Various modifier chars
                       (list meta-z shift-a hyper-a super-a)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (134217825 t t 134217729 (134217850 33554529 16777313 8388705))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +133,12 @@ fn oracle_prop_char_literal_roundtrip_char_string() {
                             (= first-of-utf8 ?日)
                             ;; string-to-char of empty string is 0
                             (= (string-to-char "") 0))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""\n        OK (((97 \"a\" 97 t) (90 \"Z\" 90 t) (48 \"0\" 48 t) (33 \"!\" 33 t) (10 \"\n        \" 10 t) (9 \"\t\" 9 t) (233 \"é\" 233 t) (26085 \"日\" 26085 t) (128512 \"😀\" 128512 t) (32 \" \" 32 t)) t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +182,10 @@ fn oracle_prop_char_literal_arithmetic_and_ranges() {
                             ;; Convert uppercase to lowercase by adding offset
                             (= (+ ?A case-offset) ?a)
                             (= (+ ?M case-offset) ?m))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (9 25 25 32 t t t t t t t t)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +237,12 @@ fn oracle_prop_char_literal_character_class_testing() {
                                       result)))
                         (setq i (1+ i)))
                       (nreverse result)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"a\" alpha nil nil lower alnum nil) (\"B\" alpha nil upper nil alnum nil) (\"3\" nil digit nil nil alnum nil) (\" \" nil nil nil nil nil space) (\"\t\" nil nil nil nil nil space) (\"!\" nil nil nil nil nil nil) (\"@\" nil nil nil nil nil nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +273,10 @@ fn oracle_prop_char_literal_hex_and_octal_escapes() {
                     ;; Unicode escapes in strings, verify via string-to-char
                     (= (string-to-char "\u00e9") ?é)
                     (= (string-to-char "\u65e5") ?日))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (65 97 10 t t t 65 97 10 t t t t t)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -320,5 +347,8 @@ fn oracle_prop_char_literal_vigenere_cipher() {
                             ;; Verify different keys produce different ciphertext
                             (let ((enc2 (funcall vigenere-encrypt plain "other")))
                               (not (string= encrypted enc2))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"Zincs, Pgvnu!\" \"Hello, World!\" t t)""#]],
+    );
 }

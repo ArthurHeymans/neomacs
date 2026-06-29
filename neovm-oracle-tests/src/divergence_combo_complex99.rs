@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx99_comint_availability_and_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -18,13 +18,14 @@ fn div_cx99_comint_availability_and_creation() {
             (boundp 'comint-buffer-maximum-size)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx99_compile_buffer_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -35,13 +36,14 @@ fn div_cx99_compile_buffer_availability() {
             (fboundp 'compilation-mode)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx99_eww_browser_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -51,13 +53,14 @@ fn div_cx99_eww_browser_availability() {
             (boundp 'eww-search-prefix)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx99_shell_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -67,13 +70,14 @@ fn div_cx99_shell_mode_availability() {
             (boundp 'explicit-shell-file-name)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx99_ielm_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -82,13 +86,14 @@ fn div_cx99_ielm_availability() {
             (fboundp 'ielm-change-working-buffer)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx99_run_hooks_with_buffer_local_and_global() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (add-hook 'neo-cx99-hook (lambda () (push :global calls)))
@@ -105,13 +110,14 @@ fn div_cx99_run_hooks_with_buffer_local_and_global() {
         (list in-buf in-temp))))
   (remove-hook 'neo-cx99-hook (lambda () (push :global calls))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx99_run_hook_with_args_through_two_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (collected)
   (let ((fn1 (lambda (&rest args) (push (cons :h1 args) collected)))
@@ -123,13 +129,14 @@ fn div_cx99_run_hook_with_args_through_two_hooks() {
       (remove-hook 'neo-cx99-arg-hook fn1)
       (remove-hook 'neo-cx99-arg-hook fn2))))
 "##,
+        expect_test::expect![[r#""OK ((:h2 :a :b :c) (:h1 :a :b :c))""#]],
     );
 }
 
 #[test]
 fn div_cx99_run_hook_with_args_until_success() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (collected)
   (let ((fn1 (lambda () (push :h1 collected) nil))
@@ -144,13 +151,14 @@ fn div_cx99_run_hook_with_args_until_success() {
         (remove-hook 'neo-cx99-succ-hook fn2)
         (remove-hook 'neo-cx99-succ-hook fn3)))))
 "##,
+        expect_test::expect![[r#""OK (:success (:h3 :h2))""#]],
     );
 }
 
 #[test]
 fn div_cx99_run_hook_with_args_until_failure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (collected)
   (let ((fn1 (lambda () (push :h1 collected) nil))
@@ -165,13 +173,14 @@ fn div_cx99_run_hook_with_args_until_failure() {
         (remove-hook 'neo-cx99-fail-hook fn2)
         (remove-hook 'neo-cx99-fail-hook fn3)))))
 "##,
+        expect_test::expect![[r#""OK (nil (:h3))""#]],
     );
 }
 
 #[test]
 fn div_cx99_run_hook_wrapped_with_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (collected)
   (let ((fn1 (lambda () (push :normal collected))))
@@ -185,13 +194,14 @@ fn div_cx99_run_hook_wrapped_with_override() {
     (prog1 (nreverse collected)
       (remove-hook 'neo-cx99-wrapped-hook fn1))))
 "##,
+        expect_test::expect![[r#""OK (:wrap-enter :normal :wrap-exit)""#]],
     );
 }
 
 #[test]
 fn div_cx99_define_minor_mode_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -210,13 +220,14 @@ fn div_cx99_define_minor_mode_basic() {
                 before after-on neo-cx99-minor))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx99_hooks_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (add-hook 'after-change-functions
@@ -246,5 +257,6 @@ fn div_cx99_hooks_with_marker_overlay_undo_narrow_mega() {
                   (overlay-start ov) (overlay-end ov)
                   (text-properties-at 1))))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

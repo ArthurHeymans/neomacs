@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx239_garbage_collect_return_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((gc-result (garbage-collect)))
   (list (consp gc-result)
@@ -17,13 +17,16 @@ fn div_cx239_garbage_collect_return_value() {
         (assq 'symbols gc-result)
         (assq 'strings gc-result)))
 "##,
+        expect_test::expect![[
+            r#""OK (t t (conses 16 250691 124536) (symbols 48 27103 1) (strings 32 86361 11785))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx239_memory_use_counts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((counts (memory-use-counts)))
   (list (consp counts)
@@ -31,25 +34,27 @@ fn div_cx239_memory_use_counts() {
         (integerp (nth 0 counts))
         (integerp (nth 1 counts))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx239_memory_limit_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'memory-limit)
       (integerp (memory-limit))
       (> (memory-limit) 0))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx239_gc_cons_threshold_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'gc-cons-threshold)
       (integerp gc-cons-threshold)
@@ -57,13 +62,14 @@ fn div_cx239_gc_cons_threshold_query() {
       (boundp 'gc-cons-percentage)
       (floatp gc-cons-percentage))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx239_weak_hash_after_gc_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :weakness 'key :test 'eq)))
   (dotimes (i 10) (puthash (cons i nil) (* i 10) ht))
@@ -72,37 +78,40 @@ fn div_cx239_weak_hash_after_gc_consistency() {
     (let ((after (hash-table-count ht)))
       (list before after (<= after before)))))
 "##,
+        expect_test::expect![[r#""OK (10 0 t)""#]],
     );
 }
 
 #[test]
 fn div_cx239_purecopy_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'purecopy)
       (boundp 'purify-flag))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx239_gc_elapsed_time_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'gc-elapsed)
       (floatp gc-elapsed)
       (boundp 'gcs-done)
       (integerp gcs-done))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx239_buffer_resources_after_create_kill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((before (garbage-collect)))
   (dotimes (i 20)
@@ -119,25 +128,27 @@ fn div_cx239_buffer_resources_after_create_kill() {
             (consp after-create)
             (consp after-kill)))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx239_float_pairs_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'make-float-pairs)
       (fboundp 'float-pairs-p)
       (boundp 'float-pairs))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx239_gc_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((gc-before (garbage-collect))
       (weak-ht (make-hash-table :weakness 'key :test 'eq)))
@@ -167,5 +178,6 @@ fn div_cx239_gc_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

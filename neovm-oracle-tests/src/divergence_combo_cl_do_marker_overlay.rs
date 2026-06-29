@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_cl_do_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cdo")))
     (with-current-buffer buf
@@ -36,6 +36,7 @@ fn combo_cl_do_marker_overlay_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -43,7 +44,7 @@ fn combo_cl_do_marker_overlay_undo() {
 fn combo_cl_do_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cdn")))
     (with-current-buffer buf
@@ -73,6 +74,7 @@ fn combo_cl_do_narrow_marker() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -80,7 +82,7 @@ fn combo_cl_do_narrow_marker() {
 fn combo_cl_do_clone_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cdl")))
     (with-current-buffer buf
@@ -110,6 +112,7 @@ fn combo_cl_do_clone_overlay() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -117,7 +120,7 @@ fn combo_cl_do_clone_overlay() {
 fn combo_cl_do_multi_step() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cdm")))
     (with-current-buffer buf
@@ -150,6 +153,7 @@ fn combo_cl_do_multi_step() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -157,7 +161,7 @@ fn combo_cl_do_multi_step() {
 fn combo_cl_do_overlay_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cdu")))
     (with-current-buffer buf
@@ -187,5 +191,6 @@ fn combo_cl_do_overlay_narrow_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

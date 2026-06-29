@@ -7,11 +7,12 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_calendar_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'calendar)
   (fboundp 'calendar-current-date)
   (featurep 'calendar))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -19,11 +20,12 @@ fn divergence_calendar_functions() {
 fn divergence_diary_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'diary)
   (fboundp 'diary-view-entries)
   (featurep 'diary-lib))"#,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
@@ -31,11 +33,12 @@ fn divergence_diary_functions() {
 fn divergence_holidays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'list-holidays)
   (fboundp 'calendar-holiday-list)
   (featurep 'holidays))"#,
+        expect_test::expect![[r#""OK (t nil nil)""#]],
     );
 }
 
@@ -43,10 +46,11 @@ fn divergence_holidays() {
 fn divergence_solar_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'sunrise-sunset)
   (featurep 'solar))"#,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -54,10 +58,11 @@ fn divergence_solar_functions() {
 fn divergence_lunar_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'lunar-phases)
   (featurep 'lunar))"#,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
@@ -65,7 +70,7 @@ fn divergence_lunar_functions() {
 fn divergence_time_date_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'format-time-string)
   (fboundp 'decode-time)
@@ -73,6 +78,7 @@ fn divergence_time_date_functions() {
   (fboundp 'current-time)
   (fboundp 'time-add)
   (fboundp 'time-subtract))"#,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
@@ -80,7 +86,7 @@ fn divergence_time_date_functions() {
 fn divergence_decode_time_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((time (decode-time)))
   (list (listp time)
         (>= (length time) 9)
@@ -90,6 +96,7 @@ fn divergence_decode_time_deep() {
         (integerp (nth 3 time))
         (integerp (nth 4 time))
         (integerp (nth 5 time)))) "#,
+        expect_test::expect![[r#""OK (t t t t t t t t)""#]],
     );
 }
 
@@ -97,7 +104,7 @@ fn divergence_decode_time_deep() {
 fn divergence_encode_decode_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let* ((encoded (encode-time 30 45 12 1 6 2025 nil -1 nil))
         (decoded (decode-time encoded)))
   (list (nth 0 decoded)
@@ -106,6 +113,7 @@ fn divergence_encode_decode_roundtrip() {
         (nth 3 decoded)
         (nth 4 decoded)
         (nth 5 decoded))) "#,
+        expect_test::expect![[r#""OK (30 45 12 1 6 2025)""#]],
     );
 }
 
@@ -113,12 +121,13 @@ fn divergence_encode_decode_roundtrip() {
 fn divergence_float_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'float-time)
   (floatp (float-time))
   (>= (float-time) 0)
   (fboundp 'seconds-to-time))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -126,7 +135,7 @@ fn divergence_float_time() {
 fn divergence_time_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((now (current-time))
         (fixed '(27153 25741 493127 0)))
   (list (listp now)
@@ -135,5 +144,6 @@ fn divergence_time_conversion() {
         (time-subtract fixed 50)
         (time-equal-p fixed fixed)
         (time-less-p fixed (time-add fixed 1)))) "#,
+        expect_test::expect![[r#""OK (t t (27153 25841 493127 0) (27153 25691 493127 0) t t)""#]],
     );
 }

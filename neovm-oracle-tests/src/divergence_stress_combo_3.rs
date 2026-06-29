@@ -7,11 +7,12 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_deep_nesting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((x 0))
   (dotimes (_ 100)
     (setq x (1+ x)))
   (list x (= x 100))) "#,
+        expect_test::expect![[r#""OK (100 t)""#]],
     );
 }
 
@@ -19,7 +20,7 @@ fn divergence_deep_nesting() {
 fn divergence_nested_condition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((result nil))
   (condition-case err
       (condition-case err2
@@ -27,6 +28,7 @@ fn divergence_nested_condition() {
         (wrong-type-argument (push 'inner result)))
     (error (push 'outer result)))
   result) "#,
+        expect_test::expect![[r#""OK (inner)""#]],
     );
 }
 
@@ -34,7 +36,7 @@ fn divergence_nested_condition() {
 fn divergence_nested_unwind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((log nil))
   (unwind-protect
       (unwind-protect
@@ -42,6 +44,7 @@ fn divergence_nested_unwind() {
         (push 'cleanup1 log))
     (push 'cleanup2 log))
   log) "#,
+        expect_test::expect![[r#""ERR (error \"test\")""#]],
     );
 }
 
@@ -49,12 +52,13 @@ fn divergence_nested_unwind() {
 fn divergence_large_list_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((lst (number-sequence 1 100)))
   (list (length lst)
         (= (car lst) 1)
         (= (car (last lst)) 100)
         (= (apply '+ lst) 5050))) "#,
+        expect_test::expect![[r#""OK (100 t t t)""#]],
     );
 }
 
@@ -62,12 +66,13 @@ fn divergence_large_list_ops() {
 fn divergence_large_string_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((s (make-string 1000 ?x)))
   (list (length s)
         (= (length s) 1000)
         (string= (substring s 0 5) "xxxxx")
         (string= (substring s -5) "xxxxx"))) "#,
+        expect_test::expect![[r#""OK (1000 t t t)""#]],
     );
 }
 
@@ -75,9 +80,10 @@ fn divergence_large_string_ops() {
 fn divergence_deep_let_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((a 1) (b 2) (c 3) (d 4) (e 5) (f 6) (g 7) (h 8) (i 9) (j 10))
   (list (+ a b c d e) (+ f g h i j) (+ a b c d e f g h i j))) "#,
+        expect_test::expect![[r#""OK (15 40 55)""#]],
     );
 }
 
@@ -85,7 +91,7 @@ fn divergence_deep_let_bindings() {
 fn divergence_interleaved_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (goto-char 1)
@@ -93,6 +99,7 @@ fn divergence_interleaved_ops() {
   (goto-char (point-max))
   (insert "456")
   (list (buffer-string) (point) (buffer-size))) "#,
+        expect_test::expect![[r#""123ABCDEFGHIJ456OK (\"123ABCDEFGHIJ456\" 17 16)""#]],
     );
 }
 
@@ -100,13 +107,14 @@ fn divergence_interleaved_ops() {
 fn divergence_many_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (dotimes (i 5)
     (make-overlay (1+ (* i 2)) (+ 2 (* i 2))))
   (list (length (overlays-in 1 11))
         (overlay-start (car (overlays-in 1 3))))) "#,
+        expect_test::expect![[r#""ABCDEFGHIJOK (5 1)""#]],
     );
 }
 
@@ -114,7 +122,7 @@ fn divergence_many_overlays() {
 fn divergence_many_text_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (dotimes (i 5)
@@ -124,6 +132,7 @@ fn divergence_many_text_props() {
         (get-text-property 3 'test-prop)
         (get-text-property 4 'test-prop)
         (get-text-property 5 'test-prop))) "#,
+        expect_test::expect![[r#""ABCDEFGHIJOK (0 nil 1 nil 2)""#]],
     );
 }
 
@@ -131,7 +140,7 @@ fn divergence_many_text_props() {
 fn divergence_stress_combo_3() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'face 'bold)
@@ -140,5 +149,6 @@ fn divergence_stress_combo_3() {
   (list (buffer-string)
         (get-text-property (point-min) 'face)
         (length (overlays-in (point-min) (point-max))))) "#,
+        expect_test::expect![[r#""llo WoOK (#(\"llo Wo\" 0 3 (face bold)) bold 1)""#]],
     );
 }

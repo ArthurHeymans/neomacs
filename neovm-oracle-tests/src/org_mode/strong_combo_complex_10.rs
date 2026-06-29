@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo10_list_struct() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  - B\n  - C\n- D\n  - E\n    - F")
@@ -40,6 +40,7 @@ fn combo10_list_struct() {
                                                               (org-element-property :contents-begin i)
                                                               (org-element-property :contents-end i))))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -50,7 +51,7 @@ fn combo10_list_struct() {
 #[test]
 fn combo10_export_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((src "#+TITLE: T\n* H1\nBody *bold* /italic/\n** H2\n- a\n- b\n| x | y |\n| 1 | 2 |"))
   (let ((html (org-export-string-as src 'html t))
         (latex (org-export-string-as src 'latex t))
@@ -65,6 +66,9 @@ fn combo10_export_string() {
           (list :latex-has-table (string-match-p "\\\\begin{tabular}" latex))
           (list :ascii-has-h (string-match-p "H1" ascii))
           (list :ascii-has-bold (string-match-p "bold" ascii)))))"##,
+        expect_test::expect![[
+            r#""OK ((:html-has-title 9) (:html-has-h2 44) (:html-has-bold 418) (:html-has-table 676) (:latex-has-title nil) (:latex-has-section 0) (:latex-has-bold 41) (:latex-has-table 169) (:ascii-has-h 2) (:ascii-has-bold 19))""#
+        ]],
     );
 }
 
@@ -75,7 +79,7 @@ fn combo10_export_string() {
 #[test]
 fn combo10_map_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+TITLE: T\n* TODO [#A] H1 :t1:\nSCHEDULED: <2026-01-15>\nBody *bold* /italic/ [[http://a][Link]] $x^2$\n** H2\n- [X] a\n- [ ] b\n| x | y |\n| 1 | 2 |\n#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n* DONE H3\n:PROPERTIES:\n:A: 1\n:END:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:00] =>  1:00")
@@ -95,6 +99,7 @@ fn combo10_map_all() {
     (push (list :tables (length (org-element-map (org-element-parse-buffer) 'table 'identity))) r)
     (push (list :src-blocks (length (org-element-map (org-element-parse-buffer) 'src-block 'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -105,7 +110,7 @@ fn combo10_map_all() {
 #[test]
 fn combo10_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO T\nSCHEDULED: <2026-01-15>\nDEADLINE: <2026-01-20>\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\nCLOCK: [2026-01-11 14:00]--[2026-01-11 15:00] =>  1:00\n:END:\nBody")
@@ -130,6 +135,7 @@ fn combo10_clock() {
     ;; clock string
     (push (list :clock-string (org-clock-get-clock-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -140,7 +146,7 @@ fn combo10_clock() {
 #[test]
 fn combo10_footnotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Para1[fn:1] text[fn:2] more[fn:3] end\n\nPara2[fn:1] ref\n\n[fn:1] First def\n[fn:2] Second def\n[fn:3] Third def")
@@ -158,6 +164,7 @@ fn combo10_footnotes() {
     (push (list :ref-count (length (org-element-map (org-element-parse-buffer) 'footnote-reference 'identity))) r)
     (push (list :def-count (length (org-element-map (org-element-parse-buffer) 'footnote-definition 'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -168,7 +175,7 @@ fn combo10_footnotes() {
 #[test]
 fn combo10_links() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\n[[http://a.com][A]] and [[file:b.el]] and [[id:xxx][C]] and [[mailto:d@e.com]] and [[news:comp]]")
@@ -184,6 +191,7 @@ fn combo10_links() {
     (push (list :types (org-element-map (org-element-parse-buffer) 'link
                           (lambda (l) (org-element-property :type l)))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -194,7 +202,7 @@ fn combo10_links() {
 #[test]
 fn combo10_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+TITLE: Test\n#+AUTHOR: Me\n#+DATE: 2026-01-15\n#+OPTIONS: toc:nil\n#+FILETAGS: :t1:t2:\n#+STARTUP: overview\n#+CATEGORY: c\n#+LANGUAGE: en")
@@ -206,6 +214,7 @@ fn combo10_keywords() {
     ;; collect-keywords
     (push (list :collected (org-collect-keywords '("TITLE" "AUTHOR" "DATE" "OPTIONS" "FILETAGS"))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -216,7 +225,7 @@ fn combo10_keywords() {
 #[test]
 fn combo10_entities() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text \\alpha \\beta \\gamma \\Agrave \\copy \\deg \\pm \\times")
@@ -230,6 +239,7 @@ fn combo10_entities() {
     ;; count
     (push (list :count (length (org-element-map (org-element-parse-buffer) 'entity 'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -240,7 +250,7 @@ fn combo10_entities() {
 #[test]
 fn combo10_latex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text $x^2$ $$y=mx+b$$ and \\(z\\) \\[w\\] \\alpha")
@@ -255,6 +265,7 @@ fn combo10_latex() {
     (push (list :frag-count (length (org-element-map (org-element-parse-buffer) 'latex-fragment 'identity))) r)
     (push (list :ent-count (length (org-element-map (org-element-parse-buffer) 'entity 'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -265,7 +276,7 @@ fn combo10_latex() {
 #[test]
 fn combo10_timestamps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\nSCHEDULED: <2026-01-15 Wed>\n* U\n<2026-01-20>--<2026-01-25>\n* V\n[2026-01-30]\n* W\n<2026-02-01 +1w>")
@@ -284,5 +295,6 @@ fn combo10_timestamps() {
     (push (list :types (org-element-map (org-element-parse-buffer) 'timestamp
                           (lambda (ts) (org-element-property :type ts)))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }

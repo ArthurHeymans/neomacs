@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_cl_defstruct_print_read_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (tester (:constructor make-tester) (:type list))\n\
          x y z)\n\
@@ -17,6 +17,7 @@ fn deficiency_cl_defstruct_print_read_round_trip() {
          (let ((re-read (read-from-string printed)))\n\
          (list printed (car re-read) (cdr re-read)\n\
          (tester-x a) (tester-y a) (tester-z a))))))",
+        expect_test::expect![[r#""ERR (void-variable \\\"hello\\\")""#]],
     );
 }
 
@@ -24,7 +25,7 @@ fn deficiency_cl_defstruct_print_read_round_trip() {
 fn deficiency_cl_defstruct_vector_type_with_hash_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (vpoint (:type vector) (:constructor vpoint-create))\n\
          label x y)\n\
@@ -39,6 +40,7 @@ fn deficiency_cl_defstruct_vector_type_with_hash_key() {
          (vpoint-x p2)\n\
          (vpoint-y p2)\n\
          (hash-table-count ht))))",
+        expect_test::expect![[r#""OK (start end origin 10 20 2)""#]],
     );
 }
 
@@ -46,7 +48,7 @@ fn deficiency_cl_defstruct_vector_type_with_hash_key() {
 fn deficiency_nested_structs_with_print_circle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (node (:type list) (:constructor node-create))\n\
          value left right)\n\
@@ -59,6 +61,7 @@ fn deficiency_nested_structs_with_print_circle() {
          (node-value root)\n\
          (node-value (node-left root))\n\
          (node-value (node-right root))))))))",
+        expect_test::expect![[r#""OK (\"(root (1 nil nil) (2 nil nil))\" root 1 2)""#]],
     );
 }
 
@@ -66,7 +69,7 @@ fn deficiency_nested_structs_with_print_circle() {
 fn deficiency_struct_equal_vs_type_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (entry (:type list) (:constructor entry-create) (:copier entry-copy))\n\
          key value tag)\n\
@@ -81,6 +84,7 @@ fn deficiency_struct_equal_vs_type_predicate() {
          (entry-key e1)\n\
          (entry-value e3)\n\
          (entry-tag e3))))",
+        expect_test::expect![[r#""ERR (void-variable \\\"bob\\\")""#]],
     );
 }
 
@@ -88,7 +92,7 @@ fn deficiency_struct_equal_vs_type_predicate() {
 fn deficiency_cl_defstruct_with_boa_constructor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (range (:constructor make-range (min max))\n\
          (:type list))\n\
@@ -103,6 +107,7 @@ fn deficiency_cl_defstruct_with_boa_constructor() {
          (list (range-min r1) (range-max r1) (range-label r1)\n\
          (range-min r2) (range-max r2) (range-label r2)\n\
          (gethash r1 ht) (gethash r2 ht))))))",
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 14 36)""#]],
     );
 }
 
@@ -110,7 +115,7 @@ fn deficiency_cl_defstruct_with_boa_constructor() {
 fn deficiency_struct_alist_with_print_length_and_level() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (item (:type list) (:constructor item-create))\n\
          name payload)\n\
@@ -124,6 +129,7 @@ fn deficiency_struct_alist_with_print_length_and_level() {
          (item-name (nth 0 items))\n\
          (item-name (nth 7 items))\n\
          (length (item-payload (nth 4 items)))))))",
+        expect_test::expect![[r#""ERR (void-variable \\\"item-%d\\\")""#]],
     );
 }
 
@@ -131,7 +137,7 @@ fn deficiency_struct_alist_with_print_length_and_level() {
 fn deficiency_hash_table_with_struct_keys_update_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (coord (:type vector) (:constructor coord))\n\
          x y)\n\
@@ -151,6 +157,7 @@ fn deficiency_hash_table_with_struct_keys_update_remove() {
          (cl-loop for k being the hash-keys of ht\n\
          when (and (= (coord-x k) 0))\n\
          collect (cons (coord-y k) (gethash k ht))))))))",
+        expect_test::expect![[r#""ERR (error \"Keyword argument 0 not one of (:x :y)\")""#]],
     );
 }
 
@@ -158,7 +165,7 @@ fn deficiency_hash_table_with_struct_keys_update_remove() {
 fn deficiency_struct_in_cl_loop_collect_with_nested_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (rec (:type list) (:constructor rec-create))\n\
          id data next)\n\
@@ -172,6 +179,7 @@ fn deficiency_struct_in_cl_loop_collect_with_nested_access() {
          (list chain printed\n\
          (rec-data (rec-next r1))\n\
          (rec-data (rec-next (rec-next r1))))))))",
+        expect_test::expect![[r#""ERR (void-variable \\\"gamma\\\")""#]],
     );
 }
 
@@ -179,7 +187,7 @@ fn deficiency_struct_in_cl_loop_collect_with_nested_access() {
 fn deficiency_struct_map_and_filter_via_cl_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (pair (:type list) (:constructor pair))\n\
          key val)\n\
@@ -196,6 +204,7 @@ fn deficiency_struct_map_and_filter_via_cl_loop() {
          (pair-val (nth 0 mapped))\n\
          (pair-val (nth 4 mapped))\n\
          (pair-val (nth 9 mapped)))))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -203,7 +212,7 @@ fn deficiency_struct_map_and_filter_via_cl_loop() {
 fn deficiency_read_from_string_with_multiple_structs_and_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (pt (:type list) (:constructor pt)) x y)\n\
          (let* ((s \\\"(pt 1 2) (pt 3 4) (pt 5 6)\\\")\n\
@@ -218,5 +227,8 @@ fn deficiency_read_from_string_with_multiple_structs_and_positions() {
          (if (equal (aref s pos) ? )\n\
          (setq pos (1+ pos))))))\n\
          (nreverse results)))",
+        expect_test::expect![[
+            r#""ERR (error \"`let' bindings can have only one value-form\" s \\\" (pt 1 2) (pt 3 4) (pt 5 6) \\\")""#
+        ]],
     );
 }

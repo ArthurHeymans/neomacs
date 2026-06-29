@@ -44,7 +44,10 @@ fn oracle_prop_algo_merge_sort() {
       (funcall 'neovm--test-msort '(38 27 43 3 9 82 10))
     (fmakunbound 'neovm--test-merge)
     (fmakunbound 'neovm--test-msort)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 9 10 27 38 43 82)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +76,7 @@ fn oracle_prop_algo_binary_search() {
                           (funcall bsearch sorted 2)
                           (funcall bsearch sorted 91)
                           (funcall bsearch sorted 50))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (5 0 9 nil)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +105,10 @@ fn oracle_prop_algo_memoized_fibonacci() {
                             (funcall 'neovm--test-fib 10)
                             (funcall 'neovm--test-fib 20))
                     (fmakunbound 'neovm--test-fib)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 1 5 55 6765)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +137,10 @@ fn oracle_prop_algo_sieve() {
                         (when (aref sieve i)
                           (setq primes (cons i primes))))
                       (nreverse primes))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +184,10 @@ fn oracle_prop_algo_lcs() {
                   (list (funcall lcs "ABCBDAB" "BDCAB")
                         (funcall lcs "hello" "hallo")
                         (funcall lcs "abc" "xyz")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"BDAB\" \"hllo\" \"\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +212,10 @@ fn oracle_prop_algo_permutations() {
   (unwind-protect
       (funcall 'neovm--test-perms '(1 2 3))
     (fmakunbound 'neovm--test-perms)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3) (1 3 2) (2 1 3) (2 3 1) (3 1 2) (3 2 1))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +255,10 @@ fn oracle_prop_algo_rle_roundtrip() {
                       (let ((decoded (funcall rle-decode encoded)))
                         (list encoded
                               (equal input decoded))))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((a . 3) (b . 2) (c . 4) (a . 2)) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -264,5 +282,8 @@ fn oracle_prop_algo_gcd_lcm() {
               (funcall lcm 12 8)
               (funcall lcm 15 20)))
     (fmakunbound 'neovm--test-gcd)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 25 24 60)""#]],
+    );
 }

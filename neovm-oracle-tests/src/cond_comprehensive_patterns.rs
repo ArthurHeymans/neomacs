@@ -32,7 +32,10 @@ fn oracle_prop_cond_comprehensive_mixed_clause_types() {
             (t 'other))
            results)))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (is-zero empty-string is-null other integer string list)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -52,7 +55,12 @@ fn oracle_prop_cond_comprehensive_t_default_complex() {
             ((< n 100) (list 'positive n))
             (t (list 'very-positive n (* n n)))))))
   (mapcar categorize '(-500 -42 0 7 999)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((very-negative -500 500) (negative -42) (zero) (positive 7) (very-positive 999 998001))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +88,10 @@ fn oracle_prop_cond_comprehensive_no_match_nil() {
    ((car nil) 'a)
    ((cdr nil) 'b)
    ((nth 5 '(1 2)) 'c)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +118,10 @@ fn oracle_prop_cond_comprehensive_multiple_body_forms() {
            (setq trace (cons 'f trace))
            'third))))
     (list result (nreverse trace))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (second (c d e))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +146,10 @@ fn oracle_prop_cond_comprehensive_single_test_return() {
         (t 'never))
   ;; Assoc as test (returns the found pair)
   (cond ((assoc 'b '((a . 1) (b . 2) (c . 3))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 hello \"a string\" 30 (a . b) 7 42 (b . 2))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +186,12 @@ fn oracle_prop_cond_comprehensive_deeply_nested() {
    (funcall classify 'square 'red 'big)
    (funcall classify 'square 'red 'small)
    (funcall classify 'triangle 'red 'big)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"big red circle\" \"small red circle\" \"medium red circle\" \"blue circle\" \"green circle\" \"big square\" \"square\" \"unknown shape\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +216,12 @@ fn oracle_prop_cond_comprehensive_side_effects_tracked() {
       (setq counter (1+ counter))
       (setq log (cons (list 'other val counter) log)))))
   (list counter (nreverse log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (69 ((other 1 1) (even 2 5) (div3 3 8) (even 4 16) (other 5 17) (div3 6 23) (other 7 24) (even 8 40) (div3 9 49) (even 10 69)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +258,12 @@ fn oracle_prop_cond_comprehensive_complex_tests() {
    (funcall eval-access "eve" 'viewer 2)
    (funcall eval-access "frank" 'banned 10)
    (funcall eval-access "grace" 'viewer 0)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (full-access write-access write-access read-access read-access no-access guest-access)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +316,10 @@ fn oracle_prop_cond_comprehensive_in_recursive_defun() {
          (funcall 'neovm--cond-test-eval '(neg (+ x y)) env)
          (funcall 'neovm--cond-test-eval '(let1 a 5 (let1 b 3 (* a (+ b x)))) env)))
     (fmakunbound 'neovm--cond-test-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 10 13 50 17 -13 65)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +355,12 @@ fn oracle_prop_cond_comprehensive_cond_vs_if_equivalence() {
      (mapcar via-cond inputs)
      ;; Show actual results from if
      (mapcar via-if inputs))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t (negative negative zero small small medium medium medium large large) (negative negative zero small small medium medium medium large large))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -354,7 +394,12 @@ fn oracle_prop_cond_comprehensive_stateful_dispatch() {
                         (if (eq old-state state) 'no-op 'transitioned))
                   transitions))))
   (list state (nreverse transitions)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (idle ((idle start running transitioned) (running process processing transitioned) (processing error error transitioned) (error retry running transitioned) (running process processing transitioned) (processing done idle transitioned) (idle reset idle no-op)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -385,5 +430,10 @@ fn oracle_prop_cond_comprehensive_string_dispatch() {
   (mapcar parse-token
           '("42" "hello" "if" "+" "(" ";" "3" "return"
             "my_var" "==" "}" "\"hi\"" "???" "while" "0" "x1")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((number 42) (identifier \"hello\") (keyword \"if\") (operator \"+\") (punctuation \"(\") (punctuation \";\") (number 3) (keyword \"return\") (identifier \"my_var\") (operator \"==\") (punctuation \"}\") (string \"\\\"hi\\\"\") (unknown \"???\") (keyword \"while\") (number 0) (identifier \"x1\"))""#
+        ]],
+    );
 }

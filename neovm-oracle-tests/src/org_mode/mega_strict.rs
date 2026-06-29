@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn mega_all_inline_markup_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -32,6 +32,7 @@ _underline with *bold* inside*
          (length (org-element-map tree 'verbatim #'identity))
          (length (org-element-map tree 'code #'identity))
          (length (org-element-map tree 'strike-through #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -42,7 +43,7 @@ _underline with *bold* inside*
 #[test]
 fn mega_all_link_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -70,6 +71,7 @@ mailto:user@example.org
         (list
          (length links)
          (mapcar (lambda (l) (org-element-property :type l)) links)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -80,7 +82,7 @@ mailto:user@example.org
 #[test]
 fn mega_all_timestamp_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -106,6 +108,7 @@ fn mega_all_timestamp_type_combinations() {
          (length timestamps)
          (mapcar (lambda (ts) (org-element-property :type ts)) timestamps)
          (mapcar (lambda (ts) (org-element-property :range-type ts)) timestamps)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -116,7 +119,7 @@ fn mega_all_timestamp_type_combinations() {
 #[test]
 fn mega_all_block_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -171,6 +174,7 @@ Special
          (length (org-element-map tree 'comment-block #'identity))
          (length (org-element-map tree 'src-block #'identity))
          (length (org-element-map tree 'special-block #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -181,7 +185,7 @@ Special
 #[test]
 fn mega_all_list_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -218,6 +222,7 @@ fn mega_all_list_type_combinations() {
          (length items)
          (mapcar (lambda (l) (org-element-property :type l)) lists)
          (mapcar (lambda (i) (org-element-property :checkbox i)) items)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -228,7 +233,7 @@ fn mega_all_list_type_combinations() {
 #[test]
 fn mega_all_headline_feature_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -254,6 +259,7 @@ fn mega_all_headline_feature_combinations() {
          (mapcar (lambda (h) (org-element-property :todo-keyword h)) headlines)
          (mapcar (lambda (h) (org-element-property :priority h)) headlines)
          (mapcar (lambda (h) (org-element-property :tags h)) headlines)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -264,7 +270,7 @@ fn mega_all_headline_feature_combinations() {
 #[test]
 fn mega_all_planning_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -304,6 +310,7 @@ SCHEDULED: <2024-01-14 Sun 09:00-10:00>")
                              (org-element-property :deadline p)
                              (org-element-property :closed p)))
                  planning)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -314,7 +321,7 @@ SCHEDULED: <2024-01-14 Sun 09:00-10:00>")
 #[test]
 fn mega_all_property_drawer_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -345,6 +352,7 @@ fn mega_all_property_drawer_combinations() {
          ;; Property keys.
          (mapcar (lambda (p) (org-element-property :key p))
                  (org-element-map tree 'node-property #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -355,7 +363,7 @@ fn mega_all_property_drawer_combinations() {
 #[test]
 fn mega_all_drawer_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -381,6 +389,7 @@ Body text.")
          (mapcar (lambda (d) (org-element-property :drawer-name d))
                  (org-element-map tree 'drawer #'identity))
          (length (org-element-map tree 'clock #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -391,7 +400,7 @@ Body text.")
 #[test]
 fn mega_all_dynamic_block_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -412,6 +421,7 @@ More content
         (list
          (length blocks)
          (mapcar (lambda (b) (org-element-property :block-name b)) blocks)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -422,7 +432,7 @@ More content
 #[test]
 fn mega_all_footnote_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -440,6 +450,7 @@ Section[fn:3].
          (length (org-element-map tree 'footnote-definition #'identity))
          (mapcar (lambda (ref) (org-element-property :type ref))
                  (org-element-map tree 'footnote-reference #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -450,7 +461,7 @@ Section[fn:3].
 #[test]
 fn mega_all_entity_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-entities)
@@ -474,6 +485,7 @@ fn mega_all_entity_type_combinations() {
          ;; First 10 names.
          (mapcar (lambda (e) (org-element-property :name e))
                  (take 10 (org-element-map tree 'entity #'identity)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -484,7 +496,7 @@ fn mega_all_entity_type_combinations() {
 #[test]
 fn mega_all_latex_fragment_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -500,6 +512,7 @@ Command: \\command{} and \\emph{text}.")
          ;; Fragment values.
          (mapcar (lambda (f) (org-element-property :value f))
                  (org-element-map tree 'latex-fragment #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -510,7 +523,7 @@ Command: \\command{} and \\emph{text}.")
 #[test]
 fn mega_all_latex_environment_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -540,6 +553,7 @@ Important theorem.
          ;; Environment values.
          (mapcar (lambda (e) (org-element-property :value e))
                  (org-element-map tree 'latex-environment #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -550,7 +564,7 @@ Important theorem.
 #[test]
 fn mega_all_macro_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -570,6 +584,7 @@ fn mega_all_macro_type_combinations() {
          (length (org-element-map tree 'macro #'identity))
          (mapcar (lambda (m) (org-element-property :value m))
                  (org-element-map tree 'macro #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -580,7 +595,7 @@ fn mega_all_macro_type_combinations() {
 #[test]
 fn mega_all_export_snippet_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -602,6 +617,7 @@ fn mega_all_export_snippet_type_combinations() {
                  (org-element-map tree 'export-snippet #'identity))
          (mapcar (lambda (s) (org-element-property :value s))
                  (org-element-map tree 'export-snippet #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -612,7 +628,7 @@ fn mega_all_export_snippet_type_combinations() {
 #[test]
 fn mega_all_radio_target_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -630,6 +646,7 @@ fn mega_all_radio_target_type_combinations() {
          (length (org-element-map tree 'radio-target #'identity))
          (mapcar #'org-element-type
                  (org-element-map tree 'radio-target #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -640,7 +657,7 @@ fn mega_all_radio_target_type_combinations() {
 #[test]
 fn mega_all_target_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -657,6 +674,7 @@ fn mega_all_target_type_combinations() {
          (length (org-element-map tree 'target #'identity))
          (mapcar #'org-element-type
                  (org-element-map tree 'target #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -667,7 +685,7 @@ fn mega_all_target_type_combinations() {
 #[test]
 fn mega_all_statistics_cookie_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -686,6 +704,7 @@ fn mega_all_statistics_cookie_type_combinations() {
          (length (org-element-map tree 'statistics-cookie #'identity))
          (mapcar (lambda (c) (org-element-property :value c))
                  (org-element-map tree 'statistics-cookie #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -696,7 +715,7 @@ fn mega_all_statistics_cookie_type_combinations() {
 #[test]
 fn mega_all_inlinetask_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-inlinetask)
@@ -731,6 +750,7 @@ Body
                              (org-element-property :priority t)
                              (org-element-property :tags t)))
                  (org-element-map tree 'inlinetask #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -741,7 +761,7 @@ Body
 #[test]
 fn mega_all_clock_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -763,6 +783,7 @@ CLOCK: [2024-01-15 Mon 13:00]")
          (length clocks)
          (mapcar (lambda (c) (org-element-property :status c)) clocks)
          (mapcar (lambda (c) (org-element-property :duration c)) clocks)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -773,7 +794,7 @@ CLOCK: [2024-01-15 Mon 13:00]")
 #[test]
 fn mega_all_diary_sexp_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -790,6 +811,7 @@ fn mega_all_diary_sexp_type_combinations() {
          (length (org-element-map tree 'diary-sexp #'identity))
          (mapcar #'org-element-type
                  (org-element-map tree 'diary-sexp #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -800,7 +822,7 @@ fn mega_all_diary_sexp_type_combinations() {
 #[test]
 fn mega_all_horizontal_rule_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -824,6 +846,7 @@ Final")
          (length (org-element-map tree 'horizontal-rule #'identity))
          (mapcar #'org-element-type
                  (org-element-map tree 'horizontal-rule #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -834,7 +857,7 @@ Final")
 #[test]
 fn mega_all_line_break_type_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -855,5 +878,6 @@ Line 7")
          (length (org-element-map tree 'line-break #'identity))
          (mapcar #'org-element-type
                  (org-element-map tree 'line-break #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

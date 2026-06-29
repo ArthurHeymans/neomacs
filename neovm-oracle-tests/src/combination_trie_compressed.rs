@@ -154,7 +154,10 @@ fn oracle_prop_compressed_trie_insert_and_lookup() {
     (fmakunbound 'neovm--rt-common-prefix-len)
     (fmakunbound 'neovm--rt-insert)
     (fmakunbound 'neovm--rt-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable children)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +303,10 @@ fn oracle_prop_compressed_trie_prefix_completion() {
     (fmakunbound 'neovm--rt2-find-prefix-node)
     (fmakunbound 'neovm--rt2-collect)
     (fmakunbound 'neovm--rt2-complete)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable children)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -476,7 +482,10 @@ fn oracle_prop_compressed_trie_delete_merge() {
     (fmakunbound 'neovm--rt3-search)
     (fmakunbound 'neovm--rt3-delete)
     (fmakunbound 'neovm--rt3-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable children)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -588,7 +597,10 @@ fn oracle_prop_compressed_trie_longest_common_prefix() {
     (fmakunbound 'neovm--rt4-cplen)
     (fmakunbound 'neovm--rt4-insert)
     (fmakunbound 'neovm--rt4-lcp)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable children)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -710,7 +722,10 @@ fn oracle_prop_compressed_trie_count_with_prefix() {
     (fmakunbound 'neovm--rt5-insert)
     (fmakunbound 'neovm--rt5-count)
     (fmakunbound 'neovm--rt5-count-prefix)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable children)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -837,5 +852,8 @@ fn oracle_prop_compressed_trie_end_to_end() {
     (fmakunbound 'neovm--rt6-search)
     (fmakunbound 'neovm--rt6-count)
     (fmakunbound 'neovm--rt6-collect-all)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable children)""#]],
+    );
 }

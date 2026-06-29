@@ -26,7 +26,10 @@ fn oracle_prop_skip_chars_advanced_combined_ranges() {
                             (point)
                             (buffer-substring (point-min) (point))
                             (buffer-substring (point) (point-max)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 7 \"aZ9_-.\" \"$!rest\")""#]],
+    );
 }
 
 #[test]
@@ -41,7 +44,10 @@ fn oracle_prop_skip_chars_advanced_hex_range() {
                       (list skipped
                             (point)
                             (buffer-substring 3 (point)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 13 \"DEADbeef42\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +67,10 @@ fn oracle_prop_skip_chars_advanced_negation_complex() {
                             (point)
                             (buffer-substring (point-min) (point))
                             (char-after (point)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (15 16 \"hello_world.foo\" 40)""#]],
+    );
 }
 
 #[test]
@@ -82,7 +91,10 @@ fn oracle_prop_skip_chars_advanced_negation_newline() {
                           (let ((second-skip (skip-chars-forward "^\n")))
                             (list first-skip line1
                                   second-skip (buffer-substring second-start (point))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (18 \"first line content\" 11 \"second line\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +123,10 @@ fn oracle_prop_skip_chars_advanced_return_count() {
                           (list fwd-count fwd-pos
                                 bwd-count bwd-pos
                                 zero-count)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (8 9 -8 14 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -141,7 +156,10 @@ fn oracle_prop_skip_chars_backward_from_end_with_limit() {
                               (list skip1 pos1 text1
                                     skip2 pos2 text2
                                     skip3 (point))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (-6 10 \"suffix\" -6 10 \"suffix\" -15 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +233,12 @@ fn oracle_prop_skip_chars_advanced_expression_tokenizer() {
                           (goto-char (point-min))
                           (neovm--test-skip-tokenize))
                       (fmakunbound 'neovm--test-skip-tokenize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((id . \"result\") (op . \"=\") (id . \"sin\") (paren . \"(\") (num . \"3.14\") (paren . \")\") (op . \"+\") (id . \"max\") (paren . \"(\") (id . \"x\") (sep . \",\") (num . \"42\") (paren . \")\") (op . \"*\") (num . \"2\") (sep . \";\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +279,12 @@ fn oracle_prop_skip_chars_advanced_word_boundary_detection() {
                                     (forward-char 1))))))
                           (nreverse neovm--test-skip-word-results))
                       (makunbound 'neovm--test-skip-word-results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((buffer-start \"hello\" 1 6) (after-punct \"world\" 7 12) (after-space \"foo\" 14 17) (after-punct \"bar\" 18 21) (after-punct \"baz\" 24 27) (after-space \"123abc\" 30 36))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +312,10 @@ fn oracle_prop_skip_chars_advanced_special_chars_in_set() {
                                 (t2 (buffer-substring (point-min) (point))))
                             (list s1 t1
                                   s2 t2))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (11 \"abc^def^ghi\" 7 \"a-b-c-d\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -324,5 +355,8 @@ fn oracle_prop_skip_chars_advanced_balanced_scan() {
                                               paren-groups))))
                               (setq depth (max 0 (1- depth))))))))
                       (nreverse paren-groups)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 \"(c + d)\") (1 \"(b * (c + d))\") (1 \"(e / f)\"))""#]],
+    );
 }

@@ -9,7 +9,10 @@ fn oracle_prop_charset_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(list (char-charset ?A) (charsetp (char-charset ?A)) (encode-char ?A 'ucs) (decode-char 'ucs #x41) (encode-char ?😀 'ucs) (decode-char 'ucs #x1F600))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (ascii t 65 65 128512 128512)""#]],
+    );
     assert_ok_eq("(ascii t 65 65 128512 128512)", &oracle, &neovm);
 }
 
@@ -19,7 +22,10 @@ fn oracle_prop_char_charset_classification() {
 
     let form =
         "(list (char-charset ?A) (char-charset ?é) (char-charset ?😀) (char-charset ?\\x80))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (ascii unicode-bmp unicode unicode-bmp)""#]],
+    );
     assert_ok_eq("(ascii unicode-bmp unicode unicode-bmp)", &oracle, &neovm);
 }
 
@@ -27,7 +33,10 @@ fn oracle_prop_char_charset_classification() {
 fn oracle_prop_encode_char_unknown_charset_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(encode-char ?A 'neovm-no-such-charset)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(encode-char ?A 'neovm-no-such-charset)",
+        expect_test::expect![[r#""ERR (wrong-type-argument charsetp neovm-no-such-charset)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -35,5 +44,10 @@ fn oracle_prop_encode_char_unknown_charset_error() {
 fn oracle_prop_decode_char_out_of_range_error_shape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(decode-char 'ucs -1)");
+    crate::common::assert_oracle_parity_expect(
+        "(decode-char 'ucs -1)",
+        expect_test::expect![[
+            r#""ERR (error \"Not an in-range integer, integral float, or cons of integers\")""#
+        ]],
+    );
 }

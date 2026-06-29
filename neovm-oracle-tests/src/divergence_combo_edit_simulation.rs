@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_simulate_code_edit_session() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(defun my-func (arg)\n  \"Docstring.\"\n  (let ((x 1))\n    (+ x arg)))")
   (let ((ov-doc (make-overlay 22 33))
@@ -53,6 +53,9 @@ fn divergence_simulate_code_edit_session() {
             (get-text-property 40 'type) (eq (get-text-property 40 'type) 'var)
             (get-text-property 50 'type) (eq (get-text-property 50 'type) 'var)
             (get-text-property 52 'type) (eq (get-text-property 52 'type) 'args))))) "#,
+        expect_test::expect![[
+            r#""(defurenamed-n my-func (arg)\n  \"(* X.\"\n  (let ((x 1))\n    (+ x arg)))ERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -60,7 +63,7 @@ fn divergence_simulate_code_edit_session() {
 fn divergence_simulate_text_reformatting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq fill-column 15)
   (insert "This is a very long paragraph that needs to be reformatted properly for display.")
@@ -86,6 +89,9 @@ fn divergence_simulate_text_reformatting() {
               (overlay-get ov 'paragraph) (eq (overlay-get ov 'paragraph) 'first)
               (get-text-property 1 'word) (eq (get-text-property 1 'word) 'w1)
               (get-text-property 6 'word) (eq (get-text-property 6 'word) 'w2)))))) "#,
+        expect_test::expect![[
+            r#""This is a very\nlong paragraph\nthat needs to\nbe reformatted\nproperly for\ndisplay.ERR (void-variable s)""#
+        ]],
     );
 }
 
@@ -93,7 +99,7 @@ fn divergence_simulate_text_reformatting() {
 fn divergence_simulate_comment_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r#"(progn
   (insert "line1\nline2\nline3\nline4\nline5")
   (put-text-property 1 5 'line-num 1)
@@ -125,7 +131,7 @@ fn divergence_simulate_comment_toggle() {
 fn divergence_simulate_find_replace_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "foo-bar-foo-baz-foo-qux-foo")
   (put-text-property 1 3 'token 'foo)
@@ -164,6 +170,9 @@ fn divergence_simulate_find_replace_all() {
             (get-text-property 17 'token) (eq (get-text-property 17 'token) 'foo)
             (get-text-property 21 'token) (eq (get-text-property 21 'token) 'qux)
             (get-text-property 25 'token) (eq (get-text-property 25 'token) 'foo))))) "#,
+        expect_test::expect![[
+            r#""HELLO-bar-HELLO-baz-HELLO-qux-HELLOERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -171,7 +180,7 @@ fn divergence_simulate_find_replace_all() {
 fn divergence_simulate_indent_region_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1\nline2\nline3\nline4")
   (put-text-property 1 5 'line 1)
@@ -195,6 +204,9 @@ fn divergence_simulate_indent_region_undo() {
             (get-text-property 7 'line) (= (get-text-property 7 'line) 2)
             (get-text-property 13 'line) (= (get-text-property 13 'line) 3)
             (get-text-property 19 'line) (= (get-text-property 19 'line) 4))))) "#,
+        expect_test::expect![[
+            r#""line1\n    line2\n    line3\nline4ERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -202,7 +214,7 @@ fn divergence_simulate_indent_region_undo() {
 fn divergence_simulate_delete_to_kill_ring_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "KEEP1-DELETE1-KEEP2-DELETE2-KEEP3")
   (put-text-property 1 5 'zone 'keep1)
@@ -234,6 +246,7 @@ fn divergence_simulate_delete_to_kill_ring_yank() {
             (get-text-property 15 'zone) (eq (get-text-property 15 'zone) 'keep2)
             (get-text-property 21 'zone) (eq (get-text-property 21 'zone) 'del2)
             (get-text-property 29 'zone) (eq (get-text-property 29 'zone) 'keep3))))) "#,
+        expect_test::expect![[r#""KEEP1-1-KEEP2-2-KEEP3ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -241,7 +254,7 @@ fn divergence_simulate_delete_to_kill_ring_yank() {
 fn divergence_simulate_multi_step_refactor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(let ((old-var 1))\n  (+ old-var 2))")
   (put-text-property 1 4 'type 'special)
@@ -269,6 +282,9 @@ fn divergence_simulate_multi_step_refactor() {
             (overlay-get ov 'refactor) (eq (overlay-get ov 'refactor) 'active)
             (get-text-property 1 'type) (eq (get-text-property 1 'type) 'special)
             (get-text-property 10 'type) (eq (get-text-property 10 'type) 'varname)))))) "#,
+        expect_test::expect![[
+            r#""(let ((new-var 1))\n  (+ new-var 2))ERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -276,7 +292,7 @@ fn divergence_simulate_multi_step_refactor() {
 fn divergence_simulate_whitespace_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello   world\n   foo    bar\nbaz   ")
   (put-text-property 1 5 'word 'w1)
@@ -300,6 +316,7 @@ fn divergence_simulate_whitespace_cleanup() {
             (overlay-get ov 'cleanup) (eq (overlay-get ov 'cleanup) t)
             (get-text-property 1 'word) (eq (get-text-property 1 'word) 'w1)
             (get-text-property 8 'word) (eq (get-text-property 8 'word) 'w2))))) "#,
+        expect_test::expect![[r#""hello world\n foo bar\nbaz ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -307,7 +324,7 @@ fn divergence_simulate_whitespace_cleanup() {
 fn divergence_simulate_duplicate_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "LINE1\nLINE2\nLINE3")
   (put-text-property 1 5 'lnum 1)
@@ -337,6 +354,7 @@ fn divergence_simulate_duplicate_line() {
             (get-text-property 1 'lnum) (= (get-text-property 1 'lnum) 1)
             (get-text-property 7 'lnum) (= (get-text-property 7 'lnum) 2)
             (get-text-property 13 'lnum) (= (get-text-property 13 'lnum) 3))))) "#,
+        expect_test::expect![[r#""LINE1\nLINE\nLINE2\nLINE3ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -344,7 +362,7 @@ fn divergence_simulate_duplicate_line() {
 fn divergence_simulate_transpose_words() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "alpha beta gamma delta")
   (put-text-property 1 5 'pos 1)
@@ -376,5 +394,8 @@ fn divergence_simulate_transpose_words() {
           (get-text-property 7 'pos) (= (get-text-property 7 'pos) 2)
           (get-text-property 12 'pos) (= (get-text-property 12 'pos) 3)
           (get-text-property 18 'pos) (= (get-text-property 18 'pos) 4))))) "#,
+        expect_test::expect![[
+            r#""alpha beta gamma deltaERR (error \"Don’t have two things to transpose\")""#
+        ]],
     );
 }

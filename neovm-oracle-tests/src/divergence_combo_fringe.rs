@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_define_fringe_bitmap_known() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((bm (define-fringe-bitmap 'test-dfbk-xxx
               [#b10000000 #b01000000 #b00100000 #b00010000
@@ -26,6 +26,7 @@ fn divergence_define_fringe_bitmap_known() {
           (eq (define-fringe-bitmap 'test-dfbk2-xxx [1 2 3] 3 8 'center)
               'test-dfbk2-xxx)
           (destroy-fringe-bitmap 'test-dfbk2-xxx)))) "#,
+        expect_test::expect![[r#""OK (t t nil error nil test-dfbk2-xxx t nil)""#]],
     );
 }
 
@@ -33,7 +34,7 @@ fn divergence_define_fringe_bitmap_known() {
 fn divergence_window_fringes_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((fringes (window-fringes)))
     (list (= (length fringes) 4)
@@ -47,6 +48,7 @@ fn divergence_window_fringes_default() {
           (= (safe-length fringes) 4)
           (window-fringes (selected-window))
           (equal (window-fringes (selected-window)) fringes)))) "#,
+        expect_test::expect![[r#""OK (t t t t t (nil) (nil) t t (0 0 nil nil) t)""#]],
     );
 }
 
@@ -54,7 +56,7 @@ fn divergence_window_fringes_default() {
 fn divergence_set_window_fringes_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((w (selected-window))
         (orig (window-fringes)))
@@ -73,6 +75,7 @@ fn divergence_set_window_fringes_roundtrip() {
               (list after-set zeroed
                     (<= (nth 0 zeroed) (nth 0 after-set))
                     (= (length zeroed) 4)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -80,7 +83,7 @@ fn divergence_set_window_fringes_roundtrip() {
 fn divergence_fringe_buffer_local_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((default-left (default-value 'left-fringe-width))
         (default-right (default-value 'right-fringe-width))
@@ -107,6 +110,9 @@ fn divergence_fringe_buffer_local_vars() {
             (kill-local-variable 'fringes-outside-margins)
             (equal left-fringe-width (default-value 'left-fringe-width))
             (equal right-fringe-width (default-value 'right-fringe-width)))))) "#,
+        expect_test::expect![[
+            r#""OK (20 t 15 t t t t t t t t left-fringe-width right-fringe-width fringes-outside-margins t t)""#
+        ]],
     );
 }
 
@@ -114,7 +120,7 @@ fn divergence_fringe_buffer_local_vars() {
 fn divergence_fringe_indicator_alist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((orig fringe-indicator-alist))
     (list (listp fringe-indicator-alist)
@@ -139,6 +145,7 @@ fn divergence_fringe_indicator_alist() {
               'left-triangle)
           (setq fringe-indicator-alist orig)
           (not (assq 'test-custom-indicator-xxx fringe-indicator-alist)))))) "#,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 24 76)""#]],
     );
 }
 
@@ -146,7 +153,7 @@ fn divergence_fringe_indicator_alist() {
 fn divergence_fringe_cursor_alist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((orig fringe-cursor-alist))
     (list (listp fringe-cursor-alist)
@@ -166,6 +173,7 @@ fn divergence_fringe_cursor_alist() {
               'filled-square)
           (setq fringe-cursor-alist orig)
           (not (assq 'test-custom-cursor-xxx fringe-cursor-alist)))))) "#,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 70)""#]],
     );
 }
 
@@ -173,7 +181,7 @@ fn divergence_fringe_cursor_alist() {
 fn divergence_frame_fringe_width_calls() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((fw (frame-fringe-width))
         (fw-selected (frame-fringe-width (selected-frame))))
@@ -186,6 +194,7 @@ fn divergence_frame_fringe_width_calls() {
             (frame-fringe-width fr))
           (frame-fringe-width nil)
           (= (frame-fringe-width nil) fw)))) "#,
+        expect_test::expect![[r#""OK (t t t t t 0 0 t)""#]],
     );
 }
 
@@ -193,7 +202,7 @@ fn divergence_frame_fringe_width_calls() {
 fn divergence_fringe_bitmaps_at_pos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Line with fringe indicators test content here")
   (let ((at-nil (fringe-bitmaps-at-pos))
@@ -210,6 +219,9 @@ fn divergence_fringe_bitmaps_at_pos() {
               (and (consp at-point)
                    (or (null (car at-point)) (symbolp (car at-point)))
                    (or (null (cdr at-point)) (symbolp (cdr at-point)))))))) "#,
+        expect_test::expect![[
+            r#""Line with fringe indicators test content hereOK (t t t t t t)""#
+        ]],
     );
 }
 
@@ -217,7 +229,7 @@ fn divergence_fringe_bitmaps_at_pos() {
 fn divergence_fringe_overlay_display_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF")
   (let ((ov1 (make-overlay 5 9))
@@ -259,6 +271,9 @@ fn divergence_fringe_overlay_display_spec() {
                    '(left-fringe filled-square warning))
             (buffer-string)
             (= (buffer-size) 29))))) "#,
+        expect_test::expect![[
+            r#""AAAA-BBBB-CCCC-DDDD-EEEE-FFFFOK (t t t left-fringe-marker t right-fringe-marker t left-fringe-filled t 5 t 9 t (left-fringe right-triangle) t (right-fringe left-arrow) t (left-fringe filled-square warning) t \"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF\" t)""#
+        ]],
     );
 }
 
@@ -266,7 +281,7 @@ fn divergence_fringe_overlay_display_spec() {
 fn divergence_fringe_mode_customization() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'fringe)
   (let ((orig fringe-mode))
@@ -290,5 +305,8 @@ fn divergence_fringe_mode_customization() {
           (boundp 'fringe-mode)
           (custom-variable-p 'fringe-mode)
           (not (custom-variable-p 'nonexistent-fringe-var-xxx))))) "#,
+        expect_test::expect![[
+            r#""OK (t nil t 0 t (nil . 0) t (0) t (8 . 8) t nil t t ((funcall #'#[0 \"\\300\\207\" [nil] 1])) t)""#
+        ]],
     );
 }

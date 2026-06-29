@@ -20,7 +20,12 @@ fn oracle_prop_replace_regexp_fixedcase_nil_preserves_case() {
       (replace-regexp-in-string "hello" "world" "Hello there, HELLO again, hello end" nil)
       (replace-regexp-in-string "foo" "bar" "Foo FOO foo fOO" nil)
       (replace-regexp-in-string "cat" "dog" "Cat CAT cat CaT" nil))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"World there, WORLD again, world end\" \"Bar BAR bar bar\" \"Dog DOG dog Dog\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -32,7 +37,10 @@ fn oracle_prop_replace_regexp_fixedcase_t_exact_replacement() {
     let form = r#"(list
       (replace-regexp-in-string "hello" "world" "Hello there, HELLO again, hello end" t)
       (replace-regexp-in-string "foo" "xYz" "Foo FOO foo" t))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"world there, world again, world end\" \"xYz xYz xYz\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -54,7 +62,12 @@ fn oracle_prop_replace_regexp_literal_backslash_handling() {
       (replace-regexp-in-string "\\([a-z]+\\)=\\([0-9]+\\)" "\\2->\\1" "foo=10 bar=20" nil nil)
       ;; LITERAL=t: \1 kept literally
       (replace-regexp-in-string "\\([a-z]+\\)=\\([0-9]+\\)" "\\2->\\1" "foo=10 bar=20" nil t))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"val=[42] x=[99]\" \"val=[\\\\&] x=[\\\\&]\" \"10->foo 20->bar\" \"\\\\2->\\\\1 \\\\2->\\\\1\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -76,7 +89,10 @@ fn oracle_prop_replace_regexp_start_offset() {
       (replace-regexp-in-string "[0-9]+" "NUM" "12 ab 34 cd 56" nil nil 14)
       ;; START in the middle of a potential match
       (replace-regexp-in-string "abcd" "XXXX" "abcd-abcd-abcd" nil nil 3))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (error \"replace-match subexpression does not exist\" 5)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +121,12 @@ fn oracle_prop_replace_regexp_function_replacement() {
         "[A-Z][a-z]+"
         (lambda (m) (format "[%s:%d]" m (length m)))
         "Alice met Bob and Charlie"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"a=10 b=20 c=50\" \"HELLO WORLD FOO\" \"[Alice:5] [met:3] [Bob:3] [and:3] [Charlie:7]\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +149,12 @@ fn oracle_prop_replace_match_all_params() {
         (replace-match "newval" nil nil s 1)
         ;; Verify match-string still works on original
         (match-string 1 s)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"REPLACED\" \"prefix:newval:suffix\" \"prefix:NEWVAL:suffix\" \"VALUE\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +183,12 @@ fn oracle_prop_regexp_multi_pass_transform_pipeline() {
                       (lambda (m) (concat "<num>" m "</num>"))
                       step3)))
         (list step1 step2 step3 step4)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\" foo_bar baz_quux 42 hello_world 7 \" \"foo_bar baz_quux 42 hello_world 7\" \"fooBar bazQuux 42 helloWorld 7\" \"fooBar bazQuux <num>42</num> helloWorld <num>7</num>\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -178,5 +209,10 @@ fn oracle_prop_regexp_quote_in_search_replace() {
                (replaced (replace-regexp-in-string pattern "REPLACED" input)))
           (setq results (cons replaced results))))
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"before REPLACED after REPLACED end\" \"before REPLACED after REPLACED end\" \"before REPLACED after REPLACED end\" \"before REPLACED after REPLACED end\" \"before REPLACED after REPLACED end\" \"before REPLACED after REPLACED end\")""#
+        ]],
+    );
 }

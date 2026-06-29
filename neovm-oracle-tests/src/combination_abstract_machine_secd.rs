@@ -210,7 +210,7 @@ fn oracle_prop_secd3_all_arithmetic_ops() {
         preamble = secd_full_preamble(),
         cleanup = secd_full_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +256,7 @@ fn oracle_prop_secd3_comparisons_and_list_ops() {
         preamble = secd_full_preamble(),
         cleanup = secd_full_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +296,7 @@ fn oracle_prop_secd3_multi_frame_environments() {
         preamble = secd_full_preamble(),
         cleanup = secd_full_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -355,7 +355,7 @@ fn oracle_prop_secd3_nested_conditionals() {
         preamble = secd_full_preamble(),
         cleanup = secd_full_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -416,7 +416,7 @@ fn oracle_prop_secd3_closures_and_application() {
         preamble = secd_full_preamble(),
         cleanup = secd_full_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -518,7 +518,7 @@ fn oracle_prop_secd3_recursive_factorial() {
         preamble = secd_full_preamble(),
         cleanup = secd_full_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -599,7 +599,7 @@ fn oracle_prop_secd3_church_numerals() {
         preamble = secd_full_preamble(),
         cleanup = secd_full_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -642,7 +642,7 @@ fn oracle_prop_secd3_list_building_and_traversal() {
         preamble = secd_full_preamble(),
         cleanup = secd_full_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -691,5 +691,5 @@ fn oracle_prop_secd3_fibonacci() {
         preamble = secd_full_preamble(),
         cleanup = secd_full_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }

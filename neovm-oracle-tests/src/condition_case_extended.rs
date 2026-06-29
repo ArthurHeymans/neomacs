@@ -24,7 +24,10 @@ fn oracle_prop_condition_case_multiple_handlers() {
                     (wrong-type-argument 'wta)
                     (arith-error 'arith)
                     (error 'generic)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (arith wta generic)""#]],
+    );
 }
 
 #[test]
@@ -32,7 +35,10 @@ fn oracle_prop_condition_case_no_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // When no error occurs, body value is returned
-    let (o, n) = eval_oracle_and_neovm("(condition-case err (+ 1 2) (error 'oops))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(condition-case err (+ 1 2) (error 'oops))",
+        expect_test::expect![[r#""OK 3""#]],
+    );
     assert_ok_eq("3", &o, &n);
 }
 
@@ -45,7 +51,10 @@ fn oracle_prop_condition_case_var_binding() {
                   (signal 'wrong-type-argument '(numberp \"hello\"))
                   (wrong-type-argument
                    (list 'caught (car err) (cadr err) (caddr err))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (caught wrong-type-argument numberp \"hello\")""#]],
+    );
 }
 
 #[test]
@@ -56,7 +65,10 @@ fn oracle_prop_condition_case_nil_var() {
     let form = "(condition-case nil
                   (car 1)
                   (wrong-type-argument 'caught-it))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK caught-it""#]],
+    );
     assert_ok_eq("caught-it", &o, &n);
 }
 
@@ -73,7 +85,10 @@ fn oracle_prop_condition_case_handler_body_multiple_forms() {
                      (setq log (cons 'second log))
                      (setq log (cons (car err) log))
                      (nreverse log))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (first second arith-error)""#]],
+    );
 }
 
 #[test]
@@ -88,7 +103,10 @@ fn oracle_prop_condition_case_nested_different_handlers() {
                      'inner-wta))
                   (arith-error
                    (list 'outer-arith (car outer-err))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (outer-arith arith-error)""#]],
+    );
 }
 
 #[test]
@@ -105,7 +123,10 @@ fn oracle_prop_condition_case_rethrow_pattern() {
                          (signal (car inner) (cdr inner))))
                     (error
                      (list 'final logged (cdr err)))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (final (\"original\") (\"original\"))""#]],
+    );
 }
 
 #[test]
@@ -121,7 +142,10 @@ fn oracle_prop_condition_case_with_unwind_cleanup() {
                         (setq resource 'released))
                     (arith-error nil))
                   resource)";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK released""#]],
+    );
     assert_ok_eq("released", &o, &n);
 }
 
@@ -136,7 +160,10 @@ fn oracle_prop_condition_case_debug_on_error_pattern() {
                           (/ 1 0)
                         (error (list 'error (car err))))
                     (/ 1 0)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (error arith-error)""#]],
+    );
 }
 
 #[test]
@@ -151,5 +178,8 @@ fn oracle_prop_condition_case_signal_in_handler() {
                      (signal 'error
                              (list \"wrapped\" (cdr inner)))))
                   (error (list 'final (car outer) (cadr outer))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (final error \"wrapped\")""#]],
+    );
 }

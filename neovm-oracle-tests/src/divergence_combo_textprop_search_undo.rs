@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_intangible_prop_search_point_movement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "visible-INVISIBLE-text")
   (put-text-property 8 16 'intangible t)
@@ -19,6 +19,9 @@ fn divergence_intangible_prop_search_point_movement() {
       (let ((p3 (point)))
         (list p1 p2 p3 (>= p3 16)
               (buffer-substring-no-properties 1 (point-max))))))) "#,
+        expect_test::expect![[
+            r#""visible-INVISIBLE-textOK (1 11 23 t \"visible-INVISIBLE-text\")""#
+        ]],
     );
 }
 
@@ -26,7 +29,7 @@ fn divergence_intangible_prop_search_point_movement() {
 fn divergence_propertize_insert_regex_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (let ((s (propertize \"TODO: fix #123\" 'face 'bold 'category 'task)))
     (insert s))
@@ -37,6 +40,9 @@ fn divergence_propertize_insert_regex_match() {
         (get-text-property 6 'category)
         (match-beginning 0) (match-end 0)
         (buffer-string))) ",
+        expect_test::expect![[
+            r#""TODO: fix #123OK (#(\"123\" 0 3 (face bold category task)) bold task 11 15 #(\"TODO: fix #123\" 0 14 (face bold category task)))""#
+        ]],
     );
 }
 
@@ -44,7 +50,7 @@ fn divergence_propertize_insert_regex_match() {
 fn divergence_modification_hooks_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-modhook-log-xxx nil)
   (insert "ABCDEFGHIJ")
@@ -62,6 +68,7 @@ fn divergence_modification_hooks_with_undo() {
             (length test-modhook-log-xxx)
             (buffer-string)
             (>= log1 2))))) "#,
+        expect_test::expect![[r#""AB123CDEFGHIJERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -69,7 +76,7 @@ fn divergence_modification_hooks_with_undo() {
 fn divergence_overlapping_props_remove_middle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAAAAAAAA")
   (put-text-property 1 11 'face 'bold)
@@ -83,6 +90,7 @@ fn divergence_overlapping_props_remove_middle() {
         (get-text-property 5 'face)
         (get-text-property 9 'face)
         (get-text-property 10 'face))) "#,
+        expect_test::expect![[r#""AAAAAAAAAAOK (bold nil underline underline)""#]],
     );
 }
 
@@ -90,7 +98,7 @@ fn divergence_overlapping_props_remove_middle() {
 fn divergence_textprop_next_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-BBBB-CCCC-DDDD")
   (put-text-property 1 4 'group 'a)
@@ -104,6 +112,9 @@ fn divergence_textprop_next_property_change() {
         (push (list pos (get-text-property pos 'group) next) changes)
         (setq pos (or next (point-max)))))
     (nreverse changes))) "#,
+        expect_test::expect![[
+            r#""AAA-BBBB-CCCC-DDDDOK ((1 a 4) (4 nil 5) (5 b 9) (9 nil 10) (10 c 14) (14 nil 15) (15 d 18) (18 nil nil))""#
+        ]],
     );
 }
 
@@ -111,7 +122,7 @@ fn divergence_textprop_next_property_change() {
 fn divergence_field_property_search_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "field1:val1\tfield2:val2\tfield3:val3")
   (put-text-property 1 8 'field 'f1)
@@ -125,6 +136,9 @@ fn divergence_field_property_search_boundary() {
     (list (nreverse fields)
           (field-beginning 5) (field-end 5)
           (field-beginning 12) (field-end 12)))) "#,
+        expect_test::expect![[
+            r#""field1:val1\tfield2:val2\tfield3:val3OK (((1 f1) (2 f1) (3 f1) (4 f1) (5 f1) (6 f1) (7 f1) (9 f2) (10 f2) (11 f2) (12 f2) (13 f2) (14 f2) (15 f2) (16 f2) (18 f3) (19 f3) (20 f3) (21 f3) (22 f3) (23 f3) (24 f3) (25 f3)) 1 8 9 17)""#
+        ]],
     );
 }
 
@@ -132,7 +146,7 @@ fn divergence_field_property_search_boundary() {
 fn divergence_invisible_property_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "before-HIDDEN-middle-AFTER-end")
   (put-text-property 8 14 'invisible t)
@@ -142,6 +156,9 @@ fn divergence_invisible_property_search() {
     (while (re-search-forward "[A-Z]+" nil t)
       (push (list (match-string 0) (match-beginning 0) (match-end 0)) visible-positions))
     (nreverse visible-positions))) "#,
+        expect_test::expect![[
+            r#""before-HIDDEN-middle-AFTER-endOK ((\"before\" 1 7) (#(\"HIDDEN\" 0 6 (invisible t)) 8 14) (\"middle\" 15 21) (#(\"AFTER\" 0 5 (invisible t)) 22 27) (\"end\" 28 31))""#
+        ]],
     );
 }
 
@@ -149,7 +166,7 @@ fn divergence_invisible_property_search() {
 fn divergence_textprops_after_multiple_replaces() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"foo-X-foo-Y-foo-Z-foo\")
   (put-text-property 1 20 'track 'original)
@@ -162,6 +179,9 @@ fn divergence_textprops_after_multiple_replaces() {
           (get-text-property 1 'track)
           (get-text-property 10 'track)
           (get-text-property 15 'track)))) ",
+        expect_test::expect![[
+            r#""bar-X-bar-Y-bar-Z-barOK (4 #(\"bar-X-bar-Y-bar-Z-bar\" 3 6 (track original) 9 12 (track original) 15 18 (track original)) nil original nil)""#
+        ]],
     );
 }
 
@@ -169,7 +189,7 @@ fn divergence_textprops_after_multiple_replaces() {
 fn divergence_propertize_buffer_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
   (put-text-property 1 5 'level 1)
@@ -184,6 +204,7 @@ fn divergence_propertize_buffer_substring() {
           (get-text-property 1 'level sub2)
           (= (length sub1) 9)
           (= (length sub2) 9)))) "#,
+        expect_test::expect![[r#""AAAA-BBBB-CCCC-DDDDOK (1 2 nil nil t t)""#]],
     );
 }
 
@@ -191,7 +212,7 @@ fn divergence_propertize_buffer_substring() {
 fn divergence_add_face_text_property_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAAAAAAAABBBBBBBBBBCCCCCCCCCC")
   (add-face-text-property 1 11 'bold nil (current-buffer))
@@ -205,5 +226,8 @@ fn divergence_add_face_text_property_overlay() {
           (get-text-property 15 'face)
           (get-text-property 25 'face)
           (length (overlays-in 10 20))))) "#,
+        expect_test::expect![[
+            r#""AAAAAAAAAABBBBBBBBBBCCCCCCCCCCOK (bold bold italic underline 1)""#
+        ]],
     );
 }

@@ -15,7 +15,7 @@ fn combo_coding_encode_decode_marker_overlay_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Encode buffer to string, decode back; markers/overlays must survive.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-cod")))
     (with-current-buffer buf
@@ -49,6 +49,7 @@ fn combo_coding_encode_decode_marker_overlay_textprop() {
                                   (get-text-property 5 'zone))))
               (kill-buffer buf)
               (list after restored)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -57,7 +58,7 @@ fn combo_coding_multibyte_insert_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Insert multibyte text at marker position; undo must restore.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-cmb")))
     (with-current-buffer buf
@@ -87,6 +88,7 @@ fn combo_coding_multibyte_insert_marker_overlay_undo() {
                                   (get-text-property 6 'charset))))
             (kill-buffer buf)
             (list after-insert after-undo))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -95,7 +97,7 @@ fn combo_coding_narrow_encode_decode_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Narrow, encode/decode, undo; markers must track.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-cnarrow")))
     (with-current-buffer buf
@@ -134,6 +136,7 @@ fn combo_coding_narrow_encode_decode_marker_undo() {
                                   (get-text-property 9 'sect))))
               (kill-buffer buf)
               (list after restored)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -142,7 +145,7 @@ fn combo_coding_replace_multibyte_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Replace multibyte with different-length multibyte; markers track.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-crep")))
     (with-current-buffer buf
@@ -172,6 +175,7 @@ fn combo_coding_replace_multibyte_marker_overlay_undo() {
                                 (get-text-property 9 'word))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -180,7 +184,7 @@ fn combo_coding_buffer_local_coding_system_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Buffer-local coding system affects encode/decode.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-cbl")))
     (with-current-buffer buf
@@ -210,5 +214,6 @@ fn combo_coding_buffer_local_coding_system_marker_overlay() {
                                 buffer-file-coding-system)))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

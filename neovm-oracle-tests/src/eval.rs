@@ -24,16 +24,22 @@ fn oracle_eval_proptest_failure_path() -> &'static str {
 fn oracle_prop_eval_lexical_flag_controls_closure_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_default, neovm_default) =
-        eval_oracle_and_neovm("(let ((f (eval '(let ((x 1)) (lambda () x))))) (funcall f))");
+    let (oracle_default, neovm_default) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((f (eval '(let ((x 1)) (lambda () x))))) (funcall f))",
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
+    );
     assert_err_kind(&oracle_default, &neovm_default, "void-variable");
 
-    let (oracle_nil, neovm_nil) =
-        eval_oracle_and_neovm("(let ((f (eval '(let ((x 1)) (lambda () x)) nil))) (funcall f))");
+    let (oracle_nil, neovm_nil) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((f (eval '(let ((x 1)) (lambda () x)) nil))) (funcall f))",
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
+    );
     assert_err_kind(&oracle_nil, &neovm_nil, "void-variable");
 
-    let (oracle_lex, neovm_lex) =
-        eval_oracle_and_neovm("(let ((f (eval '(let ((x 1)) (lambda () x)) t))) (funcall f))");
+    let (oracle_lex, neovm_lex) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((f (eval '(let ((x 1)) (lambda () x)) t))) (funcall f))",
+        expect_test::expect![[r#""OK 1""#]],
+    );
     assert_ok_eq("1", &oracle_lex, &neovm_lex);
 }
 
@@ -42,7 +48,10 @@ fn oracle_prop_eval_nil_resets_dynamic_mode_after_lexical_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((_ (eval '(let ((x 7)) (lambda () x)) t))) (condition-case nil (let ((f (eval '(let ((x 9)) (lambda () x)) nil))) (funcall f)) (void-variable 'dynamic)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK dynamic""#]],
+    );
     assert_ok_eq("dynamic", &oracle, &neovm);
 }
 
@@ -50,7 +59,10 @@ fn oracle_prop_eval_nil_resets_dynamic_mode_after_lexical_eval() {
 fn oracle_prop_eval_wrong_arity_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(eval)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(eval)",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments eval 0)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-number-of-arguments");
 }
 
@@ -58,7 +70,10 @@ fn oracle_prop_eval_wrong_arity_error() {
 fn oracle_prop_eval_lexenv_list_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(eval '(list x y) '((x . 1) (y . 2)))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(eval '(list x y) '((x . 1) (y . 2)))",
+        expect_test::expect![[r#""OK (1 2)""#]],
+    );
     assert_ok_eq("(1 2)", &oracle, &neovm);
 }
 
@@ -66,7 +81,10 @@ fn oracle_prop_eval_lexenv_list_basics() {
 fn oracle_prop_eval_lexenv_shadowing_outer_dynamic_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(let ((x 10)) (eval 'x '((x . 3))))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((x 10)) (eval 'x '((x . 3))))",
+        expect_test::expect![[r#""OK 3""#]],
+    );
     assert_ok_eq("3", &oracle, &neovm);
 }
 
@@ -74,7 +92,10 @@ fn oracle_prop_eval_lexenv_shadowing_outer_dynamic_binding() {
 fn oracle_prop_eval_lexenv_duplicate_binding_first_wins() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(eval 'x '((x . 1) (x . 2)))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(eval 'x '((x . 1) (x . 2)))",
+        expect_test::expect![[r#""OK 1""#]],
+    );
     assert_ok_eq("1", &oracle, &neovm);
 }
 
@@ -82,7 +103,10 @@ fn oracle_prop_eval_lexenv_duplicate_binding_first_wins() {
 fn oracle_prop_eval_lexenv_binding_with_implicit_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(eval 'x '((x)))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(eval 'x '((x)))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
@@ -90,15 +114,24 @@ fn oracle_prop_eval_lexenv_binding_with_implicit_nil() {
 fn oracle_prop_eval_lexenv_captured_by_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(let ((f (eval '(lambda () x) '((x . 99))))) (funcall f))");
-    assert_oracle_parity("(let ((f (eval '(lambda () x) '((x . 99))))) (let ((x 3)) (funcall f)))");
+    crate::common::assert_oracle_parity_expect(
+        "(let ((f (eval '(lambda () x) '((x . 99))))) (funcall f))",
+        expect_test::expect![[r#""OK 99""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(let ((f (eval '(lambda () x) '((x . 99))))) (let ((x 3)) (funcall f)))",
+        expect_test::expect![[r#""OK 99""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_eval_macro_expansion_with_lexenv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(eval '(when x y) '((x . t) (y . 9)))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(eval '(when x y) '((x . t) (y . 9)))",
+        expect_test::expect![[r#""OK 9""#]],
+    );
     assert_ok_eq("9", &oracle, &neovm);
 }
 
@@ -106,7 +139,10 @@ fn oracle_prop_eval_macro_expansion_with_lexenv() {
 fn oracle_prop_eval_lexenv_argument_shape_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(eval 'x '(x . 1))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(eval 'x '(x . 1))",
+        expect_test::expect![[r#""ERR (wrong-type-argument listp (x . 1))""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -115,7 +151,10 @@ fn oracle_prop_eval_error_does_not_leak_lexical_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((_ (condition-case nil (eval '(+ 1 \"x\") t) (error 'err)))) (let ((f (eval '(let ((x 9)) (lambda () x)) nil))) (condition-case nil (funcall f) (void-variable 'dynamic))))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK dynamic""#]],
+    );
     assert_ok_eq("dynamic", &oracle, &neovm);
 }
 
@@ -123,8 +162,9 @@ fn oracle_prop_eval_error_does_not_leak_lexical_mode() {
 fn oracle_prop_eval_nested_mode_switch_with_inner_lexical_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         "(let ((f (eval '(eval '(let ((x 7)) (lambda () x)) t) nil))) (funcall f))",
+        expect_test::expect![[r#""OK 7""#]],
     );
     assert_ok_eq("7", &oracle, &neovm);
 }
@@ -137,7 +177,10 @@ fn oracle_prop_eval_dynamic_setq_side_effect() {
     // environment, so `setq` sets the global/dynamic `x`, not the lexical `x`.
     // The outer `let` still sees its lexical `x` = 1.
     // GNU Emacs returns OK 1; NeoVM should match.
-    let (oracle, neovm) = eval_oracle_and_neovm("(let ((x 1)) (eval '(setq x 2)) x)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((x 1)) (eval '(setq x 2)) x)",
+        expect_test::expect![[r#""OK 1""#]],
+    );
     assert_eq!(neovm, oracle, "neovm and oracle should match");
 }
 
@@ -145,11 +188,16 @@ fn oracle_prop_eval_dynamic_setq_side_effect() {
 fn oracle_prop_eval_quote_and_function_forms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_quote, neovm_quote) = eval_oracle_and_neovm("(let ((x 1)) (eval '(quote x)))");
+    let (oracle_quote, neovm_quote) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((x 1)) (eval '(quote x)))",
+        expect_test::expect![[r#""OK x""#]],
+    );
     assert_ok_eq("x", &oracle_quote, &neovm_quote);
 
-    let (oracle_fn, neovm_fn) =
-        eval_oracle_and_neovm("(let ((f (eval '(function (lambda (x) (+ x 1)))))) (funcall f 41))");
+    let (oracle_fn, neovm_fn) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((f (eval '(function (lambda (x) (+ x 1)))))) (funcall f 41))",
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &oracle_fn, &neovm_fn);
 }
 
@@ -157,8 +205,10 @@ fn oracle_prop_eval_quote_and_function_forms() {
 fn oracle_prop_eval_error_passthrough_via_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) =
-        eval_oracle_and_neovm("(condition-case nil (eval '(car 1)) (wrong-type-argument 'caught))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(condition-case nil (eval '(car 1)) (wrong-type-argument 'caught))",
+        expect_test::expect![[r#""OK caught""#]],
+    );
     assert_ok_eq("caught", &oracle, &neovm);
 }
 

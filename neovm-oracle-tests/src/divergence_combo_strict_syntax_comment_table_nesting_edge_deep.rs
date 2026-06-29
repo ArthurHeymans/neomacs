@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_s2_syntax_comment_classes_forward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -23,13 +23,14 @@ fn div_s2_syntax_comment_classes_forward() {
         (nth 4 (syntax-pp 6))
         (nth 4 (syntax-pp 1))))
 "####,
+        expect_test::expect![[r#""ERR (void-function syntax-pp)""#]],
     );
 }
 
 #[test]
 fn div_s2_syntax_table_text_property_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (with-temp-buffer
   (insert "(a (b) c)")
@@ -40,13 +41,14 @@ fn div_s2_syntax_table_text_property_override() {
         (scan-sexps 1 1)
         (nth 0 (parse-partial-sexp 1 4))))
 "####,
+        expect_test::expect![[r#""ERR (void-function syntax-pp)""#]],
     );
 }
 
 #[test]
 fn div_s2_syntax_nesting_depth_and_list_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (with-temp-buffer
   (insert "(((a) b) (c (d)))")
@@ -63,13 +65,14 @@ fn div_s2_syntax_nesting_depth_and_list_navigation() {
         (up-list -1)
         (point)))
 "####,
+        expect_test::expect![[r#""ERR (void-function syntax-pp)""#]],
     );
 }
 
 #[test]
 fn div_s2_syntax_string_fence_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (with-temp-buffer
   (insert "(concat \"hello world\" foo)")
@@ -80,5 +83,6 @@ fn div_s2_syntax_string_fence_detection() {
         (char-syntax ?\")
         (syntax-after 10)))
 "####,
+        expect_test::expect![[r#""ERR (void-function syntax-pp)""#]],
     );
 }

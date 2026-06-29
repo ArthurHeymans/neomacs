@@ -138,7 +138,12 @@ fn oracle_prop_csp_solver_basic_framework() {
     (fmakunbound 'neovm--csp-solve)
     (fmakunbound 'neovm--csp-bt)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((all-diff t t t) (must-equal t t) (unsatisfiable t) (ordering t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -244,7 +249,10 @@ fn oracle_prop_csp_solver_4_queens() {
     (fmakunbound 'neovm--csp-solve-all)
     (fmakunbound 'neovm--csp-bt-all)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 t ((1 3 0 2) (2 0 3 1)))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -377,7 +385,12 @@ fn oracle_prop_csp_solver_map_coloring() {
     (fmakunbound 'neovm--csp-count-solutions)
     (fmakunbound 'neovm--csp-bt-count)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((triangle t t 6) (line 12) (square t 18) (two-color-triangle t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -512,7 +525,12 @@ fn oracle_prop_csp_solver_arc_consistency() {
     (fmakunbound 'neovm--csp-ac3-revise)
     (fmakunbound 'neovm--csp-ac3)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ac3-basic t 3 3 3) (ac3-propagate t t (2 3) (2 3)) (ac3-wipeout t) (ac3-lt (1 2 3 4) (2 3 4 5)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -635,7 +653,10 @@ fn oracle_prop_csp_solver_forward_checking() {
     (fmakunbound 'neovm--csp-fc-solve)
     (fmakunbound 'neovm--csp-fc-bt)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((fc-4diff t t t) (fc-ordered t t) (fc-unsat t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -781,5 +802,10 @@ fn oracle_prop_csp_solver_magic_square() {
     (fmakunbound 'neovm--csp-count-solutions)
     (fmakunbound 'neovm--csp-bt-count)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((relaxed-2x2 t (1 4 4 1) t) (relaxed-count 4) (latin-3x3 t t))""#
+        ]],
+    );
 }

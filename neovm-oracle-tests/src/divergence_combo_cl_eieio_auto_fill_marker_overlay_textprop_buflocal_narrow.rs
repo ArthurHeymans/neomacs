@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_auto_fill_insert_long_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass fill-edit-snap ()
     ((step :initarg :step :accessor fes-step :initform "")
@@ -57,6 +57,7 @@ fn combo_eieio_auto_fill_insert_long_line() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -64,7 +65,7 @@ fn combo_eieio_auto_fill_insert_long_line() {
 fn combo_eieio_auto_fill_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass fill-prop-snap ()
     ((step :initarg :step :accessor fps-step :initform "")
@@ -112,6 +113,7 @@ fn combo_eieio_auto_fill_with_props() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -119,7 +121,7 @@ fn combo_eieio_auto_fill_with_props() {
 fn combo_eieio_auto_fill_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass fill-narrow-snap ()
     ((step :initarg :step :accessor fns-step :initform "")
@@ -172,6 +174,7 @@ fn combo_eieio_auto_fill_narrow() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -179,7 +182,7 @@ fn combo_eieio_auto_fill_narrow() {
 fn combo_eieio_auto_fill_marker_relocation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass fill-marker-snap ()
     ((step :initarg :step :accessor fms-step :initform "")
@@ -235,6 +238,7 @@ fn combo_eieio_auto_fill_marker_relocation() {
                 (marker-position m1) (marker-position m2)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -242,7 +246,7 @@ fn combo_eieio_auto_fill_marker_relocation() {
 fn combo_eieio_auto_fill_undo_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass fill-undo-snap ()
     ((step :initarg :step :accessor fus-step :initform "")
@@ -293,5 +297,6 @@ fn combo_eieio_auto_fill_undo_cycle() {
               (marker-position m)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

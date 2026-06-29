@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_g7_text_property_search_forward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "aaaabbbbcccc")
@@ -21,13 +21,14 @@ fn div_g7_text_property_search_forward() {
     (list (point)
           (and m (point)))))
 "##,
+        expect_test::expect![[r#""OK (9 9)""#]],
     );
 }
 
 #[test]
 fn div_g7_filter_buffer_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello world")
@@ -36,13 +37,16 @@ fn div_g7_filter_buffer_substring() {
         (filter-buffer-substring 1 6 nil)
         (filter-buffer-substring 1 6 'noprops)))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"hello\" 0 5 (face bold)) #(\"hello\" 0 5 (face bold)) #(\"hello\" 0 5 (face bold)))""#
+        ]],
     );
 }
 
 #[test]
 fn div_g7_set_window_point_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-wp3*")))
   (unwind-protect
@@ -55,13 +59,14 @@ fn div_g7_set_window_point_roundtrip() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (4 4)""#]],
     );
 }
 
 #[test]
 fn div_g7_re_search_noerror_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "foo bar baz")
@@ -73,13 +78,14 @@ fn div_g7_re_search_noerror_variants() {
               (search-failed (car err)))))
     (list r1 r2 r3 (point))))
 "##,
+        expect_test::expect![[r#""OK (8 nil search-failed 1)""#]],
     );
 }
 
 #[test]
 fn div_g7_with_silent_modifications() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abc")
@@ -88,5 +94,6 @@ fn div_g7_with_silent_modifications() {
     (insert "def"))
   (list (buffer-string) (buffer-modified-p)))
 "##,
+        expect_test::expect![[r#""OK (\"abcdef\" nil)""#]],
     );
 }

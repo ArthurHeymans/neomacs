@@ -75,5 +75,10 @@ fn oracle_directory_files_and_attributes_shape_id_format_count_and_errors() {
     (delete-directory dir t)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"alpha.txt\" nil t t t t t t 5 \"-\" t t t 12) (\"zeta.txt\" nil t t t t t t 5 \"-\" t t t 12)) (\"alpha.txt\" \"zeta.txt\") (t t) ((\"alpha.txt\" t t) (\"zeta.txt\" t t)) ((\".\" t) (\"..\" t)) nil 1 (wrong-type-argument (stringp 42)) (wrong-type-argument (wholenump -1)) (wrong-type-argument (stringp 42)))""#
+        ]],
+    );
 }

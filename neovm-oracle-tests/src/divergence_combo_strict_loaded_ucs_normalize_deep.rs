@@ -14,7 +14,7 @@ fn div_l1_nfc_composition_from_decomposed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Characterization (parity): NFC composition (decomposed -> precomposed)
     // WORKS in Neomacs — the composition table/path is functional.
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (ucs-normalize-NFC-string "è")
       (ucs-normalize-NFC-string "ñ")
@@ -22,6 +22,7 @@ fn div_l1_nfc_composition_from_decomposed() {
       (ucs-normalize-NFC-string "ü"))
 "##,
         &["international/ucs-normalize.el"],
+        expect_test::expect![[r#""OK (\"è\" \"ñ\" \"ö\" \"ü\")""#]],
     );
 }
 
@@ -30,7 +31,7 @@ fn div_l1_hangul_compose_decompose() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Characterization (parity): Hangul algorithmic NFC/NFD composition AND
     // decomposition WORK in Neomacs — the special-case algorithm is functional.
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (ucs-normalize-NFC-string "가")
       (ucs-normalize-NFD-string "가")
@@ -39,6 +40,7 @@ fn div_l1_hangul_compose_decompose() {
       (length (ucs-normalize-NFD-string "각")))
 "##,
         &["international/ucs-normalize.el"],
+        expect_test::expect![[r#""OK (\"가\" \"가\" 2 \"각\" 3)""#]],
     );
 }
 
@@ -52,7 +54,7 @@ fn div_l1_nfd_sweep_precomposed() {
     // chars (a u n o) stay 1 char in Neomacs but decompose to 2 in GNU. Chars
     // without a decomposition (Omega, Cyrillic ya, o-slash) agree at 1.
     // (Hangul algorithmic decomposition and NFC composition DO work.)
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (length (ucs-normalize-NFD-string "à"))
       (length (ucs-normalize-NFD-string "ü"))
@@ -63,13 +65,14 @@ fn div_l1_nfd_sweep_precomposed() {
       (length (ucs-normalize-NFD-string "ø")))
 "##,
         &["international/ucs-normalize.el"],
+        expect_test::expect![[r#""OK (2 2 2 2 1 1 1)""#]],
     );
 }
 
 #[test]
 fn div_l1_nfc_nfd_idempotent_precomposed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (ucs-normalize-NFC-string "é")
       (ucs-normalize-NFC-string "café")
@@ -78,6 +81,7 @@ fn div_l1_nfc_nfd_idempotent_precomposed() {
       (ucs-normalize-NFC-string "Æ"))
 "##,
         &["international/ucs-normalize.el"],
+        expect_test::expect![[r#""OK (\"é\" \"café\" \"日本\" \"Ω\" \"Æ\")""#]],
     );
 }
 
@@ -90,7 +94,7 @@ fn div_l1_nfkc_canonical_and_compat() {
     // NFKD/NFKC compatibility decomposition is broken: the ligature ﬁ stays ﬁ
     // (GNU -> fi) and trademark ™ stays ™ (GNU -> TM) in Neomacs. The
     // ideographic (株) and ℃ decompositions agree.
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (ucs-normalize-NFKC-string "Ω")
       (ucs-normalize-NFKC-string "㈱")
@@ -99,5 +103,6 @@ fn div_l1_nfkc_canonical_and_compat() {
       (ucs-normalize-NFKD-string "™"))
 "##,
         &["international/ucs-normalize.el"],
+        expect_test::expect![[r#""OK (\"Ω\" \"(株)\" \"°C\" \"fi\" \"TM\")""#]],
     );
 }

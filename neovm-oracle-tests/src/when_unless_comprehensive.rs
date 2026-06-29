@@ -24,7 +24,12 @@ fn oracle_prop_when_unless_comp_when_truthy_values() {
                     (when 0 'from-zero)
                     (when "" 'from-empty-string)
                     (when [1 2] 'from-vector))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (from-t from-number from-string from-list from-symbol from-zero from-empty-string from-vector)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -43,7 +48,12 @@ fn oracle_prop_when_unless_comp_falsy_conditions() {
                     (unless (car nil) 'unless-car-nil-runs)
                     (when (and nil t) 'should-not-appear)
                     (unless (and nil t) 'unless-and-nil-runs))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil unless-nil-runs nil nil unless-car-nil-runs nil unless-and-nil-runs)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +80,12 @@ fn oracle_prop_when_unless_comp_multiple_body_forms() {
                               :unless-result unless-result
                               :side-a side-a
                               :side-b side-b))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:when-result 60 :unless-result 21 :side-a (third-effect . first-effect) :side-b (fourth-effect . second-effect))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +112,10 @@ fn oracle_prop_when_unless_comp_return_values() {
                     ;; Nested: return value propagation
                     (when t (when t (when t 'deep)))
                     (when t (unless nil (when t 'deep-mixed))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 nil c nil nil nil deep deep-mixed)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +137,12 @@ fn oracle_prop_when_unless_comp_nested_control_flow() {
                                        (format "divisible-by-5:%d" n))))))))
                         (setq results (cons (cons n label) results))))
                     (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((-5) (-1) (0) (1) (5 . \"divisible-by-5:5\") (10 . \"divisible-by-5:10\") (15 . \"divisible-by-5:15\") (20 . \"divisible-by-5:20\") (25))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +171,12 @@ fn oracle_prop_when_unless_comp_complex_conditions() {
                           (setq tag (cons 'extreme-nonzero tag)))
                         (setq results (cons (cons x (nreverse tag)) results))))
                     (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 milestone) (1 extreme-nonzero) (2 extreme-nonzero) (3) (4 even-mid) (5 milestone) (6 even-mid) (7) (8 even-mid above-7) (9 above-7) (10 milestone above-7) (11 above-7 extreme-nonzero) (12 above-7 extreme-nonzero) (15 milestone above-7 extreme-nonzero) (20 above-7 extreme-nonzero) (30 above-7 extreme-nonzero))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +205,12 @@ fn oracle_prop_when_unless_comp_when_inside_let() {
                            (list :shadowed outer)))
                        ;; after when, outer is restored
                        (list :outer-restored outer))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:product 20000 :sum 300) (:a 10 :b 30 :c 17) (:shadowed 999) (:outer-restored 100))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +238,10 @@ fn oracle_prop_when_unless_comp_unless_side_effects() {
                       (setq log (cons 'true-comparison log)))
                     ;; Only 2 of 4 unless blocks should have executed
                     (list :counter counter :log (nreverse log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (:counter 2 :log (nil-branch false-comparison))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -239,7 +275,12 @@ fn oracle_prop_when_unless_comp_in_iteration_bodies() {
                     (list :evens (nreverse evens)
                           :odds (nreverse odds)
                           :fizzbuzz (nreverse fizzbuzz)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:evens (0 2 4 6 8 10) :odds (1 3 5 7 9 11) :fizzbuzz ((3 . \"fizz\") (5 . \"buzz\") (6 . \"fizz\") (9 . \"fizz\") (10 . \"buzz\") (12 . \"fizz\") (15 . \"fizzbuzz\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +305,12 @@ fn oracle_prop_when_unless_comp_predicate_conditions() {
                         (unless (atom item) (setq tags (cons :non-atom tags)))
                         (setq results (cons (cons item (nreverse tags)) results))))
                     (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((42 :number :non-null) (\"hello\" :string :non-null) (nil :list :symbol :null) ((1 2 3) :list :non-null :non-atom) (t :symbol :non-null) ([a b] :vector :non-null) (0 :number :non-null) (\"\" :string :non-null) (foo :symbol :non-null))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +352,12 @@ fn oracle_prop_when_unless_comp_guard_clause_pattern() {
         (funcall 'neovm--test-validate-and-process '(hello world))
         (funcall 'neovm--test-validate-and-process '(42)))
     (fmakunbound 'neovm--test-validate-and-process)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:ok t :sum 15 :count 5) (:error \"not a list\" :input \"not-a-list\") (:error \"empty list\") (:error \"first element not a number\" :got symbol) (:error \"need at least 2 elements\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -352,5 +403,10 @@ fn oracle_prop_when_unless_comp_config_validator() {
                      (funcall validate-config '(:name "app" :port 99999))
                      (funcall validate-config '(:name "app" :port 3000 :timeout 600))
                      (funcall validate-config nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:valid t :errors nil :warnings nil) (:valid t :errors nil :warnings (\"port < 1024 requires root\" \"no :timeout, using default 30s\")) (:valid nil :errors (\"missing :name\" \":port must be a number\") :warnings (\"no :timeout, using default 30s\")) (:valid nil :errors (\"port out of range\") :warnings (\"no :timeout, using default 30s\")) (:valid t :errors nil :warnings (\"timeout > 300s is very long\")) (:valid nil :errors (\"missing :name\" \"missing :port\") :warnings (\"no :timeout, using default 30s\")))""#
+        ]],
+    );
 }

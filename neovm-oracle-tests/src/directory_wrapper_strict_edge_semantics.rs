@@ -70,5 +70,8 @@ fn oracle_directory_wrapper_edges() {
     (ignore-errors (delete-directory root t))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 47)""#]],
+    );
 }

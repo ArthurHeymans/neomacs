@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_textprop_next_change_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass annotation ()
     ((tag :initarg :tag :accessor ann-tag :initform "")
@@ -57,6 +57,7 @@ fn combo_eieio_textprop_next_change_with_objects() {
                 (buffer-string)
                 annots))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -64,7 +65,7 @@ fn combo_eieio_textprop_next_change_with_objects() {
 fn combo_eieio_textprop_single_change_overlay_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass styled-chunk ()
     ((style-name :initarg :style-name :accessor sc-name :initform "")
@@ -133,6 +134,7 @@ fn combo_eieio_textprop_single_change_overlay_merge() {
                 (buffer-string)
                 styles))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -140,7 +142,7 @@ fn combo_eieio_textprop_single_change_overlay_merge() {
 fn combo_eieio_textprop_remove_add_overlay_clash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass token ()
     ((kind :initarg :kind :accessor tk-kind :initform "")
@@ -208,6 +210,7 @@ fn combo_eieio_textprop_remove_add_overlay_clash() {
                 (buffer-string)
                 tokens))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -215,7 +218,7 @@ fn combo_eieio_textprop_remove_add_overlay_clash() {
 fn combo_eieio_textprop_object_identity_eq_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ref ()
     ((label :initarg :label :accessor ref-label :initform "")
@@ -270,6 +273,7 @@ fn combo_eieio_textprop_object_identity_eq_check() {
                 (buffer-string)
                 refs))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -277,7 +281,7 @@ fn combo_eieio_textprop_object_identity_eq_check() {
 fn combo_eieio_textprop_add_transitive_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass link ()
     ((from :initarg :from :accessor lk-from :initform "")
@@ -336,5 +340,6 @@ fn combo_eieio_textprop_add_transitive_overlay() {
                 (buffer-string)
                 links))))
     (kill-buffer buf))"#,
+        expect_test::expect![[r#""ERR (void-variable chain-weight)""#]],
     );
 }

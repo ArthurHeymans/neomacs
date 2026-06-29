@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx73_func_arity_of_lambdas_subrs_and_macros() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((fixed (lambda (a b) (+ a b)))
       (many (lambda (&rest args) args))
@@ -23,13 +23,16 @@ fn div_cx73_func_arity_of_lambdas_subrs_and_macros() {
    (func-arity (symbol-function 'car))
    (func-arity (symbol-function 'list))))
 "##,
+        expect_test::expect![[
+            r#""OK ((2 . 2) (0 . many) (0 . 1) (1 . many) (0 . many) (1 . 1) (0 . many))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx73_closure_capture_mutation_lexical_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (let ((counter 0))
@@ -45,13 +48,14 @@ fn div_cx73_closure_capture_mutation_lexical_binding() {
        (funcall get)
        counter))))
 "##,
+        expect_test::expect![[r#""OK (0 1 2 3 2 2 2)""#]],
     );
 }
 
 #[test]
 fn div_cx73_dynamic_vs_lexical_var_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defvar neo-cx73-dyn 0)
@@ -61,13 +65,14 @@ fn div_cx73_dynamic_vs_lexical_var_capture() {
         (let ((neo-cx73-dyn 999))
           (list (funcall lex-captured) neo-cx73-dyn))))))
 "##,
+        expect_test::expect![[r#""OK (999 999)""#]],
     );
 }
 
 #[test]
 fn div_cx73_apply_funcall_with_optional_and_rest() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((fn (lambda (a b &optional c &rest d) (list a b c d))))
   (list
@@ -79,13 +84,16 @@ fn div_cx73_apply_funcall_with_optional_and_rest() {
    (apply fn 1 '(2 3))
    (apply '+ 1 2 '(3 4 5))))
 "##,
+        expect_test::expect![[
+            r#""OK ((1 2 nil nil) (1 2 3 nil) (1 2 3 (4 5)) (1 2 nil nil) (1 2 3 (4 5)) (1 2 3 nil) 15)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx73_function_cells_and_indirect_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (defalias 'neo-cx73-orig (lambda () :orig))
 (defalias 'neo-cx73-alias 'neo-cx73-orig)
@@ -99,13 +107,14 @@ fn div_cx73_function_cells_and_indirect_function() {
         (funcall 'neo-cx73-orig)
         (funcall 'neo-cx73-alias)))
 "##,
+        expect_test::expect![[r#""OK (nil t t :orig :orig)""#]],
     );
 }
 
 #[test]
 fn div_cx73_eval_with_different_lexical_environments() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (let ((x 100))
@@ -116,13 +125,14 @@ fn div_cx73_eval_with_different_lexical_environments() {
      (let ((y 50)) (eval '(+ x y) t))
      (eval '(let ((z 5)) (* x z))) )))
 "##,
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
     );
 }
 
 #[test]
 fn div_cx73_closure_environment_capture_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((lexical-binding t))
@@ -132,13 +142,14 @@ fn div_cx73_closure_environment_capture_keys() {
             (list env)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx73_funcall_macro_should_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (defmacro neo-cx73-mac (x) `(* ,x 2))
 (list
@@ -148,13 +159,14 @@ fn div_cx73_funcall_macro_should_error() {
  (condition-case e (funcall 'neo-cx73-mac 5) (error (cons :err (car e))))
  (macroexpand '(neo-cx73-mac 21)))
 "##,
+        expect_test::expect![[r#""OK (t t nil (:err . invalid-function) (* 21 2))""#]],
     );
 }
 
 #[test]
 fn div_cx73_partial_application_with_apply_partially() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((add-then (apply-partially #'+ 1000))
@@ -165,13 +177,14 @@ fn div_cx73_partial_application_with_apply_partially() {
             (length (funcall add-then 5))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
     );
 }
 
 #[test]
 fn div_cx73_helpful_recursive_lambda_in_letrec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (letrec ((fact (lambda (n) (if (= n 0) 1 (* n (funcall fact (1- n)))))))
@@ -180,13 +193,14 @@ fn div_cx73_helpful_recursive_lambda_in_letrec() {
           (funcall fact 5)
           (funcall fact 10))))
 "##,
+        expect_test::expect![[r#""OK (1 1 120 3628800)""#]],
     );
 }
 
 #[test]
 fn div_cx73_mapcar_mapc_with_strings_and_vectors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (acc)
   (list
@@ -197,13 +211,16 @@ fn div_cx73_mapcar_mapc_with_strings_and_vectors() {
    (mapcan (lambda (x) (list x x)) '(1 2 3))
    (mapconcat (lambda (x) (format "<%d>" x)) '(1 2 3) ",")))
 "##,
+        expect_test::expect![[
+            r#""OK ((97 98 99) (2 3 4) (1 2 3) (1 2 3) (1 1 2 2 3 3) \"<1>,<2>,<3>\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx73_apply_lambda_with_defun_kw_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defun neo-cx73-kwfn (a &key b (c 99))
   (list a b c))
@@ -213,13 +230,14 @@ fn div_cx73_apply_lambda_with_defun_kw_args() {
  (neo-cx73-kwfn 1)
  (condition-case e (neo-cx73-kwfn 1 :unknown 5) (error (cons :err (car e)))))
 "##,
+        expect_test::expect![[r#""OK ((1 2 99) (1 2 3) (1 nil 99) (:err . error))""#]],
     );
 }
 
 #[test]
 fn div_cx73_closure_apply_eval_undo_marker_overlay_textprop_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (letrec ((counter 0)
@@ -249,5 +267,6 @@ fn div_cx73_closure_apply_eval_undo_marker_overlay_textprop_narrow_mega() {
                   (overlay-start ov) (overlay-end ov)
                   (text-properties-at 1))))))))
 "##,
+        expect_test::expect![[r#""ERR (void-function add-eval)""#]],
     );
 }

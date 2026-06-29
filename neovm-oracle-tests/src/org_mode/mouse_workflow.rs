@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_mouse_insert_menu_priority_checkbox_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-mouse)
@@ -100,6 +100,7 @@ fn org_mouse_insert_menu_priority_checkbox_combo() {
               (org-mouse-agenda-type 'unknown)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -107,7 +108,7 @@ fn org_mouse_insert_menu_priority_checkbox_combo() {
 fn org_mouse_timestamp_options_visibility_mutation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-mouse)
@@ -207,6 +208,7 @@ fn org_mouse_timestamp_options_visibility_mutation_combo() {
                 (org-mouse-clip-text "0123456789abcdef" 10)
                  (buffer-substring-no-properties
                   (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -214,7 +216,7 @@ fn org_mouse_timestamp_options_visibility_mutation_combo() {
 fn org_mouse_context_menu_move_drag_link_open_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-mouse)
@@ -265,5 +267,6 @@ fn org_mouse_context_menu_move_drag_link_open_combo() {
                     after-move
                     after-move-up
                     after-tag)))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-mouse-move-subtree-down)""#]],
     );
 }

@@ -73,7 +73,12 @@ fn oracle_prop_textfmt_word_wrap_greedy() {
          ;; Edge: single long word
          (funcall 'neovm--test-word-wrap "supercalifragilistic" 10)))
     (fmakunbound 'neovm--test-word-wrap)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"The quick brown fox jumped over the lazy\" \"sleeping dog while the cat watched from\" \"the warm sunny windowsill and the birds\" \"sang their morning songs in the tall oak\" \"tree\") 5 t) ((\"The quick brown fox\" \"jumped over the lazy\" \"sleeping dog while\" \"the cat watched from\" \"the warm sunny\" \"windowsill and the\" \"birds sang their\" \"morning songs in the\" \"tall oak tree\") 9 t) 3 (\"supercalifragilistic\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +123,12 @@ fn oracle_prop_textfmt_center_align() {
                                 (<= (abs (- left-spaces right-spaces)) 1)))))
                         centered))))
     (fmakunbound 'neovm--test-center)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"            Title             \" \"      Subtitle Goes Here      \" \"        By Author Name        \" \"                              \" \"         Chapter One          \" \"A very long line that exceeds the width limit\") (30 30 30 30 30 45) (\"Title\" \"Subtitle Goes Here\" \"By Author Name\" \"\" \"Chapter One\" \"A very long line that exceeds the width limit\") (t t t t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +193,12 @@ fn oracle_prop_textfmt_justify() {
                   ;; Verify word content preserved
                   (mapcar (lambda (j) (length (split-string j " " t))) justified)))))
     (fmakunbound 'neovm--test-justify)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"This    is    a    line   of   text   to   justify\" \"Short                                             \" \"Two                                          words\" \"The   quick   brown   fox   jumps   over  the  dog\" \"a      b      c      d      e      f      g      h\") (50 50 50 50 50) t (8 1 2 8 8))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +287,12 @@ fn oracle_prop_textfmt_ascii_table() {
            ;; Row count
            (length data-rows))))
     (fmakunbound 'neovm--test-build-table)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"+----------+-----+-------+-------+\" \"| Name     | Age | Score | Grade |\" \"+----------+-----+-------+-------+\" (\"| Alice    |  30 | 95.5  |   A   |\" \"| Bob      |  25 | 87.3  |  B+   |\" \"| Caroline |  35 | 91.0  |  A-   |\" \"| Dave     |  28 | 78.9  |  C+   |\") \"+----------+-----+-------+-------+\") (t 34) 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +340,12 @@ fn oracle_prop_textfmt_thousands_separator() {
                     (list n (funcall 'neovm--test-format-number n sep gs))))
                 test-cases))
     (fmakunbound 'neovm--test-format-number)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 \"0\") (42 \"42\") (1000 \"1,000\") (1234567 \"1,234,567\") (-9876543 \"-9,876,543\") (1000000000 \"1,000,000,000\") (1234567890 \"1.234.567.890\") (123456789 \"123_456_789\") (12345678 \"1234 5678\") (-1 \"-1\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -433,7 +458,12 @@ Short paragraph."))
          ;; Reflow to 100 columns (wider -- should produce fewer lines)
          (length (funcall 'neovm--test-reflow text 100))))
     (fmakunbound 'neovm--test-reflow)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"This is the first paragraph that has been wrapped at a\" \"narrow width. It should be unwrapped and then re-wrapped to\" \"fit the new column width properly.\" \"\" \"Here is a second paragraph. This one is also wrapped at the\" \"same narrow width and needs to be reflowed independently\" \"from the first paragraph.\" \"\" \"Short paragraph.\") 9 t) 11 7)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -497,5 +527,10 @@ fn oracle_prop_textfmt_column_truncation() {
            ;; Verify truncation happened where expected
            (length formatted))))
     (fmakunbound 'neovm--test-format-columns)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"Alice Johnson   |     1234 | Senior Developer     |   Active  \" \"Bob             |     5678 | Junior Developer ... |   Active  \" \"Caroline Bea... |    91011 | Team Lead            |  On Leave \" \"D               |        0 | A                    |     X     \") ((62 62 62 62) t) 4)""#
+        ]],
+    );
 }

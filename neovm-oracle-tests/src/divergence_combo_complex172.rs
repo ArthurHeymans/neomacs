@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx172_pcase_pred_with_various_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
           (pcase v
@@ -20,13 +20,14 @@ fn div_cx172_pcase_pred_with_various_predicates() {
             ((pred symbolp) :sym)))
         '(42 "hello" (1 2) [1 2] nil alpha))
 "##,
+        expect_test::expect![[r#""OK (:int :str :cons :vec :nil :sym)""#]],
     );
 }
 
 #[test]
 fn div_cx172_pcase_app_with_transformation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
           (pcase v
@@ -34,13 +35,14 @@ fn div_cx172_pcase_app_with_transformation() {
             ((app car-safe 'first) :first-car)))
         '("hello" (1 2 3) [a b c d]))
 "##,
+        expect_test::expect![[r#""OK ((:length 5) (:length 3) (:length 4))""#]],
     );
 }
 
 #[test]
 fn div_cx172_pcase_quote_with_literal_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
           (pcase v
@@ -52,36 +54,41 @@ fn div_cx172_pcase_quote_with_literal_match() {
             (_ :other)))
         '(alpha beta gamma "str" 42 :unknown))
 "##,
+        expect_test::expect![[
+            r#""OK (:alpha-symbol :beta-symbol :gamma-symbol :string-literal :number-literal :other)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx172_pcase_let_pattern_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (pcase-let ((`(,a ,b ,c) (list 1 2 3)))
   (list :a a :b b :c c))
 "##,
+        expect_test::expect![[r#""OK (:a 1 :b 2 :c 3)""#]],
     );
 }
 
 #[test]
 fn div_cx172_pcase_let_star_multiple_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (pcase-let* ((`(,a ,b) (list 1 2))
              (`(,c ,d) (list 3 4)))
   (list a b c d))
 "##,
+        expect_test::expect![[r#""OK (1 2 3 4)""#]],
     );
 }
 
 #[test]
 fn div_cx172_pcase_or_with_multiple_alternatives() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
           (pcase v
@@ -91,13 +98,14 @@ fn div_cx172_pcase_or_with_multiple_alternatives() {
             (_ :other)))
         '(alpha red 1 delta))
 "##,
+        expect_test::expect![[r#""OK (:greek :color :small-int :other)""#]],
     );
 }
 
 #[test]
 fn div_cx172_pcase_and_with_combined_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
           (pcase v
@@ -107,13 +115,14 @@ fn div_cx172_pcase_and_with_combined_predicates() {
             (_ :other)))
         '(200 "hello" (first . rest) 50 "ab"))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \"hello\")""#]],
     );
 }
 
 #[test]
 fn div_cx172_pcase_not_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
           (pcase v
@@ -121,13 +130,14 @@ fn div_cx172_pcase_not_pattern() {
             (_ :int)))
         '(42 "hello" (1 2) [a b] nil))
 "##,
+        expect_test::expect![[r#""ERR (error \"Unknown not pattern: (not (pred integerp))\")""#]],
     );
 }
 
 #[test]
 fn div_cx172_pcase_guard_clause() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
           (pcase v
@@ -135,13 +145,14 @@ fn div_cx172_pcase_guard_clause() {
             (_ :other)))
         '(-5 0 50 100 200))
 "##,
+        expect_test::expect![[r#""OK (:other :other :other :other :other)""#]],
     );
 }
 
 #[test]
 fn div_cx172_pcase_map_pattern_with_hash_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((ht (make-hash-table :test 'equal)))
@@ -153,13 +164,14 @@ fn div_cx172_pcase_map_pattern_with_hash_table() {
         (_ :no-match)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx172_pcase_with_destructuring_complex_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
           (pcase v
@@ -171,13 +183,16 @@ fn div_cx172_pcase_with_destructuring_complex_nested() {
           (mid (1 2 3) 4)
           (end one two three)))
 "##,
+        expect_test::expect![[
+            r#""OK ((:start-pattern 1 2 3) (:mid-pattern 1 (2 3) 4) (:end-pattern (one two three)))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx172_pcase_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '("alpha" 42 (1 2 3) [a b c])))
   (with-temp-buffer
@@ -208,5 +223,6 @@ fn div_cx172_pcase_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

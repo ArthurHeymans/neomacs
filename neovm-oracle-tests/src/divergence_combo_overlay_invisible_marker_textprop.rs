@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_overlay_invisible_marker_textprop_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "oin")))
     (with-current-buffer buf
@@ -33,6 +33,7 @@ fn combo_overlay_invisible_marker_textprop_narrow() {
           (widen)
           (list mp os oe inv k1 k2 bs))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -40,7 +41,7 @@ fn combo_overlay_invisible_marker_textprop_narrow() {
 fn combo_overlay_invisible_undo_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "oiu")))
     (with-current-buffer buf
@@ -69,6 +70,7 @@ fn combo_overlay_invisible_undo_marker() {
                 (overlay-start ov)
                 (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -76,7 +78,7 @@ fn combo_overlay_invisible_undo_marker() {
 fn combo_overlay_priority_invisible_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "opi")))
     (with-current-buffer buf
@@ -105,6 +107,7 @@ fn combo_overlay_priority_invisible_textprop() {
               (k (get-text-property 5 'p)))
           (list mp inv1 inv2 inv3 p1 p2 p3 k))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -112,7 +115,7 @@ fn combo_overlay_priority_invisible_textprop() {
 fn combo_overlay_invisible_clone_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "oic")))
     (with-current-buffer buf
@@ -138,6 +141,7 @@ fn combo_overlay_invisible_clone_narrow() {
             (list mp os oe inv v1 v2 bs))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -145,7 +149,7 @@ fn combo_overlay_invisible_clone_narrow() {
 fn combo_overlay_invisible_textprop_undo_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "oit")))
     (with-current-buffer buf
@@ -179,5 +183,6 @@ fn combo_overlay_invisible_textprop_undo_narrow() {
                 (buffer-string)
                 (marker-position m)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

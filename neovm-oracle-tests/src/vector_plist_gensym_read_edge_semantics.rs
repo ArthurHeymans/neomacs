@@ -9,21 +9,30 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_vconcat_two_vectors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(vconcat [1 2] [3 4])"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(vconcat [1 2] [3 4])"#,
+        expect_test::expect![[r#""OK [1 2 3 4]""#]],
+    );
     assert_ok_eq("[1 2 3 4]", &o, &n);
 }
 
 #[test]
 fn oracle_vconcat_vector_and_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(vconcat [1] '(2 3))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(vconcat [1] '(2 3))"#,
+        expect_test::expect![[r#""OK [1 2 3]""#]],
+    );
     assert_ok_eq("[1 2 3]", &o, &n);
 }
 
 #[test]
 fn oracle_vconcat_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(vconcat)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(vconcat)"#,
+        expect_test::expect![[r#""OK []""#]],
+    );
     assert_ok_eq("[]", &o, &n);
 }
 
@@ -32,7 +41,10 @@ fn oracle_vconcat_empty() {
 #[test]
 fn oracle_append_vector_to_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(append [1 2] '(3 4))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(append [1 2] '(3 4))"#,
+        expect_test::expect![[r#""OK (1 2 3 4)""#]],
+    );
     assert_ok_eq("(1 2 3 4)", &o, &n);
 }
 
@@ -41,14 +53,20 @@ fn oracle_append_vector_to_list() {
 #[test]
 fn oracle_aref_returns_element() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(aref [10 20 30] 1)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(aref [10 20 30] 1)"#,
+        expect_test::expect![[r#""OK 20""#]],
+    );
     assert_ok_eq("20", &o, &n);
 }
 
 #[test]
 fn oracle_aset_returns_new_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(aset [10 20 30] 1 99)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(aset [10 20 30] 1 99)"#,
+        expect_test::expect![[r#""OK 99""#]],
+    );
     assert_ok_eq("99", &o, &n);
 }
 
@@ -57,14 +75,20 @@ fn oracle_aset_returns_new_value() {
 #[test]
 fn oracle_plist_get_found() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(plist-get '(a 1 b 2) 'b)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(plist-get '(a 1 b 2) 'b)"#,
+        expect_test::expect![[r#""OK 2""#]],
+    );
     assert_ok_eq("2", &o, &n);
 }
 
 #[test]
 fn oracle_plist_get_missing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(plist-get '(a 1 b 2) 'c)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(plist-get '(a 1 b 2) 'c)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -73,8 +97,9 @@ fn oracle_plist_get_missing() {
 #[test]
 fn oracle_plist_put_destructive_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (setq p (list 'a 1 'b 2)) (plist-put p 'b 99) (plist-get p 'b))"#,
+        expect_test::expect![[r#""OK 99""#]],
     );
     assert_ok_eq("99", &o, &n);
 }
@@ -84,14 +109,20 @@ fn oracle_plist_put_destructive_modify() {
 #[test]
 fn oracle_make_symbol_creates_uninterned() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(not (eq (make-symbol "foo") (make-symbol "foo")))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(not (eq (make-symbol "foo") (make-symbol "foo")))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_make_symbol_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(symbol-name (make-symbol "my-sym"))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(symbol-name (make-symbol "my-sym"))"#,
+        expect_test::expect![[r#""OK \"my-sym\"""#]],
+    );
     assert_ok_eq("\"my-sym\"", &o, &n);
 }
 
@@ -100,21 +131,30 @@ fn oracle_make_symbol_name() {
 #[test]
 fn oracle_gensym_returns_symbol_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(symbolp (gensym))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(symbolp (gensym))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_gensym_with_prefix_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(symbolp (gensym "pre"))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(symbolp (gensym "pre"))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_gensym_unique_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(not (eq (gensym "x") (gensym "x")))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(not (eq (gensym "x") (gensym "x")))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
@@ -123,14 +163,20 @@ fn oracle_gensym_unique_via_binary() {
 #[test]
 fn oracle_plist_member_found_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(plist-member '(a 1 b 2) 'a)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(plist-member '(a 1 b 2) 'a)"#,
+        expect_test::expect![[r#""OK (a 1 b 2)""#]],
+    );
     assert_ok_eq("(a 1 b 2)", &o, &n);
 }
 
 #[test]
 fn oracle_plist_member_missing_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(plist-member '(a 1 b 2) 'c)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(plist-member '(a 1 b 2) 'c)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -139,20 +185,29 @@ fn oracle_plist_member_missing_via_binary() {
 #[test]
 fn oracle_read_from_string_integer_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(read-from-string "42")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(read-from-string "42")"#,
+        expect_test::expect![[r#""OK (42 . 2)""#]],
+    );
     assert_ok_eq("(42 . 2)", &o, &n);
 }
 
 #[test]
 fn oracle_read_from_string_list_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(read-from-string "(a b c)")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(read-from-string "(a b c)")"#,
+        expect_test::expect![[r#""OK ((a b c) . 7)""#]],
+    );
     assert_ok_eq("((a b c) . 7)", &o, &n);
 }
 
 #[test]
 fn oracle_read_from_string_nil_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(read-from-string "nil")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(read-from-string "nil")"#,
+        expect_test::expect![[r#""OK (nil . 3)""#]],
+    );
     assert_ok_eq("(nil . 3)", &o, &n);
 }

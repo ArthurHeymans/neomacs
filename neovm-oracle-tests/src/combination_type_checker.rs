@@ -93,7 +93,10 @@ fn oracle_prop_typechk_env_and_literals() {
     (fmakunbound 'neovm--tc-env-extend)
     (fmakunbound 'neovm--tc-env-lookup)
     (fmakunbound 'neovm--tc-check)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +214,10 @@ fn oracle_prop_typechk_binary_operations() {
     (fmakunbound 'neovm--tcb-env-lookup)
     (fmakunbound 'neovm--tcb-binop-type)
     (fmakunbound 'neovm--tcb-check)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -326,7 +332,10 @@ fn oracle_prop_typechk_if_and_let() {
     (fmakunbound 'neovm--tcil-env-lookup)
     (fmakunbound 'neovm--tcil-binop-type)
     (fmakunbound 'neovm--tcil-check)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -443,7 +452,10 @@ fn oracle_prop_typechk_function_application() {
     (fmakunbound 'neovm--tcfa-env-lookup)
     (fmakunbound 'neovm--tcfa-binop-type)
     (fmakunbound 'neovm--tcfa-check)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -585,7 +597,10 @@ fn oracle_prop_typechk_program_sequences() {
     (fmakunbound 'neovm--tcp-binop-type)
     (fmakunbound 'neovm--tcp-check)
     (fmakunbound 'neovm--tcp-check-program)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -743,5 +758,8 @@ fn oracle_prop_typechk_polymorphic_unification() {
     (fmakunbound 'neovm--tcu-unify)
     (fmakunbound 'neovm--tcu-check)
     (makunbound 'neovm--tcu-counter)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }

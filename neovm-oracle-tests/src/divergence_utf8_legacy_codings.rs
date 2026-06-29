@@ -23,7 +23,7 @@ macro_rules! iso_decode_test {
                 $coding,
                 ")))\n  (list (length d) (append d nil)))"
             );
-            assert_oracle_parity(form);
+            crate::common::assert_oracle_parity(form);
         }
     };
 }
@@ -152,7 +152,7 @@ macro_rules! cjk_roundtrip_test {
                 ")))\n",
                 "  (list (append e nil) (equal s d) (length e)))"
             );
-            assert_oracle_parity(form);
+            crate::common::assert_oracle_parity(form);
         }
     };
 }
@@ -187,7 +187,7 @@ cjk_roundtrip_test!(div_utf8_gb18030_mixed_roundtrip, "gb18030", "\"AB中¤文�
 #[test]
 fn div_utf8_gb18030_decode_charset_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let* ((s "A中¤😀")
        (e (encode-coding-string s 'gb18030))
@@ -199,6 +199,9 @@ fn div_utf8_gb18030_decode_charset_properties() {
       (setq i (1+ i))))
   (list (append e nil) (equal s d) (nreverse props)))
 "#,
+        expect_test::expect![[
+            r#""OK ((65 214 208 161 232 148 57 252 54) t ((0 nil) (1 gb18030-2-byte) (2 gb18030-2-byte) (3 gb18030-4-byte-smp)))""#
+        ]],
     );
 }
 cjk_roundtrip_test!(
@@ -216,21 +219,23 @@ cjk_roundtrip_test!(div_utf8_emacs_mule_roundtrip, "emacs-mule", "\"café世界\
 #[test]
 fn div_utf8_find_auto_coding_expressions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((s (decode-coding-string (unibyte-string 225 198 230 240) 'iso-8859-2)))
   (list (append s nil)))
 "#,
+        expect_test::expect![[r#""OK ((225 262 263 273))""#]],
     );
 }
 
 #[test]
 fn div_utf8_decode_coding_string_cyrillic_iso8859_5() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((d (decode-coding-string (unibyte-string 176 177 178 179 180) 'iso-8859-5)))
   (list (length d) (append d nil)))
 "#,
+        expect_test::expect![[r#""OK (5 (1040 1041 1042 1043 1044))""#]],
     );
 }

@@ -14,7 +14,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn combo_deep_headline_nesting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -31,13 +31,16 @@ fn combo_deep_headline_nesting() {
          ;; Outline path at deepest.
          (goto-char (point-max))
          (org-get-outline-path))))))"##,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9 10) 10 96 (\"L1\" \"L2\" \"L3\" \"L4\" \"L5\" \"L6\" \"L7\" \"L8\" \"L9\"))""#
+        ]],
     );
 }
 
 #[test]
 fn combo_deeply_nested_blocks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -54,6 +57,7 @@ fn combo_deeply_nested_blocks() {
          ;; Lineage at source block.
          (mapcar #'org-element-type
                  (org-element-lineage (org-element-context) nil t))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -64,7 +68,7 @@ fn combo_deeply_nested_blocks() {
 #[test]
 fn combo_mixed_content_full_document() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'oc)
@@ -171,6 +175,7 @@ This section is under development.
          ;; Export headline numbers.
          (mapcar (lambda (h) (org-export-get-headline-number h info))
                  (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -181,7 +186,7 @@ This section is under development.
 #[test]
 fn combo_empty_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -191,13 +196,14 @@ fn combo_empty_buffer() {
          (org-element-type tree)
          (org-element-contents tree)
          (org-element-map tree t #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn combo_single_character() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -209,13 +215,14 @@ fn combo_single_character() {
          (org-element-type tree)
          (length (org-element-map tree t #'identity))
          (org-element-type (org-element-at-point))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn combo_only_headline_no_body() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -228,13 +235,14 @@ fn combo_only_headline_no_body() {
          (length headlines)
          (mapcar (lambda (h) (org-element-property :raw-value h)) headlines)
          (mapcar (lambda (h) (org-element-property :level h)) headlines))))))"##,
+        expect_test::expect![[r#""OK (3 (\"\" \"\" \"\") (1 2 3))""#]],
     );
 }
 
 #[test]
 fn combo_only_blank_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -245,6 +253,7 @@ fn combo_only_blank_lines() {
         (list
          (org-element-type tree)
          (length (org-element-map tree t #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -255,7 +264,7 @@ fn combo_only_blank_lines() {
 #[test]
 fn strict_headline_property_contract() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -281,13 +290,14 @@ fn strict_headline_property_contract() {
          ;; :contents-begin and :contents-end.
          (numberp (org-element-property :contents-begin hl))
          (numberp (org-element-property :contents-end hl))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn strict_paragraph_property_contract() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -307,13 +317,14 @@ fn strict_paragraph_property_contract() {
          (org-element-type (org-element-property :parent para))
          ;; Contents contain objects.
          (mapcar #'org-element-type (org-element-contents para))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn strict_link_property_contract() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -333,13 +344,14 @@ fn strict_link_property_contract() {
          (org-element-contents link)
          ;; Parent is paragraph.
          (org-element-type (org-element-property :parent link))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn strict_timestamp_property_contract() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -367,13 +379,16 @@ fn strict_timestamp_property_contract() {
          (org-element-property :warning-type ts)
          (org-element-property :warning-value ts)
          (org-element-property :warning-unit ts))))))"##,
+        expect_test::expect![[
+            r#""OK (timestamp active 2024 1 15 14 30 cumulate 1 week all 3 day)""#
+        ]],
     );
 }
 
 #[test]
 fn strict_src_block_property_contract() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -396,6 +411,7 @@ fn strict_src_block_property_contract() {
          ;; Positions.
          (numberp (org-element-property :begin src))
          (numberp (org-element-property :end src))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -406,7 +422,7 @@ fn strict_src_block_property_contract() {
 #[test]
 fn strict_map_with_first_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -421,13 +437,14 @@ fn strict_map_with_first_match() {
          ;; FIRST-MATCH = nil: list of results.
          (mapcar (lambda (h) (org-element-property :raw-value h))
                  (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn strict_map_with_no_recursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -440,13 +457,14 @@ fn strict_map_with_no_recursion() {
          (length (org-element-map tree 'bold #'identity))
          ;; With no-recursion on center-block: skips contents.
          (length (org-element-map tree 'bold #'identity nil nil 'center-block))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn strict_map_with_affiliated() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -459,6 +477,7 @@ fn strict_map_with_affiliated() {
          (length (org-element-map tree 'bold #'identity))
          ;; With affiliated: finds bold in caption.
          (length (org-element-map tree 'bold #'identity nil nil nil nil t))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -469,7 +488,7 @@ fn strict_map_with_affiliated() {
 #[test]
 fn strict_interpret_roundtrip_paragraph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -480,13 +499,14 @@ fn strict_interpret_roundtrip_paragraph() {
              (interpreted (org-element-interpret-data tree)))
         ;; Round-trip: parse then interpret should preserve content.
         (substring-no-properties interpreted)))))"##,
+        expect_test::expect![[r#""OK \"Simple paragraph.\n\"""#]],
     );
 }
 
 #[test]
 fn strict_interpret_roundtrip_headlines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -496,13 +516,14 @@ fn strict_interpret_roundtrip_headlines() {
       (let* ((tree (org-element-parse-buffer))
              (interpreted (org-element-interpret-data tree)))
         (substring-no-properties interpreted)))))"##,
+        expect_test::expect![[r#""OK \"* H1\nBody 1\n** H2\nBody 2\n* H3\nBody 3\n\"""#]],
     );
 }
 
 #[test]
 fn strict_interpret_roundtrip_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -512,13 +533,14 @@ fn strict_interpret_roundtrip_table() {
       (let* ((tree (org-element-parse-buffer))
              (interpreted (org-element-interpret-data tree)))
         (substring-no-properties interpreted)))))"##,
+        expect_test::expect![[r#""OK \"| a | b |\n|---+---|\n| c | d |\n\"""#]],
     );
 }
 
 #[test]
 fn strict_interpret_roundtrip_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -528,6 +550,9 @@ fn strict_interpret_roundtrip_list() {
       (let* ((tree (org-element-parse-buffer))
              (interpreted (org-element-interpret-data tree)))
         (substring-no-properties interpreted)))))"##,
+        expect_test::expect![[
+            r#""OK \"- Item 1\n- Item 2\n  - Sub 2.1\n  - Sub 2.2\n- Item 3\n\"""#
+        ]],
     );
 }
 
@@ -538,7 +563,7 @@ fn strict_interpret_roundtrip_list() {
 #[test]
 fn combo_multiple_top_level_sections() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -558,13 +583,14 @@ fn combo_multiple_top_level_sections() {
                              (substring-no-properties
                               (org-element-property :raw-value h))))
                  (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn combo_interleaved_blocks_and_headlines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -582,6 +608,7 @@ fn combo_interleaved_blocks_and_headlines() {
          ;; Each block has correct parent.
          (org-element-map tree '(src-block quote-block example-block center-block)
            (lambda (el) (org-element-type (org-element-property :parent el))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -592,7 +619,7 @@ fn combo_interleaved_blocks_and_headlines() {
 #[test]
 fn strict_incomplete_block_no_crash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -605,13 +632,14 @@ fn strict_incomplete_block_no_crash() {
          (org-element-type tree)
          ;; Headline after incomplete block is still found.
          (length (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn strict_malformed_link_no_crash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -623,13 +651,14 @@ fn strict_malformed_link_no_crash() {
          (org-element-type tree)
          ;; Valid link is still found.
          (length (org-element-map tree 'link #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn strict_malformed_table_no_crash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -640,6 +669,7 @@ fn strict_malformed_table_no_crash() {
         (list
          (org-element-type tree)
          (length (org-element-map tree 'table-row #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -650,7 +680,7 @@ fn strict_malformed_table_no_crash() {
 #[test]
 fn combo_adopt_extract_set_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let* ((doc (org-element-create 'org-data nil))
@@ -687,6 +717,9 @@ fn combo_adopt_extract_set_chain() {
               (substring-no-properties (org-element-interpret-data doc))
               ;; h2 has no parent after extract.
               (org-element-property :parent h2))))))"##,
+        expect_test::expect![[
+            r#""OK (\"* Alpha\nPara 1.\n* Beta\nPara 2.\n* Gamma\nPara 3.\n\" \"* Alpha\nPara 1.\n* Gamma\nPara 3.\n\" \"* Alpha\nNew para.\n* Gamma\nPara 3.\n\" nil)""#
+        ]],
     );
 }
 
@@ -697,7 +730,7 @@ fn combo_adopt_extract_set_chain() {
 #[test]
 fn combo_property_inheritance_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   ;; Build a 3-level hierarchy with properties at each level.
@@ -717,6 +750,7 @@ fn combo_property_inheritance_chain() {
      (org-element-property-inherited :own-c grandchild 'with-self 'accumulate)
      ;; Only grandchild has :own-gc.
      (org-element-property-inherited :own-gc grandchild 'with-self 'accumulate))))"##,
+        expect_test::expect![[r#""OK (3 2 (1 2 3) (\"p\") (\"c\") (\"gc\"))""#]],
     );
 }
 
@@ -727,7 +761,7 @@ fn combo_property_inheritance_chain() {
 #[test]
 fn combo_export_all_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -778,6 +812,7 @@ Content.")
          ;; Headline numbers.
          (mapcar (lambda (h) (org-export-get-headline-number h info))
                  (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -788,7 +823,7 @@ Content.")
 #[test]
 fn combo_list_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -810,6 +845,7 @@ fn combo_list_operations() {
                  items)
          ;; Each item's parent is a plain-list.
          (every (lambda (item) (eq 'plain-list (org-element-type (org-element-property :parent item)))) items))))))"##,
+        expect_test::expect![[r#""ERR (void-function every)""#]],
     );
 }
 
@@ -820,7 +856,7 @@ fn combo_list_operations() {
 #[test]
 fn combo_footnote_nesting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ox)
@@ -845,6 +881,7 @@ fn combo_footnote_nesting() {
          ;; First reference check.
          (mapcar (lambda (ref) (org-export-footnote-first-reference-p ref info))
                  (org-element-map tree 'footnote-reference #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -855,7 +892,7 @@ fn combo_footnote_nesting() {
 #[test]
 fn combo_clock_logbook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -880,6 +917,9 @@ fn combo_clock_logbook() {
                            (org-element-property :hour-start ts)
                            (org-element-property :minute-start ts))))
                  clocks))))))"##,
+        expect_test::expect![[
+            r#""OK (3 (closed closed closed) (\"1:30\" \"1:00\" \"2:00\") ((2024 1 15 9 0) (2024 1 15 11 0) (2024 1 14 14 0)))""#
+        ]],
     );
 }
 
@@ -890,7 +930,7 @@ fn combo_clock_logbook() {
 #[test]
 fn combo_dynamic_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -906,6 +946,7 @@ fn combo_dynamic_block() {
            (org-element-map tree 'dynamic-block #'identity nil t))
          ;; Clock found.
          (length (org-element-map tree 'clock #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -916,7 +957,7 @@ fn combo_dynamic_block() {
 #[test]
 fn combo_entities_latex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-entities)
@@ -934,6 +975,7 @@ fn combo_entities_latex() {
          (length (org-element-map tree 'latex-fragment #'identity))
          ;; LaTeX environments.
          (length (org-element-map tree 'latex-environment #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -944,7 +986,7 @@ fn combo_entities_latex() {
 #[test]
 fn combo_sparse_tree_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -959,6 +1001,7 @@ fn combo_sparse_tree_match() {
               (when (org-element-property :begin h)
                 (push title visible)))))
         (nreverse visible)))))"##,
+        expect_test::expect![[r#""OK (\"Alpha\" \"Beta\" \"Gamma\" \"Delta\" \"Epsilon\")""#]],
     );
 }
 
@@ -969,7 +1012,7 @@ fn combo_sparse_tree_match() {
 #[test]
 fn combo_refile_targets() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-refile)
@@ -980,6 +1023,9 @@ fn combo_refile_targets() {
       (goto-char (point-min))
       (mapcar (lambda (r) (car r))
               (org-refile-get-targets)))))"##,
+        expect_test::expect![[
+            r#""OK (\"Project A\" \"Design\" \"UI\" \"Implementation\" \"Project B\" \"Testing\" \"Unit tests\" \"Integration tests\" \"Archive\")""#
+        ]],
     );
 }
 
@@ -990,7 +1036,7 @@ fn combo_refile_targets() {
 #[test]
 fn combo_tag_inheritance_matching() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -1009,6 +1055,7 @@ fn combo_tag_inheritance_matching() {
          (length (org-map-entries #'point "project"))
          ;; Tag matcher: find :dev: tagged.
          (length (org-map-entries #'point "dev"))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -1019,7 +1066,7 @@ fn combo_tag_inheritance_matching() {
 #[test]
 fn combo_export_backend_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let (org-export-registered-backends)
@@ -1041,6 +1088,9 @@ fn combo_export_backend_chain() {
      (let ((all (org-export-get-all-transcoders 'child)))
        (list (cdr (assq 'headline all))
              (cdr (assq 'section all)))))))"##,
+        expect_test::expect![[
+            r#""OK ((parent) t ((lambda (h c i) (format \"CHILD: %s\n%s\" (org-element-property :raw-value h) c)) (lambda (s c i) c)))""#
+        ]],
     );
 }
 
@@ -1051,7 +1101,7 @@ fn combo_export_backend_chain() {
 #[test]
 fn combo_citations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'oc)
@@ -1071,5 +1121,6 @@ fn combo_citations() {
          ;; Keys.
          (mapcar (lambda (r) (org-element-property :key r))
                  (org-element-map tree 'citation-reference #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

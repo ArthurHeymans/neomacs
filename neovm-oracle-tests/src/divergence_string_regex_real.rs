@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_re_search_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"2024-01-15 and 2025-12-31\")
   (goto-char 1)
@@ -18,6 +18,9 @@ fn divergence_re_search_groups() {
           (list (match-string 1) (match-string 2) (match-string 3))
           (match-beginning 0)
           (match-end 0)))) ",
+        expect_test::expect![[
+            r#""2024-01-15 and 2025-12-31OK ((\"2024\" \"01\" \"15\") (\"2025\" \"12\" \"31\") 16 26)""#
+        ]],
     );
 }
 
@@ -25,7 +28,7 @@ fn divergence_re_search_groups() {
 fn divergence_string_multibyte_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((s \"Hello \\u4e16\\u754c\"))
   (list (length s)
         (string-bytes s)
@@ -35,6 +38,7 @@ fn divergence_string_multibyte_operations() {
         (aref s 6)
         (= (aref s 5) #x4e16)
         (= (aref s 6) #x754c))) ",
+        expect_test::expect![[r#""OK (8 12 \"Hello\" \" 世界\" 32 19990 nil nil)""#]],
     );
 }
 
@@ -42,7 +46,7 @@ fn divergence_string_multibyte_operations() {
 fn divergence_regex_anchored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"abc\\ndef\\nghi\")
   (goto-char 1)
@@ -50,6 +54,7 @@ fn divergence_regex_anchored() {
     (while (re-search-forward \"^\\\\([a-z]+\\\\)\" nil t)
       (push (match-string 1) matches))
     (nreverse matches))) ",
+        expect_test::expect![[r#""abc\ndef\nghiOK (\"abc\" \"def\" \"ghi\")""#]],
     );
 }
 
@@ -57,11 +62,12 @@ fn divergence_regex_anchored() {
 fn divergence_case_fold_replacement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((case-fold-search t))
   (list (string-match \"HELLO\" \"hello world\")
         (string-match \"hello\" \"HELLO WORLD\")
         (replace-regexp-in-string \"foo\" \"bar\" \"Foo BAR FOO\"))) ",
+        expect_test::expect![[r#""OK (0 0 \"Bar BAR BAR\")""#]],
     );
 }
 
@@ -69,7 +75,7 @@ fn divergence_case_fold_replacement() {
 fn divergence_string_split_join_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((parts '(\"foo\" \"bar\" \"baz\"))
         (joined (string-join parts \", \"))
         (split (split-string joined \", \")))
@@ -77,6 +83,7 @@ fn divergence_string_split_join_roundtrip() {
         split
         (equal parts split)
         (length split))) ",
+        expect_test::expect![[r#""OK (\"foo, bar, baz\" (\"foo\" \"bar\" \"baz\") t 3)""#]],
     );
 }
 
@@ -84,7 +91,7 @@ fn divergence_string_split_join_roundtrip() {
 fn divergence_unicode_string_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((s \"caf\\u00e9\"))
   (list (length s)
         (string-bytes s)
@@ -93,6 +100,7 @@ fn divergence_unicode_string_ops() {
         (string= (downcase (upcase s)) s)
         (string< \"a\" \"b\")
         (string< \"a\" \"\\u00e9\"))) ",
+        expect_test::expect![[r#""OK (4 5 \"CAFÉ\" \"café\" t t t)""#]],
     );
 }
 
@@ -100,12 +108,13 @@ fn divergence_unicode_string_ops() {
 fn divergence_regex_word_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((text \"foo-bar baz\"))
   (list (string-match \"\\\\bfoo\\\\b\" text)
         (string-match \"\\\\bbar\\\\b\" text)
         (string-match \"\\\\bbaz\\\\b\" text)
         (string-match \"\\\\bfoo-bar\\\\b\" text))) ",
+        expect_test::expect![[r#""OK (0 4 8 0)""#]],
     );
 }
 
@@ -113,12 +122,15 @@ fn divergence_regex_word_boundary() {
 fn divergence_string_replace_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (replace-regexp-in-string \"o\" \"0\" \"foo boo moo\")
   (replace-regexp-in-string \"[0-9]+\" \"NUM\" \"abc 123 def 456 ghi\")
   (replace-regexp-in-string \"^\" \"PREFIX: \" \"hello\")
   (replace-regexp-in-string \"$\" \" SUFFIX\" \"hello\")) ",
+        expect_test::expect![[
+            r#""OK (\"f00 b00 m00\" \"abc NUM def NUM ghi\" \"PREFIX: hello\" \"hello SUFFIX\")""#
+        ]],
     );
 }
 
@@ -126,7 +138,7 @@ fn divergence_string_replace_all() {
 fn divergence_string_format_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((obj '(1 \"two\" three (nested)))
         (str (format \"%S\" obj)))
   (list str
@@ -135,6 +147,9 @@ fn divergence_string_format_roundtrip() {
         (format \"%.2f\" 3.14159)
         (format \"%04d\" 7)
         (format \"%-10s|\" \"hi\"))) ",
+        expect_test::expect![[
+            r#""OK (\"(1 \\\"two\\\" three (nested))\" t \"3.14\" \"0007\" \"hi        |\")""#
+        ]],
     );
 }
 
@@ -142,7 +157,7 @@ fn divergence_string_format_roundtrip() {
 fn divergence_rx_composition_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((re (rx bos (group (one-or-more (any \"a-z\")))
               \"-\" (group (one-or-more digit)) eos)))
   (list re
@@ -150,5 +165,8 @@ fn divergence_rx_composition_real() {
         (match-string 1 \"hello-42\")
         (match-string 2 \"hello-42\")
         (string-match re \"Hello-42\"))) ",
+        expect_test::expect![[
+            r#""OK (\"\\\\`\\\\([a-z]+\\\\)-\\\\([[:digit:]]+\\\\)\\\\'\" 0 \"hello\" \"42\" 0)""#
+        ]],
     );
 }

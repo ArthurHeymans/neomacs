@@ -19,5 +19,5 @@ fn oracle_tty_display_pixel_dimensions_match_initial_terminal() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (80 25 80)""#]]);
 }

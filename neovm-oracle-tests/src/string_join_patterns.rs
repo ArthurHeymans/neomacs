@@ -32,7 +32,12 @@ fn oracle_prop_string_join_basic_separators() {
   (string-join '("/usr/bin" "/usr/local/bin" "/home/user/bin") ":")
   ;; Semicolon separator
   (string-join '("a=1" "b=2" "c=3") ";"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"alpha,beta,gamma\" \"hello beautiful world\" \"2026-03-02\" \"usr/local/bin\" \"1.2.3\" \"field1|field2|field3\" \"/usr/bin:/usr/local/bin:/home/user/bin\" \"a=1;b=2;c=3\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +63,12 @@ fn oracle_prop_string_join_empty_separator() {
   (string-join '("left" "right") "")
   ;; Empty strings only with empty separator
   (string-join '("" "" "" "") ""))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"abc\" \"foobarbaz\" \"hello\" \"abcdef\" \"only\" \"leftright\" \"\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +96,12 @@ fn oracle_prop_string_join_empty_list_and_edges() {
   ;; Length checks
   (length (string-join nil ","))
   (length (string-join '("ab" "cd") "-")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\" \"\" \"\" \"alone\" \"alone\" \"alone\" \"first and second\" t t 0 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +131,12 @@ fn oracle_prop_string_join_multi_char_separators() {
   (string-join '("a" "b" "c") " & ")
   ;; Repeated char separator
   (string-join '("1" "2" "3") ":::"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"start -> middle -> end\" \"A => B => C\" \"apples, oranges, bananas\" \"line1\nline2\nline3\" \"col1\tcol2\tcol3\" \"para1<br>para2<br>para3\" \"X---separator---Y---separator---Z\" \"a & b & c\" \"1:::2:::3\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +181,12 @@ fn oracle_prop_string_join_path_building() {
     (setq results (cons url results)))
 
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"/home/user/documents/file.txt\" \"src/main/java/App.java\" \"/var/log/myapp/error.log\" t \"/usr/local/share/emacs/site-lisp\" \"/lib/a.jar:/lib/b.jar:/lib/c.jar\" \"https://example.com/api/v2/users\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +233,12 @@ fn oracle_prop_string_join_csv_tsv_construction() {
     (setq results (cons table results)))
 
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"name,age,city\" \"Alice,30,NYC\" \"Bob,25,LA\" \"id\tvalue\ttimestamp\" \"product,price,qty\nWidget,9.99,100\nGadget,19.99,50\nDoohickey,4.99,200\" \"001|005|010|042|100\" \"Name | Score | Grade\n-----+-------+------\nAlice | 95    | A    \")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -261,7 +291,12 @@ fn oracle_prop_string_join_nested_2d_data() {
     (setq results (cons (list original transposed) results)))
 
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"1,2,3\n4,5,6\n7,8,9\" \" 1  2  3\n 2  4  6\n 3  6  9\" \"host=localhost&port=5432\nuser=admin&pass=secret\" \"{\\\"name\\\": \\\"test\\\", \\\"version\\\": \\\"1.0\\\", \\\"lang\\\": \\\"elisp\\\"}\" (\"a,b;c,d;e,f\" \"a,c,e;b,d,f\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -298,7 +333,12 @@ fn oracle_prop_string_join_roundtrip_composition() {
 
   ;; Number list to formatted string
   (string-join (mapcar #'number-to-string '(1 2 3 4 5)) ", "))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"a,b,c\" \"hello world foo\" \"x::y::z\" \"a/b/c/d\" \"one-two-three\" \"key: value\" \"HELLO_WORLD\" \"[a] [b] [c]\" \"ccc,eeee\" \"four three two one\" \"1, 2, 3, 4, 5\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -327,5 +367,10 @@ fn oracle_prop_string_join_separator_in_elements() {
     (string-join (nreverse elts) ","))
   ;; Single character elements
   (string-join '("a" "b" "c" "d" "e" "f" "g") ""))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"a,b,c,d,e,f\" \"hello world foo bar\" \"line1\nline2\nline3\nline4\" \",a,,b,\" \",,\" \"e0,e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12,e13,e14,e15,e16,e17,e18,e19\" \"abcdefg\")""#
+        ]],
+    );
 }

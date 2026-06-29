@@ -53,5 +53,10 @@ fn oracle_executable_find_exec_path_modes_and_error_edges() {
     (delete-directory root t)))
 "##;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"d2/cmd\" \"d1/cmd\" nil nil \"d1/cmd\" (wrong-number-of-arguments ((1 . 2) 0)) (wrong-type-argument (stringp 42)) nil)""#
+        ]],
+    );
 }

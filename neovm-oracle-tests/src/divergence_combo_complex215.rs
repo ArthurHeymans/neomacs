@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx215_mega_1_coding_charset_eieio_clloop_advice_process_timer_env_buflocal_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -73,13 +73,14 @@ fn div_cx215_mega_1_coding_charset_eieio_clloop_advice_process_timer_env_bufloca
                       (list state (buffer-live-p buf))))))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx215_mega_2_pcase_rx_syntax_search_replace_format_time_register_window_config_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
       (t0 (encode-time 30 30 14 16 6 2026 nil))
@@ -122,6 +123,7 @@ fn div_cx215_mega_2_pcase_rx_syntax_search_replace_format_time_register_window_c
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -129,7 +131,7 @@ fn div_cx215_mega_2_pcase_rx_syntax_search_replace_format_time_register_window_c
 fn div_cx215_mega_3_process_buflocal_undo_textprop_overlay_marker_narrow_coding_env_timer_weak_hash()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX215=v2" process-environment)))
@@ -169,6 +171,7 @@ fn div_cx215_mega_3_process_buflocal_undo_textprop_overlay_marker_narrow_coding_
         (kill-buffer buf))
       (list snapshot (buffer-live-p buf)))))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     );
 }
 
@@ -176,7 +179,7 @@ fn div_cx215_mega_3_process_buflocal_undo_textprop_overlay_marker_narrow_coding_
 fn div_cx215_mega_4_keymap_eval_macro_closure_advice_clloop_hash_obarray_secure_hash_marker_overlay()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
       (calls nil))
@@ -229,6 +232,7 @@ fn div_cx215_mega_4_keymap_eval_macro_closure_advice_clloop_hash_obarray_secure_
                       (overlay-start ov) (overlay-end ov)
                       (text-properties-at 1)))))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -236,7 +240,7 @@ fn div_cx215_mega_4_keymap_eval_macro_closure_advice_clloop_hash_obarray_secure_
 fn div_cx215_mega_5_all_subsystem_final_chaos_record_eieio_hash_coding_process_timer_env_marker_overlay_undo_narrow()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX215=v3" process-environment)))
@@ -293,5 +297,6 @@ fn div_cx215_mega_5_all_subsystem_final_chaos_record_eieio_hash_coding_process_t
                     (hash-table-count ht)
                     (aref rec 2)))))))))
 "##,
+        expect_test::expect![[r#""ERR (void-variable weak-ht)""#]],
     );
 }

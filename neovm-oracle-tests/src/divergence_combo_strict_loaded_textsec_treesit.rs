@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_q2_textsec_confusable_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (condition-case err (textsec-unidata-restrictions ?a) (error (cons 'err (car err))))
       (condition-case err (textsec-string-has-confusables "abc")
@@ -19,17 +19,21 @@ fn div_q2_textsec_confusable_detection() {
         (error (cons 'err (car err)))))
 "##,
         &["international/textsec.el"],
+        expect_test::expect![[
+            r#""OK ((err . void-function) (err . void-function) (err . void-function))""#
+        ]],
     );
 }
 
 #[test]
 fn div_q2_treesit_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case err (treesit-available-p) (error (car err)))
       (fboundp 'treesit-parse-string)
       (fboundp 'treesit-node-type))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }

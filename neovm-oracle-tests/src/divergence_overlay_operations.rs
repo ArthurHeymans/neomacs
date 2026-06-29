@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_overlay_create_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (let ((ov (make-overlay 1 6)))
@@ -18,6 +18,9 @@ fn divergence_overlay_create_props() {
           (overlay-start ov)
           (overlay-end ov)
           (overlays-at 3)))) "#,
+        expect_test::expect![[
+            r#""Hello WorldOK (bold 10 1 6 (#<overlay from 1 to 6 in  *neovm-oracle-stdout*>))""#
+        ]],
     );
 }
 
@@ -25,7 +28,7 @@ fn divergence_overlay_create_props() {
 fn divergence_overlay_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (let ((ov (make-overlay 1 6)))
@@ -34,6 +37,9 @@ fn divergence_overlay_move() {
           (overlay-end ov)
           (overlays-at 3)
           (overlays-at 9)))) "#,
+        expect_test::expect![[
+            r#""Hello WorldOK (7 12 nil (#<overlay from 7 to 12 in  *neovm-oracle-stdout*>))""#
+        ]],
     );
 }
 
@@ -41,7 +47,7 @@ fn divergence_overlay_move() {
 fn divergence_overlay_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (let ((ov1 (make-overlay 1 6))
@@ -54,6 +60,7 @@ fn divergence_overlay_priority() {
           (length (overlays-in 3 8))
           (overlay-get ov1 'priority)
           (overlay-get ov2 'priority)))) "#,
+        expect_test::expect![[r#""Hello WorldOK (2 2 5 10)""#]],
     );
 }
 
@@ -61,7 +68,7 @@ fn divergence_overlay_priority() {
 fn divergence_overlay_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (let ((ov (make-overlay 1 6)))
@@ -69,6 +76,7 @@ fn divergence_overlay_delete() {
     (list (length (overlays-in 1 6))
           (progn (delete-overlay ov)
                  (length (overlays-in 1 6)))))) "#,
+        expect_test::expect![[r#""Hello WorldOK (1 0)""#]],
     );
 }
 
@@ -76,7 +84,7 @@ fn divergence_overlay_delete() {
 fn divergence_overlay_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World Foo Bar")
   (make-overlay 1 6)
@@ -86,6 +94,7 @@ fn divergence_overlay_in_buffer() {
         (length (overlays-in 1 6))
         (length (overlays-in 6 7))
         (overlays-in 1 1))) "#,
+        expect_test::expect![[r#""Hello World Foo BarOK (3 1 0 nil)""#]],
     );
 }
 
@@ -93,7 +102,7 @@ fn divergence_overlay_in_buffer() {
 fn divergence_overlay_before_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (let ((ov (make-overlay 6 6)))
@@ -103,6 +112,7 @@ fn divergence_overlay_before_string() {
           (overlay-get ov 'after-string)
           (overlay-start ov)
           (overlay-end ov)))) "#,
+        expect_test::expect![[r#""Hello WorldOK (\"[\" \"]\" 6 6)""#]],
     );
 }
 
@@ -110,7 +120,7 @@ fn divergence_overlay_before_string() {
 fn divergence_overlay_invisible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (let ((ov (make-overlay 1 6)))
@@ -118,6 +128,7 @@ fn divergence_overlay_invisible() {
     (list (overlay-get ov 'invisible)
           (buffer-substring 1 12)
           (buffer-substring-no-properties 1 12)))) "#,
+        expect_test::expect![[r#""Hello WorldOK (t \"Hello World\" \"Hello World\")""#]],
     );
 }
 
@@ -125,13 +136,14 @@ fn divergence_overlay_invisible() {
 fn divergence_overlay_intangible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (let ((ov (make-overlay 1 6)))
     (overlay-put ov 'intangible t)
     (list (overlay-get ov 'intangible)
           (overlay-properties ov)))) "#,
+        expect_test::expect![[r#""Hello WorldOK (t (intangible t))""#]],
     );
 }
 
@@ -139,7 +151,7 @@ fn divergence_overlay_intangible() {
 fn divergence_overlay_modification_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (let ((ov (make-overlay 1 6)))
@@ -148,6 +160,7 @@ fn divergence_overlay_modification_hooks() {
     (list (overlay-get ov 'modification-hooks)
           (overlay-get ov 'insert-behind-hooks)
           (fboundp 'overlay-recenter)))) "#,
+        expect_test::expect![[r#""Hello WorldOK ((test-hook-fn) (test-hook-fn2) t)""#]],
     );
 }
 
@@ -155,7 +168,7 @@ fn divergence_overlay_modification_hooks() {
 fn divergence_overlay_next_prev() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (let ((ov1 (make-overlay 1 6))
@@ -164,5 +177,6 @@ fn divergence_overlay_next_prev() {
           (next-overlay-change 6)
           (previous-overlay-change 12)
           (previous-overlay-change 6)))) "#,
+        expect_test::expect![[r#""Hello WorldOK (6 7 7 1)""#]],
     );
 }

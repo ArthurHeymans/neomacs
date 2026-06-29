@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_p8_svg_basic_shapes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((svg (svg-create 100 50)))
   (svg-rectangle svg 10 10 80 30 :fill "red" :stroke "black")
@@ -21,5 +21,6 @@ fn div_p8_svg_basic_shapes() {
     (buffer-string)))
 "##,
         &["svg.el"],
+        expect_test::expect![[r#""ERR (wrong-type-argument symbolp 45)""#]],
     );
 }

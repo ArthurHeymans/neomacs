@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx211_emoji_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'emoji)
@@ -17,13 +17,14 @@ fn div_cx211_emoji_availability() {
           (boundp 'emoji--repeat-walking))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil t t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx211_emoji_presentation_selector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'char-has-emoji-presentation-p)
@@ -31,13 +32,14 @@ fn div_cx211_emoji_presentation_selector() {
           (boundp 'emoji-variation-specifications-vs))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx211_emoji_in_buffer_with_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "Before 😀 after 🎉 end 🌍")
@@ -46,13 +48,16 @@ fn div_cx211_emoji_in_buffer_with_display() {
         (string-bytes (buffer-string))
         (mapcar #'char-charset (string-to-list (buffer-string)))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"Before 😀 after 🎉 end 🌍\" 22 31 (ascii ascii ascii ascii ascii ascii ascii unicode ascii ascii ascii ascii ascii ascii ascii unicode ascii ascii ascii ascii ascii unicode))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx211_emoji_width_and_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((emoji-str "😀🎉🌍"))
   (list (string-width emoji-str)
@@ -60,24 +65,28 @@ fn div_cx211_emoji_width_and_display() {
         (string-bytes emoji-str)
         (mapcar #'char-width (string-to-list emoji-str))))
 "##,
+        expect_test::expect![[r#""OK (6 3 12 (2 2 2))""#]],
     );
 }
 
 #[test]
 fn div_cx211_variation_selector_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c) (list c (char-charset c) (char-width c)))
         '(#xFE0E #xFE0F #x200D #x20E3))
 "##,
+        expect_test::expect![[
+            r#""OK ((65038 unicode-bmp 0) (65039 unicode-bmp 0) (8205 unicode-bmp 0) (8419 unicode-bmp 0))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx211_zwj_sequence_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((zwj-seq (concat (string ?👨 ?\x200d ?👩 ?\x200d ?👦))))
   (list (length zwj-seq)
@@ -85,26 +94,30 @@ fn div_cx211_zwj_sequence_handling() {
         (string-width zwj-seq)
         (mapcar #'char-charset (string-to-list zwj-seq))))
 "##,
+        expect_test::expect![[
+            r#""OK (5 18 6 (unicode unicode-bmp unicode unicode-bmp unicode))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx211_emoji_keycap_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((keycap (concat (string ?1 #xFE0F #x20E3))))
   (list (length keycap)
         (string-bytes keycap)
         (string-width keycap)))
 "##,
+        expect_test::expect![[r#""OK (3 7 1)""#]],
     );
 }
 
 #[test]
 fn div_cx211_emoji_regexp_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "text 😀 more 🎉 text 🌍 end"))
   (list (string-match "😀" s)
@@ -112,13 +125,14 @@ fn div_cx211_emoji_regexp_match() {
         (string-match "🎉" s)
         (match-beginning 0) (match-end 0)))
 "##,
+        expect_test::expect![[r#""OK (5 5 6 12 12 13)""#]],
     );
 }
 
 #[test]
 fn div_cx211_emoji_format_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((emoji-text "Hello 😀 World 🎉"))
   (let ((printed (prin1-to-string emoji-text))
@@ -128,13 +142,14 @@ fn div_cx211_emoji_format_round_trip() {
           printed
           (equal emoji-text read-back))))
 "##,
+        expect_test::expect![[r#""OK (15 21 \"\\\"Hello 😀 World 🎉\\\"\" t)""#]],
     );
 }
 
 #[test]
 fn div_cx211_emoji_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((emoji-str "😀🎉🌍 alpha"))
   (with-temp-buffer
@@ -159,5 +174,8 @@ fn div_cx211_emoji_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"Changes to be undone are outside visible portion of buffer\")""#
+        ]],
     );
 }

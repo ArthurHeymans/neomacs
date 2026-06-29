@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo2_nested_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** B\n*** C\n**** D\n* E")
@@ -46,6 +46,9 @@ fn combo2_nested_move() {
           (setq p (org-element-property :parent p))))
       (push (list :after-right (nreverse chain)) r))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init-chain (\"D\" \"C\" \"B\" \"A\" nil)) (:after-left (\"D\" \"B\" \"A\" nil)) (:after-right (\"D\" \"C\" \"B\" \"A\" nil)))""#
+        ]],
     );
 }
 
@@ -56,7 +59,7 @@ fn combo2_nested_move() {
 #[test]
 fn combo2_visibility_states() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub")
@@ -81,6 +84,9 @@ fn combo2_visibility_states() {
     (org-cycle 'subtree)
     (push (list :local-subtree (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:overview \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\") (:global1 \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\") (:global2 \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\") (:global3 \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\") (:local-children \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\") (:local-subtree \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\"))""#
+        ]],
     );
 }
 
@@ -91,7 +97,7 @@ fn combo2_visibility_states() {
 #[test]
 fn combo2_all_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nPara *bold* /italic/ _under_ +strike+ =code= ~verb~ [[http://a][Link]] $x^2$ \\alpha H_2O E=mc^2")
@@ -115,6 +121,7 @@ fn combo2_all_objects() {
           (setq p (org-element-property :parent p))))
       (push (list :bold-chain (nreverse chain)) r))
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p nil)""#]],
     );
 }
 
@@ -125,7 +132,7 @@ fn combo2_all_objects() {
 #[test]
 fn combo2_export_compare() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((src "* H\nBody *bold* /italic/"))
   (let ((html (org-export-string-as src 'html t))
         (latex (org-export-string-as src 'latex t))
@@ -138,6 +145,9 @@ fn combo2_export_compare() {
           (list :latex-has-textit (string-match-p "\\\\textit" latex))
           (list :ascii-has-h (string-match-p "H" ascii))
           (list :ascii-has-bold (string-match-p "bold" ascii)))))"##,
+        expect_test::expect![[
+            r#""OK ((:html-has-h2 44) (:html-has-bold 361) (:html-has-italic 373) (:latex-has-section 0) (:latex-has-textbf 40) (:latex-has-textit nil) (:ascii-has-h 2) (:ascii-has-bold 17))""#
+        ]],
     );
 }
 
@@ -148,7 +158,7 @@ fn combo2_export_compare() {
 #[test]
 fn combo2_props_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T")
@@ -171,6 +181,9 @@ fn combo2_props_complex() {
     ;; verify buffer
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:after-put (\"1\" \"2\" \"3\")) (:after-update (\"1\" \"22\" \"3\")) (:after-delete (nil \"22\" \"3\")) (:multi (\"v1\" \"v2\" \"v3\")) (:content \"* T\n:PROPERTIES:\n:B:        22\n:C:        3\n:D:        v1 v2 v3\n:END:\n\"))""#
+        ]],
     );
 }
 
@@ -181,7 +194,7 @@ fn combo2_props_complex() {
 #[test]
 fn combo2_tags_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T :existing:")
@@ -204,6 +217,9 @@ fn combo2_tags_complex() {
     ;; verify buffer
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init (\"existing\")) (:after-add (\"existing\" \"new\")) (:after-remove (\"new\")) (:after-set (\"a\" \"b\" \"c\")) (:after-toggle (\"b\" \"c\")) (:content \"* T                                                                     :b:c:\"))""#
+        ]],
     );
 }
 
@@ -214,7 +230,7 @@ fn combo2_tags_complex() {
 #[test]
 fn combo2_todo_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H")
@@ -229,6 +245,9 @@ fn combo2_todo_complex() {
     ;; verify buffer
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init nil) (:cycle #(\"TODO\" 0 4 (org-todo-head \"TODO\"))) (:cycle #(\"DONE\" 0 4 (org-todo-head \"TODO\"))) (:cycle nil) (:cycle #(\"TODO\" 0 4 (org-todo-head \"TODO\"))) (:cycle #(\"DONE\" 0 4 (org-todo-head \"TODO\"))) (:cycle nil) (:content #(\"* H\" 0 3 (org-todo-head \"TODO\"))))""#
+        ]],
     );
 }
 
@@ -239,7 +258,7 @@ fn combo2_todo_complex() {
 #[test]
 fn combo2_priority_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* [#B] T")
@@ -258,6 +277,9 @@ fn combo2_priority_complex() {
     ;; verify buffer
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init 66) (:up 65) (:up nil) (:up 67) (:down nil) (:down 65) (:down 66) (:content \"* [#B] T\"))""#
+        ]],
     );
 }
 
@@ -268,7 +290,7 @@ fn combo2_priority_complex() {
 #[test]
 fn combo2_list_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n- B\n- C\n- D")
@@ -307,6 +329,9 @@ fn combo2_list_complex() {
                                                               (org-element-property :contents-begin i)
                                                               (org-element-property :contents-end i))))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init (\"A\" \"B\" \"C\" \"D\")) (:after-indent ((nil \"A\n  - B\") (nil \"B\") (nil \"C\") (nil \"D\"))) (:after-move ((nil \"C\") (nil \"A\n  - B\") (nil \"B\") (nil \"D\"))) (:after-dedent ((nil \"C\") (nil \"A\") (nil \"B\") (nil \"D\"))))""#
+        ]],
     );
 }
 
@@ -317,7 +342,7 @@ fn combo2_list_complex() {
 #[test]
 fn combo2_table_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| a | b |\n| 1 | 2 |\n| 3 | 4 |")
@@ -342,6 +367,9 @@ fn combo2_table_complex() {
     (org-table-transpose-table-at-point)
     (push (list :after-transpose (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init \"| a | b |\n| 1 | 2 |\n| 3 | 4 |\") (:rows 3) (:after-row #(\"| a | b |   |\n| 1 | 2 |   |\n| 5 | 6 |   |\n| 3 | 4 |   |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table rear-nonsticky t display (space :relative-width 1)) 10 11 (face org-table) 11 12 (face org-table display (space :relative-width 1.001)) 12 13 (face org-table) 13 14 (face org-table-row) 14 15 (face org-table) 15 16 (face org-table rear-nonsticky t display (space :relative-width 1)) 16 17 (face org-table) 17 18 (face org-table display (space :relative-width 1.001)) 18 19 (face org-table) 19 20 (face org-table rear-nonsticky t display (space :relative-width 1)) 20 21 (face org-table) 21 22 (face org-table display (space :relative-width 1.001)) 22 23 (face org-table) 23 24 (face org-table rear-nonsticky t display (space :relative-width 1)) 24 25 (face org-table) 25 26 (face org-table display (space :relative-width 1.001)) 26 27 (face org-table) 27 28 (face org-table-row) 28 29 (face org-table) 29 30 (face org-table rear-nonsticky t display (space :relative-width 1)) 30 31 (face org-table) 31 32 (face org-table display (space :relative-width 1.001)) 32 33 (face org-table) 33 34 (face org-table rear-nonsticky t display (space :relative-width 1)) 34 35 (face org-table) 35 36 (face org-table display (space :relative-width 1.001)) 36 37 (face org-table) 37 38 (face org-table rear-nonsticky t display (space :relative-width 1)) 38 39 (face org-table) 39 40 (face org-table display (space :relative-width 1.001)) 40 41 (face org-table) 41 42 (face org-table-row) 42 43 (face org-table) 43 44 (face org-table rear-nonsticky t display (space :relative-width 1)) 44 45 (face org-table) 45 46 (face org-table display (space :relative-width 1.001)) 46 47 (face org-table) 47 48 (face org-table rear-nonsticky t display (space :relative-width 1)) 48 49 (face org-table) 49 50 (face org-table display (space :relative-width 1.001)) 50 51 (face org-table) 51 52 (face org-table rear-nonsticky t display (space :relative-width 1)) 52 53 (face org-table) 53 54 (face org-table display (space :relative-width 1.001)) 54 55 (face org-table) 55 56 (face org-table-row))) (:after-col #(\"| a |   | b |   |\n| 1 |   | 2 |   |\n| 5 |   | 6 |   |\n| 3 |   | 4 |   |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table rear-nonsticky t display (space :relative-width 1)) 10 11 (face org-table) 11 12 (face org-table display (space :relative-width 1.001)) 12 13 (face org-table) 13 14 (face org-table rear-nonsticky t display (space :relative-width 1)) 14 15 (face org-table) 15 16 (face org-table display (space :relative-width 1.001)) 16 17 (face org-table) 17 18 (face org-table-row) 18 19 (face org-table) 19 20 (face org-table rear-nonsticky t display (space :relative-width 1)) 20 21 (face org-table) 21 22 (face org-table display (space :relative-width 1.001)) 22 23 (face org-table) 23 24 (face org-table rear-nonsticky t display (space :relative-width 1)) 24 25 (face org-table) 25 26 (face org-table display (space :relative-width 1.001)) 26 27 (face org-table) 27 28 (face org-table rear-nonsticky t display (space :relative-width 1)) 28 29 (face org-table) 29 30 (face org-table display (space :relative-width 1.001)) 30 31 (face org-table) 31 32 (face org-table rear-nonsticky t display (space :relative-width 1)) 32 33 (face org-table) 33 34 (face org-table display (space :relative-width 1.001)) 34 35 (face org-table) 35 36 (face org-table-row) 36 37 (face org-table) 37 38 (face org-table rear-nonsticky t display (space :relative-width 1)) 38 39 (face org-table) 39 40 (face org-table display (space :relative-width 1.001)) 40 41 (face org-table) 41 42 (face org-table rear-nonsticky t display (space :relative-width 1)) 42 43 (face org-table) 43 44 (face org-table display (space :relative-width 1.001)) 44 45 (face org-table) 45 46 (face org-table rear-nonsticky t display (space :relative-width 1)) 46 47 (face org-table) 47 48 (face org-table display (space :relative-width 1.001)) 48 49 (face org-table) 49 50 (face org-table rear-nonsticky t display (space :relative-width 1)) 50 51 (face org-table) 51 52 (face org-table display (space :relative-width 1.001)) 52 53 (face org-table) 53 54 (face org-table-row) 54 55 (face org-table) 55 56 (face org-table rear-nonsticky t display (space :relative-width 1)) 56 57 (face org-table) 57 58 (face org-table display (space :relative-width 1.001)) 58 59 (face org-table) 59 60 (face org-table rear-nonsticky t display (space :relative-width 1)) 60 61 (face org-table) 61 62 (face org-table display (space :relative-width 1.001)) 62 63 (face org-table) 63 64 (face org-table rear-nonsticky t display (space :relative-width 1)) 64 65 (face org-table) 65 66 (face org-table display (space :relative-width 1.001)) 66 67 (face org-table) 67 68 (face org-table rear-nonsticky t display (space :relative-width 1)) 68 69 (face org-table) 69 70 (face org-table display (space :relative-width 1.001)) 70 71 (face org-table) 71 72 (face org-table-row))) (:after-sort #(\"| a |   | b |   |\n| 1 |   | 2 |   |\n| 5 |   | 6 |   |\n| 3 |   | 4 |   |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table rear-nonsticky t display (space :relative-width 1)) 10 11 (face org-table) 11 12 (face org-table display (space :relative-width 1.001)) 12 13 (face org-table) 13 14 (face org-table rear-nonsticky t display (space :relative-width 1)) 14 15 (face org-table) 15 16 (face org-table display (space :relative-width 1.001)) 16 17 (face org-table) 17 18 (face org-table-row) 18 19 (face org-table) 19 20 (face org-table rear-nonsticky t display (space :relative-width 1)) 20 21 (face org-table) 21 22 (face org-table display (space :relative-width 1.001)) 22 23 (face org-table) 23 24 (face org-table rear-nonsticky t display (space :relative-width 1)) 24 25 (face org-table) 25 26 (face org-table display (space :relative-width 1.001)) 26 27 (face org-table) 27 28 (face org-table rear-nonsticky t display (space :relative-width 1)) 28 29 (face org-table) 29 30 (face org-table display (space :relative-width 1.001)) 30 31 (face org-table) 31 32 (face org-table rear-nonsticky t display (space :relative-width 1)) 32 33 (face org-table) 33 34 (face org-table display (space :relative-width 1.001)) 34 35 (face org-table) 35 36 (face org-table-row) 36 37 (face org-table) 37 38 (face org-table rear-nonsticky t display (space :relative-width 1)) 38 39 (face org-table) 39 40 (face org-table display (space :relative-width 1.001)) 40 41 (face org-table) 41 42 (face org-table rear-nonsticky t display (space :relative-width 1)) 42 43 (face org-table) 43 44 (face org-table display (space :relative-width 1.001)) 44 45 (face org-table) 45 46 (face org-table rear-nonsticky t display (space :relative-width 1)) 46 47 (face org-table) 47 48 (face org-table display (space :relative-width 1.001)) 48 49 (face org-table) 49 50 (face org-table rear-nonsticky t display (space :relative-width 1)) 50 51 (face org-table) 51 52 (face org-table display (space :relative-width 1.001)) 52 53 (face org-table) 53 54 (face org-table-row) 54 55 (face org-table) 55 56 (face org-table rear-nonsticky t display (space :relative-width 1)) 56 57 (face org-table) 57 58 (face org-table display (space :relative-width 1.001)) 58 59 (face org-table) 59 60 (face org-table rear-nonsticky t display (space :relative-width 1)) 60 61 (face org-table) 61 62 (face org-table display (space :relative-width 1.001)) 62 63 (face org-table) 63 64 (face org-table rear-nonsticky t display (space :relative-width 1)) 64 65 (face org-table) 65 66 (face org-table display (space :relative-width 1.001)) 66 67 (face org-table) 67 68 (face org-table rear-nonsticky t display (space :relative-width 1)) 68 69 (face org-table) 69 70 (face org-table display (space :relative-width 1.001)) 70 71 (face org-table) 71 72 (face org-table-row))) (:after-transpose #(\"| a | 1 | 5 | 3 |\n|   |   |   |   |\n| b | 2 | 6 | 4 |\n|   |   |   |   |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table rear-nonsticky t display (space :relative-width 1)) 10 11 (face org-table) 11 12 (face org-table display (space :relative-width 1.001)) 12 13 (face org-table) 13 14 (face org-table rear-nonsticky t display (space :relative-width 1)) 14 15 (face org-table) 15 16 (face org-table display (space :relative-width 1.001)) 16 17 (face org-table) 17 18 (face org-table-row) 18 19 (face org-table) 19 20 (face org-table rear-nonsticky t display (space :relative-width 1)) 20 21 (face org-table) 21 22 (face org-table display (space :relative-width 1.001)) 22 23 (face org-table) 23 24 (face org-table rear-nonsticky t display (space :relative-width 1)) 24 25 (face org-table) 25 26 (face org-table display (space :relative-width 1.001)) 26 27 (face org-table) 27 28 (face org-table rear-nonsticky t display (space :relative-width 1)) 28 29 (face org-table) 29 30 (face org-table display (space :relative-width 1.001)) 30 31 (face org-table) 31 32 (face org-table rear-nonsticky t display (space :relative-width 1)) 32 33 (face org-table) 33 34 (face org-table display (space :relative-width 1.001)) 34 35 (face org-table) 35 36 (face org-table-row) 36 37 (face org-table) 37 38 (face org-table rear-nonsticky t display (space :relative-width 1)) 38 39 (face org-table) 39 40 (face org-table display (space :relative-width 1.001)) 40 41 (face org-table) 41 42 (face org-table rear-nonsticky t display (space :relative-width 1)) 42 43 (face org-table) 43 44 (face org-table display (space :relative-width 1.001)) 44 45 (face org-table) 45 46 (face org-table rear-nonsticky t display (space :relative-width 1)) 46 47 (face org-table) 47 48 (face org-table display (space :relative-width 1.001)) 48 49 (face org-table) 49 50 (face org-table rear-nonsticky t display (space :relative-width 1)) 50 51 (face org-table) 51 52 (face org-table display (space :relative-width 1.001)) 52 53 (face org-table) 53 54 (face org-table-row) 54 55 (face org-table) 55 56 (face org-table rear-nonsticky t display (space :relative-width 1)) 56 57 (face org-table) 57 58 (face org-table display (space :relative-width 1.001)) 58 59 (face org-table) 59 60 (face org-table rear-nonsticky t display (space :relative-width 1)) 60 61 (face org-table) 61 62 (face org-table display (space :relative-width 1.001)) 62 63 (face org-table) 63 64 (face org-table rear-nonsticky t display (space :relative-width 1)) 64 65 (face org-table) 65 66 (face org-table display (space :relative-width 1.001)) 66 67 (face org-table) 67 68 (face org-table rear-nonsticky t display (space :relative-width 1)) 68 69 (face org-table) 69 70 (face org-table display (space :relative-width 1.001)) 70 71 (face org-table) 71 72 (face org-table-row))))""#
+        ]],
     );
 }
 
@@ -352,7 +380,7 @@ fn combo2_table_complex() {
 #[test]
 fn combo2_src_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_SRC emacs-lisp\n(+ 1)\n(+ 2)\n(+ 3)\n#+END_SRC")
@@ -370,6 +398,9 @@ fn combo2_src_complex() {
                           (lambda (s) (list (org-element-property :language s)
                                             (org-element-property :value s))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r##""OK ((:init \"#+BEGIN_SRC emacs-lisp\n(+ 1)\n(+ 2)\n(+ 3)\n#+END_SRC\") (:after-demarcate \"#+BEGIN_SRC emacs-lisp\n  (+ 1)\n#+END_SRC\n\n#+BEGIN_SRC emacs-lisp\n  (+ 2)\n  (+ 3)\n#+END_SRC\n\") (:blocks ((\"emacs-lisp\" \"  (+ 1)\n\") (\"emacs-lisp\" \"  (+ 2)\n  (+ 3)\n\"))))""##
+        ]],
     );
 }
 
@@ -380,7 +411,7 @@ fn combo2_src_complex() {
 #[test]
 fn combo2_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** B\n*** C\n** D\n* E\n** F")
@@ -407,5 +438,6 @@ fn combo2_navigation() {
     (org-previous-visible-heading 1)
     (push (list :prev1 (org-element-property :raw-value (org-element-at-point))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 2) 0)""#]],
     );
 }

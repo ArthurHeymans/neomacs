@@ -15,7 +15,7 @@ fn combo_register_point_jump_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Save point to register, insert text, jump back; markers track.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-reg")))
     (with-current-buffer buf
@@ -51,6 +51,7 @@ fn combo_register_point_jump_marker_overlay_undo() {
                                   (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after-insert after-undo))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -59,7 +60,7 @@ fn combo_register_copy_region_insert_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Copy region to register, insert at different position; undo.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-regcopy")))
     (with-current-buffer buf
@@ -90,6 +91,7 @@ fn combo_register_copy_region_insert_marker_overlay_undo() {
                                 (get-text-property 13 'word))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (args-out-of-range 20 26)""#]],
     );
 }
 
@@ -98,7 +100,7 @@ fn combo_register_narrow_copy_insert_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Narrow, copy to register, widen, insert; undo restores.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-regnar")))
     (with-current-buffer buf
@@ -133,6 +135,7 @@ fn combo_register_narrow_copy_insert_marker_overlay_undo() {
                                 (get-text-property 16 'sect))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -141,7 +144,7 @@ fn combo_register_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Buffer-local register usage with markers/overlays.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-regbl")))
     (with-current-buffer buf
@@ -176,6 +179,7 @@ fn combo_register_buffer_local_marker_overlay_undo() {
                                 (get-text-property 7 'part))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -184,7 +188,7 @@ fn combo_register_multiple_registers_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Multiple registers with different content; undo chain.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-regmult")))
     (with-current-buffer buf
@@ -227,5 +231,6 @@ fn combo_register_multiple_registers_marker_overlay_undo() {
                                 (get-text-property 13 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

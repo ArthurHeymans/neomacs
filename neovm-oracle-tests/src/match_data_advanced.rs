@@ -26,7 +26,10 @@ fn oracle_prop_match_data_set_roundtrip() {
                         (match-beginning 1) (match-end 1)
                         (match-beginning 2) (match-end 2)
                         (equal md '(10 20 12 15 16 19)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 20 12 15 16 19 t)""#]],
+    );
 }
 
 #[test]
@@ -40,7 +43,7 @@ fn oracle_prop_match_data_set_then_search_overwrites() {
                     (string-match "\\(abc\\)" "xyzabcdef")
                     (list (match-beginning 0) (match-end 0)
                           (match-beginning 1) (match-end 1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (3 6 3 6)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +68,10 @@ fn oracle_prop_save_match_data_nested_searches() {
                             (match-beginning 0)
                             (match-string 1 "hello world")
                             (match-string 2 "hello world"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 \"hello\" \"world\" 0 \"hello\" \"world\")""#]],
+    );
 }
 
 #[test]
@@ -86,7 +92,10 @@ fn oracle_prop_save_match_data_deeply_nested() {
                           (setq level1 (list level1 (match-string 1 "bbb")))))
                       ;; After outer save-match-data, level0 data restored
                       (list level0 (match-string 1 "aaa"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"aaa\" \"aaa\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +117,10 @@ fn oracle_prop_match_beginning_end_multiple_subgroups() {
                       (match-beginning 2) (match-end 2)
                       (match-beginning 3) (match-end 3)
                       (match-beginning 4) (match-end 4)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 15 0 3 4 7 8 11 12 15)""#]],
+    );
 }
 
 #[test]
@@ -124,7 +136,10 @@ fn oracle_prop_match_beginning_end_optional_groups() {
                       (match-beginning 1) (match-end 1)
                       (match-beginning 2) (match-end 2)
                       (match-beginning 3) (match-end 3)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 3 0 3 nil nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +163,12 @@ fn oracle_prop_match_string_all_groups() {
                       (match-string 4 str)
                       (match-string 5 str)
                       (match-string 6 str)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"2026-03-02T15:30:45\" \"2026\" \"03\" \"02\" \"15\" \"30\" \"45\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +201,10 @@ fn oracle_prop_match_data_string_match_vs_buffer_search() {
                         (list str-md buf-md
                               (= (1+ (nth 0 str-md)) (nth 0 buf-md))
                               (= (1+ (nth 1 str-md)) (nth 1 buf-md))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 7 0 4 5 7) (1 8 1 5 6 8) t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +238,10 @@ fn oracle_prop_match_data_sequential_overwrite() {
                                       (match-string 2 "3.14"))
                                 results))
                     (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"a\" \"b\" \"c\") (\"xyz\" nil nil) (\"3\" \"14\"))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -239,7 +265,12 @@ fn oracle_prop_match_data_extraction_pipeline() {
                                   pairs))
                       (setq start (match-end 0)))
                     (nreverse pairs))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"name\" . \"Alice\") (\"age\" . \"30\") (\"city\" . \"London\") (\"country\" . \"UK\"))""#
+        ]],
+    );
 }
 
 #[test]
@@ -258,7 +289,7 @@ fn oracle_prop_match_data_collect_all_matches() {
                               (cons (string-to-number (match-string 1))
                                     errors)))
                       (nreverse errors)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (10 42)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +313,10 @@ fn oracle_prop_match_data_template_substitution() {
                                 (cons (concat first-name " " last-name)
                                       results)))))
                     (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"John Smith\" \"Jane Doe\" \"Alice Park\")""#]],
+    );
 }
 
 #[test]
@@ -299,7 +333,10 @@ fn oracle_prop_match_data_replace_with_captures() {
                             (num (match-string 2)))
                         (replace-match (concat word "(" num ")") t t)))
                     (buffer-string))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"FOO(42) BAR(7) BAZ(999)\"""#]],
+    );
 }
 
 #[test]
@@ -316,5 +353,8 @@ fn oracle_prop_match_data_with_replace_match_groups() {
                             (second (match-string 2)))
                         (replace-match (concat second "-" first) t t)))
                     (buffer-string))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"world-hello\"""#]],
+    );
 }

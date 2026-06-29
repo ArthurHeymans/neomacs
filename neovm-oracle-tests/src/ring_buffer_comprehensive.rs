@@ -39,7 +39,10 @@ fn oracle_prop_ring_buffer_comp_make_ring_predicates() {
             (ring-p "hello")
             (ring-p '(1 2 3))
             (ring-p (make-ring 1))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 5 0 t 3 nil 5 nil nil nil nil t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +71,10 @@ fn oracle_prop_ring_buffer_comp_insert_and_ref() {
    (ring-ref r -1)
    ;; ring-length
    (ring-length r)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (third second first first 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +101,10 @@ fn oracle_prop_ring_buffer_comp_insert_at_beginning() {
           (ref-last (ring-ref r (1- (ring-length r)))))
       (list elements-before elements-after ref0 ref-last
             (ring-length r)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((c b a) (c b a z) c z 4)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +137,10 @@ fn oracle_prop_ring_buffer_comp_remove() {
                     removed-oldest after2
                     removed0 (ring-elements r)
                     (ring-length r)))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((d c b a) c (d b a) a (d b) d (b) 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +174,12 @@ fn oracle_prop_ring_buffer_comp_elements() {
           (list empty-elems partial-elems full-elems
                 overflow-elems (ring-elements r)
                 (ring-length r) (ring-size r)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (20 10) (40 30 20 10) (50 40 30 20) (70 60 50 40) 4 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +210,10 @@ fn oracle_prop_ring_buffer_comp_copy() {
             (ring-size r) (ring-size r2)
             ;; Both are still rings
             (ring-p r) (ring-p r2)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((z y x) (z y x) (w z y x) (z y) 4 2 5 5 t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +251,12 @@ fn oracle_prop_ring_buffer_comp_member() {
    ;; "apple" was oldest, should be gone
    (ring-member r "apple")
    (ring-member r "overflow")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 2 1 0 nil nil \"e1\" \"e2\" \"e3\" \"e4\" \"overflow\" nil 0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +280,10 @@ fn oracle_prop_ring_buffer_comp_extend() {
     (list after-extend len-after
           (ring-elements r)
           (ring-length r))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((base) 1 (base) 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +309,12 @@ fn oracle_prop_ring_buffer_comp_overflow_fifo() {
     (list (nreverse snapshots) final-elems
           (ring-empty-p r)
           (= (ring-length r) (ring-size r)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 (1) 1) (2 (2 1) 2) (3 (3 2 1) 3) (4 (4 3 2) 3) (5 (5 4 3) 3) (6 (6 5 4) 3)) (6 5 4) nil t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +342,10 @@ fn oracle_prop_ring_buffer_comp_mixed_types() {
           (ring-member r nil)
           (ring-member r 'symbol)
           (ring-length r))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t nil (1 2 3) symbol \"hello\" 42) t 42 4 1 3 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +375,10 @@ fn oracle_prop_ring_buffer_comp_ref_modular() {
    (ring-ref r -2) ;; wraps backwards to b
    (ring-ref r -3) ;; wraps backwards to c
    ))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (c b a c b a c a b c)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -379,5 +418,10 @@ fn oracle_prop_ring_buffer_comp_stress_cycles() {
   (ring-insert r 70)
   (setq results (cons (list 'overflow (ring-elements r)) results))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((full (4 3 2 1)) (empty t 0) (partial-remove 20 (30 10)) (refilled (50 40 30 10) 4) (overflow (70 60 50 40)))""#
+        ]],
+    );
 }

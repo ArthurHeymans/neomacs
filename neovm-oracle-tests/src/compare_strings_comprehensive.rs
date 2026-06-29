@@ -54,7 +54,10 @@ fn oracle_prop_compare_strings_comprehensive_all_params() {
       (push (compare-strings "abc" 0 3 "abc" 0 3) results)
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t -3 t -3 t -3 t t t t -1 t -1 t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +99,10 @@ fn oracle_prop_compare_strings_comprehensive_return_values() {
       (push (compare-strings "xxABC" 2 nil "xxABD" 2 nil) results)
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t -1 1 -4 4 -3 -2 -1 3 2 1 -6 -3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +144,10 @@ fn oracle_prop_compare_strings_comprehensive_case() {
       (push (compare-strings "apple" nil nil "banana" nil nil t) results)
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (-1 1 -1 -1 t t t t t -2 t t t t t -1 -1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +193,10 @@ fn oracle_prop_compare_strings_comprehensive_boundaries() {
       (push (compare-strings "\n" nil nil "\n" nil nil) results)
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t -1 1 t t t t t t t t -2 t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +234,10 @@ fn oracle_prop_compare_strings_comprehensive_unicode() {
       (push (compare-strings "ABC" nil nil "abc" nil nil t) results)
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 1 t 4 t t -1 t -1 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +314,12 @@ fn oracle_prop_compare_strings_comprehensive_sort_algorithm() {
                 '("z" "a" "m" "b" "y") nil))
     (fmakunbound 'neovm--cs-charwise-cmp)
     (fmakunbound 'neovm--cs-insertion-sort)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (equal (diff-at 2 -1) longer shorter equal (\"apple\" \"apricot\" \"banana\" \"cherry\" \"date\") (\"apple\" \"apricot\" \"Banana\" \"Cherry\" \"DATE\") (\"a\" \"b\" \"m\" \"y\" \"z\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -351,5 +371,8 @@ fn oracle_prop_compare_strings_comprehensive_pattern_search() {
        (funcall 'neovm--cs-find-all "aaa" "aa" nil))
     (fmakunbound 'neovm--cs-find-all)
     (fmakunbound 'neovm--cs-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 3 6) (0 6 12) nil (0) nil (0 2 4 6) 2 2 (0 1))""#]],
+    );
 }

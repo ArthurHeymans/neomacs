@@ -21,7 +21,10 @@ fn oracle_nthcdr_negative_and_oversized_counts() {
         (nth 99 lst)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((a b c) t (a b c) nil a nil)""#]],
+    );
 }
 
 #[test]
@@ -47,7 +50,12 @@ fn oracle_nthcdr_improper_list_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a b . c) (b . c) c (wrong-type-argument (listp (a b . c))) (wrong-type-argument (listp (a b . c))))""#
+        ]],
+    );
 }
 
 #[test]
@@ -67,7 +75,12 @@ fn oracle_nthcdr_argument_type_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument (integerp x)) (wrong-type-argument (listp 42)) (wrong-type-argument (integerp x)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -85,7 +98,10 @@ fn oracle_nthcdr_circular_large_and_bignum_counts() {
         (nth 100000000000000000000000000000000000001 x)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t b b c b c)""#]],
+    );
 }
 
 #[test]
@@ -105,5 +121,8 @@ fn oracle_last_negative_zero_and_improper_cases() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil (a b c) (b . c) (b . c))""#]],
+    );
 }

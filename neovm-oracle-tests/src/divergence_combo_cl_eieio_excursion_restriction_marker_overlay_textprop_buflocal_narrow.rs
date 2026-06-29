@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_nested_excursion_object_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cursor-snapshot ()
     ((name :initarg :name :accessor cs-name :initform "")
@@ -88,6 +88,7 @@ fn combo_eieio_nested_excursion_object_state() {
                 (buffer-string)
                 snaps)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -95,7 +96,7 @@ fn combo_eieio_nested_excursion_object_state() {
 fn combo_eieio_with_current_buffer_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass buf-state ()
     ((buf :initarg :buf :accessor bs-buf :initform nil)
@@ -156,6 +157,7 @@ fn combo_eieio_with_current_buffer_excursion() {
                 my-state)))
       (kill-buffer buf1)
       (kill-buffer buf2))))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range 15 19)""#]],
     );
 }
 
@@ -163,7 +165,7 @@ fn combo_eieio_with_current_buffer_excursion() {
 fn combo_eieio_save_restriction_nested_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-state ()
     ((label :initarg :label :accessor ns-label :initform "")
@@ -224,6 +226,7 @@ fn combo_eieio_save_restriction_nested_undo() {
                 (buffer-string)
                 my-states))))
     (kill-buffer buf))"#,
+        expect_test::expect![[r#""ERR (void-variable m)""#]],
     );
 }
 
@@ -231,7 +234,7 @@ fn combo_eieio_save_restriction_nested_undo() {
 fn combo_eieio_excursion_marker_overlay_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass edit-cursor ()
     ((id :initarg :id :accessor ec-id :initform 0)
@@ -287,6 +290,7 @@ fn combo_eieio_excursion_marker_overlay_interaction() {
                 (marker-position m2)
                 cursors)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -294,7 +298,7 @@ fn combo_eieio_excursion_marker_overlay_interaction() {
 fn combo_eieio_excursion_with_text_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass styled-region ()
     ((name :initarg :name :accessor sr-name :initform "")
@@ -359,5 +363,6 @@ fn combo_eieio_excursion_with_text_props() {
                 (buffer-string)
                 regions)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

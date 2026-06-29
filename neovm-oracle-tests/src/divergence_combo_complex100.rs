@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx100_mega_textprop_overlay_buflocal_marker_undo_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx100-mega-1*")))
   (with-current-buffer buf
@@ -53,13 +53,14 @@ fn div_cx100_mega_textprop_overlay_buflocal_marker_undo_narrow() {
           (kill-buffer buf)
           (list state-1 state-2)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx100_mega_process_timer_hook_buffer_undo_env_exitcode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (hook-fired nil)
@@ -93,13 +94,14 @@ fn div_cx100_mega_process_timer_hook_buffer_undo_env_exitcode() {
         (kill-buffer buf)
         (list state (buffer-string))))))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     );
 }
 
 #[test]
 fn div_cx100_mega_eieio_clloop_textprop_marker_overlay_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -136,13 +138,14 @@ fn div_cx100_mega_eieio_clloop_textprop_marker_overlay_narrow() {
                     (text-properties-at 1)))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }
 
 #[test]
 fn div_cx100_mega_coding_regex_format_print_circle_secure_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((text "Hello café 世界 😀")
        (encoded (encode-coding-string text 'utf-8))
@@ -156,13 +159,16 @@ fn div_cx100_mega_coding_regex_format_print_circle_secure_hash() {
         (equal text decoded)
         (length encoded) (string-bytes encoded)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"[Hello café 世界 😀] bytes=23 hash=e674b2aed8aed39df9e72cbea5d02dd760618a8220e24dc3b008826ee97b24d2\" \"(\\\"Hello café 世界 😀\\\" \\\"Hello caf\\\\303\\\\251 \\\\344\\\\270\\\\226\\\\347\\\\225\\\\214 \\\\360\\\\237\\\\230\\\\200\\\" \\\"Hello café 世界 😀\\\")\" t t 23 23)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx100_mega_window_config_marker_overlay_register_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx100-mega-3*")))
   (set-window-buffer (selected-window) buf)
@@ -192,13 +198,14 @@ fn div_cx100_mega_window_config_marker_overlay_register_undo() {
             (kill-buffer buf)
             (list state-1 state-2))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx100_mega_advice_clloop_closure_marker_overlay_undo_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
       (calls nil))
@@ -238,13 +245,14 @@ fn div_cx100_mega_advice_clloop_closure_marker_overlay_undo_narrow() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }
 
 #[test]
 fn div_cx100_mega_pcase_rx_syntax_table_textprop_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -274,13 +282,14 @@ fn div_cx100_mega_pcase_rx_syntax_table_textprop_marker_overlay() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument characterp nil)""#]],
     );
 }
 
 #[test]
 fn div_cx100_mega_time_process_env_exitcode_buflocal_undo_invis_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((env-val (let ((process-environment (cons "NEO_CX100=v2" process-environment)))
                   (string-trim (shell-command-to-string "echo $NEO_CX100"))))
@@ -311,13 +320,14 @@ fn div_cx100_mega_time_process_env_exitcode_buflocal_undo_invis_textprop() {
               (overlay-start invis-ov) (overlay-end invis-ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }
 
 #[test]
 fn div_cx100_mega_file_io_coding_charset_marker_overlay_undo_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx100-mega-file"))
        (data "Hello café 世界"))
@@ -348,13 +358,14 @@ fn div_cx100_mega_file_io_coding_charset_marker_overlay_undo_narrow() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }
 
 #[test]
 fn div_cx100_mega_hash_table_obarray_symbol_plist_marker_overlay_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal))
       (ob (make-obarray 31))
@@ -386,13 +397,14 @@ fn div_cx100_mega_hash_table_obarray_symbol_plist_marker_overlay_narrow() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
     );
 }
 
 #[test]
 fn div_cx100_mega_kbd_macro_register_rectangle_window_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((config (current-window-configuration)))
   (with-temp-buffer
@@ -412,13 +424,16 @@ fn div_cx100_mega_kbd_macro_register_rectangle_window_config() {
         (list state (buffer-string) (marker-position m)
               (overlay-start ov) (overlay-end ov))))))
 "##,
+        expect_test::expect![[
+            r#""OK ((\"AAA111\nBBB222\nCCC333\n\" 5 2 10 #<marker in no buffer>) \"AAA111\nBBB222\nCCC333\n\" 5 2 10)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx100_mega_combination_eleven_subsystems_full_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX100=v3" process-environment)))
@@ -464,5 +479,6 @@ fn div_cx100_mega_combination_eleven_subsystems_full_stress() {
                 (hash-table-count ht)
                 (aref rec 2))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

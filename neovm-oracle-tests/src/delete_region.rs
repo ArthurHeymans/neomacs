@@ -12,8 +12,9 @@ use super::common::{
 fn oracle_prop_delete_region_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (erase-buffer) (insert "abcdef") (delete-region 2 5) (buffer-string))"#,
+        expect_test::expect![[r#""aefOK \"aef\"""#]],
     );
     assert_ok_eq("\"aef\"", &oracle, &neovm);
 }
@@ -22,11 +23,18 @@ fn oracle_prop_delete_region_basics() {
 fn oracle_prop_delete_region_error_kinds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (type_oracle, type_neovm) = eval_oracle_and_neovm(r#"(delete-region "x" 1)"#);
+    let (type_oracle, type_neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(delete-region "x" 1)"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p \"x\")""#]],
+    );
     assert_err_kind(&type_oracle, &type_neovm, "wrong-type-argument");
 
-    let (range_oracle, range_neovm) =
-        eval_oracle_and_neovm(r#"(progn (erase-buffer) (insert "abc") (delete-region 0 1))"#);
+    let (range_oracle, range_neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(progn (erase-buffer) (insert "abc") (delete-region 0 1))"#,
+        expect_test::expect![[
+            r#""abcERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 1)""#
+        ]],
+    );
     assert_err_kind(&range_oracle, &range_neovm, "args-out-of-range");
 }
 
@@ -40,7 +48,12 @@ fn oracle_prop_delete_region_bignum_start_saturates_like_gnu() {
   (erase-buffer)
   (insert "abc")
   (delete-region 1000000000000000000000000000000 1))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""abcERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 1000000000000000000000000000000 1)""#
+        ]],
+    );
 }
 
 proptest! {

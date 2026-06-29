@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf16_at_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nBody text\n** H2\nSub\n* H3")
@@ -28,6 +28,9 @@ fn uf16_at_point() {
     (beginning-of-line)
     (push (list :sub (org-element-type (org-element-at-point))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:top headline) (:body paragraph) (:h2 headline) (:sub paragraph))""#
+        ]],
     );
 }
 
@@ -38,7 +41,7 @@ fn uf16_at_point() {
 #[test]
 fn uf16_context() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nPara *bold* /italic/ =code=")
@@ -52,6 +55,9 @@ fn uf16_context() {
     (search-forward "code")
     (push (list :code (org-element-type (org-element-context))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:h headline) (:bold bold) (:italic italic) (:code verbatim))""#
+        ]],
     );
 }
 
@@ -62,7 +68,7 @@ fn uf16_context() {
 #[test]
 fn uf16_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| a | b |\n|---+---|\n| 1 | 2 |")
@@ -72,6 +78,7 @@ fn uf16_table() {
     (search-forward "a")
     (push (list :cell (org-element-type (org-element-context))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:table table) (:cell table-cell))""#]],
     );
 }
 
@@ -82,7 +89,7 @@ fn uf16_table() {
 #[test]
 fn uf16_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n- B\n- C")
@@ -93,6 +100,7 @@ fn uf16_list() {
     (beginning-of-line)
     (push (list :item (org-element-type (org-element-at-point))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:list plain-list) (:item item))""#]],
     );
 }
 
@@ -103,7 +111,7 @@ fn uf16_list() {
 #[test]
 fn uf16_src() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_SRC emacs-lisp\n(+ 1 2)\n#+END_SRC")
@@ -114,6 +122,7 @@ fn uf16_src() {
     (beginning-of-line)
     (push (list :inside (org-element-type (org-element-at-point))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:begin src-block) (:inside src-block))""#]],
     );
 }
 
@@ -124,12 +133,13 @@ fn uf16_src() {
 #[test]
 fn uf16_quote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_QUOTE\nQuoted\n#+END_QUOTE")
   (goto-char (point-min))
   (org-element-type (org-element-at-point)))"##,
+        expect_test::expect![[r#""OK quote-block""#]],
     );
 }
 
@@ -140,12 +150,13 @@ fn uf16_quote() {
 #[test]
 fn uf16_comment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "# Comment\nNormal")
   (goto-char (point-min))
   (org-element-type (org-element-at-point)))"##,
+        expect_test::expect![[r#""OK comment""#]],
     );
 }
 
@@ -156,12 +167,13 @@ fn uf16_comment() {
 #[test]
 fn uf16_fixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert ": fixed\n: lines\nNormal")
   (goto-char (point-min))
   (org-element-type (org-element-at-point)))"##,
+        expect_test::expect![[r#""OK fixed-width""#]],
     );
 }
 
@@ -172,13 +184,14 @@ fn uf16_fixed() {
 #[test]
 fn uf16_planning() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\nSCHEDULED: <2026-01-15>\nBody")
   (goto-char (point-min))
   (forward-line)
   (org-element-type (org-element-at-point)))"##,
+        expect_test::expect![[r#""OK planning""#]],
     );
 }
 
@@ -189,7 +202,7 @@ fn uf16_planning() {
 #[test]
 fn uf16_prop_drawer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n:PROPERTIES:\n:A: 1\n:END:")
@@ -197,6 +210,7 @@ fn uf16_prop_drawer() {
   (search-forward ":A:")
   (beginning-of-line)
   (org-element-type (org-element-at-point)))"##,
+        expect_test::expect![[r#""OK node-property""#]],
     );
 }
 
@@ -207,12 +221,13 @@ fn uf16_prop_drawer() {
 #[test]
 fn uf16_keyword() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+TITLE: Test\n* H")
   (goto-char (point-min))
   (org-element-type (org-element-at-point)))"##,
+        expect_test::expect![[r#""OK keyword""#]],
     );
 }
 
@@ -223,12 +238,13 @@ fn uf16_keyword() {
 #[test]
 fn uf16_hr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "-----\nText")
   (goto-char (point-min))
   (org-element-type (org-element-at-point)))"##,
+        expect_test::expect![[r#""OK horizontal-rule""#]],
     );
 }
 
@@ -239,7 +255,7 @@ fn uf16_hr() {
 #[test]
 fn uf16_footnote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text[fn:1]\n\n[fn:1] Def")
@@ -250,6 +266,7 @@ fn uf16_footnote() {
     (beginning-of-line)
     (push (list :def (org-element-type (org-element-at-point))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:ref paragraph) (:def footnote-definition))""#]],
     );
 }
 
@@ -260,12 +277,13 @@ fn uf16_footnote() {
 #[test]
 fn uf16_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text [[http://a][Link]] end")
   (search-forward "Link")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"Link\")""#]],
     );
 }
 
@@ -276,12 +294,13 @@ fn uf16_link() {
 #[test]
 fn uf16_bold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Para *bold* text")
   (search-forward "bold")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"bold\")""#]],
     );
 }
 
@@ -292,12 +311,13 @@ fn uf16_bold() {
 #[test]
 fn uf16_italic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Para /italic/ text")
   (search-forward "italic")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"italic\")""#]],
     );
 }
 
@@ -308,12 +328,13 @@ fn uf16_italic() {
 #[test]
 fn uf16_code() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Para =code= text")
   (search-forward "code")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"code\")""#]],
     );
 }
 
@@ -324,12 +345,13 @@ fn uf16_code() {
 #[test]
 fn uf16_verb() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Para ~verb~ text")
   (search-forward "verb")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"verb\")""#]],
     );
 }
 
@@ -340,12 +362,13 @@ fn uf16_verb() {
 #[test]
 fn uf16_strike() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Para +strike+ text")
   (search-forward "strike")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"strike\")""#]],
     );
 }
 
@@ -356,12 +379,13 @@ fn uf16_strike() {
 #[test]
 fn uf16_under() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Para _under_ text")
   (search-forward "under")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"under\")""#]],
     );
 }
 
@@ -372,12 +396,13 @@ fn uf16_under() {
 #[test]
 fn uf16_sub() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "H_2O text")
   (search-forward "_2")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"_2\")""#]],
     );
 }
 
@@ -388,12 +413,13 @@ fn uf16_sub() {
 #[test]
 fn uf16_super() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "E=mc^2 text")
   (search-forward "^2")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"^2\")""#]],
     );
 }
 
@@ -404,12 +430,13 @@ fn uf16_super() {
 #[test]
 fn uf16_latex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text $x^2$ end")
   (search-forward "$x")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"$x\")""#]],
     );
 }
 
@@ -420,12 +447,13 @@ fn uf16_latex() {
 #[test]
 fn uf16_entity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text \\alpha end")
   (search-forward "\\alpha")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"\\\\alpha\")""#]],
     );
 }
 
@@ -436,12 +464,13 @@ fn uf16_entity() {
 #[test]
 fn uf16_ts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text <2026-01-15> end")
   (search-forward "<2026")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"<2026\")""#]],
     );
 }
 
@@ -452,11 +481,12 @@ fn uf16_ts() {
 #[test]
 fn uf16_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+MACRO: m Hi\nText {{{m}}} end")
   (search-forward "{{{m}}}")
   (org-element-type (org-element-context)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"{{{m}}}\")""#]],
     );
 }

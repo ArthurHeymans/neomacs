@@ -40,7 +40,10 @@ fn oracle_prop_char_width_ascii_exhaustive() {
         (setq consistent nil)))
     (setq results (cons consistent results)))
   (nreverse results))"#;
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity_expect(
+        &form,
+        expect_test::expect![r#""OK (t 1 1 1 1 1 1 1 t)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +86,10 @@ fn oracle_prop_char_width_cjk_wide() {
     (list (length s)
           (string-width s)
           (= (string-width s) (* 2 (length s))))))"#;
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity_expect(
+        &form,
+        expect_test::expect![r#""OK (2 2 2 2 2 2 2 2 2 2 2 2 t (4 8 t))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +128,10 @@ fn oracle_prop_char_width_combining_marks() {
   (string-width (string #x4e16 #x0301))
   ;; Multiple combining marks stacked
   (string-width (string ?x #x0300 #x0301 #x0302 #x0303)))"#;
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity_expect(
+        &form,
+        expect_test::expect![r#""OK (0 0 0 0 0 0 1 1 (1 1 t) 2 1)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -167,7 +176,12 @@ fn oracle_prop_char_width_control_and_tab() {
         (setq widths (cons (char-width i) widths))
         (setq i (1+ i))))
     (nreverse widths)))"#;
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity_expect(
+        &form,
+        expect_test::expect![
+            r#""OK (8 2 2 2 0 2 2 2 2 2 2 2 2 8 (2 2 2 2 2 2 2 2 2 8 0 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +215,10 @@ fn oracle_prop_char_width_emoji_variation() {
   ;; String width of emoji sequences
   (string-width (string #x1f600))
   (string-width (string #x1f4a9)))"#;
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity_expect(
+        &form,
+        expect_test::expect![r#""OK (1 1 2 1 0 0 0 0 1 1 2 2 2 2 2)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -293,7 +310,12 @@ fn oracle_prop_char_width_truncation_algorithm() {
     (fmakunbound 'neovm--cw-truncate)
     (fmakunbound 'neovm--cw-pad-right)
     (fmakunbound 'neovm--cw-format-table)))"#;
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity_expect(
+        &form,
+        expect_test::expect![[
+            r#""OK ((\"Name        |City    |Pts   \" \"Alice       |Boston  |100   \" \"张三丰      |东京都  |88    \" \"LongNameHere|Xyzzy   |42    \" \"A中文Test   |北京    |7     \") (28 t) (\"hello\") (\"世界你..\" . t) (\"A中B..\" . t) (\"世界\") (\"..\" . t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -305,7 +327,10 @@ fn oracle_prop_char_width_word_wrap_ascii_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = char_width_word_wrap_form(r#"(funcall 'neovm--cw-wrap "hello world foo bar" 10)"#);
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity_expect(
+        &form,
+        expect_test::expect![[r#""OK (\" hello\" \"dlrow foo\" \"rab\")""#]],
+    );
 }
 
 fn char_width_word_wrap_form(body: &str) -> String {
@@ -389,7 +414,10 @@ fn oracle_prop_char_width_word_wrap_cjk_case() {
     let form = char_width_word_wrap_form(
         r#"(funcall 'neovm--cw-wrap "\u4e16\u754c\u4f60\u597d\u4e2d\u6587\u6d4b\u8bd5" 6)"#,
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity_expect(
+        &form,
+        expect_test::expect![[r#""OK (\"世界你\" \"好中文\" \"测试\")""#]],
+    );
 }
 
 #[test]
@@ -399,7 +427,10 @@ fn oracle_prop_char_width_word_wrap_mixed_case() {
     let form = char_width_word_wrap_form(
         r#"(funcall 'neovm--cw-wrap "Hi\u4e16\u754cWorld\u4f60\u597d" 8)"#,
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity_expect(
+        &form,
+        expect_test::expect![[r#""OK (\"Hi世界\" \"dlroW你\" \"好\")""#]],
+    );
 }
 
 #[test]
@@ -407,7 +438,10 @@ fn oracle_prop_char_width_word_wrap_long_word_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = char_width_word_wrap_form(r#"(funcall 'neovm--cw-wrap "abcdefghij" 5)"#);
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity_expect(
+        &form,
+        expect_test::expect![[r#""OK (\"jihgfedcba\")""#]],
+    );
 }
 
 #[test]
@@ -415,7 +449,7 @@ fn oracle_prop_char_width_word_wrap_empty_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = char_width_word_wrap_form(r#"(funcall 'neovm--cw-wrap "" 10)"#);
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity_expect(&form, expect_test::expect![r#""OK nil""#]);
 }
 
 #[test]
@@ -430,7 +464,10 @@ fn oracle_prop_char_width_word_wrap_width_bound_case() {
       (setq all-ok nil)))
   (list lines all-ok))"#,
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity_expect(
+        &form,
+        expect_test::expect![[r#""OK ((\" The世界\" \" is美丽\") t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -481,5 +518,10 @@ fn oracle_prop_char_width_halfwidth_fullwidth() {
               (char-width #x00fc)   ;; ü
               (char-width #x00c0))) ;; À
     (fmakunbound 'neovm--cw-classify)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((1 2) (1 2) (1 2) (1 2) (1 2) (1 2) ((65 narrow) (65313 wide) (19990 wide) (769 zero) (9 (other 8)) (48 narrow) (12450 wide) (65393 narrow)) (6 6 6 12 t t) (1 1 1 1))""#
+        ],
+    );
 }

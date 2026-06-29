@@ -170,7 +170,12 @@ fn oracle_prop_treap_insert_search_traverse() {
       ;; Root should have highest priority (30 has pri=90)
       (funcall 'neovm--tr-key t9)
       (funcall 'neovm--tr-pri t9))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 20 30 40 50 60 70 80 90) t t t t nil nil nil t 30 90)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +328,12 @@ fn oracle_prop_treap_split() {
                 (funcall 'neovm--tr-heap-valid (cdr pair35))
                 (funcall 'neovm--tr-heap-valid (car pair50))
                 (funcall 'neovm--tr-heap-valid (cdr pair50))))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 20 30) (40 50 60 70) nil (10 20 30 40 50 60 70) (10 20 30 40 50 60 70) nil (10 20 30 40) (50 60 70) t t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -449,7 +459,12 @@ fn oracle_prop_treap_merge() {
           (funcall 'neovm--tr-heap-valid single-merge)
           ;; Root is 5 (pri 100 > 50)
           (funcall 'neovm--tr-key single-merge))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 20 30 50 60 70) t 50 90 ((10 20 30 50 60 70) t) (10 20 30) (50 60 70) ((5 95) t 5))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -596,7 +611,12 @@ fn oracle_prop_treap_range_count() {
       (funcall 'neovm--tr-range-keys tree 5 5)
       ;; Range [1, 99]: all keys
       (funcall 'neovm--tr-range-keys tree 1 99))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (10 4 (25 35 45 55) 10 10 1 (45) 0 nil 1 (95) 0 1 (5) (5 15 25 35 45 55 65 75 85 95))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -742,7 +762,12 @@ fn oracle_prop_treap_split_merge_insert() {
           (funcall 'neovm--tr-inorder t-dup)
           ;; 40 should still be there exactly once
           (length (funcall 'neovm--tr-inorder t-dup)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 20 30 40 50 60 70) t t t t nil ((10 20 30 50 60 70) t nil t) ((20 40 60) t) ((10 20 30 40 50 60 70) 7))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -875,5 +900,8 @@ fn oracle_prop_treap_kth_smallest() {
       ;; Min/max of empty
       (funcall 'neovm--tr-min nil)
       (funcall 'neovm--tr-max nil))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3 4 5 6 9) 1 2 3 4 5 6 9 nil nil 1 9 4 nil nil)""#]],
+    );
 }

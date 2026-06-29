@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_deep_excursion_nesting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass nest-ctx ()
     ((buf-name :initarg :buf :accessor nc-buf :initform "")
@@ -76,6 +76,7 @@ fn combo_eieio_deep_excursion_nesting() {
               (overlay-start ov) (overlay-end ov)
               my-nc-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -83,7 +84,7 @@ fn combo_eieio_deep_excursion_nesting() {
 fn combo_eieio_deep_unwind_protect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass guard-ctx ()
     ((buf-name :initarg :buf :accessor gc-buf :initform "")
@@ -154,6 +155,7 @@ fn combo_eieio_deep_unwind_protect() {
               (overlay-start ov) (overlay-end ov)
               my-gc-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -161,7 +163,7 @@ fn combo_eieio_deep_unwind_protect() {
 fn combo_eieio_deep_dynamic_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass dyn-ctx ()
     ((buf-name :initarg :buf :accessor dc-buf :initform "")
@@ -227,6 +229,7 @@ fn combo_eieio_deep_dynamic_binding() {
               (overlay-start ov) (overlay-end ov)
               my-dc-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -234,7 +237,7 @@ fn combo_eieio_deep_dynamic_binding() {
 fn combo_eieio_deep_condition_case_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass err-ctx ()
     ((buf-name :initarg :buf :accessor ec-buf :initform "")
@@ -310,6 +313,7 @@ fn combo_eieio_deep_condition_case_chain() {
               (overlay-start ov) (overlay-end ov)
               my-ec-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -317,7 +321,7 @@ fn combo_eieio_deep_condition_case_chain() {
 fn combo_eieio_deep_mixed_nesting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mixed-ctx ()
     ((buf-name :initarg :buf :accessor mx-buf :initform "")
@@ -395,5 +399,6 @@ fn combo_eieio_deep_mixed_nesting() {
               (marker-position m)
               my-mx-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }

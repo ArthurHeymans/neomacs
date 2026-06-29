@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_footnote_renumber_delete_sort_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -31,6 +31,7 @@ fn org_footnote_renumber_delete_sort_combo() {
                 (org-footnote-all-labels)
                 (buffer-substring-no-properties
                  (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (error \"Don’t know which footnote to remove\")""#]],
     );
 }
 
@@ -38,7 +39,7 @@ fn org_footnote_renumber_delete_sort_combo() {
 fn org_footnote_local_inline_export_edit_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -116,6 +117,7 @@ fn org_footnote_local_inline_export_edit_combo() {
                     ascii
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -123,7 +125,7 @@ fn org_footnote_local_inline_export_edit_combo() {
 fn org_footnote_inline_normalize_section_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -139,6 +141,9 @@ fn org_footnote_inline_normalize_section_combo() {
       (list (org-footnote-all-labels)
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""OK ((\"2\" \"1\") \"* Alpha\nText [fn:1] and named [fn:2].\n\n* Footnotes\n\n[fn:1] Inline *bold* note\n\n[fn:2] Named note\n\")""#
+        ]],
     );
 }
 
@@ -146,7 +151,7 @@ fn org_footnote_inline_normalize_section_combo() {
 fn org_footnote_reference_definition_navigation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -174,6 +179,7 @@ fn org_footnote_reference_definition_navigation_combo() {
                   pos
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -181,7 +187,7 @@ fn org_footnote_reference_definition_navigation_combo() {
 fn org_footnote_auto_label_inline_adjust_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -208,6 +214,9 @@ fn org_footnote_auto_label_inline_adjust_combo() {
             (org-footnote--collect-definitions)
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""OK ((\"2\" \"1\") ((\"1\" #<marker in no buffer> t nil) (\"2\" #<marker in no buffer> t nil)) ((\"2\" . \"[fn:2] Definition B\") (\"1\" . \"[fn:1] Inline A\")) \"* Body\nAlpha[fn:1] sentence. Beta[fn:2] sentence.\n\n* Footnotes\n\n[fn:1] Inline A\n\n[fn:2] Definition B\n\")""#
+        ]],
     );
 }
 
@@ -215,7 +224,7 @@ fn org_footnote_auto_label_inline_adjust_combo() {
 fn org_footnote_delete_label_references_definitions_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -239,6 +248,7 @@ fn org_footnote_delete_label_references_definitions_combo() {
               (org-footnote--collect-definitions)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -246,7 +256,7 @@ fn org_footnote_delete_label_references_definitions_combo() {
 fn org_footnote_missing_duplicate_normalize_sort_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -270,6 +280,9 @@ fn org_footnote_missing_duplicate_normalize_sort_combo() {
             (org-footnote--collect-definitions)
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""OK ((\"4\" \"3\" \"2\" \"1\") ((\"1\" #<marker in no buffer> t nil) (\"2\" #<marker in no buffer> t nil) (\"1\" #<marker in no buffer> t nil) (\"3\" #<marker in no buffer> t nil)) ((\"4\" . \"[fn:4] Unused def\") (\"3\" . \"[fn:3] Local def\") (\"2\" . \"[fn:2] DEFINITION NOT FOUND.\") (\"1\" . \"[fn:1] First Z\")) \"* H\nFirst[fn:1] missing[fn:2] again[fn:1].\n** Local\nNested[fn:3]\n\n* Footnotes\n\n[fn:1] First Z\n\n[fn:2] DEFINITION NOT FOUND.\n\n[fn:3] Local def\n\n[fn:4] Unused def\n\")""#
+        ]],
     );
 }
 
@@ -277,7 +290,7 @@ fn org_footnote_missing_duplicate_normalize_sort_combo() {
 fn org_footnote_action_context_matrix_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -342,6 +355,7 @@ fn org_footnote_action_context_matrix_combo() {
                   (org-footnote--collect-definitions)
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-footnote-auto-label)""#]],
     );
 }
 
@@ -349,7 +363,7 @@ fn org_footnote_action_context_matrix_combo() {
 fn org_footnote_local_normalize_nested_missing_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -398,6 +412,7 @@ fn org_footnote_local_normalize_nested_missing_combo() {
                              (line-number-at-pos (nth 1 prev-global))))
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -405,7 +420,7 @@ fn org_footnote_local_normalize_nested_missing_combo() {
 fn org_footnote_label_definition_section_adjust_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -453,6 +468,7 @@ fn org_footnote_label_definition_section_adjust_combo() {
                     (org-footnote--collect-references 'anonymous)
                     (org-footnote--collect-definitions)
                     after-adjust)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -460,7 +476,7 @@ fn org_footnote_label_definition_section_adjust_combo() {
 fn org_footnote_export_numbering_mutation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -567,6 +583,7 @@ fn org_footnote_export_numbering_mutation_combo() {
                    ascii-after
                    (buffer-substring-no-properties
                     (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -574,7 +591,7 @@ fn org_footnote_export_numbering_mutation_combo() {
 fn org_footnote_insert_sort_normalize_delete_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -621,6 +638,7 @@ fn org_footnote_insert_sort_normalize_delete_lifecycle_combo() {
                         after-sort
                         after-delete
                         action-result))))))))))"##,
+        expect_test::expect![[r#""ERR (search-failed \"[fn:alpha\")""#]],
     );
 }
 
@@ -628,7 +646,7 @@ fn org_footnote_insert_sort_normalize_delete_lifecycle_combo() {
 fn org_footnote_insert_normalize_sort_delete_multi_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-footnote)
@@ -674,5 +692,6 @@ fn org_footnote_insert_normalize_sort_delete_multi_edit_deep() {
                         action-result
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (search-failed \"[fn:one\")""#]],
     );
 }

@@ -15,7 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_buflocal_setq_set_let_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq bl-test 'global)
   (let ((buf (generate-new-buffer " combo-blssl")))
@@ -52,6 +52,7 @@ fn combo_buflocal_setq_set_let_marker_overlay_undo() {
                                    (get-text-property 11 'zone))))
               (kill-buffer buf)
               (list in-let after-let bl-test)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -59,7 +60,7 @@ fn combo_buflocal_setq_set_let_marker_overlay_undo() {
 fn combo_buflocal_let_star_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq bls-a 'global-a)
   (setq bls-b 'global-b)
@@ -99,6 +100,7 @@ fn combo_buflocal_let_star_marker_overlay_undo() {
                                (get-text-property 11 'zone))))
               (kill-buffer buf)
               (list in-let* after)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -106,7 +108,7 @@ fn combo_buflocal_let_star_marker_overlay_undo() {
 fn combo_buflocal_default_value_set_default_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq bdv-test 'original)
   (let ((buf (generate-new-buffer " combo-bldv")))
@@ -145,6 +147,7 @@ fn combo_buflocal_default_value_set_default_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -152,7 +155,7 @@ fn combo_buflocal_default_value_set_default_marker_overlay_undo() {
 fn combo_buflocal_with_current_buffer_switch_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq bwcb-test 'global)
   (let ((buf1 (generate-new-buffer " combo-bwcb1"))
@@ -203,6 +206,7 @@ fn combo_buflocal_with_current_buffer_switch_marker_overlay_undo() {
       (kill-buffer buf1)
       (kill-buffer buf2)
       (list (nreverse results) bwcb-test)))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -210,7 +214,7 @@ fn combo_buflocal_with_current_buffer_switch_marker_overlay_undo() {
 fn combo_buflocal_indirect_buffer_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq bind-test 'global)
   (let ((base (generate-new-buffer " combo-blbase")))
@@ -251,5 +255,6 @@ fn combo_buflocal_indirect_buffer_marker_overlay_undo() {
                 (kill-buffer ind)
                 (kill-buffer base)
                 (list after restored))))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

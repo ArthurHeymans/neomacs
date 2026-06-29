@@ -43,7 +43,12 @@ fn oracle_prop_replace_regexp_adv_backreferences_multiple_groups() {
     "\\([A-Z]\\)\\([a-z]+\\)"
     "(\\&=\\1.\\2)"
     "Hello World Foo"))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"smith, alice jones, bob brown, charlie\" \"val=5+5 x=12+12 y=300+300\" \"[whole=abc123,word=abc] [whole=def456,word=def] [whole=ghi789,word=ghi]\" \"15-01-2024 and 25-12-2023\" \"(Hello=H.Ello) (World=W.Orld) (Foo=F.Oo)\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +74,12 @@ fn oracle_prop_replace_regexp_adv_fixedcase_literal_combinations() {
     (replace-regexp-in-string "HELLO" "goodbye" text nil nil)
     ;; FIXEDCASE=t with same
     (replace-regexp-in-string "HELLO" "goodbye" text t nil)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"(Hello) (World) (HELLO) (world)\" \"(Hello) (World) (HELLO) (world)\" \"(\\\\1) (\\\\1) (\\\\1) (\\\\1)\" \"(\\\\1) (\\\\1) (\\\\1) (\\\\1)\" \"Goodbye World GOODBYE world\" \"goodbye World goodbye world\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +110,12 @@ fn oracle_prop_replace_regexp_adv_subexp_group_replacement() {
   (replace-regexp-in-string
     "\\(prefix-\\([0-9]+\\)-suffix\\)" "XXX"
     "prefix-42-suffix prefix-99-suffix" nil nil nil 2))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"KEY KEY KEY\" \"VAL VAL VAL\" \"REPLACED REPLACED\" \"ame: Alice, Title\" \"efix-42-suffix XXX\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +147,10 @@ fn oracle_prop_replace_regexp_adv_start_with_other_params() {
   (replace-regexp-in-string "x" "Y" "axbxcx" nil nil 6)
   ;; START in middle of potential match
   (replace-regexp-in-string "abc" "XYZ" "abc-abc-abc" nil nil 2))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (args-out-of-range 10 0 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +191,12 @@ fn oracle_prop_replace_regexp_adv_lambda_with_match_data() {
     (replace-regexp-in-string "[aeiou]"
       (lambda (m) (setq count (1+ count)) (number-to-string count))
       "abecidofu")))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"olleh dlrow oof\" \"HOST:user SERVER:admin\" \"a***b*****c*de**\" \"val=SMALL x=MED y=BIG z=MED\" \"1b2c3d4f5\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +219,12 @@ fn oracle_prop_replace_regexp_adv_chained_pipeline() {
        ;; Step 4: convert commas to spaces within
        (s5 (replace-regexp-in-string "," " " s4)))
   (list s1 s2 s3 s4 s5))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"John,Doe,30;  Jane,Smith,25; Bob,Brown,40  \" \"John,Doe,30;  Jane,Smith,25; Bob,Brown,40\" \"John,Doe,30;Jane,Smith,25;Bob,Brown,40\" \"(John,Doe,30);(Jane,Smith,25);(Bob,Brown,40)\" \"(John Doe 30);(Jane Smith 25);(Bob Brown 40)\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +253,12 @@ fn oracle_prop_replace_regexp_adv_complex_patterns() {
   ;; Optional group: match with or without prefix
   (replace-regexp-in-string "\\(un\\)?happy" "MOOD"
     "I am happy but unhappy about it"))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"abc#def#ghi\" \"I have a animal and a animal and a animal\" \"text {hello} more {world} end\" \"THE other theme is THE best\" \"hello world tab newline\" \"I am MOOD but MOOD about it\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -252,5 +285,10 @@ fn oracle_prop_replace_regexp_adv_edge_cases() {
   ;; Backslash in replacement with LITERAL=t vs nil
   (replace-regexp-in-string "x" "a\\\\b" "x-x" nil nil)
   (replace-regexp-in-string "x" "a\\\\b" "x-x" nil t))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"-a-b-c\" \"XXXXXoXXXXX\" \"REPLACED\" \"[single line]\" \"NaNNbNNc\" \"\" \"a\\\\b-a\\\\b\" \"a\\\\\\\\b-a\\\\\\\\b\")""#
+        ]],
+    );
 }

@@ -9,14 +9,20 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_eq_integer_equals_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(= 1 1.0)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(= 1 1.0)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_eq_three_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(= 5 5 5)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(= 5 5 5)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
@@ -25,21 +31,30 @@ fn oracle_eq_three_equal() {
 #[test]
 fn oracle_neq_two_different() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(/= 1 2)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(/= 1 2)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_neq_all_different() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(/= 1 2)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(/= 1 2)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_neq_same_is_false() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(/= 5 5)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(/= 5 5)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -48,14 +63,20 @@ fn oracle_neq_same_is_false() {
 #[test]
 fn oracle_lt_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(< 1 2 3)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(< 1 2 3)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_gt_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(> 3 2 1)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(> 3 2 1)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
@@ -64,14 +85,20 @@ fn oracle_gt_chain() {
 #[test]
 fn oracle_le_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(<= 1 1 2)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(<= 1 1 2)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_ge_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(>= 3 3 2)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(>= 3 3 2)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
@@ -80,7 +107,10 @@ fn oracle_ge_chain() {
 #[test]
 fn oracle_inc_dec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(list (1+ 41) (1- 43) (1+ -1) (1- 0))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(list (1+ 41) (1- 43) (1+ -1) (1- 0))"#,
+        expect_test::expect![[r#""OK (42 42 0 -1)""#]],
+    );
     assert_ok_eq("(42 42 0 -1)", &o, &n);
 }
 
@@ -89,6 +119,9 @@ fn oracle_inc_dec() {
 #[test]
 fn oracle_abs_positive_and_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(list (abs -5) (abs 5) (abs 0) (abs -3.5))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(list (abs -5) (abs 5) (abs 0) (abs -3.5))"#,
+        expect_test::expect![[r#""OK (5 5 0 3.5)""#]],
+    );
     assert_ok_eq("(5 5 0 3.5)", &o, &n);
 }

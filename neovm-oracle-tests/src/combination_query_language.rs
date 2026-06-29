@@ -67,7 +67,12 @@ fn oracle_prop_ql_select_where_basic() {
     (fmakunbound 'neovm--ql-project)
     (fmakunbound 'neovm--ql-where)
     (fmakunbound 'neovm--ql-select)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((((name . \"Alice\") (dept . \"eng\")) ((name . \"Charlie\") (dept . \"eng\")) ((name . \"Eve\") (dept . \"eng\")) ((name . \"Grace\") (dept . \"eng\"))) (((name . \"Alice\") (salary . 90000)) ((name . \"Charlie\") (salary . 110000)) ((name . \"Eve\") (salary . 95000)) ((name . \"Grace\") (salary . 120000))) (((name . \"Alice\")) ((name . \"Charlie\")) ((name . \"Eve\"))) (((id . 2) (name . \"Bob\") (age . 25) (dept . \"sales\") (salary . 60000)) ((id . 6) (name . \"Frank\") (age . 22) (dept . \"sales\") (salary . 55000))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +136,12 @@ fn oracle_prop_ql_order_by_limit() {
     (fmakunbound 'neovm--ql-order-by)
     (fmakunbound 'neovm--ql-limit)
     (fmakunbound 'neovm--ql-offset)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"Doohickey\" \"Widget\" \"Gizmo\" \"Gadget\" \"Thingamajig\" \"Contraption\") ((\"Contraption\" 90) (\"Thingamajig\" 75) (\"Gadget\" 50)) (\"Contraption\" \"Doohickey\" \"Gadget\" \"Gizmo\" \"Thingamajig\" \"Widget\") ((\"Widget\" 100) (\"Gizmo\" 80)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +226,12 @@ fn oracle_prop_ql_aggregate_functions() {
     (fmakunbound 'neovm--ql-agg-sum)
     (fmakunbound 'neovm--ql-agg-min)
     (fmakunbound 'neovm--ql-agg-max)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"A\" (count . 3) (sum . 450) (min . 100) (max . 200)) (\"B\" (count . 3) (sum . 625) (min . 175) (max . 250)) (\"C\" (count . 2) (sum . 400) (min . 100) (max . 300))) ((\"north\" (count . 4) (sum . 850)) (\"south\" (count . 4) (sum . 625))) 1475 8)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -287,7 +302,12 @@ fn oracle_prop_ql_distinct_union() {
     (fmakunbound 'neovm--ql-distinct)
     (fmakunbound 'neovm--ql-union)
     (fmakunbound 'neovm--ql-union-all)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"Alice\" \"Bob\" \"Charlie\") (\"eng\" \"sales\" \"marketing\") 5 7 9 (\"Alice\" \"Bob\" \"Charlie\" \"Diana\" \"Eve\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +392,12 @@ fn oracle_prop_ql_nested_subqueries() {
     (fmakunbound 'neovm--ql-filter)
     (fmakunbound 'neovm--ql-proj)
     (fmakunbound 'neovm--ql-col-values)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"Alice\" \"Bob\" \"Charlie\" \"Eve\" \"Frank\") (\"Alice\" \"Charlie\" \"Eve\") 85000 ((\"Engineering\" \"Charlie\" 110000) (\"Marketing\" \"Diana\" 70000) (\"Sales\" \"Eve\" 95000)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -463,7 +488,12 @@ fn oracle_prop_ql_join_operations() {
     (fmakunbound 'neovm--ql-inner-join)
     (fmakunbound 'neovm--ql-left-join)
     (fmakunbound 'neovm--ql-cross-join)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 (\"Acme Corp\" \"Acme Corp\" \"Beta Inc\" \"Gamma LLC\") 5 nil 6 ((\"red\" \"S\") (\"red\" \"M\") (\"red\" \"L\") (\"blue\" \"S\") (\"blue\" \"M\") (\"blue\" \"L\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -564,7 +594,12 @@ fn oracle_prop_ql_full_pipeline() {
     (fmakunbound 'neovm--ql2-group-by)
     (fmakunbound 'neovm--ql2-order-by)
     (fmakunbound 'neovm--ql2-limit)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (6 (((cname . \"Acme\") (total-spent . 240) (order-count . 3)) ((cname . \"Beta\") (total-spent . 200) (order-count . 2))) ((\"Acme\" 240) (\"Beta\" 200) (\"Gamma\" 160)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -621,5 +656,10 @@ fn oracle_prop_ql_having_clause() {
                                                 (cdr (assq 'total r))))
                               agg)
                       (lambda (a b) (string< (car a) (car b))))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((((seller . \"Alice\") (total . 500) (count . 3) (avg . 166)) ((seller . \"Bob\") (total . 600) (count . 3) (avg . 200))) (\"Alice\" \"Bob\") ((\"Alice\" 500) (\"Bob\" 600) (\"Charlie\" 125)))""#
+        ]],
+    );
 }

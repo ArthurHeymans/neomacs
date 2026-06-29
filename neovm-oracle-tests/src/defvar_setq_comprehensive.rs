@@ -43,7 +43,10 @@ fn oracle_prop_defvar_setq_docstring_lifecycle() {
   (makunbound 'neovm--dsq-a)
   (makunbound 'neovm--dsq-b)
   (makunbound 'neovm--dsq-c))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 42 nil void t (1 2 3) 42 100 100 \"hello\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +90,10 @@ fn oracle_prop_defvar_setq_multiple_variables() {
   (makunbound 'neovm--dsq-m2)
   (makunbound 'neovm--dsq-m3)
   (makunbound 'neovm--dsq-m4))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 20 30 (10 20 30) (10 20 30) 60 (new 10 20 30))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +137,12 @@ fn oracle_prop_defvar_setq_set_computed_symbol() {
   (makunbound 'neovm--dsq-dyn-a)
   (makunbound 'neovm--dsq-dyn-b)
   (makunbound 'neovm--dsq-dyn-c))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (42 (x y z) \"dynamic\" 42 (x y z) replaced replaced via-set)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +189,12 @@ fn oracle_prop_defvar_setq_boundp_lifecycle() {
       (push neovm--dsq-lifecycle results)
       (nreverse results))
   (makunbound 'neovm--dsq-lifecycle))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil t first nil void-error t second nil t third let-bound third)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +239,12 @@ fn oracle_prop_defvar_setq_declare_special_only() {
        neovm--dsq-special-only)
     (fmakunbound 'neovm--dsq-read-special)
     (makunbound 'neovm--dsq-special-only)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil got-void nil global-val let-bound global-val (inner) global-val)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +355,12 @@ fn oracle_prop_defvar_setq_variable_registry() {
     (fmakunbound 'neovm--dsq-reg-reset)
     (fmakunbound 'neovm--dsq-reg-info)
     (makunbound 'neovm--dsq-registry)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((80 24 dark nil) (120 light) 80 (:name theme :value light :doc \"UI theme\" :type symbol :default dark) 4 t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -422,5 +448,10 @@ fn oracle_prop_defvar_setq_config_management() {
     (makunbound 'neovm--dsq-cfg-log-level)
     (makunbound 'neovm--dsq-cfg-max-retries)
     (makunbound 'neovm--dsq-cfg-timeout)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((debug) (log-level . info) (max-retries . 3) (timeout . 30)) ((debug . t) (log-level . trace) (max-retries . 3) (timeout . 30)) ((debug) (log-level . error) (max-retries . 5) (timeout . 60)) ((debug . t) (log-level . trace) (max-retries . 5) (timeout . 60)) t ((debug) (log-level . info) (max-retries . 10) (timeout . 120)) 120 10 t trace)""#
+        ]],
+    );
 }

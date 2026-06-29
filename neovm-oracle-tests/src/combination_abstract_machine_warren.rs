@@ -102,7 +102,12 @@ fn oracle_prop_wam_heap_representation() {
     (fmakunbound 'neovm--wam-put-const)
     (fmakunbound 'neovm--wam-put-var)
     (fmakunbound 'neovm--wam-put-structure)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (6 (con . a) (ref . 1) (str . 3) (fun f . 2) (ref . 0) (ref . 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +247,7 @@ fn oracle_prop_wam_unification() {
     (fmakunbound 'neovm--wam-bind)
     (fmakunbound 'neovm--wam-unify)
     (fmakunbound 'neovm--wam-read-term)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +363,12 @@ fn oracle_prop_wam_register_allocation() {
     (fmakunbound 'neovm--wamr-set-variable)
     (fmakunbound 'neovm--wamr-set-value)
     (fmakunbound 'neovm--wamr-set-constant)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (12 (str . 8) (str . 1) (str . 5) (ref . 2) (ref . 3) (fun p . 3))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -484,7 +494,10 @@ fn oracle_prop_wam_knowledge_base_query() {
     (fmakunbound 'neovm--wkb-unify)
     (fmakunbound 'neovm--wkb-query)
     (fmakunbound 'neovm--wkb-extract-vars)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 87 54)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -614,7 +627,12 @@ fn oracle_prop_wam_list_predicates() {
     (fmakunbound 'neovm--wlp-length)
     (fmakunbound 'neovm--wlp-remove-one)
     (fmakunbound 'neovm--wlp-permutations)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5) (a b) (x) nil t nil t (4 3 2 1) nil (a) 5 0 ((1 2 3) (1 3 2) (2 1 3) (2 3 1) (3 1 2) (3 2 1)) ((a)) 24 nil fail)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -730,5 +748,8 @@ fn oracle_prop_wam_rule_inference() {
     (fmakunbound 'neovm--wri-query-facts)
     (fmakunbound 'neovm--wri-grandparents)
     (fmakunbound 'neovm--wri-ancestors)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 64 50)""#]],
+    );
 }

@@ -13,7 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx428_process_command_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx428-pc"
                           :command '("echo" "hello")
@@ -23,6 +23,7 @@ fn div_cx428_process_command_buffer() {
                (process-buffer proc))
     (delete-process proc)))
 "##,
+        expect_test::expect![[r#""OK ((\"echo\" \"hello\") nil)""#]],
     );
 }
 
@@ -30,11 +31,14 @@ fn div_cx428_process_command_buffer() {
 #[test]
 fn div_cx428_network_interface() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (listp (network-interface-list)) (error (car e)))
       (condition-case e (network-interface-info "lo") (error (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (t ([127 0 0 1 0] [0 0 0 0 0] [255 0 0 0 0] (772 . [0 0 0 0 0 0]) (running loopback up)))""#
+        ]],
     );
 }
 
@@ -42,7 +46,7 @@ fn div_cx428_network_interface() {
 #[test]
 fn div_cx428_file_acl_selinux() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx428-acl-")))
   (unwind-protect
@@ -50,6 +54,7 @@ fn div_cx428_file_acl_selinux() {
             (condition-case e (file-selinux-context f) (error (car e))))
     (delete-file f)))
 "##,
+        expect_test::expect![[r#""OK (nil (nil nil nil nil))""#]],
     );
 }
 
@@ -57,11 +62,12 @@ fn div_cx428_file_acl_selinux() {
 #[test]
 fn div_cx428_file_backup_remote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (file-backup-file-names "/tmp/test.el")
       (file-remote-p "/tmp/test.el"))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
@@ -69,7 +75,7 @@ fn div_cx428_file_backup_remote() {
 #[test]
 fn div_cx428_file_symlink() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((target (make-temp-file "neo-cx428-target-"))
       (link (make-temp-file "neo-cx428-link-")))
@@ -80,6 +86,7 @@ fn div_cx428_file_symlink() {
       (file-symlink-p "/tmp")
       (file-truename "/tmp"))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -87,12 +94,15 @@ fn div_cx428_file_symlink() {
 #[test]
 fn div_cx428_executable_find() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (executable-find "sh")
       (executable-find "nonexistent-command-cx428")
       (executable-find "echo"))
 "##,
+        expect_test::expect![[
+            r#""OK (\"/nix/store/i27rhb3nr65rkrwz36bchkwmav6ggsmn-bash-5.3p9/bin/sh\" nil \"/nix/store/jjxngswsb214vb58qx485jhmilf0kxxy-coreutils-9.10/bin/echo\")""#
+        ]],
     );
 }
 
@@ -100,12 +110,13 @@ fn div_cx428_executable_find() {
 #[test]
 fn div_cx428_user_real_uid_gid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (user-real-uid)
       (group-gid)
       (stringp (user-real-login-name)))
 "##,
+        expect_test::expect![[r#""OK (1001 100 t)""#]],
     );
 }
 
@@ -113,12 +124,13 @@ fn div_cx428_user_real_uid_gid() {
 #[test]
 fn div_cx428_user_full_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (stringp (user-full-name))
       (stringp (user-login-name))
       (stringp (user-uid)))
 "##,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
@@ -126,11 +138,12 @@ fn div_cx428_user_full_name() {
 #[test]
 fn div_cx428_read_kbd_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (read-kbd-macro "C-c C-f")
       (read-kbd-macro "M-x"))
 "##,
+        expect_test::expect![[r#""OK ([3 6] [134217848])""#]],
     );
 }
 
@@ -138,7 +151,7 @@ fn div_cx428_read_kbd_macro() {
 #[test]
 fn div_cx428_define_key_vector_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
   (define-key map [?\C-c ?\C-f] 'forward-char)
@@ -146,6 +159,7 @@ fn div_cx428_define_key_vector_string() {
   (list (key-binding [?\C-c ?\C-f] nil nil map)
         (key-binding "\C-c\C-b" nil nil map)))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
@@ -153,12 +167,13 @@ fn div_cx428_define_key_vector_string() {
 #[test]
 fn div_cx428_list_packages() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'package)
   (list (boundp 'package-archives)
         (package-installed-p 'emacs)))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -166,12 +181,13 @@ fn div_cx428_list_packages() {
 #[test]
 fn div_cx428_face_font() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-face 'neo-cx428-ff)))
   (set-face-font f "Monospace-10")
   (face-font f))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -179,13 +195,14 @@ fn div_cx428_face_font() {
 #[test]
 fn div_cx428_char_displayable_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-displayable-p ?a)
       (char-displayable-p ?é)
       (char-displayable-p ?世)
       (char-displayable-p #x1F600))
 "##,
+        expect_test::expect![[r#""OK (t unicode unicode unicode)""#]],
     );
 }
 
@@ -193,13 +210,16 @@ fn div_cx428_char_displayable_p() {
 #[test]
 fn div_cx428_buffer_hash_sha() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "content to hash")
   (list (buffer-hash)
         (secure-hash 'sha1 (current-buffer))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"8ad95ad9cf041daa6635bf314ae42a7a7a1f781e\" \"8ad95ad9cf041daa6635bf314ae42a7a7a1f781e\")""#
+        ]],
     );
 }
 
@@ -207,7 +227,7 @@ fn div_cx428_buffer_hash_sha() {
 #[test]
 fn div_cx428_window_config_register() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "test register")
@@ -215,6 +235,7 @@ fn div_cx428_window_config_register() {
   (jump-to-register ?w)
   (buffer-string))
 "##,
+        expect_test::expect![[r#""OK \"test register\"""#]],
     );
 }
 
@@ -222,12 +243,13 @@ fn div_cx428_window_config_register() {
 #[test]
 fn div_cx428_mail_abbrevs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'mailabbrev)
   (list (boundp 'mail-abbrevs)
         (fboundp 'define-mail-abbrev)))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -235,7 +257,7 @@ fn div_cx428_mail_abbrevs() {
 #[test]
 fn div_cx428_process_filter_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *cx428-pfi*")))
   (let ((proc (make-process :name "neo-cx428-pfi"
@@ -251,5 +273,8 @@ fn div_cx428_process_filter_insert() {
              (string-trim-right (buffer-string)))
       (kill-buffer buf))))
 "##,
+        expect_test::expect![[
+            r#""OK \"\nProcess neo-cx428-pfi finished\n[hello-from-filter\n]\"""#
+        ]],
     );
 }

@@ -49,7 +49,12 @@ fn oracle_prop_char_table_range_adv_single_char() {
           (char-table-range ct ?a)
           ;; Neighboring char unaffected
           (char-table-range ct ?b))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((alpha-lower-a alpha-lower-z alpha-upper-a digit-zero digit-nine space-char cjk-zhong unset unset unset unset) alpha-lower-a-v2 unset)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +101,12 @@ fn oracle_prop_char_table_range_adv_cons_range() {
    ;; Verify non-overlapping
    (char-table-range ct ?\s)
    (char-table-range ct ?!)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (lowercase lowercase lowercase nil nil uppercase uppercase digit digit digit nil nil at-sign nil nil)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +157,12 @@ fn oracle_prop_char_table_range_adv_readback_overwrite() {
    (char-table-range ct 127)
    ;; Far outside: base default
    (char-table-range ct #x1000)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (the-letter-a the-letter-F hex-lower hex-lower hex-upper hex-upper lower lower upper upper digit digit ascii-printable ascii-printable base base base)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +205,12 @@ fn oracle_prop_char_table_range_adv_t_range() {
            override-a override-5
            default-b default-bang
            new-b still-a still-5))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (nil nil everything everything special-a digit everything everything new-default new-default new-default)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +246,12 @@ fn oracle_prop_char_table_range_adv_nil_range() {
        ct1-a ct2-a ct1-z ct2-z
        ct1-nil ct2-nil
        ct1-a-after ct1-b-after))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (default-via-nil default-via-t default-via-nil default-via-t default-via-nil nil special default-via-nil)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -305,7 +330,12 @@ fn oracle_prop_char_table_range_adv_unicode_block_classifier() {
              ;; o(lower) r(lower) l(lower) d(lower) (ws) 4(digit) 2(digit) !(punct)
              (length classification)))))
     (fmakunbound 'neovm--ctrange-classify)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((ascii-lower ascii-upper ascii-digit whitespace at-sign ascii-punct latin-supplement greek cyrillic cjk hiragana katakana other) ((ascii-digit . 2) (ascii-lower . 8) (ascii-punct . 1) (ascii-upper . 2) (whitespace . 2)) 5)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -357,5 +387,10 @@ fn oracle_prop_char_table_range_adv_parent_fallthrough() {
        over-a over-f fall-g fall-z
        over-X fall-Y fall-7
        p-a p-f))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (p-lower p-upper p-digit p-exclaim p-default c-hex c-hex p-lower p-lower c-special-x p-upper p-digit p-lower p-lower)""#
+        ],
+    );
 }

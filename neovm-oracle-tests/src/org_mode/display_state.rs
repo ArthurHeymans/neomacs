@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_num_overlay_update_after_heading_edit_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-num)
@@ -43,6 +43,9 @@ fn org_num_overlay_update_after_heading_edit_combo() {
                 (funcall snapshot)
                 (buffer-substring-no-properties
                  (point-min) (point-max))))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Alpha\" ((t \"\"))) (\"Beta\" ((t \"\"))) (\"COMMENT Skip\" ((t \"\"))) (\"Gamma :noexport:\" ((t \"\"))) (\"Delta\" ((t \"\"))) (\"Epsilon\" ((t \"\")))) ((\"Alpha\" ((t \"\"))) (\"Beta\" ((t \"\"))) (\"Inserted\" ((t \"\"))) (\"COMMENT Skip\" ((t \"\"))) (\"Gamma :noexport:\" ((t \"\"))) (\"Delta\" ((t \"\"))) (\"Epsilon\" ((t \"\")))) \"* Alpha\n** Beta\n*** Inserted\n\n*** COMMENT Skip\n*** Gamma :noexport:\n**** Delta\n* Epsilon\n\")""#
+        ]],
     );
 }
 
@@ -50,7 +53,7 @@ fn org_num_overlay_update_after_heading_edit_combo() {
 fn org_indent_mode_prefix_after_deep_edit_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-indent)
@@ -82,6 +85,9 @@ fn org_indent_mode_prefix_after_deep_edit_combo() {
                   out))
           (forward-line 1))
         (nreverse out)))))"##,
+        expect_test::expect![[
+            r#""OK ((\"* A\" nil nil) (\"body A\" nil nil) (\"** B\" nil nil) (\"body B\" nil nil) (\"*** C\" nil nil) (\"body C\" (6 org-indent) (6 org-indent)) (\"more C\" (6 org-indent) (6 org-indent)) (\"**** D\" nil nil) (\"body D\" nil nil))""#
+        ]],
     );
 }
 
@@ -89,7 +95,7 @@ fn org_indent_mode_prefix_after_deep_edit_combo() {
 fn org_font_lock_deep_headline_markup_faces_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -112,6 +118,9 @@ fn org_font_lock_deep_headline_markup_faces_combo() {
                     (get-text-property (match-beginning 0) 'invisible))
               out))
       (nreverse out))))"##,
+        expect_test::expect![[
+            r#""OK ((\"TODO\" org-meta-line t nil) (\"[#A]\" (org-priority org-level-1) t nil) (\"work\" (org-tag org-level-1) nil nil) (\"WAIT\" org-meta-line t nil) (\"link\" (org-link org-level-2) nil nil) (\"DONE\" org-meta-line t nil) (\"code\" (org-verbatim org-headline-done org-level-3) nil nil) (\"verbatim\" (org-code org-headline-done org-level-3) nil nil) (\"[#B]\" (org-priority org-level-4) t nil) (\"bold\" (bold org-level-4) nil nil) (\"italic\" (italic org-level-4) nil nil) (\"deep\" (org-tag org-level-4) nil nil))""#
+        ]],
     );
 }
 
@@ -119,7 +128,7 @@ fn org_font_lock_deep_headline_markup_faces_combo() {
 fn org_indent_inlinetask_list_property_refresh_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-indent)
@@ -204,6 +213,9 @@ fn org_indent_inlinetask_list_property_refresh_combo() {
                             props)
                       (forward-line 1))
                     (nreverse props)))))))))"##,
+        expect_test::expect![[
+            r#""OK ((before ((\"* Project\" (0 \"\" nil) (2 \"* \" org-indent)) (\"SCHEDULED: <2026-05-27 Wed>\" (0 \"\" nil) (2 \"* \" org-indent)) (\":PROPERTIES:\" (0 \"\" nil) (2 \"* \" org-indent)) (\":Owner: Ada\" (0 \"\" nil) (2 \"* \" org-indent)) (\":END:\" (0 \"\" nil) (2 \"* \" org-indent)) (\"Paragraph one\" (2 \"  \" org-indent) (2 \"  \" org-indent)) (\"- item alpha\" (2 \"  \" org-indent) (4 \"    \" org-indent)) (\"  continuation alpha\" (2 \"  \" org-indent) (4 \"    \" org-indent)) (\"** Area\" (2 \"**\" org-indent) (5 \"**** \" org-indent)) (\"Area body\" (5 \"     \" org-indent) (5 \"     \" org-indent)) (\"**** Inline task\" (6 \"******\" org-warning) (11 \"********** \" org-indent)) (\"Inline body\" (5 \"     \" org-indent) (5 \"     \" org-indent)) (\"**** END\" (6 \"******\" org-warning) (11 \"********** \" org-indent)))) (after-edit ((\"* Project\" (0 \"\" nil) (2 \"* \" org-indent)) (\"SCHEDULED: <2026-05-27 Wed>\" (0 \"\" nil) (2 \"* \" org-indent)) (\":PROPERTIES:\" (0 \"\" nil) (2 \"* \" org-indent)) (\":Owner: Ada\" (0 \"\" nil) (2 \"* \" org-indent)) (\":END:\" (0 \"\" nil) (2 \"* \" org-indent)) (\"Paragraph one\" (2 \"  \" org-indent) (2 \"  \" org-indent)) (\"- item alpha\" (2 \"  \" org-indent) (4 \"    \" org-indent)) (\"  new continuation\" (2 \"  \" org-indent) (4 \"    \" org-indent)) (\"  continuation alpha\" (2 \"  \" org-indent) (4 \"    \" org-indent)) (\"*** Inserted\" (4 \"****\" org-indent) (8 \"******* \" org-indent)) (\"Inserted body\" (8 \"        \" org-indent) (8 \"        \" org-indent)) (\"** Area\" (2 \"**\" org-indent) (5 \"**** \" org-indent)) (\"Area body\" (5 \"     \" org-indent) (5 \"     \" org-indent)) (\"**** Inline task\" (6 \"******\" org-warning) (11 \"********** \" org-indent)) (\"Inline body\" (5 \"     \" org-indent) (5 \"     \" org-indent)) (\"**** END\" (6 \"******\" org-warning) (11 \"********** \" org-indent)))) (0 0) \"* Project\nSCHEDULED: <2026-05-27 Wed>\n:PROPERTIES:\n:Owner: Ada\n:END:\nParagraph one\n- item alpha\n  new continuation\n  continuation alpha\n*** Inserted\nInserted body\n** Area\nArea body\n**** Inline task\nInline body\n**** END\n\" ((\"* Project\" nil nil) (\"SCHEDULED: <2026-05-27 Wed>\" nil nil) (\":PROPERTIES:\" nil nil) (\":Owner: Ada\" nil nil) (\":END:\" nil nil) (\"Paragraph one\" nil nil) (\"- item alpha\" nil nil) (\"  new continuation\" nil nil) (\"  continuation alpha\" nil nil) (\"*** Inserted\" nil nil) (\"Inserted body\" nil nil) (\"** Area\" nil nil) (\"Area body\" nil nil) (\"**** Inline task\" nil nil) (\"Inline body\" nil nil) (\"**** END\" nil nil)))""#
+        ]],
     );
 }
 
@@ -211,7 +223,7 @@ fn org_indent_inlinetask_list_property_refresh_combo() {
 fn org_preview_latex_inline_image_overlay_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'cl-lib)
   (require 'org)
@@ -368,5 +380,6 @@ fn org_preview_latex_inline_image_overlay_lifecycle_combo() {
                                        'images-after-region-remove)
                               (buffer-substring-no-properties
                                (point-min) (point-max)))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-variable norm)""#]],
     );
 }

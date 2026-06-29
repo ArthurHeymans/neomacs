@@ -66,7 +66,12 @@ fn oracle_prop_kmp_failure_function() {
        ;; Two characters, different
        (funcall 'neovm--kmp-build-fail "AB"))
     (fmakunbound 'neovm--kmp-build-fail)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([0 0 1 2] [0 0 0 0 0] [0 1 2 3] [0 0 0 1 2 0] [0 1 0 1 2 3 4 5 2] [0] [0 1] [0 0])""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +161,10 @@ fn oracle_prop_kmp_search_all_occurrences() {
        (funcall 'neovm--kmp2-search "AAAAAA" "AA"))
     (fmakunbound 'neovm--kmp2-build-fail)
     (fmakunbound 'neovm--kmp2-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 3 6) nil (0) (6) (0) nil (0 15) (0 1 2 3 4))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +235,10 @@ fn oracle_prop_kmp_overlapping_matches() {
        (funcall 'neovm--kmp3-search "BANANA" "ANA"))
     (fmakunbound 'neovm--kmp3-build-fail)
     (fmakunbound 'neovm--kmp3-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 1 2) (0 2) (0 2 4 6) (0 1 2 3 4) (0 3 6) (0 3) (1 3))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -298,7 +309,10 @@ fn oracle_prop_kmp_single_char_pattern() {
        (funcall 'neovm--kmp4-search "a b c d" " "))
     (fmakunbound 'neovm--kmp4-build-fail)
     (fmakunbound 'neovm--kmp4-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 3) (1 2 3 4) nil (0 1 2 3 4) (0) nil (1 3 5))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +386,10 @@ fn oracle_prop_kmp_empty_pattern() {
              (funcall 'neovm--kmp5-search "ABAB" "AB")
              (funcall 'neovm--kmp5-search "ABAB" "BA")))
     (fmakunbound 'neovm--kmp5-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 1 2 3) (0) (0 1) 6 nil ((0 1 2 3 4) (0 2) (1)))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -461,7 +478,12 @@ fn oracle_prop_kmp_repeated_patterns_performance() {
     (fmakunbound 'neovm--kmp6-build-fail)
     (fmakunbound 'neovm--kmp6-search)
     (fmakunbound 'neovm--kmp6-repeat)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (48) 19 (0 1 2 3 4 5 6 7) (0 3 6 9 12 15 18 21) 10 (25))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -535,5 +557,8 @@ fn oracle_prop_kmp_case_insensitive() {
     (fmakunbound 'neovm--kmp7-build-fail)
     (fmakunbound 'neovm--kmp7-search)
     (fmakunbound 'neovm--kmp7-search-ci)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 12) (0) (0 3 6) (nil (0 6)) nil)""#]],
+    );
 }

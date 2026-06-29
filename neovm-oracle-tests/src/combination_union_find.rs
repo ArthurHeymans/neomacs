@@ -110,7 +110,12 @@ fn oracle_prop_union_find_core() {
     (fmakunbound 'neovm--uf-find)
     (fmakunbound 'neovm--uf-union)
     (fmakunbound 'neovm--uf-connected-p)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (before (nil nil t) after (t t t t t nil nil nil) merged (t t t nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +190,10 @@ fn oracle_prop_union_find_component_count() {
     (fmakunbound 'neovm--uf2-find)
     (fmakunbound 'neovm--uf2-union)
     (fmakunbound 'neovm--uf2-count-components)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 5 3 1 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +287,10 @@ fn oracle_prop_union_find_kruskal_mst() {
     (fmakunbound 'neovm--uf3-union)
     (fmakunbound 'neovm--uf3-connected-p)
     (fmakunbound 'neovm--uf3-kruskal)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((1 A B) (2 B C) (3 C D) (5 D E) (7 E F)) 18 1 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +380,10 @@ fn oracle_prop_union_find_equivalence_classes() {
     (fmakunbound 'neovm--uf4-union)
     (fmakunbound 'neovm--uf4-classes)
     (fmakunbound 'neovm--uf4-class-size)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (9 2 5 4 t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -442,7 +456,10 @@ fn oracle_prop_union_find_path_compression() {
     (fmakunbound 'neovm--uf5-find)
     (fmakunbound 'neovm--uf5-union-simple)
     (fmakunbound 'neovm--uf5-parent)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (root 1 before (1 1 1 1 1) after (1 1 1 1 1) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -514,7 +531,10 @@ fn oracle_prop_union_find_string_keys() {
     (fmakunbound 'neovm--uf6-find)
     (fmakunbound 'neovm--uf6-union)
     (fmakunbound 'neovm--uf6-connected-p)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t nil nil nil nil t t 4)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -582,5 +602,8 @@ fn oracle_prop_union_find_idempotent() {
     (fmakunbound 'neovm--uf7-find)
     (fmakunbound 'neovm--uf7-union)
     (fmakunbound 'neovm--uf7-connected-p)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil t t nil nil t t nil nil t t)""#]],
+    );
 }

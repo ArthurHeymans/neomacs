@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_keymap_lookup_with_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-kla-xxx () (interactive) "original")
   (advice-add 'test-kla-xxx :filter-return
@@ -21,6 +21,7 @@ fn divergence_keymap_lookup_with_advice() {
           (string= (funcall (lookup-key map "x")) "original+advised")
           (advice-remove 'test-kla-xxx
                           (lambda (r) (concat r "+advised"))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -28,7 +29,7 @@ fn divergence_keymap_lookup_with_advice() {
 fn divergence_command_error_recovery_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-cer-xxx () (interactive) (error "command error"))
   (advice-add 'test-cer-xxx :around
@@ -50,6 +51,7 @@ fn divergence_command_error_recovery_keymap() {
                             (condition-case e
                                 (apply fn args)
                               (error (format "caught: %s" (cadr e)))))))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 21 75)""##]],
     );
 }
 
@@ -57,7 +59,7 @@ fn divergence_command_error_recovery_keymap() {
 fn divergence_keymap_parent_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-kp1-xxx () "parent")
   (defun test-kp2-xxx () "child")
@@ -77,6 +79,9 @@ fn divergence_keymap_parent_override() {
           (string= (funcall (lookup-key child "a")) "child")
           (funcall (lookup-key child "b"))
           (string= (funcall (lookup-key child "b")) "parent")))) "#,
+        expect_test::expect![[
+            r#""OK (test-kp2-xxx t test-kp1-xxx t test-kp1-xxx t \"child\" t \"parent\" t)""#
+        ]],
     );
 }
 
@@ -84,7 +89,7 @@ fn divergence_keymap_parent_override() {
 fn divergence_keymap_prefix_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-pm1-xxx () "cmd1")
   (defun test-pm2-xxx () "cmd2")
@@ -100,6 +105,7 @@ fn divergence_keymap_prefix_map() {
           (eq (lookup-key (lookup-key global-map "\C-c") "b") 'test-pm2-xxx)
           (lookup-key global-map "a")
           (null (lookup-key global-map "a"))))) "#,
+        expect_test::expect![[r#""OK (t test-pm1-xxx t test-pm2-xxx t nil t)""#]],
     );
 }
 
@@ -107,7 +113,7 @@ fn divergence_keymap_prefix_map() {
 fn divergence_where_is_internal_with_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-wi-xxx () (interactive) "test")
   (let ((map (make-sparse-keymap)))
@@ -117,6 +123,7 @@ fn divergence_where_is_internal_with_advice() {
             (>= (length bindings) 1)
             (lookup-key map "t")
           (eq (lookup-key map "t") 'test-wi-xxx))))) "#,
+        expect_test::expect![[r#""OK (t t test-wi-xxx t)""#]],
     );
 }
 
@@ -124,7 +131,7 @@ fn divergence_where_is_internal_with_advice() {
 fn divergence_keymap_menu_item() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-mi-cmd-xxx () (interactive) "menu")
   (let ((map (make-sparse-keymap)))
@@ -133,6 +140,7 @@ fn divergence_keymap_menu_item() {
     (list (keymapp map)
           (keymapp (lookup-key map [menu-bar test-menu]))
           (string= (car-safe (lookup-key map [menu-bar test-menu])) "Test")))) "#,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
@@ -140,7 +148,7 @@ fn divergence_keymap_menu_item() {
 fn divergence_commandp_with_lambda_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((cmd1 (lambda () (interactive) "lambda-cmd"))
         (cmd2 (lambda () "non-interactive")))
@@ -153,6 +161,7 @@ fn divergence_commandp_with_lambda_keymap() {
             (null (commandp (lookup-key map "b")))
             (funcall (lookup-key map "a"))
             (string= (funcall (lookup-key map "a")) "lambda-cmd"))))) "#,
+        expect_test::expect![[r#""OK (t t t t \"lambda-cmd\" t)""#]],
     );
 }
 
@@ -160,7 +169,7 @@ fn divergence_commandp_with_lambda_keymap() {
 fn divergence_accessible_keymaps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-ak1-xxx () "1")
   (defun test-ak2-xxx () "2")
@@ -176,6 +185,7 @@ fn divergence_accessible_keymaps() {
             (eq (lookup-key child "a") 'test-ak1-xxx)
             (lookup-key child "b")
             (eq (lookup-key child "b") 'test-ak2-xxx))))) "#,
+        expect_test::expect![[r#""OK (t t test-ak1-xxx t test-ak2-xxx t)""#]],
     );
 }
 
@@ -183,7 +193,7 @@ fn divergence_accessible_keymaps() {
 fn divergence_keymap_unbind_rebind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-ur1-xxx () "first")
   (defun test-ur2-xxx () "second")
@@ -199,6 +209,7 @@ fn divergence_keymap_unbind_rebind() {
                 (eq b3 'test-ur2-xxx)
                 (funcall b3)
                 (string= (funcall b3) "second"))))))) "#,
+        expect_test::expect![[r#""OK (t t t \"second\" t)""#]],
     );
 }
 
@@ -206,7 +217,7 @@ fn divergence_keymap_unbind_rebind() {
 fn divergence_keymap_copy_and_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-cm1-xxx () "orig")
   (defun test-cm2-xxx () "copy")
@@ -225,5 +236,8 @@ fn divergence_keymap_copy_and_modify() {
             (eq (lookup-key copy "b") 'test-cm1-xxx)
             (funcall (lookup-key copy "a"))
             (string= (funcall (lookup-key copy "a")) "copy"))))) "#,
+        expect_test::expect![[
+            r#""OK (test-cm1-xxx t test-cm2-xxx t test-cm1-xxx t test-cm1-xxx t \"copy\" t)""#
+        ]],
     );
 }

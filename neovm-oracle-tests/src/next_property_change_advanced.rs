@@ -34,7 +34,10 @@ fn oracle_prop_npc_step_through_boundaries() {
                            (get-text-property 4 'face s)
                            (get-text-property 6 'help-echo s)
                            (get-text-property 8 'face s))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 4 6 8) bold italic nil \"x\" underline)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +68,10 @@ fn oracle_prop_npc_limit_before_at_and_after_boundary() {
                      (next-property-change 6 s 10)
                      ;; LIMIT = 0 (less than pos)
                      (next-property-change 0 s 0)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 3 3 3 4 6 10 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -93,7 +99,10 @@ fn oracle_prop_npc_nil_at_end() {
                      (next-property-change 0 "")
                      ;; Start past string length
                      (next-property-change 100 s1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (args-out-of-range 100 100)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +139,10 @@ fn oracle_prop_npc_face_property_walk() {
                            (setq all-boundaries (cons pos2 all-boundaries))))
                        (list (nreverse face-boundaries)
                              (nreverse all-boundaries)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((3 . italic) (6 . underline) (9)) (2 3 6 9 10))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +180,12 @@ fn oracle_prop_npc_collect_all_property_runs() {
         (put-text-property 16 19 'help-echo "animal" s)
         (funcall 'neovm--test-collect-runs s))
     (fmakunbound 'neovm--test-collect-runs)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 3 \"The\" font-lock-keyword-face nil) (3 4 \" \" nil nil) (4 9 \"quick\" font-lock-type-face \"speed\") (9 10 \" \" nil nil) (10 15 \"brown\" font-lock-string-face nil) (15 16 \" \" nil nil) (16 19 \"fox\" nil \"animal\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +264,10 @@ fn oracle_prop_npc_merge_adjacent_same_props() {
                         merged))))
     (fmakunbound 'neovm--test-plist-equal)
     (fmakunbound 'neovm--test-collect-and-merge)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 3 ((0 4 bold) (4 8 italic) (8 10 nil)))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +300,10 @@ fn oracle_prop_npc_buffer_text_property_walk() {
           (get-text-property 6 'face)
           (get-text-property 7 'face)
           (get-text-property 12 'face))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((6 nil) (7 italic) (12 nil)) 14 bold nil italic nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -314,5 +337,8 @@ fn oracle_prop_npc_forward_backward_roundtrip() {
                            backward
                            (equal (sort (copy-sequence forward) #'<)
                                   (sort (copy-sequence backward) #'<)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 4 6) (2 4 6) t)""#]],
+    );
 }

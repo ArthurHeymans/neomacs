@@ -12,8 +12,9 @@ use super::common::{
 fn oracle_prop_beginning_of_line_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"ab\\ncd\\n\") (goto-char 5) (beginning-of-line) (point))",
+        expect_test::expect![[r#""ab\ncd\nOK 4""#]],
     );
     assert_ok_eq("4", &oracle, &neovm);
 }
@@ -22,7 +23,10 @@ fn oracle_prop_beginning_of_line_basics() {
 fn oracle_prop_beginning_of_line_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(beginning-of-line "x")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(beginning-of-line "x")"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument fixnump \"x\")""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 

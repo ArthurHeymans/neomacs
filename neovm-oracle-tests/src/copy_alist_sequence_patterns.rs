@@ -47,7 +47,10 @@ fn oracle_prop_copy_alist_vs_copy_sequence_on_alist() {
    (mapcar #'cdr ca)
    (mapcar #'cdr cs)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (999 100 t nil t (999 2 3) (100 2 3) (4 999 2 3))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -92,7 +95,10 @@ fn oracle_prop_copy_sequence_all_types() {
    (equal lst (list 1 2 3 4 5))
    (not (eq lst lst-copy))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 999 10 999 104 72 cons vector string t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +144,10 @@ fn oracle_prop_copy_alist_complex_values() {
      ;; equal check on keys
      (equal (mapcar #'car orig) (mapcar #'car cp)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument consp [4 5 6])""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +208,10 @@ fn oracle_prop_deep_copy_recursive() {
          (not (eq (car orig) (car deep)))))
     (fmakunbound 'neovm--deep-copy)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 999 [2 3] [2 3] 222 102 t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -261,7 +273,10 @@ fn oracle_prop_snapshot_undo_pattern() {
                     ;; Undo stack is now empty
                     (null undo-stack)))))))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((100 200 30) (10 20 30) (10 20 0) (10 0 0) (0 0 0) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +317,10 @@ fn oracle_prop_copy_sequence_edge_cases() {
    (list (equal orig cp)
          (not (eq (car orig) (car cp))))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil (42 99) (0 0 t nil) (0 0 t) nil (42 99) (t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +357,10 @@ fn oracle_prop_copy_alist_non_symbol_keys() {
    ;; Full equal check (before modification it would have been equal)
    (equal (mapcar #'car orig) (mapcar #'car cp))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"one\" \"string-key\" \"ONE\" \"STRING-KEY\" t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -387,5 +408,8 @@ fn oracle_prop_structural_sharing_detection() {
    (length list-a)
    (length copy-a)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t nil 444 444 4 6 6)""#]],
+    );
 }

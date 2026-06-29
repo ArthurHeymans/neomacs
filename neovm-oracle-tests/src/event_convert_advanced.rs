@@ -30,7 +30,12 @@ fn oracle_prop_event_convert_advanced_all_modifier_combos() {
       (event-convert-list '(control meta shift ?a))
       (event-convert-list '(control meta shift super ?a))
       (event-convert-list '(control meta shift super hyper ?a)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 134217825 65 8388705 16777313 134217729 33554433 8388609 16777217 134217793 142606433 150995041 167772161 176160769 192937985)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +58,12 @@ fn oracle_prop_event_convert_advanced_mouse_events() {
       (event-convert-list '(control down-mouse-1))
       (event-convert-list '(double-mouse-1))
       (event-convert-list '(meta double-mouse-1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (mouse-1 C-mouse-1 M-mouse-1 C-M-mouse-1 S-mouse-2 C-S-mouse-3 down-mouse-1 C-down-mouse-1 double-mouse-1 M-double-mouse-1)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +91,12 @@ fn oracle_prop_event_convert_advanced_key_description_sequences() {
       (key-description [tab])
       (key-description [return])
       (key-description [backspace]))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"a\" \"A\" \"C-a\" \"M-a\" \"C-M-a\" \"C-x f\" \"C-x C-f\" \"C-x C-s\" \"M-x\" \"a b c\" \"C-a C-b C-c\" \"<escape> x\" \"<tab>\" \"<return>\" \"<backspace>\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +120,12 @@ fn oracle_prop_event_convert_advanced_single_key_description() {
       (single-key-description (event-convert-list '(meta control shift ?z)))
       (single-key-description (event-convert-list '(super ?q)))
       (single-key-description (event-convert-list '(hyper ?h))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"a\" \"A\" \"C-a\" \"M-a\" \"C-M-a\" \"SPC\" \"TAB\" \"DEL\" \"C-x\" \"C-M-S-z\" \"s-q\" \"H-h\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +149,12 @@ fn oracle_prop_event_convert_advanced_parse_modifiers_various() {
       (internal-event-symbol-parse-modifiers 'C-M-mouse-3)
       (internal-event-symbol-parse-modifiers 'down-mouse-1)
       (internal-event-symbol-parse-modifiers 'C-down-mouse-1))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((x control) (x meta) (x meta control) (return shift) (a super) (f1 hyper) (z meta control shift) (mouse-1 click) (mouse-1 control click) (mouse-3 meta control click) (mouse-1 down) (mouse-1 control down))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +181,12 @@ fn oracle_prop_event_convert_advanced_roundtrip_describe() {
       (key-description
        (vector (event-convert-list '(super ?l))
                (event-convert-list '(hyper ?r)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"C-x C-s\" \"C-x b\" \"M-x\" \"C-M-c C-M-k\" \"s-l H-r\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +223,10 @@ fn oracle_prop_event_convert_advanced_keymap_multi_key_binding() {
                     (key-description
                      (vector (event-convert-list '(control ?x))
                              (event-convert-list '(control ?f))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (save-fn find-fn \"C-x C-s\" \"C-x C-f\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -224,5 +257,8 @@ fn oracle_prop_event_convert_advanced_modifier_bit_consistency() {
                     ;; Verify event-convert-list order independence
                     (= (event-convert-list '(control meta ?z))
                        (event-convert-list '(meta control ?z)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((control) (meta) (control meta) 97 97 97 t t t t)""#]],
+    );
 }

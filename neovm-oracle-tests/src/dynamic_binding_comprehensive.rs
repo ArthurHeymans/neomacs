@@ -45,7 +45,10 @@ fn oracle_prop_dynamic_comprehensive_defvar_defconst() {
     (makunbound 'neovm--test-dc-v1)
     (makunbound 'neovm--test-dc-c1)
     (makunbound 'neovm--test-dc-v2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 200 nil 77)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +80,12 @@ fn oracle_prop_dynamic_comprehensive_let_special() {
         (setq after neovm--test-ls-var)
         (list before during after))
     (makunbound 'neovm--test-ls-var)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (original (first-rebind second-rebind first-rebind) original)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +118,12 @@ fn oracle_prop_dynamic_comprehensive_visible_in_called_fns() {
     (fmakunbound 'neovm--test-vcf-get-color)
     (fmakunbound 'neovm--test-vcf-format-color)
     (makunbound 'neovm--test-vcf-color)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"color=red\" \"color=blue\" \"color=green\" \"color=green\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +156,12 @@ fn oracle_prop_dynamic_comprehensive_symbol_value_set() {
         (setq results (cons (symbol-value 'neovm--test-svs-x) results))
         (nreverse results))
     (makunbound 'neovm--test-svs-x)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (global let-bound set-modified set-modified global new-global)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -180,7 +198,10 @@ fn oracle_prop_dynamic_comprehensive_boundp_makunbound() {
     (when (boundp 'neovm--test-bm-var)
       (makunbound 'neovm--test-bm-var))
     ))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK neovm--test-bm-var""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +233,10 @@ fn oracle_prop_dynamic_comprehensive_default_value() {
           (list (default-value 'neovm--test-dv-x)
                 neovm--test-dv-x)))
     (makunbound 'neovm--test-dv-x)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (global-default global-default)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +270,10 @@ fn oracle_prop_dynamic_comprehensive_buffer_local() {
                           (local-variable-p 'neovm--test-bl-var))))))  ;; nil
           (kill-buffer buf)))
     (makunbound 'neovm--test-bl-var)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (global-val local-val global-val t local-val t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -293,7 +320,12 @@ fn oracle_prop_dynamic_comprehensive_local_variable_p() {
           (kill-buffer buf2)))
     (makunbound 'neovm--test-lvp-a)
     (makunbound 'neovm--test-lvp-b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t nil t t a-local-buf1 a-global b-local-buf1 b-local-buf2)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -330,7 +362,12 @@ fn oracle_prop_dynamic_comprehensive_lexical_interaction() {
             (setq results (cons (funcall reader) results))
             (nreverse results))))
     (makunbound 'neovm--test-li-dyn)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((lex-outer dyn-outer) (lex-outer dyn-inner) (lex-outer dyn-outer) (lex-outer dyn-both) (lex-mutated dyn-outer))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +406,12 @@ fn oracle_prop_dynamic_comprehensive_recursive_dynamic() {
     (fmakunbound 'neovm--test-rd-walk)
     (makunbound 'neovm--test-rd-depth)
     (makunbound 'neovm--test-rd-trace)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (0 ((0 . node) (1 . leaf) (1 . node) (2 . leaf) (2 . leaf)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -408,5 +450,8 @@ fn oracle_prop_dynamic_comprehensive_catch_throw_restore() {
     (makunbound 'neovm--test-ctr-a)
     (makunbound 'neovm--test-ctr-b)
     (makunbound 'neovm--test-ctr-c)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((a2 b2 c1) a0 b0 c0)""#]],
+    );
 }

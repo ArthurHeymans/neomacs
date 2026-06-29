@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_defstruct_bridge_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (bridge-node (:constructor bridge-node-create))
     label marker overlay log)
@@ -92,6 +92,7 @@ fn combo_eieio_defstruct_bridge_objects() {
                       (bc-nodes ctx))
               my-bc-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -99,7 +100,7 @@ fn combo_eieio_defstruct_bridge_objects() {
 fn combo_eieio_defstruct_shared_state_transform() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (xform-step (:constructor xform-step-create))
     label pos str result)
@@ -173,6 +174,7 @@ fn combo_eieio_defstruct_shared_state_transform() {
               (xe-log engine)
               my-xe-log))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -180,7 +182,7 @@ fn combo_eieio_defstruct_shared_state_transform() {
 fn combo_eieio_defstruct_class_hierarchy_mix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (event (:constructor event-create))
     type pos charcount timestamp)
@@ -268,6 +270,7 @@ fn combo_eieio_defstruct_class_hierarchy_mix() {
               (cl-typep sh 'event-handler)
               my-eh-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -275,7 +278,7 @@ fn combo_eieio_defstruct_class_hierarchy_mix() {
 fn combo_eieio_defstruct_copy_merge_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (text-region (:constructor text-region-create))
     label start end face marker)
@@ -355,6 +358,7 @@ fn combo_eieio_defstruct_copy_merge_objects() {
               (marker-position m)
               my-rm-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -362,7 +366,7 @@ fn combo_eieio_defstruct_copy_merge_objects() {
 fn combo_eieio_defstruct_method_dispatch_across_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (cmd (:constructor cmd-create))
     type pos text undoable)
@@ -452,5 +456,6 @@ fn combo_eieio_defstruct_method_dispatch_across_types() {
               (ce-log strict) (ce-log lenient)
               my-ce-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }

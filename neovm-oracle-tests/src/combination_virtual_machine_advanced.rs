@@ -252,7 +252,10 @@ fn oracle_prop_vm_advanced_stack_operations() {
     (fmakunbound 'neovm--vm-peek)
     (fmakunbound 'neovm--vm-step)
     (fmakunbound 'neovm--vm-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((30 30 30 20 10) (1 3 2) 85 (3 2) -42 (1 1 1))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -393,7 +396,10 @@ fn oracle_prop_vm_advanced_control_flow() {
     (fmakunbound 'neovm--vm-peek)
     (fmakunbound 'neovm--vm-step)
     (fmakunbound 'neovm--vm-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -493,7 +499,10 @@ fn oracle_prop_vm_advanced_fibonacci() {
     (fmakunbound 'neovm--vm-peek)
     (fmakunbound 'neovm--vm-step)
     (fmakunbound 'neovm--vm-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 1 1 2 3 5 8 13 21 34)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -604,7 +613,10 @@ fn oracle_prop_vm_advanced_factorial_with_call_ret() {
     (fmakunbound 'neovm--vm-peek)
     (fmakunbound 'neovm--vm-step)
     (fmakunbound 'neovm--vm-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 1 120 5040 3628800)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -683,7 +695,10 @@ fn oracle_prop_vm_advanced_string_reverse() {
     (fmakunbound 'neovm--vm-push)
     (fmakunbound 'neovm--vm-pop)
     (fmakunbound 'neovm--vm-peek)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"olleh\" \"edcba\" \"racecar\" \"x\" \"\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -776,7 +791,10 @@ fn oracle_prop_vm_advanced_gcd() {
     (fmakunbound 'neovm--vm-peek)
     (fmakunbound 'neovm--vm-step)
     (fmakunbound 'neovm--vm-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 25 1 5 12 21)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -881,5 +899,8 @@ fn oracle_prop_vm_advanced_power_and_expression() {
     (fmakunbound 'neovm--vm-peek)
     (fmakunbound 'neovm--vm-step)
     (fmakunbound 'neovm--vm-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1024 243 125 1 1) 9 26)""#]],
+    );
 }

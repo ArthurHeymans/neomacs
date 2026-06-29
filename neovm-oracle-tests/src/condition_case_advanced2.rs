@@ -49,7 +49,12 @@ fn oracle_prop_cc_adv2_handler_specificity_ordering() {
     (arith-error 'arith)
     (wrong-type-argument 'wta)
     (error (list 'generic-file (car err) (cadr err)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((specific-arith arith-error) (specific-wta wrong-type-argument listp) (generic-caught arith-error) (void-var neovm--cc-adv2-nonexistent-var-abc) (void-fn neovm--cc-adv2-nonexistent-fn-abc) (generic-file file-error \"No such file\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +86,12 @@ fn oracle_prop_cc_adv2_resignal_chain() {
      (setq trace (cons 'handler-3 trace))
      (list 'final-trace (nreverse trace)
            'error-data (cdr err3)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (final-trace (original-body handler-1 handler-2 handler-3) error-data (\"level-2-wrap\" \"level-1-wrap\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +127,12 @@ fn oracle_prop_cc_adv2_nested_selective_handling() {
    (funcall run-with-handlers (lambda () (signal 'file-error '("nope"))))
    ;; No error: body value returned
    (funcall run-with-handlers (lambda () (+ 10 20)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((inner-caught arith arith-error) (outer-caught wta wrong-type-argument listp) (outer-caught void neovm--cc-adv2-undef-xyz) (outer-caught generic file-error) 30)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +178,12 @@ fn oracle_prop_cc_adv2_error_data_extraction() {
   ;; error-message-string on manually constructed error data
   (error-message-string '(error "Something went wrong"))
   (error-message-string '(arith-error)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((symbol arith-error data nil msg \"Arithmetic error\") (symbol wrong-type-argument predicate listp value \"not-a-list\" msg \"Wrong type argument: listp, \\\"not-a-list\\\"\") (symbol error message \"custom message\" extra (extra-data 42) msg \"custom message: extra-data, 42\") (symbol void-variable varname neovm--cc-adv2-unbound-for-msg msg \"Symbol’s value as variable is void: neovm--cc-adv2-unbound-for-msg\") \"Something went wrong\" \"Arithmetic error\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +242,12 @@ fn oracle_prop_cc_adv2_user_defined_error_symbols() {
     (put 'neovm--cc-adv2-my-net-error 'error-message nil)
     (put 'neovm--cc-adv2-my-timeout 'error-conditions nil)
     (put 'neovm--cc-adv2-my-timeout 'error-message nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((caught-my \"detail-1\") (caught-parent neovm--cc-adv2-my-net-error \"conn refused\") (caught-grandparent neovm--cc-adv2-my-timeout \"5 seconds\") (caught-specific \"10 seconds\") (caught-generic neovm--cc-adv2-my-net-error \"host unreachable\") \"Timeout error: \\\"30 seconds\\\"\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +287,12 @@ fn oracle_prop_cc_adv2_handler_body_side_effects() {
      (list 'all-failed (cdr final-err))))
   (list 'retries retry-count
         'log (nreverse log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (retries 3 log ((attempt 0 fail) (retry 1 \"operation failed\") (attempt 1 fail) (retry 2 \"operation failed\") (attempt 2 fail) (retry 3 \"operation failed\") (attempt 3 succeed)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -324,7 +354,12 @@ fn oracle_prop_cc_adv2_three_way_interaction() {
 
    ;; Final log showing execution order
    (nreverse log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (escaped-from-handler (caught-cleanup-error \"cleanup-error\") deep-throw arith-caught (handler cleanup-1 body-2 cleanup-2-before-error outer-handler-2 inner-cleanup outer-cleanup in-catch-body catch-cleanup arith-handler))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -365,5 +400,10 @@ fn oracle_prop_cc_adv2_dispatch_table_error_handling() {
                     (length (cddr err)))))))
       (setq results (cons result results))))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((divide arith-error 0) (type-check wrong-type number-or-marker-p) (lookup void-var neovm--cc-adv2-no-such-var-zzz) (signal-custom generic-error \"custom\" 3) 42)""#
+        ]],
+    );
 }

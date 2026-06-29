@@ -7,11 +7,12 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cal_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'calendar)
   (fboundp 'holiday-list)
   (featurep 'calendar))"#,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
@@ -19,11 +20,12 @@ fn divergence_cal_functions() {
 fn divergence_calc_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'calc)
   (featurep 'calc)
   (fboundp 'calc-eval))"#,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }
 
@@ -31,11 +33,12 @@ fn divergence_calc_functions() {
 fn divergence_org_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'org-mode)
   (fboundp 'org-agenda)
   (featurep 'org))"#,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
@@ -43,13 +46,14 @@ fn divergence_org_functions() {
 fn divergence_mode_line_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (stringp mode-name)
   (stringp mode-line-format)
   (consp mode-line-format)
   (boundp 'mode-line-process)
   (boundp 'minor-mode-alist))"#,
+        expect_test::expect![[r#""OK (t nil t t t)""#]],
     );
 }
 
@@ -57,13 +61,14 @@ fn divergence_mode_line_vars() {
 fn divergence_mode_line_modification() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq mode-name "TestMode")
   (list mode-name
         (buffer-name)
         (buffer-file-name)
         (buffer-modified-p)))"#,
+        expect_test::expect![[r#""OK (\"TestMode\" \" *neovm-oracle-stdout*\" nil nil)""#]],
     );
 }
 
@@ -71,11 +76,12 @@ fn divergence_mode_line_modification() {
 fn divergence_header_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'header-line-format)
   (boundp 'mode-line-in-non-selected-windows)
   (booleanp mode-line-in-non-selected-windows))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -83,12 +89,13 @@ fn divergence_header_line() {
 fn divergence_echo_area() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'message)
   (fboundp 'format-message)
   (fboundp 'minibuffer-message)
   (stringp (message "test %d" 42)))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -96,11 +103,12 @@ fn divergence_echo_area() {
 fn divergence_cursor_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'cursor-type)
   (boundp 'blink-cursor-mode)
   (fboundp 'blink-cursor-mode))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -108,7 +116,7 @@ fn divergence_cursor_type() {
 fn divergence_buffer_display_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'truncate-lines)
   (booleanp truncate-lines)
@@ -116,6 +124,7 @@ fn divergence_buffer_display_vars() {
   (booleanp word-wrap)
   (boundp 'tab-width)
   (integerp tab-width))"#,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
@@ -123,12 +132,13 @@ fn divergence_buffer_display_vars() {
 fn divergence_buffer_display_tables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'standard-display-table)
   (boundp 'buffer-display-table)
   (char-table-p (standard-display-table))
   (or (null buffer-display-table)
       (char-table-p buffer-display-table)))"#,
+        expect_test::expect![[r#""ERR (void-function standard-display-table)""#]],
     );
 }

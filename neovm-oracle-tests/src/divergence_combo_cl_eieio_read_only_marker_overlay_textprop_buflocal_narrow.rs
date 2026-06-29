@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_read_only_insert_protected() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass protected-region ()
     ((name :initarg :name :accessor pr-name :initform "")
@@ -77,6 +77,7 @@ fn combo_eieio_read_only_insert_protected() {
                 (buffer-string)
                 my-regions))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -84,7 +85,7 @@ fn combo_eieio_read_only_insert_protected() {
 fn combo_eieio_read_only_text_prop_overlay_clash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass lock-state ()
     ((layer :initarg :layer :accessor ls-layer :initform "")
@@ -151,6 +152,7 @@ fn combo_eieio_read_only_text_prop_overlay_clash() {
                 (buffer-string)
                 my-locks))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -158,7 +160,7 @@ fn combo_eieio_read_only_text_prop_overlay_clash() {
 fn combo_eieio_read_only_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass guard ()
     ((zone :initarg :zone :accessor gz-zone :initform "")
@@ -218,6 +220,7 @@ fn combo_eieio_read_only_narrow_undo() {
                 (buffer-string)
                 my-guards))))
     (kill-buffer buf))"#,
+        expect_test::expect![[r#""ERR (void-variable m)""#]],
     );
 }
 
@@ -225,7 +228,7 @@ fn combo_eieio_read_only_narrow_undo() {
 fn combo_eieio_read_only_kill_yank_protected() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass kill-guard ()
     ((region :initarg :region :accessor kg-region :initform "")
@@ -278,6 +281,7 @@ fn combo_eieio_read_only_kill_yank_protected() {
                 (buffer-string)
                 my-kg))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range #<buffer ro4> 7 11)""#]],
     );
 }
 
@@ -285,7 +289,7 @@ fn combo_eieio_read_only_kill_yank_protected() {
 fn combo_eieio_read_only_overlay_priority_layers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass lock-layer ()
     ((name :initarg :name :accessor ll-name :initform "")
@@ -348,5 +352,6 @@ fn combo_eieio_read_only_overlay_priority_layers() {
                 (buffer-string)
                 my-layers))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

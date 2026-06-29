@@ -56,7 +56,12 @@ fn oracle_prop_btp_line_by_line_transform() {
                               (insert line "\n"))
                             (buffer-string)))
                       (fmakunbound 'neovm--test-transform-line)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK \"001: THE quick brown fox [19]\n002: JUMPS over [10]\n003: THE lazy dog [12]\n004: AND runs away [13]\n\"""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +93,12 @@ fn oracle_prop_btp_search_replace_with_stats() {
                                 (cons (list (car repl) (cdr repl) count (nreverse positions))
                                       stats))))
                       (list (buffer-string) (nreverse stats))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"The dog sat on the rug. The dog chased the mouse on the rug.\" ((\"cat\" \"dog\" 2 (5 29)) (\"mat\" \"rug\" 2 (20 55)) (\"rat\" \"mouse\" 1 (44))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +145,12 @@ fn oracle_prop_btp_html_tag_matching() {
                                   unclosed)))
                       (makunbound 'neovm--test-tag-stack)
                       (makunbound 'neovm--test-tag-tree)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((pair \"p\" 6 \"p\" 14 t) (pair \"span\" 18 \"span\" 29 t) (pair \"div\" 1 \"div\" 36 t)) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +220,12 @@ fn oracle_prop_btp_table_extract_reformat() {
                                   (setq row-num (1+ row-num))))
                               (buffer-string))))
                       (fmakunbound 'neovm--test-pad-right)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK \"Name    | Age | City         \n--------+-----+--------------\nAlice   | 30  | Boston       \nBob     | 25  | San Francisco\nCharlie | 35  | NY           \n\"""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +298,12 @@ fn oracle_prop_btp_undo_simulation() {
                       (fmakunbound 'neovm--test-undo-delete)
                       (fmakunbound 'neovm--test-undo-replay)
                       (makunbound 'neovm--test-undo-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello World\" \"HelloBeautiful  World\" \"Beautiful  World\" \"Goodbye Beautiful  World\" 3 \"Hello World\" t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -324,7 +349,12 @@ fn oracle_prop_btp_comment_stripping() {
                             (let ((lines (split-string stripped "\n" t)))
                               (list stripped lines (length lines)))))
                       (fmakunbound 'neovm--test-strip-comments)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"int x = 5; \nint y = 10; \nint z = x + y;  int w = 0;\n\" (\"int x = 5; \" \"int y = 10; \" \"int z = x + y;  int w = 0;\") 3)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -366,5 +396,10 @@ fn oracle_prop_btp_line_dedup_preserve_order() {
                             (setq stats (cons (cons line (gethash line dup-counts))
                                               stats)))
                           (list deduped (nreverse stats))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"apple\nbanana\ncherry\ndate\n\" ((\"apple\" . 3) (\"banana\" . 2) (\"cherry\" . 2) (\"date\" . 1)))""#
+        ]],
+    );
 }

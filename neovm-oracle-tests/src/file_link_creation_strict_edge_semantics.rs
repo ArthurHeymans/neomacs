@@ -71,5 +71,8 @@ fn oracle_file_link_creation_edges() {
     (ignore-errors (delete-directory dir t))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 46)""#]],
+    );
 }

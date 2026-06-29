@@ -43,7 +43,12 @@ fn oracle_prop_expt_comprehensive() {
   ;; Identity: x^1 = x
   (= (expt 42 1) 42)
   (= (expt 3.14 1) 3.14))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 2 1024 1048576 243 1000000 -8 16 1 1 0 1024.0 0.125 5.0625 1.4142135623730951 2.0 3.0 0.5 0.01 t t)""#
+        ]],
+    );
 }
 
 #[test]
@@ -72,7 +77,10 @@ fn oracle_prop_expt_laws_verification() {
     ;; a^0 = 1
     (= (expt a 0) 1.0)
     (= (expt b 0) 1.0)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +123,12 @@ fn oracle_prop_sqrt_precision_and_identities() {
     (< (abs (- (sqrt (/ a b))
                (/ (sqrt a) (sqrt b))))
        1e-10)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (0.0 1.0 2.0 3.0 4.0 5.0 10.0 100.0 1.4142135623730951 1.7320508075688772 2.23606797749979 t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +176,10 @@ fn oracle_prop_log_comprehensive() {
   ;; exp(log(x)) roundtrip
   (let ((x 42.0))
     (< (abs (- (exp (log x)) x)) 1e-8)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0.0 1.0 2.0 3.0 2.0 3.0 0.0 1.0 t t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -239,7 +255,12 @@ fn oracle_prop_compound_interest_calculations() {
     (fmakunbound 'neovm--test-doubling-time)
     (fmakunbound 'neovm--test-continuous-compound)
     (fmakunbound 'neovm--test-effective-rate)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (162889 164700 164866 164872 993 1028 1268 1274 (2456 4467 8116 19837))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +335,10 @@ fn oracle_prop_geometric_series_and_log_scale() {
     (fmakunbound 'neovm--test-to-decibels)
     (fmakunbound 'neovm--test-from-decibels)
     (fmakunbound 'neovm--test-richter-energy-ratio)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (31 1998 2000 t 0 20 40 -20 t 1000 31)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -423,7 +447,10 @@ fn oracle_prop_newtons_method_root_finding() {
     (fmakunbound 'neovm--test-newton-sqrt)
     (fmakunbound 'neovm--test-newton-cbrt)
     (fmakunbound 'neovm--test-newton-nthroot)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 2000 3000 5000 2000 2000 2000 3000)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -505,5 +532,8 @@ fn oracle_prop_exp_log_numerical_algorithms() {
     (fmakunbound 'neovm--test-log-sum-exp)
     (fmakunbound 'neovm--test-softmax)
     (fmakunbound 'neovm--test-entropy)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (500 t t t t t t t t t)""#]],
+    );
 }

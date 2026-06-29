@@ -14,7 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_sort_lines_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-sl")))
     (with-current-buffer buf
@@ -51,6 +51,7 @@ fn combo_sort_lines_marker_overlay_undo() {
                                 (get-text-property 26 'line))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -58,7 +59,7 @@ fn combo_sort_lines_marker_overlay_undo() {
 fn combo_sort_lines_reverse_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-slr")))
     (with-current-buffer buf
@@ -95,6 +96,7 @@ fn combo_sort_lines_reverse_marker_overlay_undo() {
                                 (get-text-property 26 'line))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -102,7 +104,7 @@ fn combo_sort_lines_reverse_marker_overlay_undo() {
 fn combo_sort_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-snar")))
     (with-current-buffer buf
@@ -144,6 +146,7 @@ fn combo_sort_narrow_marker_overlay_undo() {
                                 (get-text-property 32 'sect))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -151,7 +154,7 @@ fn combo_sort_narrow_marker_overlay_undo() {
 fn combo_sort_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-sbl")))
     (with-current-buffer buf
@@ -189,6 +192,7 @@ fn combo_sort_buffer_local_marker_overlay_undo() {
                                 (get-text-property 20 'line))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -196,7 +200,7 @@ fn combo_sort_buffer_local_marker_overlay_undo() {
 fn combo_sort_fields_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-sf")))
     (with-current-buffer buf
@@ -230,5 +234,6 @@ fn combo_sort_fields_marker_overlay_undo() {
                                 (get-text-property 25 'entry))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

@@ -69,7 +69,12 @@ fn oracle_prop_delete_region_comp_boundary_combinations() {
     (delete-region 5 9)
     (setq results (cons (list 'point-before (buffer-string) (point)) results)))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((reversed \"ABCHIJ\" 6) (single-start \"BCDEFGHIJ\") (single-end \"ABCDEFGHI\") (single-mid \"ABCDFGHIJ\") (full \"\" 1 0) (equal \"ABCDEFGHIJ\" 10) (point-inside \"ABHIJ\" 3) (point-after \"ABFGHIJ\" 7) (point-before \"ABCDIJ\" 2))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +145,12 @@ fn oracle_prop_delete_region_comp_delete_char_count_killp() {
     (setq results (cons (list 'killp-bwd (buffer-string) (point)
                               (car kill-ring)) results)))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((fwd-3 \"ABCGHIJ\" 4) (bwd-3 \"ABCGHIJ\" 4) (fwd-1 \"BCDEFGHIJ\" 1) (bwd-1 \"ABCDEFGHI\" 10) (zero \"ABCDEFGHIJ\" 5) (all-fwd \"\" 1 0) (all-bwd \"\" 1 0) (killp-fwd \"ABCGHIJ\" 4 \"DEF\") (killp-bwd \"ABCGHIJ\" 4 \"DEF\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +202,12 @@ fn oracle_prop_delete_region_comp_extract_various() {
            (e3 (delete-and-extract-region 1 4)))
       (setq results (cons (list 'sequential e1 e2 e3 (buffer-string)) results))))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((begin \"ABC\" \"DEFGHIJ\" 7) (middle \"DEFG\" \"ABCHIJ\") (end \"HIJ\" \"ABCDEFG\") (all \"ABCDEFGHIJ\" \"\" 0) (empty \"\" \"ABCDEFGHIJ\") (reversed \"CDEFG\" \"ABHIJ\") (sequential \"AAA\" \"BBB\" \"CCC\" \"DDDEEE\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +255,10 @@ fn oracle_prop_delete_region_comp_marker_interactions() {
         (set-marker m-after nil)
         (set-marker m-insert-type nil)
         (list result-1 result-2)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 5 5 5 7 5 \"0123BCDEF\") (5 8 10 \"0123XYZBCDEF\"))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +302,10 @@ fn oracle_prop_delete_region_comp_narrowed_buffer_complex() {
                after-del-mid
                full-after
                (buffer-size)))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 3 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -333,7 +354,12 @@ fn oracle_prop_delete_region_comp_with_text_properties() {
              buf-after faces-after
              e2 e2-face
              buf-after-2 remaining-face)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((bold italic underline bold) #(\"BBB\" 0 3 (face italic)) italic 3 #(\"AAACCCDDD\" 0 3 (face bold) 3 6 (face underline) 6 9 (face bold)) (bold bold underline underline) #(\"AAA\" 0 3 (face bold)) bold #(\"CCCDDD\" 0 3 (face underline) 3 6 (face bold)) underline)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +399,12 @@ fn oracle_prop_delete_region_comp_size_tracking() {
     (widen)
     (setq log (cons (list 'widened (buffer-size) (point-min) (point-max) (point) (buffer-string)) log))
     (nreverse log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((init 0 1 1 1) (after-insert 10 1 11 11) (del-3-start 7 1 8 8 \"DEFGHIJ\") (ins-5-mid 12 1 13 9 \"DEFXXXXXGHIJ\") (del-2-end 10 1 11 9 \"DEFXXXXXGH\") (narrowed 10 3 8 8) (del-narrowed 8 3 6 6 \"XXX\") (widened 8 1 9 6 \"DEXXXXGH\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -432,5 +463,10 @@ fn oracle_prop_delete_region_comp_boundary_edge_cases() {
         (progn (delete-char 1) 'no-error)
       (error (setq results (cons (list 'del-char-after-end (car err)) results)))))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((single-char \"\" 1 0) (first-char-repeat (65 66 67 68 69) \"\" 0) (last-char-repeat (69 68 67 66 65) \"\" 0) (alternating (\"BCDEFGHIJ\" \"BCDEFGHI\" \"CDEFGHI\" \"CDEFGH\" \"DEFGH\")) (del-char-before-start beginning-of-buffer) (del-char-after-end end-of-buffer))""#
+        ]],
+    );
 }

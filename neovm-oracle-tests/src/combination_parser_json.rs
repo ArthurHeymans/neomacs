@@ -256,7 +256,7 @@ fn oracle_prop_json_parse_strings() {
         PARSER_PREAMBLE = PARSER_PREAMBLE,
         PARSER_CLEANUP = PARSER_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -293,7 +293,7 @@ fn oracle_prop_json_parse_numbers() {
         PARSER_PREAMBLE = PARSER_PREAMBLE,
         PARSER_CLEANUP = PARSER_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -327,7 +327,7 @@ fn oracle_prop_json_parse_booleans_null() {
         PARSER_PREAMBLE = PARSER_PREAMBLE,
         PARSER_CLEANUP = PARSER_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -365,7 +365,7 @@ fn oracle_prop_json_parse_arrays() {
         PARSER_PREAMBLE = PARSER_PREAMBLE,
         PARSER_CLEANUP = PARSER_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -404,7 +404,7 @@ fn oracle_prop_json_parse_objects() {
         PARSER_PREAMBLE = PARSER_PREAMBLE,
         PARSER_CLEANUP = PARSER_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -440,7 +440,7 @@ fn oracle_prop_json_parse_errors() {
         PARSER_PREAMBLE = PARSER_PREAMBLE,
         PARSER_CLEANUP = PARSER_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -506,5 +506,5 @@ fn oracle_prop_json_parse_complex_query() {
         PARSER_PREAMBLE = PARSER_PREAMBLE,
         PARSER_CLEANUP = PARSER_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }

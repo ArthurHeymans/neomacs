@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn strict_parse_granularity_object() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -25,13 +25,14 @@ fn strict_parse_granularity_object() {
          (length (org-element-map tree 'bold #'identity))
          (length (org-element-map tree 'italic #'identity))
          (length (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn strict_parse_granularity_element() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -46,13 +47,14 @@ fn strict_parse_granularity_element() {
          (length (org-element-map tree 'bold #'identity))
          ;; Paragraphs found.
          (length (org-element-map tree 'paragraph #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn strict_parse_granularity_greater_element() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -67,6 +69,7 @@ fn strict_parse_granularity_greater_element() {
          (length (org-element-map tree 'center-block #'identity))
          ;; No paragraphs inside center.
          (length (org-element-map tree 'paragraph #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -77,7 +80,7 @@ fn strict_parse_granularity_greater_element() {
 #[test]
 fn strict_context_at_various_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -100,13 +103,14 @@ fn strict_context_at_various_positions() {
        ;; On plain text.
        (search-forward "Para")
        (org-element-type (org-element-context))))))"##,
+        expect_test::expect![[r#""ERR (search-failed \"Para\")""#]],
     );
 }
 
 #[test]
 fn strict_context_in_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -123,13 +127,14 @@ fn strict_context_in_table() {
        ;; In code cell.
        (search-forward "code")
        (org-element-type (org-element-context))))))"##,
+        expect_test::expect![[r#""OK (8 bold 19 italic 51 table-cell)""#]],
     );
 }
 
 #[test]
 fn strict_context_in_headline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -146,6 +151,7 @@ fn strict_context_in_headline() {
        ;; On plain text in headline.
        (search-forward "Headline")
        (org-element-type (org-element-context))))))"##,
+        expect_test::expect![[r#""ERR (search-failed \"Headline\")""#]],
     );
 }
 
@@ -156,7 +162,7 @@ fn strict_context_in_headline() {
 #[test]
 fn strict_lineage_in_nested_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -177,6 +183,7 @@ fn strict_lineage_in_nested_structure() {
          (mapcar #'org-element-type (org-element-lineage bold 'center-block))
          ;; Filtered: with self.
          (mapcar #'org-element-type (org-element-lineage bold '(bold paragraph) t))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -187,7 +194,7 @@ fn strict_lineage_in_nested_structure() {
 #[test]
 fn strict_map_with_type_lists() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -204,6 +211,7 @@ fn strict_map_with_type_lists() {
          ;; Map single type.
          (length (org-element-map tree 'bold #'identity))
          (length (org-element-map tree 'italic #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -214,7 +222,7 @@ fn strict_map_with_type_lists() {
 #[test]
 fn strict_export_subtree_scope() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -230,6 +238,7 @@ fn strict_export_subtree_scope() {
                      tree (org-export-get-environment)))))
         ;; Export subtree.
         (org-export-as (org-test-default-backend) 'subtree)))))"##,
+        expect_test::expect![[r#""ERR (void-function org-test-default-backend)""#]],
     );
 }
 
@@ -240,7 +249,7 @@ fn strict_export_subtree_scope() {
 #[test]
 fn strict_copy_deep_vs_shallow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let* ((original (org-element-create
@@ -265,6 +274,7 @@ fn strict_copy_deep_vs_shallow() {
      (org-element-property :parent copy)
      ;; Original has no parent either (was root).
      (org-element-property :parent original))))"##,
+        expect_test::expect![[r#""OK (nil t nil t nil nil)""#]],
     );
 }
 
@@ -275,7 +285,7 @@ fn strict_copy_deep_vs_shallow() {
 #[test]
 fn strict_swap_preserves_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -292,6 +302,9 @@ fn strict_swap_preserves_structure() {
                  (org-element-map tree 'headline #'identity))
          ;; Buffer content.
          (buffer-substring-no-properties (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK ((\"A\" \"A1\" \"B\" \"B1\" \"C\") \"** A1\nBody A1 A1\nBody A1\n* B\nBody B\n** B1\nBody B1\n* C\nBody C\")""#
+        ]],
     );
 }
 
@@ -302,7 +315,7 @@ fn strict_swap_preserves_structure() {
 #[test]
 fn strict_uniq_with_mixed_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let* ((p1 (org-element-create 'paragraph nil "p1"))
@@ -316,6 +329,7 @@ fn strict_uniq_with_mixed_types() {
      (length (org-element-uniq list))
      ;; Order preserved.
      (mapcar #'org-element-type (org-element-uniq list)))))"##,
+        expect_test::expect![[r#""ERR (void-function org-element-uniq)""#]],
     );
 }
 
@@ -326,7 +340,7 @@ fn strict_uniq_with_mixed_types() {
 #[test]
 fn strict_deferred_create_and_resolve() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (list
@@ -348,6 +362,7 @@ fn strict_deferred_create_and_resolve() {
    (let ((el (org-element-create 'dummy '(:foo ,(org-element-deferred-create-list
                                                   (list 1 2 (org-element-deferred-create nil (lambda (_) 3))))))))
      (org-element-property :foo el))))"##,
+        expect_test::expect![[r#""ERR (void-function org-element-deferred-force-p)""#]],
     );
 }
 
@@ -358,7 +373,7 @@ fn strict_deferred_create_and_resolve() {
 #[test]
 fn strict_set_with_keep_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (list
@@ -377,6 +392,7 @@ fn strict_set_with_keep_props() {
      (list (org-element-property :a result)
            (org-element-property :b result)
            (org-element-property :x result)))))"##,
+        expect_test::expect![[r#""OK (bar (1 2 10))""#]],
     );
 }
 
@@ -387,7 +403,7 @@ fn strict_set_with_keep_props() {
 #[test]
 fn strict_insert_before_secondary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -402,6 +418,7 @@ fn strict_insert_before_secondary() {
         ;; Check title now has entity and italic.
         (org-element-map (org-element-property :title headline) '(entity italic)
                          #'org-element-type)))))"##,
+        expect_test::expect![[r#""OK (entity italic)""#]],
     );
 }
 
@@ -412,7 +429,7 @@ fn strict_insert_before_secondary() {
 #[test]
 fn strict_extract_from_various_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -442,6 +459,7 @@ fn strict_extract_from_various_positions() {
          (org-element-extract h2)
          (mapcar (lambda (h) (org-element-property :raw-value h))
                  (org-element-map tree 'headline #'identity)))))))"##,
+        expect_test::expect![[r#""OK (nil nil (\"H1\" \"H3\"))""#]],
     );
 }
 
@@ -452,7 +470,7 @@ fn strict_extract_from_various_positions() {
 #[test]
 fn strict_adopt_various_children() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let* ((parent (org-element-create 'section nil)))
@@ -464,6 +482,9 @@ fn strict_adopt_various_children() {
              (org-element-contents parent))
      ;; Parent set on children.
      (org-element-type (org-element-property :parent (nth 1 (org-element-contents parent)))))))"##,
+        expect_test::expect![[
+            r#""OK ((#(\"text1\" 0 5 (:parent (section nil #(\"text1\" 0 5 (:parent #4)) (paragraph (:standard-properties [nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil #4]) #(\"para\" 0 4 (:parent #5))) #(\"text2\" 0 5 (:parent #4))))) paragraph #(\"text2\" 0 5 (:parent (section nil #(\"text1\" 0 5 (:parent #4)) (paragraph (:standard-properties [nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil #4]) #(\"para\" 0 4 (:parent #5))) #(\"text2\" 0 5 (:parent #4)))))) section)""#
+        ]],
     );
 }
 
@@ -474,7 +495,7 @@ fn strict_adopt_various_children() {
 #[test]
 fn strict_secondary_string_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -495,6 +516,7 @@ fn strict_secondary_string_handling() {
          ;; Italic in title has correct parent.
          (let ((italic (car (org-element-map title 'italic #'identity))))
            (org-element-type (org-element-property :parent italic))))))))"##,
+        expect_test::expect![[r#""OK (t (plain-text bold plain-text italic) headline headline)""#]],
     );
 }
 
@@ -505,7 +527,7 @@ fn strict_secondary_string_handling() {
 #[test]
 fn strict_property_raw_setter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let ((el (org-element-create 'dummy '(:foo 1))))
@@ -516,6 +538,7 @@ fn strict_property_raw_setter() {
     (list (org-element-property-raw :foo el)
           (org-element-property-raw :bar el)
           (org-element-property-raw :num el))))"##,
+        expect_test::expect![[r#""OK (42 baz 3.14)""#]],
     );
 }
 
@@ -526,7 +549,7 @@ fn strict_property_raw_setter() {
 #[test]
 fn strict_properties_mapc_with_deferred() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let ((el (org-element-create
@@ -548,6 +571,7 @@ fn strict_properties_mapc_with_deferred() {
           (when (and (eq prop :foo) (eq 1 val))
             (throw :found t)))
         el 'undefer)))))"##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -558,7 +582,7 @@ fn strict_properties_mapc_with_deferred() {
 #[test]
 fn strict_properties_map_arities() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let ((el (org-element-create 'dummy '(:foo 1 :bar 2 :baz 3))))
@@ -575,6 +599,7 @@ fn strict_properties_map_arities() {
             (1+ (org-element-property-raw :baz node))
           val))
       el))))"##,
+        expect_test::expect![[r#""OK ((1 2 3) (1 2 nil) (1 2 4))""#]],
     );
 }
 
@@ -585,7 +610,7 @@ fn strict_properties_map_arities() {
 #[test]
 fn strict_at_point_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -610,6 +635,7 @@ fn strict_at_point_edge_cases() {
      (with-temp-buffer (org-mode) (insert ":DRAWER:\ncontents\n:END:")
        (goto-char (point-min)) (forward-line 2)
        (org-element-type (org-element-at-point))))))"##,
+        expect_test::expect![[r#""OK (paragraph paragraph paragraph headline drawer)""#]],
     );
 }
 
@@ -620,7 +646,7 @@ fn strict_at_point_edge_cases() {
 #[test]
 fn strict_export_headline_features() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -647,6 +673,9 @@ fn strict_export_headline_features() {
          (mapcar (lambda (h) (org-export-numbered-headline-p h info)) headlines)
          ;; Relative levels.
          (mapcar (lambda (h) (org-export-get-relative-level h info)) headlines))))))"##,
+        expect_test::expect![[
+            r#""OK ((\"TODO\" \"DONE\" nil nil nil) (65 66 nil nil 67) ((\"tag1\" \"tag2\") nil nil nil (\"important\")) ((1) (2) (3) (4) (5)) (t t t t t) (1 1 1 1 1))""#
+        ]],
     );
 }
 
@@ -657,7 +686,7 @@ fn strict_export_headline_features() {
 #[test]
 fn strict_export_footnote_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -680,5 +709,6 @@ fn strict_export_footnote_edge_cases() {
          ;; First reference?
          (mapcar (lambda (ref) (org-export-footnote-first-reference-p ref info))
                  (org-element-map tree 'footnote-reference #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

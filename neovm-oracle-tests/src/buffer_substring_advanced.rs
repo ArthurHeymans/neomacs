@@ -34,7 +34,10 @@ fn oracle_prop_buffer_substring_properties_vs_no_properties() {
                             ;; Verify specific property ranges survived
                             (get-text-property 5 'face with-props)
                             (null (get-text-property 0 'face with-props)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (t t t bold value1 bold t)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +68,10 @@ fn oracle_prop_buffer_substring_narrowed_region() {
                               ;; Verify narrowed substring is a slice of the full
                               (string= narrowed-str
                                        (substring full 4 12))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""ERR (args-out-of-range #<killed buffer> 2 5)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +101,12 @@ fn oracle_prop_buffer_substring_multibyte_chars() {
                             (length nihon)
                             ;; Verify string-bytes differs from string length for multibyte
                             (> (string-bytes full) (length full)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"café日本語xyz\" \"café\" \"本語x\" \"é日本語xy\" 10 10 4 3 t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +137,12 @@ fn oracle_prop_buffer_substring_delete_and_extract_vs_manual() {
                               (string= remaining1 remaining2)
                               extracted1
                               remaining1))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t \"quick brow\" \"the n fox jumps over the lazy dog\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +176,10 @@ fn oracle_prop_buffer_substring_boundary_conditions() {
                             reversed
                             first-char
                             last-char)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"abcdef\" \"\" \"\" \"\" t \"bcd\" \"a\" \"f\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +228,12 @@ fn oracle_prop_buffer_substring_line_diff() {
                               (setq diffs (cons (list 'added i lb) diffs)))))
                           (setq a (cdr a) b (cdr b) i (1+ i))))
                       (nreverse diffs)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((changed 1 \"line two\" \"LINE TWO\") (changed 3 \"line four\" \"line 4\") (added 5 \"line six\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +264,12 @@ fn oracle_prop_buffer_substring_extract_reconstruct() {
                                 original
                                 ;; Verify lengths match
                                 (= (length reversed) (length original)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"AA\" \"BC\" \"DD\" \"B\" \"C\" \"EE\" \"DDCBCBAAEE\" \"AABBCCDDEE\" t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -294,5 +323,5 @@ fn oracle_prop_buffer_string_vs_substring_full_range() {
                                   results)))
                     ;; All should be t
                     (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (t t t t t)""#]);
 }

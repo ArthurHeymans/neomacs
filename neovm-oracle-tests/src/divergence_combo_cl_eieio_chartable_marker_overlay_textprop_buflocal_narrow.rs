@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_chartable_syntax_class_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ct-snap ()
     ((step :initarg :step :accessor cts-step :initform "")
@@ -67,6 +67,7 @@ fn combo_eieio_chartable_syntax_class_lookup() {
               (char-syntax ?.) (char-syntax ?+)
               my-ct-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -74,7 +75,7 @@ fn combo_eieio_chartable_syntax_class_lookup() {
 fn combo_eieio_chartable_category_table_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cat-snap ()
     ((step :initarg :step :accessor cats-step :initform "")
@@ -134,6 +135,7 @@ fn combo_eieio_chartable_category_table_ops() {
               (category-docstring ?x ct)
               my-cat-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (error \"Category ‘y’ is already defined\")""#]],
     );
 }
 
@@ -141,7 +143,7 @@ fn combo_eieio_chartable_category_table_ops() {
 fn combo_eieio_chartable_with_syntax_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass syntab-snap ()
     ((step :initarg :step :accessor sts-step :initform "")
@@ -196,6 +198,7 @@ fn combo_eieio_chartable_with_syntax_textprop() {
               (overlay-start ov) (overlay-end ov)
               my-st-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -203,7 +206,7 @@ fn combo_eieio_chartable_with_syntax_textprop() {
 fn combo_eieio_chartable_case_table_with_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass case-snap ()
     ((step :initarg :step :accessor css-step :initform "")
@@ -258,6 +261,7 @@ fn combo_eieio_chartable_case_table_with_overlay() {
               (overlay-start ov) (overlay-end ov)
               my-cs-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -265,7 +269,7 @@ fn combo_eieio_chartable_case_table_with_overlay() {
 fn combo_eieio_chartable_translate_region_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass trans-snap ()
     ((step :initarg :step :accessor trs-step :initform "")
@@ -336,5 +340,6 @@ fn combo_eieio_chartable_translate_region_with_markers() {
               (overlay-start ov) (overlay-end ov)
               my-tr-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments make-string 1)""#]],
     );
 }

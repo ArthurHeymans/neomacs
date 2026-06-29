@@ -7,12 +7,13 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_encode_decode_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"Hello World\")
   (encode-coding-region 1 12 'utf-8)
   (list (buffer-string)
         (length (buffer-string)))) ",
+        expect_test::expect![[r#""Hello WorldOK (\"Hello World\" 11)""#]],
     );
 }
 
@@ -20,7 +21,7 @@ fn divergence_encode_decode_region() {
 fn divergence_coding_system_base() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (coding-system-base 'utf-8)
   (coding-system-base 'utf-8-dos)
@@ -28,6 +29,7 @@ fn divergence_coding_system_base() {
   (coding-system-base 'no-conversion)
   (coding-system-p 'utf-8)
   (coding-system-p 'nonexistent-cs-xxx)) ",
+        expect_test::expect![[r#""OK (utf-8 utf-8 iso-latin-1 no-conversion t nil)""#]],
     );
 }
 
@@ -35,11 +37,12 @@ fn divergence_coding_system_base() {
 fn divergence_coding_system_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((cs (coding-system-priority-list)))
   (list (car cs)
         (>= (length cs) 1)
         (eq (car cs) 'utf-8))) ",
+        expect_test::expect![[r#""OK (utf-8 t t)""#]],
     );
 }
 
@@ -47,13 +50,14 @@ fn divergence_coding_system_priority() {
 fn divergence_charset_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (charsetp 'ascii)
   (charsetp 'unicode)
   (charsetp 'nonexistent-xxx)
   (encode-char ?A 'ascii)
   (decode-char 'ascii 65)) ",
+        expect_test::expect![[r#""OK (t t nil 65 65)""#]],
     );
 }
 
@@ -61,12 +65,13 @@ fn divergence_charset_operations() {
 fn divergence_string_encode_decode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((s \"caf\\u00e9\"))
   (list (encode-coding-string s 'utf-8)
         (decode-coding-string (encode-coding-string s 'utf-8) 'utf-8)
         (string= s (decode-coding-string (encode-coding-string s 'utf-8) 'utf-8))
         (length (encode-coding-string s 'utf-8)))) ",
+        expect_test::expect![[r#""OK (\"caf\\303\\251\" \"café\" t 5)""#]],
     );
 }
 
@@ -74,13 +79,14 @@ fn divergence_string_encode_decode() {
 fn divergence_process_environment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (stringp (getenv \"HOME\"))
   (stringp (getenv \"PATH\"))
   (stringp (getenv \"SHELL\"))
   (> (length (getenv \"PATH\")) 10)
   (> (length process-environment) 5)) ",
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -88,10 +94,11 @@ fn divergence_process_environment() {
 fn divergence_shell_command_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((out (shell-command-to-string \"echo hello\")))
   (list (string-trim out)
         (string= (string-trim out) \"hello\"))) ",
+        expect_test::expect![[r#""OK (\"hello\" t)""#]],
     );
 }
 
@@ -99,7 +106,7 @@ fn divergence_shell_command_output() {
 fn divergence_call_process_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((result (with-temp-buffer
                  (insert \"hello\")
                  (call-process-region (point-min) (point-max)
@@ -107,6 +114,7 @@ fn divergence_call_process_region() {
                  (buffer-string))))
   (list (string-trim result)
         (string= (string-trim result) \"hello\"))) ",
+        expect_test::expect![[r#""OK (\"hello\" t)""#]],
     );
 }
 
@@ -114,11 +122,12 @@ fn divergence_call_process_region() {
 fn divergence_process_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (listp (process-list))
   (<= (length (process-list)) 0)
   (processp nil)) ",
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
@@ -126,7 +135,7 @@ fn divergence_process_list() {
 fn divergence_system_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (stringp system-name)
   (stringp system-configuration)
@@ -136,5 +145,6 @@ fn divergence_system_info() {
   (stringp emacs-version)
   (>= (length emacs-version) 5)
   (integerp emacs-major-version)) ",
+        expect_test::expect![[r#""ERR (void-variable emacs-pid)""#]],
     );
 }

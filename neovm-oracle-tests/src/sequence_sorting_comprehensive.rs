@@ -42,7 +42,12 @@ fn oracle_prop_sort_comprehensive_all_comparators() {
               (and (= (length a) (length b))
                    (string< a b))))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9 10) (10 9 8 7 6 5 4 3 2 1) (\"apple\" \"banana\" \"cherry\" \"date\" \"elderberry\" \"fig\" \"grape\") (\"fig\" \"date\" \"cherry\" \"banana\" \"apple\") (\"Banana\" \"Cherry\" \"DATE\" \"apple\" \"elderberry\") (3 6 9 1 4 7 2 5 8) (\"dddd\" \"bbb\" \"ggg\" \"aa\" \"ee\" \"c\" \"f\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +74,12 @@ fn oracle_prop_sort_comprehensive_vector_sort() {
   ;; Verify vector sort returns a vector (using type-of or vectorp)
   (vectorp (sort [3 1 2] '<)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([1 2 3 4 5 6 7 8 9] [\"apple\" \"banana\" \"cherry\"] [] [42] [-1 2 -3 5 7 -8 10] t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +109,12 @@ fn oracle_prop_sort_comprehensive_key_parameter() {
   (sort (list -5 3 -8 1 -9 2 -7 4 -6)
         :key 'abs :lessp '<))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . \"a\") (2 . \"b\") (3 . \"c\")) ((2 . \"apple\") (3 . \"banana\") (1 . \"cherry\")) (\"fig\" \"date\" \"apple\" \"cherry\" \"banana\") (9 8 7 6 5 4 3 2 1) ((b 1) (d 1) (a 3) (c 4) (e 5)) (1 2 3 4 -5 -6 -7 -8 -9))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +142,12 @@ fn oracle_prop_sort_comprehensive_string_sort() {
   ;; Verify string sort returns a string
   (stringp (sort "cba" '<)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""ERR (wrong-type-argument list-or-vector-p \"zyxwvutsrqponmlkjihgfedcba\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +178,12 @@ fn oracle_prop_sort_comprehensive_seq_sort() {
       ;; Single element
       (seq-sort '< '(42)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9) (5 3 8 1 9 2 7 4 6) t [1 2 3 4 5] (\"apple\" \"banana\" \"cherry\") nil (42))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +211,12 @@ fn oracle_prop_sort_comprehensive_seq_sort_by() {
   ;; Sort with string key extraction
   (seq-sort-by 'symbol-name 'string< '(cherry apple banana date)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . y) (2 . z) (3 . x)) (\"fig\" \"date\" \"apple\" \"cherry\") (-1 2 3 -5 7 -9) ((b 1) (d 1) (a 3) (c 4) (e 5)) [1 2 3 4 5] (apple banana cherry date))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -217,7 +247,12 @@ fn oracle_prop_sort_comprehensive_cl_sort_key() {
   ;; cl-sort single element
   (cl-sort (list 42) '< :key 'identity))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . \"a\") (2 . \"b\") (3 . \"c\")) ((\"apple\" . 2) (\"cherry\" . 3) (\"fig\" . 1)) [1 3 5 8 9] ((b 1 y) (d 2 w) (a 3 x) (c 4 z)) (-1 2 3 -5 7 -9) nil (42))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +280,12 @@ fn oracle_prop_sort_comprehensive_cl_stable_sort() {
       ;; Also test vector stable sort
       (cl-stable-sort (vector 3 1 4 1 5 9 2 6) '<))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 1 1 2 2 2 3 3) (\"a1\" \"a2\" \"a3\") (\"b1\" \"b2\" \"b3\") (\"c1\" \"c2\") [1 1 2 3 4 5 6 9])""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -277,7 +317,12 @@ fn oracle_prop_sort_comprehensive_cl_merge() {
   (cl-merge 'list '(1) '(2) '<)
   (cl-merge 'list '(2) '(1) '<))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9 10) (1 2 3) (4 5 6) nil (1 2 2 3 3 3 4 4 5 5) (\"apple\" \"banana\" \"cherry\" \"date\" \"fig\" \"grape\") [1 2 3 4 5 6] (1 2) (1 2))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +374,12 @@ fn oracle_prop_sort_comprehensive_nested_structures() {
                                  (> (nth 2 a) (nth 2 b))))))))
     (makunbound 'neovm--test-sort-records)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"Alice\" \"Bob\" \"Carol\" \"Dave\" \"Eve\" \"Frank\" \"Grace\" \"Hank\") ((\"Bob\" 25) (\"Frank\" 25) (\"Dave\" 28) (\"Hank\" 28) (\"Alice\" 30) (\"Eve\" 30) (\"Carol\" 35) (\"Grace\" 35)) ((\"Hank\" 95 28) (\"Alice\" 95 30) (\"Carol\" 95 35) (\"Frank\" 92 25) (\"Dave\" 92 28) (\"Grace\" 88 35) (\"Bob\" 87 25) (\"Eve\" 87 30)) ((\"Chicago\" \"Dave\" 92) (\"Chicago\" \"Grace\" 88) (\"LA\" \"Hank\" 95) (\"LA\" \"Bob\" 87) (\"LA\" \"Eve\" 87) (\"NYC\" \"Alice\" 95) (\"NYC\" \"Carol\" 95) (\"NYC\" \"Frank\" 92)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +416,12 @@ fn oracle_prop_sort_comprehensive_side_effects_in_comparator() {
               (setq ok nil)))
           ok)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7) 12 ((1 2 t) (1 4 t) (7 4 nil) (7 2 nil) (2 4 t)) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -395,7 +450,10 @@ fn oracle_prop_sort_comprehensive_destructive_behavior() {
           ;; The result of sort IS the destructively modified list
           (eq sorted-orig original))))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t (5 3 8 1 9 2 7 4 6) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -429,7 +487,12 @@ fn oracle_prop_sort_comprehensive_edge_cases() {
   ;; Mixed positive, negative, zero
   (sort (list 0 -1 1 -2 2 -3 3 0 0) '<))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9 10) (1 2 3 4 5 6 7 8 9 10) (5 5 5 5 5 5 5) (1 2) (1 2) (-1000000 -999999 -1 0 1 999999 1000000) (1 2 3 4 5 6 7 8 9 10) (1 1 1 2 2 2 3 3 3) (-9 -8 -7 -6 -5 -4 -3 -2 -1) (-3 -2 -1 0 0 0 1 2 3))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -452,7 +515,10 @@ fn oracle_prop_sort_comprehensive_in_place() {
   (sort (list '(3 . "c") '(1 . "a") '(5 . "e") '(2 . "b") '(4 . "d"))
         :key 'car :lessp '< :reverse t))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (error \"Invalid argument list\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -512,7 +578,12 @@ fn oracle_prop_sort_comprehensive_manual_merge_sort() {
     (fmakunbound 'neovm--test-msort-merge)
     (fmakunbound 'neovm--test-msort)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 4 5 9 10 12 17 23 27 29 33 38 41 43 50 55 67 76 82 91) (3 4 5 9 10 12 17 23 27 29 33 38 41 43 50 55 67 76 82 91) t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -552,5 +623,10 @@ fn oracle_prop_sort_comprehensive_frequency_sort() {
                 (setq result (cons x result))))
             (nreverse result)))))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((7 2 4 1 3 5) ((7 . 4) (2 . 3) (4 . 3) (1 . 2) (3 . 2) (5 . 1)) (7 7 7 7 2 2 2 4 4 4 1 1 3 3 5))""#
+        ]],
+    );
 }

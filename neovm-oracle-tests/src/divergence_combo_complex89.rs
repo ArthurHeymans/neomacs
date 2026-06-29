@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx89_execute_kbd_macro_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello")
@@ -16,13 +16,14 @@ fn div_cx89_execute_kbd_macro_basic() {
   (execute-kbd-macro (kbd "C-a C-e"))
   (list (point) (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK (1 \"\")""#]],
     );
 }
 
 #[test]
 fn div_cx89_execute_kbd_macro_with_insertion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -32,13 +33,14 @@ fn div_cx89_execute_kbd_macro_with_insertion() {
       (list (point) (buffer-string)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (2 \"X\")""#]],
     );
 }
 
 #[test]
 fn div_cx89_register_to_string_and_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((reg ?a))
@@ -53,13 +55,14 @@ fn div_cx89_register_to_string_and_number() {
             (get-register ?z)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (\"text content\" 99 (1 2 3) [vector content] nil)""#]],
     );
 }
 
 #[test]
 fn div_cx89_register_with_rectangle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -72,13 +75,14 @@ fn div_cx89_register_with_rectangle() {
               (consp (get-register reg)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK ((\"AA\" \"BB\" \"CC\") t)""#]],
     );
 }
 
 #[test]
 fn div_cx89_kmacro_define_run_and_save() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -93,13 +97,14 @@ fn div_cx89_kmacro_define_run_and_save() {
             (commandp 'neo-cx89-mac)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored invalid-function)""#]],
     );
 }
 
 #[test]
 fn div_cx89_register_jump_with_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((reg ?j))
   (with-temp-buffer
@@ -110,13 +115,14 @@ fn div_cx89_register_jump_with_window() {
     (list (markerp jumped-to)
           (integerp jumped-to))))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx89_window_configuration_register() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((reg ?w))
   (window-configuration-to-register reg)
@@ -126,13 +132,16 @@ fn div_cx89_window_configuration_register() {
     (let ((n-restored (length (window-list))))
       (list n-with-split n-restored (get-register reg)))))
 "##,
+        expect_test::expect![[
+            r#""OK (2 1 (#<window-configuration> #<marker at 1 in  *neovm-oracle-stdout*>))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx89_bookmark_set_and_jump() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -147,13 +156,14 @@ fn div_cx89_bookmark_set_and_jump() {
               (bookmark-get-position "neo-cx89-bm"))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx89_kmacro_append_with_counter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -168,13 +178,14 @@ fn div_cx89_kmacro_append_with_counter() {
               (kmacro-p m1))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (65 68 3 3 nil)""#]],
     );
 }
 
 #[test]
 fn div_cx89_execute_kbd_macro_count_iterations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -184,13 +195,14 @@ fn div_cx89_execute_kbd_macro_count_iterations() {
       (list (point) (buffer-string)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (5 \"XXXX\")""#]],
     );
 }
 
 #[test]
 fn div_cx89_register_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -213,18 +225,22 @@ fn div_cx89_register_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }
 
 #[test]
 fn div_cx89_register_keys_unicode_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((regs '(?α ?β ?γ ?δ ?ε)))
   (dolist (r regs)
     (set-register r (format "value-for-%c" r)))
   (mapcar (lambda (r) (cons r (get-register r))) regs))
 "##,
+        expect_test::expect![[
+            r#""OK ((945 . \"value-for-α\") (946 . \"value-for-β\") (947 . \"value-for-γ\") (948 . \"value-for-δ\") (949 . \"value-for-ε\"))""#
+        ]],
     );
 }

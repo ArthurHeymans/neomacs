@@ -83,7 +83,12 @@ fn oracle_prop_auto_dfa_multiples_of_5() {
     (fmakunbound 'neovm--auto-dfa5-run)
     (fmakunbound 'neovm--auto-int-to-bin)
     (makunbound 'neovm--auto-dfa5-trans)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t nil nil nil t ((0 1 1) (1 0 2) (2 1 0) (0 0 0)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +242,12 @@ fn oracle_prop_auto_nfa_to_dfa_subset_construction() {
     (fmakunbound 'neovm--auto-run-dfa)
     (fmakunbound 'neovm--auto-run-nfa)
     (makunbound 'neovm--auto-nfa)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 ((\"ad\" t t t) (\"abd\" t t t) (\"acd\" t t t) (\"abcd\" t t t) (\"abcbcd\" t t t) (\"abbbbbd\" t t t) (\"acccccd\" t t t) (\"abcbcbcbcd\" t t t) (\"\" nil nil t) (\"a\" nil nil t) (\"d\" nil nil t) (\"ab\" nil nil t) (\"abc\" nil nil t) (\"bd\" nil nil t) (\"aad\" nil nil t) (\"add\" nil nil t) (\"abcda\" nil nil t)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +330,12 @@ fn oracle_prop_auto_pda_balanced_parens() {
         ;; Deep nesting
         (funcall 'neovm--auto-pda-check "(((((((()))))))"))
     (fmakunbound 'neovm--auto-pda-check)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t 1 ((40 . 1) (91 . 0) (123 . 0)) nil) (t 1 ((40 . 0) (91 . 1) (123 . 0)) nil) (t 1 ((40 . 0) (91 . 0) (123 . 1)) nil) (t 2 ((40 . 1) (91 . 1) (123 . 1)) nil) (t 4 ((40 . 3) (91 . 1) (123 . 0)) nil) (t 3 ((40 . 2) (91 . 1) (123 . 1)) nil) (t 1 ((40 . 2) (91 . 2) (123 . 1)) nil) (t 0 ((40 . 0) (91 . 0) (123 . 0)) nil) (t 1 ((40 . 1) (91 . 1) (123 . 0)) nil) (t 2 ((40 . 2) (91 . 0) (123 . 0)) nil) (nil 1 ((40 . 1) (91 . 0) (123 . 0)) \"unclosed '(' (1 remaining)\") (nil 0 ((40 . 0) (91 . 0) (123 . 0)) \"unexpected ')' at pos 0\") (nil 1 ((40 . 1) (91 . 0) (123 . 0)) \"mismatch at pos 1: expected '(' got ']'\") (nil 2 ((40 . 1) (91 . 1) (123 . 0)) \"mismatch at pos 2: expected '[' got ')'\") (nil 3 ((40 . 3) (91 . 0) (123 . 0)) \"unclosed '(' (1 remaining)\") (nil 8 ((40 . 8) (91 . 0) (123 . 0)) \"unclosed '(' (1 remaining)\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -397,7 +412,12 @@ fn oracle_prop_auto_cellular_rule30() {
     (fmakunbound 'neovm--auto-ca-step)
     (fmakunbound 'neovm--auto-ca-run)
     (fmakunbound 'neovm--auto-ca-density)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 0 0 0 0 0 0 1 0 0 0 0 0 0 0) (0 0 0 0 0 0 1 1 1 0 0 0 0 0 0) (0 0 0 0 0 1 1 0 0 1 0 0 0 0 0) (0 0 0 0 1 1 0 1 1 1 1 0 0 0 0) (0 0 0 1 1 0 0 1 0 0 0 1 0 0 0) (0 0 1 1 0 1 1 1 1 0 1 1 1 0 0) (0 1 1 0 0 1 0 0 0 0 1 0 0 1 0) (1 1 0 1 1 1 1 0 0 1 1 1 1 1 1)) ((0 0 0 0 0 0 0 1 0 0 0 0 0 0 0) (0 0 0 0 0 0 1 0 1 0 0 0 0 0 0) (0 0 0 0 0 1 0 0 0 1 0 0 0 0 0) (0 0 0 0 1 0 1 0 1 0 1 0 0 0 0) (0 0 0 1 0 0 0 0 0 0 0 1 0 0 0) (0 0 1 0 1 0 0 0 0 0 1 0 1 0 0) (0 1 0 0 0 1 0 0 0 1 0 0 0 1 0) (1 0 1 0 1 0 1 0 1 0 1 0 1 0 1)) (12 . 15) (8 . 15) nil t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -468,7 +488,12 @@ fn oracle_prop_auto_cellular_rule110() {
     (fmakunbound 'neovm--auto-r110-step)
     (fmakunbound 'neovm--auto-r110-to-string)
     (fmakunbound 'neovm--auto-r110-population)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"....................#\" \"...................##\" \"..................###\" \".................##.#\" \"................#####\" \"...............##...#\" \"..............###..##\" \".............##.#.###\" \"............#######.#\" \"...........##.....###\" \"..........###....##.#\" \".........##.#...#####\" \"........#####..##...#\") (1 2 3 3 5 3 5 6 8 5 6 8 8) \"........#####..##...#\" t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -552,7 +577,12 @@ fn oracle_prop_auto_mealy_parity_checker() {
     (fmakunbound 'neovm--auto-mealy-parity)
     (fmakunbound 'neovm--auto-mealy-frame)
     (fmakunbound 'neovm--auto-mealy-verify-frame)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0) 0) ((1) 1) ((1 0) 0) ((1 0 0) 0) ((1 1 0 0) 0) ((1 0 1 0 1) 1) ((1 1 0 0 1 1 0 0) 0) \"S10100E\" \"S11110E\" \"S00000E\" (t \"1010\" t) (t \"11001\" t) (t \"0010\" nil) (nil nil nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -645,5 +675,10 @@ fn oracle_prop_auto_moore_traffic_light() {
     (makunbound 'neovm--auto-tl-trans)
     (makunbound 'neovm--auto-tl-output)
     (makunbound 'neovm--auto-tl-duration)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((green (\"CAUTION\" \"STOP\" \"LEFT-TURN\" \"GO\") ((green tick yellow \"CAUTION\") (yellow tick red \"STOP\") (red tick left-arrow \"LEFT-TURN\") (left-arrow tick green \"GO\"))) (left-arrow (\"EMERGENCY-STOP\" \"EMERGENCY-STOP\" \"EMERGENCY-STOP\" \"STOP\" \"LEFT-TURN\") ((green emergency flashing-red \"EMERGENCY-STOP\") (flashing-red tick flashing-red \"EMERGENCY-STOP\") (flashing-red tick flashing-red \"EMERGENCY-STOP\") (flashing-red clear red \"STOP\") (red tick left-arrow \"LEFT-TURN\"))) (green (\"CAUTION\" \"STOP\" \"LEFT-TURN\" \"GO\")) (yellow (\"CAUTION\" \"EMERGENCY-STOP\" \"STOP\" \"LEFT-TURN\" \"GO\" \"CAUTION\")) left-arrow (5 2 5))""#
+        ]],
+    );
 }

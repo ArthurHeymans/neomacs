@@ -34,7 +34,12 @@ fn oracle_put_get_keep_uninterned_symbol_plists_separate() {
     (setplist interned nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil uninterned-value interned-value uninterned-shared interned-shared (neomacs--oracle-prop-id uninterned-value shared uninterned-shared) (neomacs--oracle-prop-id interned-value shared interned-shared))""#
+        ]],
+    );
 }
 
 #[test]
@@ -63,7 +68,12 @@ fn oracle_setplist_is_verbatim_and_identity_based() {
     (setplist interned nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((neomacs--oracle-setplist-prop 1 \"prop\" 2) (neomacs--oracle-setplist-prop 3 \"prop\" 4) 1 3 2 4 nil nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -86,7 +96,12 @@ fn oracle_get_honors_non_nil_overriding_plist_environment() {
     (setplist sym nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (override real-nil-prop (neomacs--oracle-override-prop real nil-prop real-nil-prop))""#
+        ]],
+    );
 }
 
 #[test]
@@ -109,7 +124,12 @@ fn oracle_symbol_plist_malformed_get_put_semantics() {
     (setplist sym nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 nil nil (wrong-type-argument plistp) (a 1 b . bad-tail))""#
+        ]],
+    );
 }
 
 #[test]
@@ -141,5 +161,8 @@ fn oracle_symbol_plist_nil_and_t_are_mutable() {
     (setplist t t-old)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t (:nil 2) 2 2 (:nil 2) t (:t 4) 4 4 (:t 4))""#]],
+    );
 }

@@ -61,7 +61,10 @@ fn oracle_prop_linkedlist_rotation_advanced() {
           (equal result (funcall 'neovm--ll-rotate-left lst 3))))
     (fmakunbound 'neovm--ll-rotate-left)
     (fmakunbound 'neovm--ll-rotate-right)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((3 4 5 1 2) (4 5 1 2 3) (a b c d) (b c a) t nil (42) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +136,12 @@ fn oracle_prop_linkedlist_interleave_zip() {
     (fmakunbound 'neovm--ll-interleave)
     (fmakunbound 'neovm--ll-deinterleave)
     (fmakunbound 'neovm--ll-zip-longest)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 a 2 b 3 c) (1 a 2 b 3 4 5) (x 1 2 3 4) (a b c) (1 2) (t t) ((1 . a) (2 . b) (3 . c) (nil . d) (nil . e)) (1 3 2 6 4 9 5 7 8))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +207,12 @@ fn oracle_prop_linkedlist_rle_advanced() {
     (fmakunbound 'neovm--ll-rle-encode)
     (fmakunbound 'neovm--ll-rle-decode)
     (fmakunbound 'neovm--ll-rle-compression-ratio)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a 3) (b 2) (c 4) (d 1)) (a a a b b c c c c d) t ((a 1) (b 1) (c 1) (d 1) (e 1)) ((q 8)) ((\"hi\" 2) (\"lo\" 3) (\"hi\" 1)) ((15 2) (10 10)) (nil ((z 1))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +288,12 @@ fn oracle_prop_linkedlist_partition_by_predicate() {
     (fmakunbound 'neovm--ll-partition)
     (fmakunbound 'neovm--ll-partition-n)
     (fmakunbound 'neovm--ll-chunk)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((2 4 6 8 10) 1 3 5 7 9) ((2 5 8 1) -3 -1 0 -7 0) ((1 2 3 4 5)) (nil 1 2 3 4 5) ((1 1 4 7 10) (2 2 5 8 11) (0 3 6 9 12)) t ((a b c) (d e f) (g h)) ((1 2) (3 4) (5 6)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +350,12 @@ fn oracle_prop_linkedlist_group_by() {
                  (lambda (x) (cond ((> x 0) 'pos) ((< x 0) 'neg) (t 'zero)))
                  '(3 -1 0 5 -2 0 7 -4 0 1)))
     (fmakunbound 'neovm--ll-group-by)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((even 2 4 6 8) (odd 1 3 5 7)) ((1 \"a\" \"e\") (2 \"bb\" \"dd\" \"gg\") (3 \"ccc\" \"fff\")) ((97 \"apple\" \"avocado\") (98 \"banana\" \"blueberry\") (99 \"cherry\")) ((same 1 2 3 4 5)) ((a a) (b b) (c c) (d d) (e e)) nil ((neg -1 -2 -4) (pos 3 5 7 1) (zero 0 0 0)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -397,7 +420,12 @@ fn oracle_prop_linkedlist_sliding_window() {
     (fmakunbound 'neovm--ll-windows)
     (fmakunbound 'neovm--ll-moving-avg)
     (fmakunbound 'neovm--ll-max-window)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 2 3) (2 3 4) (3 4 5) (4 5 6)) ((a b c)) nil ((x) (y) (z)) (20.0 30.0 40.0) ((5 -2 8) 11) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -466,5 +494,10 @@ fn oracle_prop_linkedlist_frequency_histogram() {
     (fmakunbound 'neovm--ll-histogram)
     (fmakunbound 'neovm--ll-top-k)
     (fmakunbound 'neovm--ll-mode)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a . 4) (b . 3) (c . 2) (d . 1)) ((a . 4) (b . 3)) 4 ((x . 1) (y . 1) (z . 1)) t 5 ((\"the\" . 3) (\"cat\" . 2) (\"mat\" . 1) (\"on\" . 1) (\"sat\" . 1)) nil)""#
+        ]],
+    );
 }

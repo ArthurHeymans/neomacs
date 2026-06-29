@@ -30,7 +30,12 @@ fn oracle_prop_thing_at_point_word_symbol_and_line_bounds() {
           (list word1 symbol1 bounds1 word2 symbol2 line line-bounds))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"alpha\" \"alpha-beta\" (1 . 6) \"gamma\" \"gamma_delta\" \"second line\n\" (24 . 36))""#
+        ]],
+    );
 }
 
 #[test]
@@ -56,7 +61,10 @@ fn oracle_prop_thing_at_point_sexp_list_and_empty_buffer() {
       (bounds-of-thing-at-point 'whitespace)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (search-failed \"inner\")""#]],
+    );
 }
 
 #[test]
@@ -78,7 +86,12 @@ fn oracle_prop_thing_at_point_no_properties() {
        (text-properties-at 0 without-props)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (#(\"colored\" 0 7 (face bold oracle-prop 17)) (face bold oracle-prop 17) \"colored\" nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -109,5 +122,8 @@ fn oracle_prop_thing_at_point_provider_alists() {
        (progn (forward-thing 'oracle-forward -1) (point))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"provider-text\" (5 . 8) 3 1)""#]],
+    );
 }

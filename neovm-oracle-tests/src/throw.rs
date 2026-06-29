@@ -10,7 +10,10 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_throw_to_matching_catch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(catch 'tag (throw 'tag 99))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(catch 'tag (throw 'tag 99))",
+        expect_test::expect![[r#""OK 99""#]],
+    );
     assert_ok_eq("99", &oracle, &neovm);
 }
 
@@ -18,7 +21,10 @@ fn oracle_prop_throw_to_matching_catch() {
 fn oracle_prop_throw_without_catch_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(throw 'tag 1)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(throw 'tag 1)",
+        expect_test::expect![[r#""ERR (no-catch tag 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "no-catch");
 }
 

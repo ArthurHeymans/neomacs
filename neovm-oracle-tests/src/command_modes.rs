@@ -30,5 +30,10 @@ fn oracle_prop_command_modes_symbol_property_lambda_and_bytecode() {
     (fmakunbound 'neovm--test-cm-bytecode)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((text-mode prog-mode) (foo-mode bar-mode) (rust-ts-mode c-mode) nil nil)""#
+        ]],
+    );
 }

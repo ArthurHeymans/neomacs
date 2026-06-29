@@ -75,7 +75,10 @@ fn oracle_prop_minimax_basic_game_tree() {
        (funcall 'neovm--mm-minimax '((5 5) (5 5)) 10 t))
     (fmakunbound 'neovm--mm-leaf-p)
     (fmakunbound 'neovm--mm-minimax)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 8 42 7 4 5)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +177,7 @@ fn oracle_prop_minimax_alpha_beta_pruning() {
     (fmakunbound 'neovm--ab-leaf-p)
     (fmakunbound 'neovm--ab-minimax)
     (fmakunbound 'neovm--ab-minimax-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (8 12 6 5)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +258,10 @@ fn oracle_prop_minimax_tictactoe_evaluation() {
     (fmakunbound 'neovm--ttt-full)
     (fmakunbound 'neovm--ttt-moves)
     (fmakunbound 'neovm--ttt-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 10 -10 (0 t) (1 3 5 7 8) 10 -10)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -365,7 +371,10 @@ fn oracle_prop_minimax_tictactoe_with_moves() {
     (fmakunbound 'neovm--ttt2-moves)
     (fmakunbound 'neovm--ttt2-minimax)
     (fmakunbound 'neovm--ttt2-best-move)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 10) (2 7) 0 9)""#]],
+    );
     assert_ok_eq("((2 10) (2 7) 0 9)", &oracle, &neovm);
 }
 
@@ -475,7 +484,10 @@ fn oracle_prop_minimax_heuristic_evaluation() {
           (funcall 'neovm--heur-minimax board 1 0 3))))
     (fmakunbound 'neovm--heur-eval)
     (fmakunbound 'neovm--heur-minimax)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 4 105 -105 -9 (1000 1000 1000))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -539,5 +551,10 @@ fn oracle_prop_minimax_nim_game() {
                  '(1 2 3 5 6 7 9 10 11 13))))
     (fmakunbound 'neovm--nim-can-win)
     (fmakunbound 'neovm--nim-best-take)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t nil t (t t t nil t t t nil t t t nil t t t nil) (1 2 3 1 2 3 1 2 3 1))""#
+        ]],
+    );
 }

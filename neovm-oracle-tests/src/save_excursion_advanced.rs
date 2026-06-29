@@ -31,7 +31,7 @@ fn oracle_prop_save_excursion_complex_movement_restore() {
               (re-search-forward "three" nil t)
               (list mid near-end (point) (match-string 0)))))
         (list (point) (= (point) original-point))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (5 t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +53,10 @@ fn oracle_prop_save_excursion_restores_mark() {
           (push-mark 15 t)
           (list (point) (mark t)))
         (list mark-before (mark t) (= mark-before (mark t)) (point))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (20 15 nil 10)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -93,7 +96,10 @@ fn oracle_prop_save_excursion_nested_different_buffers() {
                       (buffer-string)))))
         (kill-buffer buf-a)
         (kill-buffer buf-b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"neovm--test-se-A\" 3 \"BBBBXX\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +126,10 @@ fn oracle_prop_save_excursion_with_modifications() {
           (buffer-string))
         ;; Point should have shifted by the insertion length
         (list before-point (point) (buffer-string))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 9 \"01XXX234567\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +159,10 @@ fn oracle_prop_save_excursion_with_narrowing() {
               (list at-max found found-pos))))
         (list (point) narrow-min narrow-max
               (point-min) (point-max))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 5 15 5 15)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +196,10 @@ fn oracle_prop_save_excursion_save_restriction_combo() {
         (list (point) (= (point) orig-point)
               (point-min) (= (point-min) orig-min)
               (point-max) (= (point-max) orig-max))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (8 t 8 t 22 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +246,12 @@ fn oracle_prop_save_excursion_multi_pass_processing() {
         (setq replaced (buffer-string))
         ;; Point should be restored to 5
         (list (point) count matches replaced)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 4 ((1 \"10\") (8 \"20\") (15 \"30\") (22 \"40\")) \"result=20 result=40 result=60 result=80\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -260,5 +280,10 @@ fn oracle_prop_save_excursion_in_loops() {
               (setq found (cons (list pat nil) found)))))
         ;; Point unchanged after all loop iterations
         (list (point) (nreverse found))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (10 ((\"apple\" 3) (\"cherry\" 2) (\"elderberry\" 1) (\"fig\" nil)))""#
+        ]],
+    );
 }

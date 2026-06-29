@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx237_org_babel_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -18,13 +18,14 @@ fn div_cx237_org_babel_availability() {
             (boundp 'org-confirm-babel-evaluate)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx237_org_babel_elisp_execution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -37,13 +38,14 @@ fn div_cx237_org_babel_elisp_execution() {
           (org-babel-execute-src-block))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK 42""#]],
     );
 }
 
 #[test]
 fn div_cx237_org_babel_get_block_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -55,13 +57,16 @@ fn div_cx237_org_babel_get_block_info() {
         (org-babel-get-src-block-info)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"emacs-lisp\" \"(+ x 32)\" ((:var x . 10) (:colname-names) (:rowname-names) (:result-params \"replace\") (:result-type . value) (:results . \"replace\") (:exports . \"code\") (:lexical . \"no\") (:tangle . \"no\") (:hlines . \"no\") (:noweb . \"no\") (:cache . \"no\") (:session . \"none\")) \"\" nil 1 \"(ref:%s)\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx237_org_src_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -72,13 +77,14 @@ fn div_cx237_org_src_availability() {
             (boundp 'org-edit-src-content-indentation)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx237_org_attach_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -89,13 +95,14 @@ fn div_cx237_org_attach_availability() {
             (boundp 'org-attach-method)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx237_org_id_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -106,13 +113,14 @@ fn div_cx237_org_id_availability() {
             (boundp 'org-id-link-to-org-use-id)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx237_org_export_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -122,13 +130,14 @@ fn div_cx237_org_export_availability() {
             (boundp 'org-export-backends)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx237_org_link_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -141,13 +150,14 @@ fn div_cx237_org_link_parsing() {
               (buffer-string))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-variable)""#]],
     );
 }
 
 #[test]
 fn div_cx237_org_tangle_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -157,13 +167,14 @@ fn div_cx237_org_tangle_availability() {
             (boundp 'org-babel-tangle-use-relative-file-links)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx237_org_babel_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -192,5 +203,6 @@ fn div_cx237_org_babel_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

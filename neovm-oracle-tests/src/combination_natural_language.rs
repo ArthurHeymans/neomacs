@@ -52,7 +52,12 @@ fn oracle_prop_nlp_tokenizer() {
         ;; Punctuation-heavy
         (funcall 'neovm--nlp-tokenize "Hello...World!!! How's it going?"))
     (fmakunbound 'neovm--nlp-tokenize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"hello\" \"world\") (\"multiple\" \"spaces\" \"here\") (\"camelcaseword\") (\"one\") nil (\"abc\" \"def\") (\"the\" \"quick\" \"brown\" \"fox\" \"jumps\" \"over\" \"the\" \"lazy\" \"dog\") (\"hello\" \"world\" \"how\" \"s\" \"it\" \"going\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +114,12 @@ fn oracle_prop_nlp_ngrams() {
         (funcall 'neovm--nlp-ngrams '("x" "y" "z") 3))
     (fmakunbound 'neovm--nlp-ngrams)
     (fmakunbound 'neovm--nlp-char-ngrams)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"the\" \"cat\") (\"cat\" \"sat\") (\"sat\" \"on\") (\"on\" \"the\") (\"the\" \"mat\")) ((\"the\" \"cat\" \"sat\") (\"cat\" \"sat\" \"on\") (\"sat\" \"on\" \"the\") (\"on\" \"the\" \"mat\")) ((\"a\") (\"b\") (\"c\")) nil (\"he\" \"el\" \"ll\" \"lo\") (\"abc\" \"bcd\" \"cde\" \"def\") ((\"x\" \"y\" \"z\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +197,12 @@ fn oracle_prop_nlp_bag_of_words_and_frequency() {
     (fmakunbound 'neovm--nlp-bow)
     (fmakunbound 'neovm--nlp-bow-to-alist)
     (fmakunbound 'neovm--nlp-top-n)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (12 7 ((\"ate\" . 1) (\"cat\" . 2) (\"food\" . 1) (\"mat\" . 1) (\"on\" . 1) (\"sat\" . 1) (\"the\" . 5)) ((\"the\" . 5) (\"cat\" . 2) (\"ate\" . 1)) ((\"the\" . 5)) 5 0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +269,10 @@ fn oracle_prop_nlp_levenshtein() {
             (+ (funcall 'neovm--nlp-levenshtein "abc" "mno")
                (funcall 'neovm--nlp-levenshtein "mno" "xyz"))))
     (fmakunbound 'neovm--nlp-levenshtein)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 3 3 3 0 1 3 t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -317,7 +335,12 @@ fn oracle_prop_nlp_lcs() {
         (= (car (funcall 'neovm--nlp-lcs "algorithm" "altruistic"))
            (car (funcall 'neovm--nlp-lcs "altruistic" "algorithm"))))
     (fmakunbound 'neovm--nlp-lcs)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((4 \"BDAB\") (5 \"hello\") (0 \"\") (0 \"\") (3 \"ayz\") t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -385,7 +408,12 @@ fn oracle_prop_nlp_stemmer() {
         (let ((s1 (funcall 'neovm--nlp-stem "organizing")))
           (list s1 (funcall 'neovm--nlp-stem s1))))
     (fmakunbound 'neovm--nlp-stem)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"runn\" \"happi\" \"relational\" \"conditional\" \"caress\" \"poni\" \"cat\" \"jump\" \"quiet\" \"effective\" \"is\" \"a\" (\"organiz\" \"organiz\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -469,5 +497,8 @@ fn oracle_prop_nlp_jaccard_similarity() {
     (fmakunbound 'neovm--nlp-jac-inter-size)
     (fmakunbound 'neovm--nlp-jac-union-size)
     (fmakunbound 'neovm--nlp-jaccard)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((5 . 5) (0 . 5) (2 . 6) (2 . 4) (1 . 1) t (1 . 6))""#]],
+    );
 }

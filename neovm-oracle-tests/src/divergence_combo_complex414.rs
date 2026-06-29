@@ -13,13 +13,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx414_define_symbol_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (define-symbol-macro neo-cx414-sm (+ 1 2))
   (list neo-cx414-sm
         (macroexpand '(neo-cx414-sm))))
 "##,
+        expect_test::expect![[r#""ERR (void-function define-symbol-macro)""#]],
     );
 }
 
@@ -27,7 +28,7 @@ fn div_cx414_define_symbol_macro() {
 #[test]
 fn div_cx414_cl_flet_labels_recursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (list (cl-flet ((f (n) (if (<= n 1) 1 (* n (g (1- n)))))
@@ -36,6 +37,7 @@ fn div_cx414_cl_flet_labels_recursion() {
         (cl-labels ((fact (n) (if (<= n 1) 1 (* n (fact (1- n))))))
           (fact 6))))
 "##,
+        expect_test::expect![[r#""ERR (void-function g)""#]],
     );
 }
 
@@ -43,7 +45,7 @@ fn div_cx414_cl_flet_labels_recursion() {
 #[test]
 fn div_cx414_setf_advanced_forms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v (vector 1 2 3))
       (ht (make-hash-table))
@@ -55,6 +57,7 @@ fn div_cx414_setf_advanced_forms() {
   (setf (car lst) 42)
   (list v (gethash 'key ht) pl lst))
 "##,
+        expect_test::expect![[r#""OK ([1 99 3] value (:a 100 :b 2) (42 20 30))""#]],
     );
 }
 
@@ -62,7 +65,7 @@ fn div_cx414_setf_advanced_forms() {
 #[test]
 fn div_cx414_gv_define_setter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((my-hash (make-hash-table :test 'equal)))
   (puthash "a" 1 my-hash)
@@ -70,6 +73,7 @@ fn div_cx414_gv_define_setter() {
   (list (gethash "a" my-hash)
         (gethash "b" my-hash 'not-found)))
 "##,
+        expect_test::expect![[r#""OK (99 not-found)""#]],
     );
 }
 
@@ -77,12 +81,13 @@ fn div_cx414_gv_define_setter() {
 #[test]
 fn div_cx414_byte_compile_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (byte-compile (lambda (x) (* x 2)))))
   (list (byte-code-function-p f)
         (funcall f 5)))
 "##,
+        expect_test::expect![[r#""OK (t 10)""#]],
     );
 }
 
@@ -90,7 +95,7 @@ fn div_cx414_byte_compile_function() {
 #[test]
 fn div_cx414_disassemble_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (byte-compile (lambda (x) (+ x 1)))))
   (with-temp-buffer
@@ -98,6 +103,7 @@ fn div_cx414_disassemble_output() {
     (list (> (buffer-size) 0)
           (string-match-p "byte-code" (buffer-string)))))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
@@ -105,11 +111,12 @@ fn div_cx414_disassemble_output() {
 #[test]
 fn div_cx414_native_comp_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (native-comp-available-p)
       (native-comp-unit-file (symbol-function 'car)))
 "##,
+        expect_test::expect![[r#""ERR (void-function native-comp-unit-file)""#]],
     );
 }
 
@@ -117,11 +124,20 @@ fn div_cx414_native_comp_availability() {
 #[test]
 fn div_cx414_documentation_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (documentation 'car t)
       (documentation-property 'car 'function-documentation))
 "##,
+        expect_test::expect![
+            [r#"OK ("Return the car of LIST.  If LIST is nil, return nil.
+Error if LIST is not nil and not a cons cell.  See also `car-safe'.
+
+See Info node `(elisp)Cons Cells' for a discussion of related basic
+Lisp concepts such as car, cdr, cons cell and list.
+
+(fn LIST)" nil)"#]
+        ],
     );
 }
 
@@ -129,7 +145,7 @@ fn div_cx414_documentation_deep() {
 #[test]
 fn div_cx414_subr_arity_type_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (subr-arity 'car)
       (subr-arity 'concat)
@@ -137,6 +153,7 @@ fn div_cx414_subr_arity_type_deep() {
       (subr-type 'car)
       (subr-type 'concat))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument subrp car)""#]],
     );
 }
 
@@ -144,13 +161,14 @@ fn div_cx414_subr_arity_type_deep() {
 #[test]
 fn div_cx414_interactive_form_specs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f1 (lambda (x) (interactive "p") (* x 2)))
       (f2 (lambda () (interactive) 42)))
   (list (interactive-form f1)
         (interactive-form f2)))
 "##,
+        expect_test::expect![[r#""OK ((interactive \"p\") (interactive nil))""#]],
     );
 }
 
@@ -158,13 +176,14 @@ fn div_cx414_interactive_form_specs() {
 #[test]
 fn div_cx414_command_modes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (lambda () (interactive) (message "test"))))
   (put 'neo-cx414-cmd 'command-modes '(text-mode))
   (defalias 'neo-cx414-cmd f)
   (command-modes 'neo-cx414-cmd))
 "##,
+        expect_test::expect![[r#""OK (text-mode)""#]],
     );
 }
 
@@ -172,12 +191,13 @@ fn div_cx414_command_modes() {
 #[test]
 fn div_cx414_purecopy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (purecopy "hello")
       (purecopy '(a b c))
       (purecopy 42))
 "##,
+        expect_test::expect![[r#""OK (\"hello\" (a b c) 42)""#]],
     );
 }
 
@@ -185,11 +205,12 @@ fn div_cx414_purecopy() {
 #[test]
 fn div_cx414_read_char_batch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (with-timeout (0.01) (read-char)) (error (car e)))
       (condition-case e (with-timeout (0.01) (read-event)) (error (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
@@ -197,7 +218,7 @@ fn div_cx414_read_char_batch() {
 #[test]
 fn div_cx414_charset_after_in_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abc")
@@ -205,6 +226,7 @@ fn div_cx414_charset_after_in_region() {
         (charset-after 2)
         (charset-in-region 1 3)))
 "##,
+        expect_test::expect![[r#""ERR (void-function charset-in-region)""#]],
     );
 }
 
@@ -212,13 +234,14 @@ fn div_cx414_charset_after_in_region() {
 #[test]
 fn div_cx414_char_charset_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-charset ?a)
       (char-charset ?é)
       (char-charset ?世)
       (char-charset #x1F600))
 "##,
+        expect_test::expect![[r#""OK (ascii unicode-bmp unicode-bmp unicode)""#]],
     );
 }
 
@@ -226,13 +249,14 @@ fn div_cx414_char_charset_various() {
 #[test]
 fn div_cx414_split_char_make_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (split-char ?A) (error (car e)))
       (condition-case e (split-char ?世) (error (car e)))
       (condition-case e (make-char 'ascii 65) (error (car e)))
       (condition-case e (make-char 'latin-iso8859-1 233) (error (car e))))
 "##,
+        expect_test::expect![[r#""OK ((ascii 65) (unicode-bmp 78 22) 65 233)""#]],
     );
 }
 
@@ -240,7 +264,7 @@ fn div_cx414_split_char_make_char() {
 #[test]
 fn div_cx414_string_as_unibyte_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "café"))
   (list (string-as-unibyte s)
@@ -248,6 +272,7 @@ fn div_cx414_string_as_unibyte_multibyte() {
         (string-bytes (string-as-unibyte s))
         (length (string-as-multibyte (string-as-unibyte s)))))
 "##,
+        expect_test::expect![[r#""OK (\"caf\\303\\251\" \"café\" 5 4)""#]],
     );
 }
 
@@ -255,7 +280,7 @@ fn div_cx414_string_as_unibyte_multibyte() {
 #[test]
 fn div_cx414_prefer_find_coding_system() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (prefer-coding-system 'utf-8)
       (find-coding-system 'utf-8)
@@ -263,6 +288,7 @@ fn div_cx414_prefer_find_coding_system() {
       (coding-system-p 'utf-8)
       (coding-system-p 'nonexistent-cx414))
 "##,
+        expect_test::expect![[r#""ERR (void-function find-coding-system)""#]],
     );
 }
 
@@ -270,13 +296,14 @@ fn div_cx414_prefer_find_coding_system() {
 #[test]
 fn div_cx414_gensym_counter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((counter gensym-counter))
   (list (gensym)
         (gensym "PREFIX-")
         (> gensym-counter counter)))
 "##,
+        expect_test::expect![[r#""OK (g0 PREFIX-1 t)""#]],
     );
 }
 
@@ -284,7 +311,7 @@ fn div_cx414_gensym_counter() {
 #[test]
 fn div_cx414_fboundp_symbol_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((alias (make-symbol "neo-cx414-alias")))
   (defalias alias 'forward-char)
@@ -293,5 +320,6 @@ fn div_cx414_fboundp_symbol_function() {
         (indirect-function alias)
         (eq (indirect-function alias) (symbol-function 'forward-char))))
 "##,
+        expect_test::expect![[r#""OK (t forward-char #<subr forward-char> t)""#]],
     );
 }

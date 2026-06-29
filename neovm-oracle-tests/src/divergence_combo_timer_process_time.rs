@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_timer_idle_create_cancel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-timer-result-xxx nil)
   (let ((timer (run-with-idle-timer 1 nil
@@ -17,6 +17,7 @@ fn divergence_timer_idle_create_cancel() {
           (cancel-timer timer)
           (null test-timer-result-xxx)
           (timerp timer)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 9 29)""##]],
     );
 }
 
@@ -24,7 +25,7 @@ fn divergence_timer_idle_create_cancel() {
 fn divergence_current_time_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((time (current-time)))
     (list (listp time)
@@ -36,6 +37,7 @@ fn divergence_current_time_format() {
           (= (length (format-time-string "%Y-%m-%d" time)) 10)
           (time-equal-p time time)
           (<= (float-time) (+ (float-time) 1))))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 11 51)""##]],
     );
 }
 
@@ -43,7 +45,7 @@ fn divergence_current_time_format() {
 fn divergence_time_subtract_add() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let* ((t1 (current-time))
          (t2 (time-add t1 60)))
@@ -54,6 +56,7 @@ fn divergence_time_subtract_add() {
           (<= (float-time (time-subtract t2 t1)) 61)
           (time-equal-p (time-add t1 0) t1)
           (= (float-time (time-subtract t2 t1)) 60)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 10 56)""##]],
     );
 }
 
@@ -61,7 +64,7 @@ fn divergence_time_subtract_add() {
 fn divergence_process_connection_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((proc (start-process "test-conn-xxx" nil "echo" "test")))
     (set-process-query-on-exit-flag proc nil)
@@ -71,6 +74,7 @@ fn divergence_process_connection_type() {
           (eq (process-status proc) 'exit)
           (null (process-live-p proc))
           (= (process-exit-status proc) 0)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 9 47)""##]],
     );
 }
 
@@ -78,7 +82,7 @@ fn divergence_process_connection_type() {
 fn divergence_encode_time_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let* ((encoded (encode-time 30 15 12 1 1 2024 nil))
          (decoded (decode-time encoded)))
@@ -95,6 +99,7 @@ fn divergence_encode_time_functions() {
           (nth 5 decoded)
           (= (nth 5 decoded) 2024)
           (= (length decoded) 9)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 16 37)""##]],
     );
 }
 
@@ -102,7 +107,7 @@ fn divergence_encode_time_functions() {
 fn divergence_process_buffer_live() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " test-pbl-xxx")))
     (with-current-buffer buf
@@ -118,6 +123,7 @@ fn divergence_process_buffer_live() {
                 (> (length output) 0)
                 (kill-buffer buf)
                 (not (buffer-live-p pbuf)))))))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 15 50)""##]],
     );
 }
 
@@ -125,7 +131,7 @@ fn divergence_process_buffer_live() {
 fn divergence_format_time_string_zones() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((fixed-time '(26150 29968)))
     (list (stringp (format-time-string "%H:%M:%S" fixed-time))
@@ -133,6 +139,7 @@ fn divergence_format_time_string_zones() {
           (stringp (format-time-string "%s" fixed-time))
           (> (string-to-number (format-time-string "%s" fixed-time)) 0)
           (string-match "^[0-9]+$" (format-time-string "%s" fixed-time))))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 7 77)""##]],
     );
 }
 
@@ -140,7 +147,7 @@ fn divergence_format_time_string_zones() {
 fn divergence_timer_duration_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (seconds-to-time 60)
         (equal (seconds-to-time 60) (list 0 60))
@@ -149,6 +156,7 @@ fn divergence_timer_duration_functions() {
         (float-time (seconds-to-time 3600))
         (= (float-time (seconds-to-time 3600)) 3600)
         (<= (abs (- (float-time) (float-time (current-time)))) 1))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 8 69)""##]],
     );
 }
 
@@ -156,7 +164,7 @@ fn divergence_timer_duration_functions() {
 fn divergence_process_list_length() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((before (length (process-list))))
     (let ((p1 (start-process "test-pl1-xxx" nil "sleep" "0.1"))
@@ -171,6 +179,7 @@ fn divergence_process_list_length() {
               (processp p2)
               (eq (process-status p1) 'exit)
               (eq (process-status p2) 'exit)))))) #"#,
+        expect_test::expect![[r#""ERR (void-function set-process-query-on-exight-flag)""#]],
     );
 }
 
@@ -178,7 +187,7 @@ fn divergence_process_list_length() {
 fn divergence_decode_time_components() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((now (decode-time)))
     (list (>= (nth 0 now) 0)
@@ -193,5 +202,6 @@ fn divergence_decode_time_components() {
           (<= (nth 4 now) 12)
           (> (nth 5 now) 2020)
           (= (length now) 9)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 14 33)""##]],
     );
 }

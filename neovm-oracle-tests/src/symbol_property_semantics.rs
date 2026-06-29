@@ -25,7 +25,10 @@ fn oracle_symbol_plist_returns_live_property_list() {
      (symbol-plist sym))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (11 c nil t (a 11 b c 3))""#]],
+    );
 }
 
 #[test]
@@ -47,7 +50,10 @@ fn oracle_setplist_accepts_malformed_plist_and_put_validates_when_needed() {
    (symbol-plist sym)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument plistp (a 1 b . bad-tail))""#]],
+    );
 }
 
 #[test]
@@ -68,7 +74,10 @@ fn oracle_get_uses_overriding_plist_environment_only_for_non_nil_values() {
      (symbol-plist sym))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 2 30 nil (a 1 b 2 c nil))""#]],
+    );
 }
 
 #[test]
@@ -91,7 +100,12 @@ fn oracle_symbol_property_type_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument (symbolp \"not-symbol\")) (wrong-type-argument (symbolp 42)) (wrong-type-argument (symbolp (not . symbol))) 1)""#
+        ]],
+    );
 }
 
 #[test]
@@ -119,7 +133,12 @@ fn oracle_define_symbol_prop_updates_load_list_and_symbol_plist() {
     (setplist 'neomacs-oracle-define-symbol-prop-b nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((define-symbol-props (neomacs-prop-two neomacs-oracle-define-symbol-prop-a) (neomacs-prop-one neomacs-oracle-define-symbol-prop-b neomacs-oracle-define-symbol-prop-a))) \"updated\" \"second\" \"third\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -149,5 +168,10 @@ fn oracle_define_symbol_prop_preserves_existing_load_list_entries() {
     (setplist 'neomacs-oracle-define-symbol-prop-new nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((define-symbol-props (neomacs-prop-two neomacs-oracle-define-symbol-prop-new) (neomacs-prop-one neomacs-oracle-define-symbol-prop-new neomacs-oracle-define-symbol-prop-existing)) (defun . neomacs-oracle-define-symbol-prop-function) neomacs-oracle-define-symbol-prop-variable) \"existing\" \"new\" \"other\")""#
+        ]],
+    );
 }

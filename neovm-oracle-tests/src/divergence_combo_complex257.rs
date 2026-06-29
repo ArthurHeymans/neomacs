@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx257_type_of_all_builtin_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v) (list (type-of v) v))
         '(42 3.14 "string" symbol
@@ -18,13 +18,16 @@ fn div_cx257_type_of_all_builtin_types() {
           (cons 1 2) nil
           (make-hash-table)))
 "##,
+        expect_test::expect![[
+            r#""OK ((integer 42) (float 3.14) (string \"string\") (symbol symbol) (cons (1 2 3)) (vector [1 2 3]) (integer 97) (symbol 1/3) (cons (expt 2 128)) (cons (cons 1 2)) (symbol nil) (cons (make-hash-table)))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx257_vconcat_append_copy_sequence_type_preservation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lst '(1 2 3))
       (vec [1 2 3])
@@ -37,13 +40,14 @@ fn div_cx257_vconcat_append_copy_sequence_type_preservation() {
         (eq (vconcat lst) (vconcat lst))
         (eq lst (copy-sequence lst))))
 "##,
+        expect_test::expect![[r#""OK (vector cons cons vector string nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx257_mapcar_mapc_return_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lst '(1 2 3 4 5)))
   (list (mapcar #'1+ lst)
@@ -52,13 +56,14 @@ fn div_cx257_mapcar_mapc_return_values() {
         (identity lst)
         (eq (identity lst) lst)))
 "##,
+        expect_test::expect![[r#""OK ((2 3 4 5 6) (1 2 3 4 5) (1 2 3 4 5) (1 2 3 4 5) t)""#]],
     )
 }
 
 #[test]
 fn div_cx257_sxhash_distribution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((vals '("alpha" "beta" "gamma" "delta" "epsilon")))
   (list (mapcar #'sxhash-equal vals)
@@ -66,13 +71,16 @@ fn div_cx257_sxhash_distribution() {
         (= (sxhash-equal "test") (sxhash-equal (copy-sequence "test")))
         (integerp (sxhash-eq 'symbol))))
 "##,
+        expect_test::expect![[
+            r#""OK ((491446041053 2032762058 507715862109 452976197021 0) (491446041053 2032762058 507715862109 452976197021 0) t t)""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx257_append_with_strings_and_vectors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (append "abc" nil)
       (append [1 2 3] nil)
@@ -82,13 +90,16 @@ fn div_cx257_append_with_strings_and_vectors() {
       (length (append "abc" nil))
       (length (append "abc" '(1 2 3))))
 "##,
+        expect_test::expect![[
+            r#""OK ((97 98 99) (1 2 3) (97 98 99 d e f) (97 98 99 . 120) [97 98 99 100] 3 6)""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx257_copy_sequence_deep_vs_shallow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((inner (list 1 2 3))
        (outer (list inner inner))
@@ -98,13 +109,14 @@ fn div_cx257_copy_sequence_deep_vs_shallow() {
         (eq (car outer) (cadr outer))
         (eq (car copy) (cadr copy))))
 "##,
+        expect_test::expect![[r#""OK (((99 2 3) (99 2 3)) ((99 2 3) (99 2 3)) t t)""#]],
     )
 }
 
 #[test]
 fn div_cx257_char_to_string_byte_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-to-string ?a)
       (char-to-string ?à)
@@ -116,13 +128,14 @@ fn div_cx257_char_to_string_byte_to_string() {
       (string-to-char "café")
       (string-to-char "世界"))
 "##,
+        expect_test::expect![[r#""OK (\"a\" \"à\" \"世\" \"😀\" \"A\" \"\\377\" 97 99 19990)""#]],
     )
 }
 
 #[test]
 fn div_cx257_number_to_string_string_to_number_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (number-to-string 42)
       (number-to-string -42)
@@ -137,13 +150,14 @@ fn div_cx257_number_to_string_string_to_number_edge_cases() {
       (string-to-number "42abc")
       (string-to-number ""))
 "##,
+        expect_test::expect![[r#""ERR (void-variable 1/3)""#]],
     )
 }
 
 #[test]
 fn div_cx257_format_type_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%S" 42)
       (format "%S" "string")
@@ -157,13 +171,14 @@ fn div_cx257_format_type_round_trip() {
       (format "%d" 42)
       (format "%c" 946))
 "##,
+        expect_test::expect![[r#""ERR (void-variable 1/3)""#]],
     )
 }
 
 #[test]
 fn div_cx257_type_semantics_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((data '((name . "alpha") (value . 42) (tags . (a b c))))
        (data-copy (copy-tree data))
@@ -192,5 +207,6 @@ fn div_cx257_type_semantics_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

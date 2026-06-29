@@ -43,7 +43,12 @@ fn oracle_file_modes_non_nil_flag_means_nofollow() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (384 nil t t 384 (wrong-number-of-arguments (file-modes 0)) (wrong-number-of-arguments (file-modes 3)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -93,5 +98,10 @@ fn oracle_file_modes_handler_expansion_and_argument_order() {
     (makunbound 'neomacs--oracle-file-modes-calls)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (417 ((file-modes \"/oracle-mode-root/child\" nil) (expand-file-name \"../child\" \"/oracle-mode-root/subdir/\")) nil 417 ((file-modes \"/oracle-mode-root/child\" nofollow) (directory-file-name \"/oracle-mode-root/child/\") (expand-file-name \"../child/\" \"/oracle-mode-root/subdir/\")) nil set-mode-handler-result ((set-file-modes \"/oracle-mode-root/child\" 384 nil) (expand-file-name \"../child\" \"/oracle-mode-root/subdir/\")) nil set-mode-handler-result ((set-file-modes \"/oracle-mode-root/child\" 420 nofollow) (expand-file-name \"../child\" \"/oracle-mode-root/subdir/\")) (wrong-type-argument (fixnump bad-mode)) ((set-file-modes \"/oracle-mode-root/child\" 420 nofollow) (expand-file-name \"../child\" \"/oracle-mode-root/subdir/\")) nil (wrong-type-argument (fixnump bad-mode)) nil)""#
+        ]],
+    );
 }

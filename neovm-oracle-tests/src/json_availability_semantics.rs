@@ -19,5 +19,8 @@ fn oracle_prop_gnu_json_available_p_is_native_json_marker() {
      (json-available-p nil)
    (error (car err))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t \"[1,2,3]\" ((a . 1)) wrong-number-of-arguments)""#]],
+    );
 }

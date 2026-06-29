@@ -12,7 +12,10 @@ use super::common::{
 fn oracle_prop_symbol_name_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(symbol-name 1)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(symbol-name 1)",
+        expect_test::expect![[r#""ERR (wrong-type-argument symbolp 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -20,7 +23,10 @@ fn oracle_prop_symbol_name_wrong_type_error() {
 fn oracle_prop_intern_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(intern 1)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(intern 1)",
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -28,7 +34,10 @@ fn oracle_prop_intern_wrong_type_error() {
 fn oracle_prop_fboundp_car() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(fboundp 'car)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(fboundp 'car)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 }
 
@@ -36,7 +45,10 @@ fn oracle_prop_fboundp_car() {
 fn oracle_prop_boundp_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(boundp 'nil)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(boundp 'nil)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 }
 
@@ -44,16 +56,21 @@ fn oracle_prop_boundp_nil() {
 fn oracle_prop_symbolp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(symbolp "x")"#);
-    assert_oracle_parity("(symbolp 'x)");
+    crate::common::assert_oracle_parity_expect(
+        r#"(symbolp "x")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(symbolp 'x)", expect_test::expect![[r#""OK t""#]]);
 }
 
 #[test]
 fn oracle_prop_bare_colon_keyword_self_evaluates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) =
-        eval_oracle_and_neovm("(let ((x :)) (list (eq x :) (keywordp x) (symbolp x)))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((x :)) (list (eq x :) (keywordp x) (symbolp x)))",
+        expect_test::expect![[r#""OK (t t t)""#]],
+    );
     assert_ok_eq("(t t t)", &oracle, &neovm);
 }
 

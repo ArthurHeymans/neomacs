@@ -7,69 +7,97 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_one_plus_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(1+ 41)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(1+ 41)",
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &o, &n);
 }
 
 #[test]
 fn oracle_one_minus_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(1- 43)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(1- 43)",
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &o, &n);
 }
 
 #[test]
 fn oracle_one_plus_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(1+ -1)");
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect("(1+ -1)", expect_test::expect![[r#""OK 0""#]]);
     assert_ok_eq("0", &o, &n);
 }
 
 #[test]
 fn oracle_lt_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(< 1 2 3)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(< 1 2 3)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_lt_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(< 1 1)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(< 1 1)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_gt_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(> 3 2 1)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(> 3 2 1)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_le_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(<= 1 1 2)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(<= 1 1 2)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_ge_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(>= 3 3 2)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(>= 3 3 2)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_not_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(/= 1 2)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(/= 1 2)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_not_equal_same() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(/= 1 1)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(/= 1 1)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }

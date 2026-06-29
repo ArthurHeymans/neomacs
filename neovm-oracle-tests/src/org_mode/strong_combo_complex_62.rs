@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo62_agenda_get_scheduled() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-agenda)
@@ -33,13 +33,14 @@ fn combo62_agenda_get_scheduled() {
                                              (org-get-todo-state)))
                             "SCHEDULED<>\"\"")) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:agenda-error t) (:map-todos ((\"A\" nil))))""#]],
     );
 }
 
 #[test]
 fn combo62_timer_item_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-timer)
@@ -59,13 +60,16 @@ fn combo62_timer_item_list() {
           (push (list :timer-seconds (numberp secs)) r))
       (error nil))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:timer-item-fbound t) (:timer-item-inserted t) (:buffer \"- 0:00:00 :: \") (:timer-seconds nil))""#
+        ]],
     );
 }
 
 #[test]
 fn combo62_element_cache_reset_multicycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-element)
@@ -80,13 +84,16 @@ fn combo62_element_cache_reset_multicycle() {
         (let ((after (length (org-element-map (org-element-parse-buffer) 'headline #'identity))))
           (push (list :iter i :before before :after after) r))))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:iter 0 :before 2 :after 3) (:iter 1 :before 3 :after 4) (:iter 2 :before 4 :after 5))""#
+        ]],
     );
 }
 
 #[test]
 fn combo62_babel_tangle_multifile() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-tangle)
@@ -111,7 +118,7 @@ fn combo62_babel_tangle_multifile() {
 #[test]
 fn combo62_habit_parse_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-habit)
@@ -129,13 +136,14 @@ fn combo62_habit_parse_properties() {
     ;; org-habit-parse-todo
     (push (list :parse-todo-fbound (fboundp 'org-habit-parse-todo)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:habit-fbound t) (:is-habit t) (:parse-todo-fbound t))""#]],
     );
 }
 
 #[test]
 fn combo62_attach_file_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-attach)
@@ -158,13 +166,14 @@ fn combo62_attach_file_operations() {
                      (push (list :file-deleted (not (file-exists-p testfile))) r))
             (error (push (list :delete-error t) r)))))
     (nreverse r))))"##,
+        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]],
     );
 }
 
 #[test]
 fn combo62_babel_session_cross_language() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -180,13 +189,16 @@ fn combo62_babel_session_cross_language() {
           (push (org-babel-execute-src-block) r)
         (error (push (list :sh-error (car e)) r)))
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"ob-sh\")""#
+        ]],
     );
 }
 
 #[test]
 fn combo62_crypt_entry_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-crypt)
@@ -204,13 +216,16 @@ fn combo62_crypt_entry_basic() {
           (push (list :encrypted (not (string= before (buffer-string)))) r))
       (error (push (list :encrypt-error t) r)))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:encrypt-fbound t) (:decrypt-fbound t) (:encrypt-error t))""#
+        ]],
     );
 }
 
 #[test]
 fn combo62_export_setupfile() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-ascii)
@@ -228,13 +243,16 @@ fn combo62_export_setupfile() {
         (error (push (list :setupfile-error (car e)) r)))
       (condition-case nil (delete-file sf) (error nil))
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:author-from-setup (#(\"File Author\" 0 11 (:parent (#(\"File Author\" 0 11 (:parent #5))))))) (:num-from-setup nil))""#
+        ]],
     );
 }
 
 #[test]
 fn combo62_mobile_agendas() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-mobile)
   (list
@@ -248,5 +266,8 @@ fn combo62_mobile_agendas() {
    (cond ((boundp 'org-mobile-directory) (list :default-dir org-mobile-directory))
          (t :not-bound))
    ))"##,
+        expect_test::expect![[
+            r#""OK ((:mobile-files-fbound t) (:mobile-directory-fbound t) (:push-fbound t) (:pull-fbound t) (:default-dir \"\"))""#
+        ]],
     );
 }

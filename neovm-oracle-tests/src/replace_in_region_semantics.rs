@@ -45,7 +45,12 @@ fn oracle_prop_gnu_replace_string_in_region_contracts() {
   (nreverse cases))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((default-start 1 5 \"foo Foo bar\") (explicit-region 2 1 \"xx z z xx\") (missing nil 2 \"abc\") (start-error error \"Start before start of buffer\") (end-error error \"End after end of buffer\"))""#
+        ]],
+    );
 }
 
 #[test]
@@ -90,5 +95,10 @@ fn oracle_prop_gnu_replace_regexp_in_region_contracts() {
   (nreverse cases))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((default-start 1 4 \"a1 A2 x3-a3\") (explicit-region 2 1 \"12:foo 34:bar baz\") (unmatched-subexp 2 \"<a/> </b>\") (missing nil 4 \"abc\") (start-error error \"Start before start of buffer\") (end-error error \"End after end of buffer\"))""#
+        ]],
+    );
 }

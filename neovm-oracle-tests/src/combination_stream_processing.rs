@@ -99,7 +99,10 @@ fn oracle_prop_stream_delay_force_memoized() {
     (fmakunbound 'neovm--sp-head)
     (fmakunbound 'neovm--sp-tail)
     (fmakunbound 'neovm--sp-take)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10 20 30) (10 20 30) t 3 3 t (a) 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +213,12 @@ fn oracle_prop_stream_map_filter_take_drop() {
     (fmakunbound 'neovm--s2-map)
     (fmakunbound 'neovm--s2-filter)
     (fmakunbound 'neovm--s2-drop)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 8 27 64 125 216 343 512) (3 6 9 12 15 18 21) (4 16 36 64 100) (4 6 10 14 22 26) (6 7 8 9 10) (14 21 28 35) (64 81 100 121 144))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +345,12 @@ fn oracle_prop_stream_zip_and_zipwith() {
     (fmakunbound 'neovm--s3-zip)
     (fmakunbound 'neovm--s3-zipwith)
     (fmakunbound 'neovm--s3-fibs)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . 1) (2 . 4) (3 . 9) (4 . 16) (5 . 25) (6 . 36)) (11 22 33 44 55 66) (2 6 12 20 30 42 56) (0 1 1 2 3 5 8 13 21 34 55 89 144 233 377) ((1 1 1) (2 4 8) (3 9 27) (4 16 64) (5 25 125)) (101 202 303))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -444,7 +457,12 @@ fn oracle_prop_stream_sieve_eratosthenes() {
     (fmakunbound 'neovm--s4-sieve)
     (fmakunbound 'neovm--s4-primes)
     (fmakunbound 'neovm--s4-nth)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((2 3 5 7 11 13 17 19 23 29 31 37 41 43 47 53 59 61 67 71 73 79 83 89 97) 29 ((3 5) (5 7) (11 13) (17 19) (29 31) (41 43) (59 61)) 328 t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -551,7 +569,12 @@ fn oracle_prop_stream_accumulate_reduce() {
     (fmakunbound 'neovm--s5-scanl)
     (fmakunbound 'neovm--s5-foldl)
     (fmakunbound 'neovm--s5-takewhile)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 1 3 6 10 15 21 28) (1 1 2 6 24 120 720 5040) 55 720 6 (0 1 2 3 4 5 6 7) (0 1 3 6 10 15 21 28 36 45 55 66 78 91))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -688,5 +711,10 @@ fn oracle_prop_stream_interleave_merge() {
     (fmakunbound 'neovm--s6-unique)
     (fmakunbound 'neovm--s6-multiples)
     (fmakunbound 'neovm--s6-from-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 1 2 3 4 5 6 7 8 9 10 11) (1 1 2 3 4 9 8 27 16 81) (2 3 4 6 6 8 9 10 12 12 14 15 16 18 18) (2 3 4 6 8 9 10 12 14 15 16 18 20 21 22) (2 3 4 5 6 8 9 10 12 14 15 16 18 20 21 22 24 25 26 27) (100 1 200 2 300 3 4 5))""#
+        ]],
+    );
 }

@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn exa_all_get_outline_path_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -32,6 +32,9 @@ fn exa_all_get_outline_path_combinations() {
      (with-temp-buffer (org-mode) (insert "* H\n** ") (goto-char (point-max)) (org-get-outline-path))
      ;; COMMENT removed.
      (with-temp-buffer (org-mode) (insert "* COMMENT This\n** COMMENT is\n*** test") (goto-char (point-max)) (org-get-outline-path)))))"##,
+        expect_test::expect![[
+            r#""OK (nil (\"H\") (\"H\") (\"H\") (\"Org\") (\"H\") (\"H\" \"S\") (\"H\") (\"This\" \"is\"))""#
+        ]],
     );
 }
 
@@ -42,7 +45,7 @@ fn exa_all_get_outline_path_combinations() {
 #[test]
 fn exa_all_format_outline_path_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (list
@@ -60,6 +63,9 @@ fn exa_all_format_outline_path_combinations() {
    (org-format-outline-path (list "one" "two" "three" "four") 10)
    ;; Narrow width.
    (org-format-outline-path (list "one" "two" "three" "four") 2)))"##,
+        expect_test::expect![[
+            r#""OK (#(\"one/two/three\" 0 3 (face org-level-1) 4 7 (face org-level-2) 8 13 (face org-level-3)) \"\" \"\" \">>\" #(\"one/tw o/three\" 0 3 (face org-level-1) 4 8 (face org-level-2) 9 14 (face org-level-3)) #(\">>|one|two|three\" 3 6 (face org-level-1) 7 10 (face org-level-2) 11 16 (face org-level-3)) #(\"one/two/..\" 0 3 (face org-level-1) 4 7 (face org-level-2)) #(\"on\" 0 2 (face org-level-1)))""#
+        ]],
     );
 }
 
@@ -70,7 +76,7 @@ fn exa_all_format_outline_path_combinations() {
 #[test]
 fn exa_all_end_of_meta_data_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -96,6 +102,7 @@ fn exa_all_end_of_meta_data_combinations() {
      ;; Incomplete drawer not skipped.
      (with-temp-buffer (org-mode) (insert "* Headline\n:LOGBOOK:\nlogging\nContents")
        (goto-char (point-min)) (org-end-of-meta-data t) (looking-at ":LOGBOOK:")))))"##,
+        expect_test::expect![[r#""OK (t t t t t t t)""#]],
     );
 }
 
@@ -106,7 +113,7 @@ fn exa_all_end_of_meta_data_combinations() {
 #[test]
 fn exa_all_end_of_subtree_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-inlinetask)
@@ -132,6 +139,7 @@ fn exa_all_end_of_subtree_combinations() {
          (insert "\n* Heading\nsome text\n*** Inlinetask\nt\n*** END\n** Sub1\n** Sub 2\nasd\n* Heading 2")
          (goto-char (point-min)) (search-forward "some text") (org-end-of-subtree)
          (forward-line 0) (looking-at-p "^asd"))))))"##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -142,7 +150,7 @@ fn exa_all_end_of_subtree_combinations() {
 #[test]
 fn exa_all_forward_element_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -163,6 +171,7 @@ fn exa_all_forward_element_combinations() {
      (with-temp-buffer (org-mode)
        (insert "\n- item1\n\n  - sub1\n\n  - sub2\n\n- item2\n\nOutside.")
        (goto-char (point-min)) (forward-line 1) (org-forward-element) (looking-at "Outside.")))))"##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -173,7 +182,7 @@ fn exa_all_forward_element_combinations() {
 #[test]
 fn exa_all_backward_element_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -198,6 +207,7 @@ fn exa_all_backward_element_combinations() {
      (with-temp-buffer (org-mode)
        (insert "\n- item1\n\n  - sub1\n\n  - sub2\n\n- item2\n\nOutside.")
        (goto-line 8) (org-backward-element) (looking-at "  - sub2")))))"##,
+        expect_test::expect![[r#""OK (t t t nil nil)""#]],
     );
 }
 
@@ -208,7 +218,7 @@ fn exa_all_backward_element_combinations() {
 #[test]
 fn exa_all_up_element_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -233,6 +243,7 @@ fn exa_all_up_element_combinations() {
      (with-temp-buffer (org-mode)
        (insert "* Top\n- item1\n\n- item2")
        (goto-line 4) (org-up-element) (looking-at "- item1")))))"##,
+        expect_test::expect![[r#""OK (t nil t t t)""#]],
     );
 }
 
@@ -243,7 +254,7 @@ fn exa_all_up_element_combinations() {
 #[test]
 fn exa_all_down_element_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -260,6 +271,7 @@ fn exa_all_down_element_combinations() {
      (with-temp-buffer (org-mode)
        (insert "#+BEGIN_CENTER\nParagraph.\n#+END_CENTER")
        (goto-char (point-min)) (org-down-element) (looking-at "Paragraph.")))))"##,
+        expect_test::expect![[r#""OK (nil nil t)""#]],
     );
 }
 
@@ -270,7 +282,7 @@ fn exa_all_down_element_combinations() {
 #[test]
 fn exa_all_next_previous_visible_heading_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -291,6 +303,7 @@ fn exa_all_next_previous_visible_heading_combinations() {
      (with-temp-buffer (org-mode)
        (insert "* H1\n* H2\n* H3\nText")
        (goto-char (point-max)) (org-previous-visible-heading 2) (looking-at "\\* H2")))))"##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -301,7 +314,7 @@ fn exa_all_next_previous_visible_heading_combinations() {
 #[test]
 fn exa_all_forward_heading_same_level_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -318,6 +331,7 @@ fn exa_all_forward_heading_same_level_combinations() {
      (with-temp-buffer (org-mode)
        (insert "* H1\n** S1\n** S2\n** S3\n* H2")
        (goto-char (point-min)) (forward-line 3) (org-forward-heading-same-level -1) (looking-at "\\*\\* S2")))))"##,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }
 
@@ -328,7 +342,7 @@ fn exa_all_forward_heading_same_level_combinations() {
 #[test]
 fn exa_all_move_subtree_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -343,6 +357,7 @@ fn exa_all_move_subtree_combinations() {
        (insert "* A\nBody A\n* B\nBody B\n* C\nBody C")
        (goto-char (point-min)) (forward-line 2) (org-move-subtree -1)
        (buffer-substring-no-properties (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-move-subtree)""#]],
     );
 }
 
@@ -353,7 +368,7 @@ fn exa_all_move_subtree_combinations() {
 #[test]
 fn exa_all_promote_demote_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -370,6 +385,9 @@ fn exa_all_promote_demote_combinations() {
      ;; Demote subtree.
      (with-temp-buffer (org-mode) (insert "* H1\n** S1\n** S2")
        (goto-char (point-min)) (org-demote-subtree) (buffer-string)))))"##,
+        expect_test::expect![[
+            r#""OK (\"* Heading\" \"** Heading\" \"* H1\n** S1\n** S2\" \"** H1\n*** S1\n*** S2\")""#
+        ]],
     );
 }
 
@@ -380,7 +398,7 @@ fn exa_all_promote_demote_combinations() {
 #[test]
 fn exa_all_toggle_heading_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -394,6 +412,7 @@ fn exa_all_toggle_heading_combinations() {
      ;; Toggle on numbered.
      (with-temp-buffer (org-mode) (insert "Item")
        (goto-char (point-min)) (org-toggle-heading 1) (buffer-string)))))"##,
+        expect_test::expect![[r#""OK (\"* Item\" \"Heading\" \"* Item\")""#]],
     );
 }
 
@@ -404,7 +423,7 @@ fn exa_all_toggle_heading_combinations() {
 #[test]
 fn exa_all_get_valid_level_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (list
@@ -412,6 +431,7 @@ fn exa_all_get_valid_level_combinations() {
    (org-get-valid-level 1 2)
    (org-get-valid-level 3 1)
    (org-get-valid-level 2 -1)))"##,
+        expect_test::expect![[r#""OK (2 3 4 1)""#]],
     );
 }
 
@@ -422,7 +442,7 @@ fn exa_all_get_valid_level_combinations() {
 #[test]
 fn exa_all_at_planning_p_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -435,6 +455,7 @@ fn exa_all_at_planning_p_combinations() {
      ;; Not planning: standalone.
      (with-temp-buffer (org-mode) (insert "DEADLINE: <2023-10-13 Fri>")
        (goto-char (point-min)) (org-at-planning-p)))))"##,
+        expect_test::expect![[r#""OK (t nil nil)""#]],
     );
 }
 
@@ -445,7 +466,7 @@ fn exa_all_at_planning_p_combinations() {
 #[test]
 fn exa_all_match_sparse_tree_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -460,6 +481,7 @@ fn exa_all_match_sparse_tree_combinations() {
               (when (org-element-property :begin h)
                 (push title visible)))))
         (nreverse visible)))))"##,
+        expect_test::expect![[r#""OK (\"A\" \"B\" \"C\" \"D\")""#]],
     );
 }
 
@@ -470,7 +492,7 @@ fn exa_all_match_sparse_tree_combinations() {
 #[test]
 fn exa_all_toggle_tag_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -481,6 +503,9 @@ fn exa_all_toggle_tag_combinations() {
      ;; Toggle tag off.
      (with-temp-buffer (org-mode) (insert "* Heading :test:")
        (goto-char (point-min)) (org-toggle-tag "test") (buffer-string)))))"##,
+        expect_test::expect![[
+            r#""OK (\"* Heading                                                              :test:\" \"* Heading\")""#
+        ]],
     );
 }
 
@@ -491,7 +516,7 @@ fn exa_all_toggle_tag_combinations() {
 #[test]
 fn exa_all_todo_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -506,6 +531,9 @@ fn exa_all_todo_combinations() {
      ;; Cycle DONE -> empty.
      (with-temp-buffer (org-mode) (insert "* DONE Heading")
        (goto-char (point-min)) (org-todo nil) (buffer-string)))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"* TODO Heading\" 0 14 (org-todo-head \"TODO\")) #(\"* DONE Heading\" 0 14 (org-todo-head \"TODO\")) #(\"* Heading\" 0 9 (org-todo-head \"TODO\")))""#
+        ]],
     );
 }
 
@@ -516,7 +544,7 @@ fn exa_all_todo_combinations() {
 #[test]
 fn exa_all_set_tags_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -533,6 +561,9 @@ fn exa_all_set_tags_combinations() {
      ;; Remove tags.
      (with-temp-buffer (org-mode) (insert "* Heading :tag:")
        (goto-char (point-min)) (org-set-tags nil) (buffer-string)))))"##,
+        expect_test::expect![[
+            r#""OK (\"* Heading                                                              :tag1:\" \"* Heading                                                               :new:\" \"* Heading                                                               :a:b:\" \"* Heading\")""#
+        ]],
     );
 }
 
@@ -543,7 +574,7 @@ fn exa_all_set_tags_combinations() {
 #[test]
 fn exa_all_get_repeat_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -554,6 +585,7 @@ fn exa_all_get_repeat_combinations() {
      ;; No repeater.
      (with-temp-buffer (org-mode) (insert "* H\nSCHEDULED: <2023-10-13 Fri>")
        (goto-char (point-min)) (forward-line 1) (org-get-repeat)))))"##,
+        expect_test::expect![[r#""OK (\"+1w\" nil)""#]],
     );
 }
 
@@ -564,7 +596,7 @@ fn exa_all_get_repeat_combinations() {
 #[test]
 fn exa_all_timestamp_has_time_p_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -575,6 +607,7 @@ fn exa_all_timestamp_has_time_p_combinations() {
      ;; Without time.
      (with-temp-buffer (org-mode) (insert "<2023-10-13 Fri>")
        (goto-char (point-min)) (org-at-timestamp-p 'lax) (org-timestamp-has-time-p)))))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
     );
 }
 
@@ -585,7 +618,7 @@ fn exa_all_timestamp_has_time_p_combinations() {
 #[test]
 fn exa_all_at_timestamp_p_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -599,6 +632,7 @@ fn exa_all_at_timestamp_p_combinations() {
      ;; Not at timestamp.
      (with-temp-buffer (org-mode) (insert "Not a timestamp")
        (goto-char (point-min)) (org-at-timestamp-p 'lax)))))"##,
+        expect_test::expect![[r#""OK (bracket bracket nil)""#]],
     );
 }
 
@@ -609,7 +643,7 @@ fn exa_all_at_timestamp_p_combinations() {
 #[test]
 fn exa_all_get_category_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -620,5 +654,6 @@ fn exa_all_get_category_combinations() {
      ;; Default.
      (with-temp-buffer (org-mode) (insert "* Heading")
        (goto-char (point-min)) (org-get-category)))))"##,
+        expect_test::expect![[r#""OK (\"Work\" \"???\")""#]],
     );
 }

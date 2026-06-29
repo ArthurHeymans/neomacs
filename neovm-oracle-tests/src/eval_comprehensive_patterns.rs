@@ -41,7 +41,10 @@ fn oracle_prop_eval_comp_lexical_parameter_modes() {
     (funcall f))
   ;; Alist with let inside eval that shadows alist binding
   (eval '(let ((x 999)) x) '((x . 1))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (dynamic-failed 10 42 30 nil nil 200 first 10 999)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +86,12 @@ fn oracle_prop_eval_comp_self_evaluating_forms() {
   (eval ?\n)
   ;; Nested self-evaluating: vector containing only self-eval forms
   (eval [1 "two" :three]))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (0 42 -1 0 0 0.0 3.14 -2.718 15000000000.0 \"\" \"hello world\" \"line\nbreak\" [1 2 3] [] [\"a\" \"b\" \"c\"] :foo :bar-baz t nil 65 10 [1 \"two\" :three])""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +125,10 @@ fn oracle_prop_eval_comp_symbol_evaluation() {
   (eval 'my-var '((my-var . "lexical-value")))
   ;; Constant symbols: t, nil, keywords
   (list (eval 't) (eval 'nil) (eval ':test-kw)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +160,12 @@ fn oracle_prop_eval_comp_function_calls() {
   (eval '(funcall (lambda (n) (* n n)) 7))
   ;; apply inside eval
   (eval '(apply '+ '(1 2 3 4 5))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (15 24 \"hello world\" 5 x (y z) (head tail) (1 2 3 4 5) (1 2 3 4 5) 26 c 5 30 49 15)""#
+        ]],
+    );
 }
 
 #[test]
@@ -168,7 +184,12 @@ fn oracle_eval_dotted_function_form_checks_raw_argument_list_first() {
      (eval '((lambda (x) x) 1 . tail))
    (error (list (car err) (cdr err)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument (listp tail)) (wrong-type-argument (listp tail)) (wrong-type-argument (listp tail)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -214,7 +235,12 @@ fn oracle_prop_eval_comp_special_forms() {
                (progn (setq result 'body) result)
              (setq result 'cleanup))
            result)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (yes no 30 30 15 5 7 b default yes nil ran nil 42 5 nil 42 caught-division cleanup)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +273,12 @@ fn oracle_prop_eval_comp_quoted_forms() {
   (eval '(quote if))
   (eval '(quote let))
   (eval '(quote progn)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (hello (1 2 3) (+ 1 2) 'x (a b c) x (+ 1 2) 36 (result 42) if let progn)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +311,10 @@ fn oracle_prop_eval_comp_nested_eval() {
     counter)
   ;; eval with constructed nested form
   (eval (list 'eval (list 'quote (list '+ 100 200)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable counter)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +371,10 @@ fn oracle_prop_eval_comp_constructed_forms() {
   ;; (simpler: just chain lets)
   (eval '(let* ((a 1) (b (+ a 1)) (c (+ b 1)) (d (+ c 1)) (e (+ d 1)))
            (list a b c d e))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (15 60 branch-b 42 5 (10 20 30) \"two\" (1 2 3 4 5))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -375,5 +412,10 @@ fn oracle_prop_eval_comp_errors_and_edge_cases() {
   (eval nil)
   ;; eval t
   (eval t))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (caught-no-args caught-invalid (void neovm--never-bound-xyz-abc) caught-bad-lexenv caught-car caught-nested-div-zero nil 42 nil t)""#
+        ]],
+    );
 }

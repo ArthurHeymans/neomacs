@@ -11,62 +11,89 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_natnump_positive_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(natnump 42)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(natnump 42)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_natnump_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(natnump 0)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(natnump 0)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_natnump_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(natnump -1)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(natnump -1)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_natnump_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(natnump 3.14)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(natnump 3.14)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_floatp_integer_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(floatp 42)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(floatp 42)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_floatp_float_returns_t() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(floatp 3.14)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(floatp 3.14)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_integerp_float_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(integerp 3.14)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(integerp 3.14)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_integerp_large_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(integerp 999999999999999)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(integerp 999999999999999)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_numberp_on_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(numberp 'sym)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(numberp 'sym)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }

@@ -105,7 +105,12 @@ fn oracle_prop_rw_configuration_system() {
     (makunbound 'neovm--test-config-defaults)
     (makunbound 'neovm--test-config-validators)
     (makunbound 'neovm--test-config-changelog)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((defaults 4 \"light\") (custom 2 \"dark\" 120) (after-reset 4) (validation (validation-error \"Validation failed for indent-width\")) (changelog-length 4))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -202,7 +207,12 @@ fn oracle_prop_rw_ring_buffer() {
     (fmakunbound 'neovm--test-ring-push)
     (fmakunbound 'neovm--test-ring-pop)
     (fmakunbound 'neovm--test-ring-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((after-abc (a b c)) (after-d (a b c d)) (after-ef (c d e f)) (popped c d (e f)) (final (f g h i)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +293,12 @@ fn oracle_prop_rw_event_system() {
     (fmakunbound 'neovm--test-event-emit)
     (makunbound 'neovm--test-event-handlers)
     (makunbound 'neovm--test-event-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((click-results (\"handler-C at (100,200)\")) (enter-results (\"key-low: Enter\")) (escape-results (stop-propagation)) (unknown-results nil) (log-length 4))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -340,7 +355,12 @@ fn oracle_prop_rw_indentation_engine() {
       (dolist (line indented-lines)
         (insert line "\n"))
       (list indented-lines (buffer-string)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"begin\" \"  x = 1\" \"  if true\" \"    y = 2\" \"    if nested\" \"      z = 3\" \"    end\" \"  end\" \"  w = 4\" \"end\") \"begin\n  x = 1\n  if true\n    y = 2\n    if nested\n      z = 3\n    end\n  end\n  w = 4\nend\n\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -485,7 +505,12 @@ fn oracle_prop_rw_undo_system() {
     (fmakunbound 'neovm--test-undo-do-undo)
     (makunbound 'neovm--test-undo-doc)
     (makunbound 'neovm--test-undo-stack)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((init \"Hello\") (after-insert \"Hello!\") (after-replace \"Hallo!\") (after-delete \"Halo!\") (after-insert2 \"XHalo!\") (undo-1 \"Halo!\") (undo-2 \"Hallo!\") (undo-3 \"Hello!\") (undo-4 \"Hello\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -556,5 +581,10 @@ fn oracle_prop_rw_task_scheduler() {
     (makunbound 'neovm--test-sched-queue)
     (makunbound 'neovm--test-sched-time)
     (makunbound 'neovm--test-sched-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((5 \"lex\" \"lexed\") (10 \"parse\" \"parsed\") (15 \"typecheck\" \"checked\") (20 \"infer\" \"inferred\") (25 \"optimize\" \"optimized\") (30 \"compile\" \"compiled\") (50 \"link\" \"linked\")) (final-time 50) (queue-empty t))""#
+        ]],
+    );
 }

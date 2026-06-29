@@ -45,7 +45,12 @@ fn oracle_prop_message_return_value_and_format_message() {
   ;; format-message with all major format specs
   (format-message "%s %d %x %o %c %%" "str" 42 255 8 65))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Alice is 30\" \"hello world\" \"2 + 3 = 5\" \"100%\" \"(a b c)\" \"hello world\" \"42 items\" \"key=\\\"value\\\"\" \"Use ‘C-h’ for help\" \"Variable ‘x’ is 42\" \"Try ‘M-x describe-function’\" \"nil\" nil \"str 42 ff 10 A %\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +100,12 @@ fn oracle_prop_message_complex_formatting_pipelines() {
     (fmakunbound 'neovm--fmp-log-entry)
     (fmakunbound 'neovm--fmp-format-table-row)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"[INFO] server: started on port 8080\" \"[WARN] db: connection pool low\" \"[ERROR] auth: invalid token\" \"Temperature        23.45 C\" \"Pressure         1013.25 hPa\" \"Humidity           67.80 %\" \"ID         Name                 Status\" \"=== Report: Monthly Summary ===\n  Total: 1523 items\n  Average: 50.8 per day\n  Peak: 89 on 2026-01-15\n=== End of report ===\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +163,12 @@ fn oracle_prop_message_in_loops() {
 
   (nreverse results))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((countdown (\"T-4 seconds\" \"T-3 seconds\" \"T-2 seconds\" \"T-1 seconds\" \"T-0 seconds\")) (invoice (\"apple        qty=3    $1.50 total=$4.50\" \"banana       qty=12   $0.25 total=$3.00\" \"cherry       qty=50   $0.10 total=$5.00\" \"date         qty=7    $2.00 total=$14.00\" \"elderberry   qty=1    $15.00 total=$15.00\")) (numbered (\"1. first\" \"2. second\" \"3. third\" \"4. fourth\" \"5. fifth\")) (msg-returns (\"square(1) = 1\" \"square(2) = 4\" \"square(3) = 9\" \"square(4) = 16\" \"square(5) = 25\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +206,12 @@ fn oracle_prop_format_message_curly_quotes() {
     (format-message "The function `%s' takes %d args" "cons" 2)
     (format-message "Set `%s' to %S for `%s'" "x" 42 "feature")))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"‘hello’\" \"‘world’\" \"Use ‘M-x’ to execute commands\" \"‘car’ and ‘cdr’ are different\" \"Try ‘a’, ‘b’, or ‘c’\" \"‘42’ is a number\" \"‘(1 2 3)’ is the printed form\" \"plain text with no quotes\" \"backtick ‘ alone\" \"quote ’ alone\" \"The function ‘cons’ takes 2 args\" \"Set ‘x’ to 42 for ‘feature’\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -219,7 +239,12 @@ fn oracle_prop_format_message_quoting_style_branches() {
              (mapcar (lambda (i) (text-properties-at i s))
                      (number-sequence 0 (1- (length s)))))))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((grave \"`x'\") (straight \"'x'\") (curve \"‘x’\") (curve \"‘x’\") (#(\"‘abc’\" 0 1 (face italic) 1 4 (face bold) 4 5 (face italic)) ((face italic) (face bold) (face bold) (face bold) (face italic))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +332,12 @@ fn oracle_prop_message_logging_system() {
     (makunbound 'neovm--fmp-log-buffer)
     (makunbound 'neovm--fmp-log-level)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (8 6 3 1 (\"[WARN ] slow query: 1523ms\" \"[ERROR] failed to authenticate: invalid token\" \"[WARN ] rate limit: 95/100 requests\") (\"[DEBUG] initializing app v1.0\" \"[INFO ] server started on port 8080\" \"[DEBUG] loading config from ‘/etc/app.conf’\" \"[INFO ] connected to db.local:5432\" \"[WARN ] slow query: 1523ms\" \"[ERROR] failed to authenticate: invalid token\" \"[INFO ] request: GET /api/users -> 200\" \"[WARN ] rate limit: 95/100 requests\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -385,7 +415,12 @@ fn oracle_prop_format_message_numeric_presentation() {
     (fmakunbound 'neovm--fmp-hex-dump)
     (fmakunbound 'neovm--fmp-summary-stats)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"[....................]   0%\" \"[#####...............]  25%\" \"[##########..........]  50%\" \"[###############.....]  75%\" \"[####################] 100%\" \"00 7F FF 10 20 40\" \"48 65 6C 6C 6F\" \"scores     n=10   sum=857      mean=  85.7 min=72     max=97    \" \"latency    n=10   sum=176      mean=  17.6 min=8      max=45    \" (\"Sales    |  1200  1350  1100  1500  1400 | avg=1310\" \"Costs    |   800   850   900   950  1000 | avg=900\" \"Profit   |   400   500   200   550   400 | avg=410\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -450,5 +485,10 @@ fn oracle_prop_message_conditional_error_patterns() {
     (fmakunbound 'neovm--fmp-pluralize)
     (fmakunbound 'neovm--fmp-describe-value)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"0 files\" \"1 file\" \"5 files\" \"1 match\" \"42 matches\" \"nil\" \"integer 42\" \"float 3.1400\" \"string \\\"hello\\\" (length 5)\" \"symbol ‘foo’\" \"cons (integer 1 . integer 2)\" \"cons (symbol ‘a’ . cons (symbol ‘b’ . cons (symbol ‘c’ . nil)))\" \"vector[3]\" \"Wrong type argument: numberp, \\\"hello\\\"\" \"Args out of range: \\\"hello\\\", 0, 10\" \"Symbol’s value as variable is void: ‘undefined-var’\")""#
+        ]],
+    );
 }

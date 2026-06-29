@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo1_build_modify_reparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n* B\n* C")
@@ -38,6 +38,9 @@ fn combo1_build_modify_reparse() {
                                 (lambda (h) (list (org-element-property :level h)
                                                   (org-element-property :raw-value h))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init (\"A\" \"B\" \"C\")) (:after-move (\"B\" \"A\" \"C\")) (:after-insert (\"B\" \"A\" \"C\" \"D\")) (:after-indent ((2 \"B\") (1 \"A\") (1 \"C\") (1 \"D\"))))""#
+        ]],
     );
 }
 
@@ -48,7 +51,7 @@ fn combo1_build_modify_reparse() {
 #[test]
 fn combo1_list_indent_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- [X] A\n- [ ] B\n- [ ] C\n- [X] D")
@@ -79,6 +82,9 @@ fn combo1_list_indent_checkbox() {
                                 (lambda (i) (list (org-element-property :level i)
                                                   (org-element-property :checkbox i))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init ((on \"A\") (off \"B\") (off \"C\") (on \"D\"))) (:after-indent ((nil off \"A\n  - [ ] B\n  - [ ] C\") (nil off \"B\") (nil off \"C\") (nil on \"D\"))) (:after-toggle ((nil trans) (nil on) (nil off) (nil on))))""#
+        ]],
     );
 }
 
@@ -89,7 +95,7 @@ fn combo1_list_indent_checkbox() {
 #[test]
 fn combo1_table_build_formula() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| a | b |\n| 1 | 2 |\n| 3 | 4 |")
@@ -113,6 +119,7 @@ fn combo1_table_build_formula() {
     (forward-line)
     (push (list :cell2 (org-table-get "2" "3")) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (user-error \"Not at a table\")""#]],
     );
 }
 
@@ -123,7 +130,7 @@ fn combo1_table_build_formula() {
 #[test]
 fn combo1_planning_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO T")
@@ -144,6 +151,9 @@ fn combo1_planning_modify() {
     ;; verify buffer content
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init nil) (:after-sched ((\"S\" nil))) (:after-dead ((\"S\" \"D\"))) (:content \"* TODO T\nDEADLINE: <2026-01-20 Tue> SCHEDULED: <2026-01-15 Thu>\"))""#
+        ]],
     );
 }
 
@@ -154,7 +164,7 @@ fn combo1_planning_modify() {
 #[test]
 fn combo1_tags_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T :existing:")
@@ -174,6 +184,9 @@ fn combo1_tags_toggle() {
     ;; verify buffer
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init (\"existing\")) (:after-add (\"existing\" \"new\")) (:after-remove (\"new\")) (:after-toggle nil) (:content \"* T\"))""#
+        ]],
     );
 }
 
@@ -184,7 +197,7 @@ fn combo1_tags_toggle() {
 #[test]
 fn combo1_props_crud() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T")
@@ -206,6 +219,9 @@ fn combo1_props_crud() {
     ;; verify buffer
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init nil) (:after-put (\"1\" \"2\" \"3\")) (:after-update (\"1\" \"22\" \"3\")) (:after-delete (nil \"22\" \"3\")) (:content \"* T\n:PROPERTIES:\n:B:        22\n:C:        3\n:END:\n\"))""#
+        ]],
     );
 }
 
@@ -216,7 +232,7 @@ fn combo1_props_crud() {
 #[test]
 fn combo1_todo_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H")
@@ -231,6 +247,9 @@ fn combo1_todo_cycle() {
     ;; verify buffer
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init nil) (:cycle #(\"TODO\" 0 4 (org-todo-head \"TODO\"))) (:cycle #(\"PROG\" 0 4 (org-todo-head \"TODO\"))) (:cycle #(\"DONE\" 0 4 (org-todo-head \"TODO\"))) (:cycle nil) (:content #(\"* H\" 0 3 (org-todo-head \"TODO\"))))""#
+        ]],
     );
 }
 
@@ -241,7 +260,7 @@ fn combo1_todo_cycle() {
 #[test]
 fn combo1_src_execute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_SRC emacs-lisp\n(+ 1 2)\n#+END_SRC")
@@ -256,6 +275,9 @@ fn combo1_src_execute() {
     (push (list :results (org-element-map (org-element-parse-buffer) 'fixed-width
                            (lambda (fw) (org-element-property :value fw)))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r##""OK ((:init \"#+BEGIN_SRC emacs-lisp\n(+ 1 2)\n#+END_SRC\") (:after-exec \"#+BEGIN_SRC emacs-lisp\n(+ 1 2)\n#+END_SRC\") (:results nil))""##
+        ]],
     );
 }
 
@@ -266,7 +288,7 @@ fn combo1_src_execute() {
 #[test]
 fn combo1_links_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\n[[http://a.com][A]] [[file:b.el][B]] [[id:xxx][C]] [[mailto:d@e.com]]")
@@ -289,6 +311,9 @@ fn combo1_links_parse() {
           (setq p (org-element-property :parent p))))
       (push (list :chain (nreverse chain)) r))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:links ((\"http\" \"//a.com\" \"http://a.com\") (\"file\" \"b.el\" \"file:b.el\") (\"id\" \"xxx\" \"id:xxx\") (\"mailto\" \"d@e.com\" \"mailto:d@e.com\"))) (:count 4) (:chain (link paragraph section headline org-data)))""#
+        ]],
     );
 }
 
@@ -299,7 +324,7 @@ fn combo1_links_parse() {
 #[test]
 fn combo1_footnotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text[fn:1] more[fn:2] end\n\n[fn:1] First def\n[fn:2] Second def")
@@ -316,6 +341,9 @@ fn combo1_footnotes() {
     (push (list :ref-count (length (org-element-map (org-element-parse-buffer) 'footnote-reference 'identity))) r)
     (push (list :def-count (length (org-element-map (org-element-parse-buffer) 'footnote-definition 'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:refs (\"1\" \"2\")) (:defs ((\"1\" \"First def\") (\"2\" \"Second def\"))) (:ref-count 2) (:def-count 2))""#
+        ]],
     );
 }
 
@@ -326,13 +354,14 @@ fn combo1_footnotes() {
 #[test]
 fn combo1_full_distribution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+TITLE: Complex\n#+FILETAGS: :t1:t2:\n* TODO [#A] H1 :work:\nSCHEDULED: <2026-01-15>\nBody *bold* /italic/\n** H2\n- [X] a\n- [ ] b\n| x | y |\n|---+---|\n| 1 | 2 |\n#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n* DONE [#B] H2 :home:\n:PROPERTIES:\n:A: 1\n:END:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:00] =>  1:00")
   (let ((types (org-element-map (org-element-parse-buffer) 'element 'org-element-type)))
     (list (length types)
           (sort (delete-dups (copy-sequence types)) 'string<))))"##,
+        expect_test::expect![[r#""OK (0 nil)""#]],
     );
 }
 
@@ -343,7 +372,7 @@ fn combo1_full_distribution() {
 #[test]
 fn combo1_cycle_visibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b")
@@ -365,6 +394,9 @@ fn combo1_cycle_visibility() {
     (org-cycle 'subtree)
     (push (list :subtree (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:overview \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\") (:content \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\") (:all \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\") (:children \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\") (:subtree \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\"))""#
+        ]],
     );
 }
 
@@ -375,7 +407,7 @@ fn combo1_cycle_visibility() {
 #[test]
 fn combo1_move_headings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n* B\n* C\n* D")
@@ -404,6 +436,9 @@ fn combo1_move_headings() {
                                 (lambda (h) (list (org-element-property :level h)
                                                   (org-element-property :raw-value h))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init (\"A\" \"B\" \"C\" \"D\")) (:after-down (\"A\" \"C\" \"B\" \"D\")) (:after-up (\"A\" \"B\" \"C\" \"D\")) (:after-right ((1 \"A\") (2 \"B\") (1 \"C\") (1 \"D\"))))""#
+        ]],
     );
 }
 
@@ -414,7 +449,7 @@ fn combo1_move_headings() {
 #[test]
 fn combo1_sort_headings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Zebra\n* Apple\n* Mango\n* Banana")
@@ -427,6 +462,7 @@ fn combo1_sort_headings() {
     (push (list :after-sort (org-element-map (org-element-parse-buffer) 'headline
                               (lambda (h) (org-element-property :raw-value h)))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (user-error \"Nothing to sort\")""#]],
     );
 }
 
@@ -437,7 +473,7 @@ fn combo1_sort_headings() {
 #[test]
 fn combo1_clone_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n** Sub1\n** Sub2")
@@ -453,6 +489,7 @@ fn combo1_clone_subtree() {
                                 (lambda (h) (list (org-element-property :level h)
                                                   (org-element-property :raw-value h))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (void-function org-clone-subtree)""#]],
     );
 }
 
@@ -463,7 +500,7 @@ fn combo1_clone_subtree() {
 #[test]
 fn combo1_narrow_context() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b")
@@ -481,6 +518,9 @@ fn combo1_narrow_context() {
     (widen)
     (push (list :widened (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:narrowed \"** H2\n*** H3\nBody\") (:context \"** H2\n*** H3\nBody\") (:widened \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\"))""#
+        ]],
     );
 }
 
@@ -491,7 +531,7 @@ fn combo1_narrow_context() {
 #[test]
 fn combo1_toggle_heading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n* H2\n* H3")
@@ -513,6 +553,9 @@ fn combo1_toggle_heading() {
     (push (list :after-restore (org-element-map (org-element-parse-buffer) 'headline
                                   (lambda (h) (org-element-property :raw-value h)))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init (\"H1\" \"H2\" \"H3\")) (:after-toggle ((headline \"H1\") (headline \"H3\"))) (:after-restore (\"H1\" \"H2\" \"H3\")))""#
+        ]],
     );
 }
 
@@ -523,7 +566,7 @@ fn combo1_toggle_heading() {
 #[test]
 fn combo1_insert_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nBody")
@@ -543,6 +586,9 @@ fn combo1_insert_various() {
       (push (list :count (length types)) r))
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:types nil) (:count 0) (:content \"* H\nBody\n#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n#+BEGIN_QUOTE\nQuoted\n#+END_QUOTE\n- item1\n- item2\n| a | b |\n| 1 | 2 |\"))""#
+        ]],
     );
 }
 
@@ -553,11 +599,12 @@ fn combo1_insert_various() {
 #[test]
 fn combo1_export_verify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((html (org-export-string-as "* H\nBody *bold*" 'html t)))
   (list (string-match-p "<h2>" html)
         (string-match-p "<b>bold</b>" html)
         (string-match-p "</body>" html)))"##,
+        expect_test::expect![[r#""ERR (void-function org-export-string-as)""#]],
     );
 }
 
@@ -568,7 +615,7 @@ fn combo1_export_verify() {
 #[test]
 fn combo1_map_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO A\n* DONE B\n* TODO C\n* DONE D\n* WAITING E")
@@ -587,5 +634,8 @@ fn combo1_map_predicate() {
                         nil nil nil
                         (lambda (h) (string= (org-element-property :todo-keyword h) "DONE")))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:all (\"A\" \"B\" \"C\" \"D\" \"WAITING E\")) (:todo (\"A\" \"B\" \"C\" \"D\" \"WAITING E\")) (:done (\"A\" \"B\" \"C\" \"D\" \"WAITING E\")))""#
+        ]],
     );
 }

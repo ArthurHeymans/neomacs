@@ -13,7 +13,8 @@ fn oracle_prop_let_dynamic_basic_rebinding() {
                   (defvar neovm--test-dyn-var 10)
                   (let ((neovm--test-dyn-var 42))
                     neovm--test-dyn-var))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 42""#]]);
     assert_ok_eq("42", &o, &n);
 }
 
@@ -26,7 +27,10 @@ fn oracle_prop_let_dynamic_restore_after_let() {
                   (let ((neovm--test-dyn-v2 'rebound))
                     nil)
                   neovm--test-dyn-v2)";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK original""#]],
+    );
     assert_ok_eq("original", &o, &n);
 }
 
@@ -44,7 +48,10 @@ fn oracle_prop_let_dynamic_visible_in_called_function() {
                               (funcall 'neovm--test-read-dyn))
                             (funcall 'neovm--test-read-dyn))
                     (fmakunbound 'neovm--test-read-dyn)))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (global local global)""#]],
+    );
     assert_ok_eq("(global local global)", &o, &n);
 }
 
@@ -58,7 +65,8 @@ fn oracle_prop_let_dynamic_nested_rebinding() {
                     (let ((neovm--test-dyn-v4 2))
                       (let ((neovm--test-dyn-v4 3))
                         neovm--test-dyn-v4))))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 3""#]]);
     assert_ok_eq("3", &o, &n);
 }
 
@@ -74,7 +82,8 @@ fn oracle_prop_let_dynamic_unwind_on_error() {
                         (signal 'error '(\"boom\")))
                     (error nil))
                   neovm--test-dyn-v5)";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK safe""#]]);
     assert_ok_eq("safe", &o, &n);
 }
 
@@ -87,6 +96,9 @@ fn oracle_prop_let_dynamic_setq_affects_binding() {
                   (let ((neovm--test-dyn-v6 'rebound))
                     (setq neovm--test-dyn-v6 'mutated)
                     neovm--test-dyn-v6))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK mutated""#]],
+    );
     assert_ok_eq("mutated", &o, &n);
 }

@@ -34,7 +34,10 @@ fn oracle_prop_lexdyn_closure_capture_lexical() {
             (funcall get-sum)
             ;; But direct references see the new scope
             x y))))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (10 20 30 999 888)""#]],
+    );
     assert_ok_eq("(10 20 30 999 888)", &o, &n);
 }
 
@@ -57,7 +60,10 @@ fn oracle_prop_lexdyn_closure_capture_dynamic_via_defvar() {
                   ;; After let exits, dynamic binding restored
                   (list r1 r2 r3 (funcall reader))))))))
     (makunbound 'neovm--lvd-dynx)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (100 200 300 300)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +80,10 @@ fn oracle_prop_lexdyn_let_parallel_swap() {
   (let ((a b) (b c) (c a))
     ;; a=2, b=3, c=1 (cyclic rotation)
     (list a b c)))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (2 3 1)""#]],
+    );
     assert_ok_eq("(2 3 1)", &o, &n);
 }
 
@@ -90,7 +99,10 @@ fn oracle_prop_lexdyn_let_star_sequential_dependency() {
         (e (list a b c d)))
   ;; a=5, b=10, c=15, d=10, e=(5 10 15 10)
   (list a b c d e))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 10 15 10 (5 10 15 10))""#]],
+    );
 }
 
 #[test]
@@ -110,7 +122,10 @@ fn oracle_prop_lexdyn_let_star_closure_captures_intermediate() {
   ;; After (x (* x 2)), x is a NEW binding = 20, f2 captures this
   ;; After (x (* x 3)), x is a NEW binding = 60, f3 captures this
   (list (funcall f1) (funcall f2) (funcall f3) x))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 20 60 60)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +158,7 @@ fn oracle_prop_lexdyn_defvar_makes_dynamic_in_let() {
         (funcall 'neovm--lvd-read-special))
     (fmakunbound 'neovm--lvd-read-special)
     (makunbound 'neovm--lvd-special)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK default""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +184,7 @@ fn oracle_prop_lexdyn_special_variable_p() {
           (special-variable-p 'neovm--lvd-svp-test2)))
     (makunbound 'neovm--lvd-svp-test)
     (makunbound 'neovm--lvd-svp-test2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +211,10 @@ fn oracle_prop_lexdyn_funcall_closure_in_different_scope() {
                 (funcall add5 0)
                 (funcall add10 0)
                 (funcall add5 (funcall add10 1))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((105 110) 5 10 16)""#]],
+    );
 }
 
 #[test]
@@ -214,7 +232,10 @@ fn oracle_prop_lexdyn_closure_passed_to_sort() {
            (lambda (a b) (if (eq direction 'desc) (> a b) (< a b))))))
     (list (sort (copy-sequence data) ascending)
           (sort (copy-sequence data) descending))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 1 2 3 3 4 5 5 5 6 9) (9 6 5 5 5 4 3 3 2 1 1))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -252,7 +273,12 @@ fn oracle_prop_lexdyn_dynamic_wind_let_unwind() {
         (push (list 'after-unwind neovm--lvd-wind-var) log)
         (nreverse log))
     (makunbound 'neovm--lvd-wind-var)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((inside-let let-bound) (after-let initial) (inside-unwind manually-set) (in-handler about-to-error) (after-unwind initial))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +309,10 @@ fn oracle_prop_lexdyn_symbol_value_lexical_vs_dynamic() {
           ;; After let, restored
           (symbol-value 'neovm--lvd-sv-dyn)))
     (makunbound 'neovm--lvd-sv-dyn)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (dyn-val void rebound dyn-val)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +341,10 @@ fn oracle_prop_lexdyn_set_on_dynamic_vs_lexical() {
                     ;; Lexical var unchanged by any set call
                     lex-x)))))
     (makunbound 'neovm--lvd-set-dyn)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (modified set-in-let set-in-let 10)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -340,7 +372,10 @@ fn oracle_prop_lexdyn_nested_let_shadowing() {
                       (funcall f3)
                       ;; Direct reference sees innermost
                       x)))))))))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (level0 level1 level2 level3 level3)""#]],
+    );
     assert_ok_eq("(level0 level1 level2 level3 level3)", &o, &n);
 }
 
@@ -357,7 +392,10 @@ fn oracle_prop_lexdyn_shadowing_with_mutation() {
       (setq x 'inner-mutated)
       (list (funcall save-outer)  ;; still 'outer
             x))))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (outer inner-mutated)""#]],
+    );
     assert_ok_eq("(outer inner-mutated)", &o, &n);
 }
 
@@ -390,7 +428,10 @@ fn oracle_prop_lexdyn_lambda_factory_with_state() {
       (funcall set1 'c)        ;; c
       (funcall get1)           ;; c
       (funcall get2))))"#; // y
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (a x b b x y c c y)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -411,7 +452,10 @@ fn oracle_prop_lexdyn_mapc_closure_accumulator() {
           (setq items (cons (* n n) items)))
         '(1 2 3 4 5))
   (list sum product (nreverse items)))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (15 120 (1 4 9 16 25))""#]],
+    );
     assert_ok_eq("(15 120 (1 4 9 16 25))", &o, &n);
 }
 
@@ -433,7 +477,10 @@ fn oracle_prop_lexdyn_mapc_multiple_closures_shared_state() {
         '(1 2 3 4 5 6 7 8 9 10))
   (list even-count odd-count even-sum odd-sum
         (+ even-sum odd-sum)))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (5 5 30 25 55)""#]],
+    );
     assert_ok_eq("(5 5 30 25 55)", &o, &n);
 }
 
@@ -467,7 +514,10 @@ fn oracle_prop_lexdyn_mixed_complex_interaction() {
                     (let ((r4 (funcall compute 10))) ;; flag=t => 200+10=210
                       (list r1 r2 r3 r4)))))))))
     (makunbound 'neovm--lvd-mix-flag)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (105 95 190 210)""#]],
+    );
 }
 
 #[test]
@@ -494,7 +544,10 @@ fn oracle_prop_lexdyn_dynamic_controls_lexical_closure_behavior() {
                         ;; After lets, back to normal
                         (funcall transform "World"))))))))
     (makunbound 'neovm--lvd-mode)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"Hello\" \"HELLO\" \"hello\" \"world\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -514,5 +567,5 @@ fn oracle_prop_lexdyn_dolist_closures_capture() {
     (let ((captured item))
       (push (lambda () captured) fns)))
   (mapcar 'funcall (nreverse fns)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (a b c d e)""#]]);
 }

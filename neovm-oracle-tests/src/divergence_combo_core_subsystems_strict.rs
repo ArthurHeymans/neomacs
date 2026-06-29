@@ -13,7 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_core_buffer_kill_query_and_kill_hook_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (let ((b (generate-new-buffer " *probe-kill*")))
@@ -25,13 +25,14 @@ fn div_core_buffer_kill_query_and_kill_hook_order() {
                   (list (lambda () (push (list 'kill (buffer-name)) log)))))
     (list (kill-buffer b) log (buffer-live-p b))))
 "##,
+        expect_test::expect![[r#""OK (t ((kill \" *probe-kill*\") q2 q1) nil)""#]],
     );
 }
 
 #[test]
 fn div_core_buffer_change_hooks_and_modified_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (with-temp-buffer
@@ -46,13 +47,16 @@ fn div_core_buffer_change_hooks_and_modified_state() {
     (delete-char 1)
     (list (buffer-string) (buffer-modified-p) (nreverse log))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"ac\" t ((before 1 1 nil) (after 1 4 0 t) (before 2 3 t) (after 2 2 1 t)))""#
+        ]],
     );
 }
 
 #[test]
 fn div_core_normal_and_abnormal_hook_order_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (defvar probe--normal-hook nil)
@@ -70,13 +74,14 @@ fn div_core_normal_and_abnormal_hook_order_combo() {
    (run-hook-with-args-until-success 'probe--abnormal-hook 42)
    log))
 "##,
+        expect_test::expect![[r#""OK ((global local) done ((b 42) global local))""#]],
     );
 }
 
 #[test]
 fn div_core_advice_depth_filter_return_and_member_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (defun probe--adv-depth (x) (push (list 'orig x) log) (+ x 10))
@@ -104,13 +109,16 @@ fn div_core_advice_depth_filter_return_and_member_combo() {
       (advice-remove 'probe--adv-depth filter-ret)
       (fmakunbound 'probe--adv-depth))))
 "##,
+        expect_test::expect![[
+            r#""OK (57 (around2-in (before 8) around1-in (orig 9) around1-out (filter-ret 19) around2-out) t)""#
+        ]],
     );
 }
 
 #[test]
 fn div_core_advice_preserves_command_interactive_shape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defun probe--adv-command (x) (interactive "p") x)
@@ -123,13 +131,14 @@ fn div_core_advice_preserves_command_interactive_shape() {
       (advice-remove 'probe--adv-command a)
       (fmakunbound 'probe--adv-command))))
 "##,
+        expect_test::expect![[r#""OK (t (interactive \"p\") (x))""#]],
     );
 }
 
 #[test]
 fn div_core_window_buffer_configuration_and_parameters_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (get-buffer-create " *probe-win-a*"))
       (b2 (get-buffer-create " *probe-win-b*")))
@@ -160,13 +169,14 @@ fn div_core_window_buffer_configuration_and_parameters_combo() {
     (when (buffer-live-p b1) (kill-buffer b1))
     (when (buffer-live-p b2) (kill-buffer b2))))
 "##,
+        expect_test::expect![[r#""OK (side 42 1 \" *probe-win-a*\" 3 3)""#]],
     );
 }
 
 #[test]
 fn div_core_display_buffer_window_parameters_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-display*")))
   (unwind-protect
@@ -186,13 +196,14 @@ fn div_core_display_buffer_window_parameters_combo() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (t 2 yes \" *probe-display*\" 4)""#]],
     );
 }
 
 #[test]
 fn div_core_buffer_swap_text_moves_markers_and_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (generate-new-buffer " *probe-swap-a*"))
       (b (generate-new-buffer " *probe-swap-b*")))
@@ -222,13 +233,14 @@ fn div_core_buffer_swap_text_moves_markers_and_overlays() {
     (kill-buffer a)
     (kill-buffer b)))
 "##,
+        expect_test::expect![[r#""OK (\"BETA\" \"alpha\" 3 nil 2 nil (ob) (oa))""#]],
     );
 }
 
 #[test]
 fn div_core_indirect_buffers_narrowing_and_local_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (with-temp-buffer
@@ -251,13 +263,14 @@ fn div_core_indirect_buffers_narrowing_and_local_hooks() {
                           log)))
         (when (buffer-live-p ind) (kill-buffer ind))))))
 "##,
+        expect_test::expect![[r#""OK (t \"bcd\" 2 5 2 t ((kill \" *probe-indirect*\" t)))""#]],
     );
 }
 
 #[test]
 fn div_core_marker_insertion_and_retarget_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (generate-new-buffer " *probe-marker-a*"))
       (b2 (generate-new-buffer " *probe-marker-b*")))
@@ -276,13 +289,14 @@ fn div_core_marker_insertion_and_retarget_combo() {
     (kill-buffer b1)
     (kill-buffer b2)))
 "##,
+        expect_test::expect![[r#""OK (4 t 1 t)""#]],
     );
 }
 
 #[test]
 fn div_core_textprop_overlay_delete_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -300,13 +314,16 @@ fn div_core_textprop_overlay_delete_combo() {
           (overlay-start ov)
           (overlay-end ov))))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"abf\" 1 2 (rear-nonsticky t category probe-cat face bold)) bold nil nil nil nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_core_text_property_stickiness_insert_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "ab")
@@ -319,13 +336,16 @@ fn div_core_text_property_stickiness_insert_matrix() {
         (text-properties-at 2)
         (text-properties-at 3)))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"aXb\" 0 1 (rear-nonsticky (face) face bold) 2 3 (front-sticky (face) face italic)) (rear-nonsticky (face) face bold) nil (front-sticky (face) face italic))""#
+        ]],
     );
 }
 
 #[test]
 fn div_core_overlay_front_rear_advance_insert_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcd")
@@ -337,13 +357,14 @@ fn div_core_overlay_front_rear_advance_insert_matrix() {
           (list (overlay-start o1) (overlay-end o1))
           (list (overlay-start o2) (overlay-end o2)))))
 "##,
+        expect_test::expect![[r#""OK (\"aLbRcd\" (2 4) (3 5))""#]],
     );
 }
 
 #[test]
 fn div_core_undo_boundaries_and_change_hooks_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (with-temp-buffer
@@ -358,13 +379,16 @@ fn div_core_undo_boundaries_and_change_hooks_combo() {
       (undo 1)
       (list (buffer-string) (consp u1) (nreverse log)))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"\" t ((before 1 1) (before 4 4) (before 4 7) (before 1 4)))""#
+        ]],
     );
 }
 
 #[test]
 fn div_core_window_delete_restores_selected_window_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (get-buffer-create " *probe-fsw-a*"))
       (b2 (get-buffer-create " *probe-fsw-b*")))
@@ -383,13 +407,14 @@ fn div_core_window_delete_restores_selected_window_combo() {
     (when (buffer-live-p b1) (kill-buffer b1))
     (when (buffer-live-p b2) (kill-buffer b2))))
 "##,
+        expect_test::expect![[r#""OK (1 t \" *probe-fsw-a*\" nil)""#]],
     );
 }
 
 #[test]
 fn div_core_minibuffer_window_frame_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((mw (minibuffer-window)))
   (list (window-live-p mw)
@@ -398,13 +423,14 @@ fn div_core_minibuffer_window_frame_state_combo() {
         (buffer-name (window-buffer mw))
         (active-minibuffer-window)))
 "##,
+        expect_test::expect![[r#""OK (t t t \" *Minibuf-0*\" nil)""#]],
     );
 }
 
 #[test]
 fn div_core_batch_frame_font_and_display_metrics_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (frame-parameter nil 'font)
       (frame-parameter nil 'font-backend)
@@ -413,13 +439,14 @@ fn div_core_batch_frame_font_and_display_metrics_combo() {
       (display-mm-width)
       (display-mm-height))
 "##,
+        expect_test::expect![[r#""OK (\"tty\" nil 80 25 nil nil)""#]],
     );
 }
 
 #[test]
 fn div_core_frame_fullscreen_alpha_sequence_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (unwind-protect
     (progn
@@ -437,13 +464,14 @@ fn div_core_frame_fullscreen_alpha_sequence_combo() {
   (modify-frame-parameters
    nil '((fullscreen . nil) (alpha . nil) (alpha-background . nil))))
 "##,
+        expect_test::expect![[r#""OK ((fullboth 80 70) nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_core_inhibit_modification_hooks_boundary_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (with-temp-buffer
@@ -458,13 +486,14 @@ fn div_core_inhibit_modification_hooks_boundary_combo() {
     (insert "d")
     (list (buffer-string) (nreverse log))))
 "##,
+        expect_test::expect![[r#""OK (\"abcd\" ((before 4 4) (after 4 5 0)))""#]],
     );
 }
 
 #[test]
 fn div_core_overlay_modification_hooks_order_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (with-temp-buffer
@@ -489,13 +518,14 @@ fn div_core_overlay_modification_hooks_order_combo() {
             (nreverse log)
             (list (overlay-start ov) (overlay-end ov)))))))
 "##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 23 59)""#]],
     );
 }
 
 #[test]
 fn div_core_temp_buffer_hooks_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (let ((temp-buffer-setup-hook
@@ -506,13 +536,16 @@ fn div_core_temp_buffer_hooks_combo() {
       (princ "hello"))
     (list (get-buffer "*Probe Help*") (nreverse log))))
 "##,
+        expect_test::expect![[
+            r#""OK (#<buffer *Probe Help*> ((setup \"*Probe Help*\") (show \"*Probe Help*\")))""#
+        ]],
     );
 }
 
 #[test]
 fn div_core_save_window_excursion_restores_buffer_point_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (get-buffer-create " *probe-swe-a*"))
       (b2 (get-buffer-create " *probe-swe-b*")))
@@ -530,13 +563,14 @@ fn div_core_save_window_excursion_restores_buffer_point_combo() {
     (when (buffer-live-p b1) (kill-buffer b1))
     (when (buffer-live-p b2) (kill-buffer b2))))
 "##,
+        expect_test::expect![[r#""OK ((\" *probe-swe-a*\" 4 1) \" *probe-swe-a*\" 4 1)""#]],
     );
 }
 
 #[test]
 fn div_core_save_current_buffer_kill_current_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (get-buffer-create " *probe-scb-a*"))
       (b2 (get-buffer-create " *probe-scb-b*")))
@@ -556,13 +590,14 @@ fn div_core_save_current_buffer_kill_current_combo() {
     (when (buffer-live-p b1) (kill-buffer b1))
     (when (buffer-live-p b2) (kill-buffer b2))))
 "##,
+        expect_test::expect![[r#""OK (t nil \" *probe-scb-a*\")""#]],
     );
 }
 
 #[test]
 fn div_core_advice_removed_by_fset_redefinition_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (defun probe--redef (x) (list 'old x))
@@ -575,13 +610,14 @@ fn div_core_advice_removed_by_fset_redefinition_combo() {
         (advice-remove 'probe--redef a)
         (fmakunbound 'probe--redef)))))
 "##,
+        expect_test::expect![[r#""OK ((old 1) (new 2) ((around 1)) nil)""#]],
     );
 }
 
 #[test]
 fn div_core_frame_parameter_delete_default_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (unwind-protect
     (progn
@@ -594,6 +630,7 @@ fn div_core_frame_parameter_delete_default_combo() {
               (assq 'probe-x (frame-parameters)))))
   (modify-frame-parameters nil '((probe-x . nil))))
 "##,
+        expect_test::expect![[r#""OK ((1 (probe-x . 1)) nil (probe-x))""#]],
     );
 }
 
@@ -603,7 +640,7 @@ fn div_core_divergence_surface_frame_unsplittable_parameter() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (nil (unsplittable))
     // Neomacs:   OK (t (unsplittable . t))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (unwind-protect
     (progn
@@ -612,6 +649,7 @@ fn div_core_divergence_surface_frame_unsplittable_parameter() {
             (assq 'unsplittable (frame-parameters))))
   (modify-frame-parameters nil '((unsplittable . nil))))
 "##,
+        expect_test::expect![[r#""OK (nil (unsplittable))""#]],
     );
 }
 
@@ -621,7 +659,7 @@ fn div_core_divergence_surface_frame_visibility_nil_parameter() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (t (visibility . t))
     // Neomacs:   OK (nil (visibility))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (unwind-protect
     (progn
@@ -630,6 +668,7 @@ fn div_core_divergence_surface_frame_visibility_nil_parameter() {
             (assq 'visibility (frame-parameters))))
   (modify-frame-parameters nil '((visibility . t))))
 "##,
+        expect_test::expect![[r#""OK (t (visibility . t))""#]],
     );
 }
 
@@ -639,7 +678,7 @@ fn div_core_divergence_surface_batch_frame_size_and_position_mutation() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (80 25 nil nil)
     // Neomacs:   OK (81 27 10 20)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (set-frame-size nil 81 26)
@@ -648,6 +687,7 @@ fn div_core_divergence_surface_batch_frame_size_and_position_mutation() {
         (frame-parameter nil 'left)
         (frame-parameter nil 'top)))
 "##,
+        expect_test::expect![[r#""OK (80 25 nil nil)""#]],
     );
 }
 
@@ -657,7 +697,7 @@ fn div_core_divergence_surface_frame_width_height_parameters() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (80 25 80 25 7 8)
     // Neomacs:   OK (90 30 90 30 7 8)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (unwind-protect
     (progn
@@ -671,6 +711,7 @@ fn div_core_divergence_surface_frame_width_height_parameters() {
   (modify-frame-parameters
    nil '((width . nil) (height . nil) (left . nil) (top . nil))))
 "##,
+        expect_test::expect![[r#""OK (80 25 80 25 7 8)""#]],
     );
 }
 
@@ -680,7 +721,7 @@ fn div_core_divergence_surface_window_resize_split_edges() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ((10 14 (0 1 80 11) (0 11 80 25)) 8 16 (0 1 80 9) (0 9 80 25) 2)
     // Neomacs:   OK ((10 14 (0 0 80 10) (0 10 80 24)) 8 16 (0 0 80 8) (0 8 80 24) 2)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (delete-other-windows)
@@ -702,6 +743,9 @@ fn div_core_divergence_surface_window_resize_split_edges() {
                    (count-windows))
         (delete-other-windows)))))
 "##,
+        expect_test::expect![[
+            r#""OK ((10 15 (0 1 81 11) (0 11 81 26)) 8 17 (0 1 81 9) (0 9 81 26) 2)""#
+        ]],
     );
 }
 
@@ -711,7 +755,7 @@ fn div_core_divergence_surface_window_start_end_scroll_state() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ((15 30 561) 22 30 561)
     // Neomacs:   OK ((15 30 176) 50 50 211)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (dotimes (i 80) (insert (format "line%02d\n" i)))
@@ -728,6 +772,7 @@ fn div_core_divergence_surface_window_start_end_scroll_state() {
                      before))))
       (list before (window-start w) (window-point w) (window-end w t)))))
 "##,
+        expect_test::expect![[r#""OK ((15 30 561) 22 30 561)""#]],
     );
 }
 
@@ -737,7 +782,7 @@ fn div_core_divergence_surface_window_margins_body_width() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (5 (2 . 3) (0 0 nil nil) 75)
     // Neomacs:   OK (5 (2 . 3) (0 0 nil nil) 80)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdefghijklmnopqrstuvwxyz")
@@ -751,6 +796,7 @@ fn div_core_divergence_surface_window_margins_body_width() {
           (window-fringes w)
           (window-body-width w))))
 "##,
+        expect_test::expect![[r#""OK (5 (2 . 3) (0 0 nil nil) 76)""#]],
     );
 }
 
@@ -760,7 +806,7 @@ fn div_core_divergence_surface_switch_buffer_update_hook() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (" *probe-switch-b*" ((update "*scratch*") (update " *probe-switch-a*") (update " *probe-switch-b*")))
     // Neomacs:   OK (" *probe-switch-b*" nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       (b1 (get-buffer-create " *probe-switch-a*"))
@@ -774,6 +820,9 @@ fn div_core_divergence_surface_switch_buffer_update_hook() {
     (when (buffer-live-p b1) (kill-buffer b1))
     (when (buffer-live-p b2) (kill-buffer b2))))
 "##,
+        expect_test::expect![[
+            r#""OK (\" *probe-switch-b*\" ((update \" *neovm-oracle-stdout*\") (update \" *probe-switch-a*\") (update \" *probe-switch-b*\")))""#
+        ]],
     );
 }
 
@@ -783,7 +832,7 @@ fn div_core_divergence_surface_window_parameter_configuration_restore() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (after (probe . after))
     // Neomacs:   OK (before (probe . before))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-wparam*")))
   (unwind-protect
@@ -798,6 +847,7 @@ fn div_core_divergence_surface_window_parameter_configuration_restore() {
                 (assq 'probe (window-parameters)))))
     (when (buffer-live-p b) (kill-buffer b))))
 "##,
+        expect_test::expect![[r#""OK (after (probe . after))""#]],
     );
 }
 
@@ -807,7 +857,7 @@ fn div_core_divergence_surface_kill_all_local_variables_hook() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (local t 70 nil ((change local 33)))
     // Neomacs:   OK (local t 70 nil nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (defvar probe--perm-local 'global)
@@ -826,6 +876,7 @@ fn div_core_divergence_surface_kill_all_local_variables_hook() {
           (local-variable-p 'fill-column)
           log)))
 "##,
+        expect_test::expect![[r#""OK (local t 70 nil ((change local 33)))""#]],
     );
 }
 
@@ -835,7 +886,7 @@ fn div_core_divergence_surface_derived_mode_change_hook_order() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (probe-child-mode (change parent-body child-body parent-hook child-hook) probe-parent-mode nil)
     // Neomacs:   OK (probe-child-mode (parent-body child-body parent-hook child-hook) probe-parent-mode nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (define-derived-mode probe-parent-mode fundamental-mode "ProbeParent"
@@ -852,6 +903,9 @@ fn div_core_divergence_surface_derived_mode_change_hook_order() {
           (derived-mode-p 'probe-parent-mode)
           (derived-mode-p 'fundamental-mode))))
 "##,
+        expect_test::expect![[
+            r#""OK (probe-child-mode (change parent-body child-body parent-hook child-hook) probe-parent-mode nil)""#
+        ]],
     );
 }
 
@@ -860,7 +914,7 @@ fn div_core_after_change_major_mode_hook_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Parity lock: after-change-major-mode-hook runs with the new major mode
     // already installed.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (add-hook 'after-change-major-mode-hook
@@ -869,6 +923,7 @@ fn div_core_after_change_major_mode_hook_combo() {
     (text-mode)
     (list major-mode (nreverse log))))
 "##,
+        expect_test::expect![[r#""OK (text-mode ((after text-mode)))""#]],
     );
 }
 
@@ -877,7 +932,7 @@ fn div_core_field_boundary_motion_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Parity lock: field-beginning/field-end/field-string and constrain-to-field
     // across three text-property fields.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "aa bb cc")
@@ -888,6 +943,7 @@ fn div_core_field_boundary_motion_combo() {
         (constrain-to-field 8 5)
         (constrain-to-field 2 5)))
 "##,
+        expect_test::expect![[r#""OK (4 6 #(\"bb\" 0 2 (field mid)) 6 4)""#]],
     );
 }
 
@@ -895,7 +951,7 @@ fn div_core_field_boundary_motion_combo() {
 fn div_core_default_value_buffer_local_symbol_plist_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Parity lock: set-default after per-buffer setq-local, plus symbol plist.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defvar probe--bufvar 'global)
@@ -914,6 +970,7 @@ fn div_core_default_value_buffer_local_symbol_plist_combo() {
       (kill-buffer b1)
       (kill-buffer b2))))
 "##,
+        expect_test::expect![[r#""OK (new-global a b symbolp)""#]],
     );
 }
 
@@ -923,7 +980,7 @@ fn div_core_divergence_surface_text_mode_change_major_mode_hook() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (text-mode (change (after text-mode)))
     // Neomacs:   OK (text-mode ((after text-mode)))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (add-hook 'change-major-mode-hook (lambda () (push 'change log)))
@@ -933,6 +990,7 @@ fn div_core_divergence_surface_text_mode_change_major_mode_hook() {
     (text-mode)
     (list major-mode (nreverse log))))
 "##,
+        expect_test::expect![[r#""OK (text-mode (change (after text-mode)))""#]],
     );
 }
 
@@ -942,7 +1000,7 @@ fn div_core_divergence_surface_set_auto_mode_change_hook() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (text-mode (change text-hook))
     // Neomacs:   OK (text-mode (text-hook))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       (auto-mode-alist '(("\\.probe\\'" . text-mode))))
@@ -953,6 +1011,7 @@ fn div_core_divergence_surface_set_auto_mode_change_hook() {
     (set-auto-mode)
     (list major-mode (nreverse log))))
 "##,
+        expect_test::expect![[r#""OK (text-mode (change text-hook))""#]],
     );
 }
 
@@ -963,7 +1022,7 @@ fn div_core_divergence_surface_read_only_before_change_hook_count() {
     // double-fires before-change-functions in Neomacs.
     // GNU Emacs: OK (buffer-read-only ok "abcY" ((before 4 4)))
     // Neomacs:   OK (buffer-read-only ok "abcY" ((before 4 4) (before 4 4)))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (with-temp-buffer
@@ -979,6 +1038,7 @@ fn div_core_divergence_surface_read_only_before_change_hook_count() {
                   'ok)))
       (list err1 err2 (buffer-string) (nreverse log)))))
 "##,
+        expect_test::expect![[r#""OK (buffer-read-only ok \"abcY\" ((before 4 4)))""#]],
     );
 }
 
@@ -987,7 +1047,7 @@ fn div_core_file_temp_attributes_and_insert_file_contents_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Parity lock: temp file creation, file attributes, and insert-file-contents
     // without retaining volatile absolute temp names in the asserted result.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-probe" t))
        (f1 (expand-file-name "a.txt" dir))
@@ -1011,6 +1071,7 @@ fn div_core_file_temp_attributes_and_insert_file_contents_combo() {
     (delete-directory dir t)
     (delete-file f2)))
 "##,
+        expect_test::expect![[r#""OK (t t t 5 \"a.txt\" (0 7 \"abc\ndef\" nil t))""#]],
     );
 }
 
@@ -1019,7 +1080,7 @@ fn div_core_call_process_environment_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Parity lock: call-process, shell-command-switch, process-environment, and
     // getenv binding all agree in batch mode.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((process-environment (cons "NEO_PROBE_VAR=xyz" process-environment)))
   (list
@@ -1032,6 +1093,7 @@ fn div_core_call_process_environment_combo() {
                                  shell-command-switch "printf $NEO_PROBE_VAR")))
        (list status (buffer-string) (getenv "NEO_PROBE_VAR"))))))
 "##,
+        expect_test::expect![[r#""OK ((0 \"a\nb\") (0 \"xyz\" \"xyz\"))""#]],
     );
 }
 
@@ -1039,7 +1101,7 @@ fn div_core_call_process_environment_combo() {
 fn div_core_register_point_text_and_rectangle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Parity lock: point registers, text registers, and rectangle registers.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (with-temp-buffer
@@ -1057,6 +1119,7 @@ fn div_core_register_point_text_and_rectangle_combo() {
    (insert-register ?r)
    (list (get-register ?r) (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK ((t 4 \"bcd\") ((\"\" \"\" \"\") \"\"))""#]],
     );
 }
 
@@ -1065,7 +1128,7 @@ fn div_core_timer_absolute_and_idle_shape_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Parity lock: absolute timer and idle timer shape are stable when the
     // scheduled time is explicit.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (let ((tm (run-at-time '(0 1 2 345000) nil (lambda () 'never))))
@@ -1077,6 +1140,9 @@ fn div_core_timer_absolute_and_idle_shape_combo() {
        (list (timerp tm) (memq tm timer-idle-list) (timer--idle-delay tm))
      (cancel-timer tm))))
 "##,
+        expect_test::expect![[
+            r#""OK ((t (0 1 2 345000) nil) (t ([nil 0 1000 0 nil (closure (t) nil 'never) nil idle 0 nil]) idle))""#
+        ]],
     );
 }
 
@@ -1086,7 +1152,7 @@ fn div_core_divergence_surface_relative_timer_microseconds() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: relative run-at-time retains a nonzero microsecond component.
     // Neomacs:   relative run-at-time reports zero microseconds.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((tm (run-at-time 1000 nil (lambda () 'never))))
   (unwind-protect
@@ -1099,6 +1165,7 @@ fn div_core_divergence_surface_relative_timer_microseconds() {
               (timer--repeat-delay tm)))
     (cancel-timer tm)))
 "##,
+        expect_test::expect![[r#""OK (t t t t t nil)""#]],
     );
 }
 
@@ -1108,7 +1175,7 @@ fn div_core_divergence_surface_repeating_timer_microseconds() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: repeating run-at-time keeps a nonzero microsecond component.
     // Neomacs:   repeating run-at-time reports zero microseconds.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((tm (run-at-time 10 5 (lambda () 'never))))
   (unwind-protect
@@ -1121,6 +1188,7 @@ fn div_core_divergence_surface_repeating_timer_microseconds() {
               (timer--repeat-delay tm)))
     (cancel-timer tm)))
 "##,
+        expect_test::expect![[r#""OK (t t t t t 5)""#]],
     );
 }
 
@@ -1130,7 +1198,7 @@ fn div_core_divergence_surface_message_repetition_coalescing() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (nil "same [3 times]\n")
     // Neomacs:   OK (nil "same\nsame\nsame\n")
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((message-log-max t))
   (with-current-buffer (get-buffer-create "*Messages*")
@@ -1142,6 +1210,7 @@ fn div_core_divergence_surface_message_repetition_coalescing() {
   (list (current-message)
         (with-current-buffer "*Messages*" (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK (nil \"same [3 times]\n\")""#]],
     );
 }
 
@@ -1150,7 +1219,7 @@ fn div_core_variable_watcher_set_and_buffer_local_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Parity lock: variable watchers receive global set/setq-default events,
     // buffer-local set events, and makunbound from kill-local-variable.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (let ((log nil))
@@ -1183,6 +1252,9 @@ fn div_core_variable_watcher_set_and_buffer_local_combo() {
                  (nreverse log)))
        (remove-variable-watcher 'probe--watch-local watcher)))))
 "##,
+        expect_test::expect![[
+            r#""OK ((3 3 ((probe--watch 1 set nil) (probe--watch 2 set nil) (probe--watch 3 set nil))) (0 0 ((probe--watch-local 10 set \" *probe-watch-local*\") (probe--watch-local 11 set \" *probe-watch-local*\") (probe--watch-local nil makunbound \" *probe-watch-local*\"))))""#
+        ]],
     );
 }
 
@@ -1191,7 +1263,7 @@ fn div_core_make_variable_buffer_local_default_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Parity lock: automatically buffer-local variables keep per-buffer values
     // after a default value mutation.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defvar probe--auto-local 'global)
@@ -1211,6 +1283,7 @@ fn div_core_make_variable_buffer_local_default_combo() {
       (kill-buffer b1)
       (kill-buffer b2))))
 "##,
+        expect_test::expect![[r#""OK (new-default a b t t)""#]],
     );
 }
 
@@ -1219,7 +1292,7 @@ fn div_core_window_state_get_put_keymap_and_face_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Parity lock: window-state-get/put, remapping keymaps, event descriptions,
     // and batch face attributes in one broader basic-subsystem probe.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (let ((b1 (get-buffer-create " *probe-state-a*"))
@@ -1259,6 +1332,9 @@ fn div_core_window_state_get_put_keymap_and_face_combo() {
        (face-attribute 'bold :weight nil 'default)
        (face-all-attributes 'bold nil)))
 "##,
+        expect_test::expect![[
+            r#""OK ((2 (\" *probe-state-a*\" \" *probe-state-b*\") (nil nil)) (new-cmd [3 110] new-cmd) (\"<C-a>\" \"C-<S-a>\" \"C-a\" [3 f5] (control shift) a) ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] \"unspecified-fg\" \"unspecified-bg\" bold ((:family . unspecified) (:foundry . unspecified) (:width . unspecified) (:height . unspecified) (:weight . unspecified) (:slant . unspecified) (:underline . unspecified) (:overline . unspecified) (:extend . unspecified) (:strike-through . unspecified) (:box . unspecified) (:inverse-video . unspecified) (:foreground . unspecified) (:background . unspecified) (:stipple . unspecified) (:inherit . unspecified))))""#
+        ]],
     );
 }
 
@@ -1268,7 +1344,7 @@ fn div_core_divergence_surface_permanent_local_mode_change_hook() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (local t nil nil ((change local probe)))
     // Neomacs:   OK (local t nil nil nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (defvar probe--perm2 'global)
@@ -1288,6 +1364,7 @@ fn div_core_divergence_surface_permanent_local_mode_change_hook() {
           (local-variable-p 'transient-mark-mode)
           (nreverse log))))
 "##,
+        expect_test::expect![[r#""OK (local t nil nil ((change local probe)))""#]],
     );
 }
 
@@ -1297,7 +1374,7 @@ fn div_core_divergence_surface_window_prev_buffers_after_previous_buffer() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("*scratch*" nil (" *probe-prev-c*"))
     // Neomacs:   OK ("*scratch*" (("*scratch*" 1 1)) (" *probe-prev-c*"))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (get-buffer-create " *probe-prev-a*"))
       (b2 (get-buffer-create " *probe-prev-b*"))
@@ -1320,6 +1397,7 @@ fn div_core_divergence_surface_window_prev_buffers_after_previous_buffer() {
     (mapc (lambda (b) (when (buffer-live-p b) (kill-buffer b)))
           (list b1 b2 b3))))
 "##,
+        expect_test::expect![[r#""OK (\"*scratch*\" nil (\" *probe-prev-c*\"))""#]],
     );
 }
 
@@ -1329,7 +1407,7 @@ fn div_core_divergence_surface_buffer_rename_update_hook() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("probe-rename-new" ("*scratch*" "probe-rename-new"))
     // Neomacs:   OK ("probe-rename-new" ("*scratch*"))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       (buffer-list-update-hook nil))
@@ -1342,6 +1420,9 @@ fn div_core_divergence_surface_buffer_rename_update_hook() {
           (list (buffer-name) (nreverse log)))
       (when (buffer-live-p b) (kill-buffer b)))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"probe-rename-new\" (\" *neovm-oracle-stdout*\" \"probe-rename-new\"))""#
+        ]],
     );
 }
 
@@ -1351,7 +1432,7 @@ fn div_core_divergence_surface_set_buffer_major_mode_change_hook() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (fundamental-mode "Fundamental" (text-mode))
     // Neomacs:   OK (fundamental-mode "Fundamental" nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (with-temp-buffer
@@ -1363,6 +1444,7 @@ fn div_core_divergence_surface_set_buffer_major_mode_change_hook() {
     (set-buffer-major-mode (current-buffer))
     (list major-mode mode-name (nreverse log))))
 "##,
+        expect_test::expect![[r#""OK (fundamental-mode \"Fundamental\" (text-mode))""#]],
     );
 }
 
@@ -1372,7 +1454,7 @@ fn div_core_divergence_surface_global_major_mode_hook_order_combo() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (fundamental-mode ((change fundamental-mode) (text-hook text-mode) (after text-mode) (change text-mode) (after fundamental-mode)))
     // Neomacs:   OK (fundamental-mode ((text-hook text-mode) (after text-mode) (after fundamental-mode)))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       (change-major-mode-hook nil)
@@ -1389,6 +1471,9 @@ fn div_core_divergence_surface_global_major_mode_hook_order_combo() {
     (fundamental-mode)
     (list major-mode (nreverse log))))
 "##,
+        expect_test::expect![[
+            r#""OK (fundamental-mode ((change fundamental-mode) (text-hook text-mode) (after text-mode) (change text-mode) (after fundamental-mode)))""#
+        ]],
     );
 }
 
@@ -1398,7 +1483,7 @@ fn div_core_divergence_surface_overlay_category_evaporate_delete() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("aef" nil nil nil #("<" 0 1 (face bold)) ">")
     // Neomacs:   OK ("aef" #<killed buffer> 2 2 #("<" 0 1 (face bold)) ">")
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -1415,6 +1500,7 @@ fn div_core_divergence_surface_overlay_category_evaporate_delete() {
           (overlay-get o 'before-string)
           (overlay-get o 'after-string))))
 "##,
+        expect_test::expect![[r#""OK (\"aef\" nil nil nil #(\"<\" 0 1 (face bold)) \">\")""#]],
     );
 }
 
@@ -1424,7 +1510,7 @@ fn div_core_divergence_surface_bury_buffer_update_hook() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (" *probe-bury*" ("*scratch*" " *probe-bury*" " *probe-bury*"))
     // Neomacs:   OK (" *probe-bury*" ("*scratch*" " *probe-bury*"))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       (buffer-list-update-hook nil)
@@ -1438,6 +1524,9 @@ fn div_core_divergence_surface_bury_buffer_update_hook() {
         (list (buffer-name (current-buffer)) (nreverse log)))
     (when (buffer-live-p b) (kill-buffer b))))
 "##,
+        expect_test::expect![[
+            r#""OK (\" *probe-bury*\" (\" *neovm-oracle-stdout*\" \" *probe-bury*\" \" *probe-bury*\"))""#
+        ]],
     );
 }
 
@@ -1447,7 +1536,7 @@ fn div_core_divergence_surface_window_configuration_hook_batch_split() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (1 nil)
     // Neomacs:   OK (1 ((config 2)))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       (b1 (get-buffer-create " *probe-wh3-a*"))
@@ -1477,6 +1566,7 @@ fn div_core_divergence_surface_window_configuration_hook_batch_split() {
     (when (buffer-live-p b1) (kill-buffer b1))
     (when (buffer-live-p b2) (kill-buffer b2))))
 "##,
+        expect_test::expect![[r#""OK (1 nil)""#]],
     );
 }
 
@@ -1486,7 +1576,7 @@ fn div_core_divergence_surface_overlay_category_modification_hooks() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("abXdef" 2 5 ((cat nil 3 3 nil 2 5) (cat t 3 5 0 2 7) (cat nil 4 6 nil 2 7) (cat t 4 4 2 2 5)))
     // Neomacs:   OK ("abXdef" 2 5 nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -1506,6 +1596,9 @@ fn div_core_divergence_surface_overlay_category_modification_hooks() {
             (overlay-end o)
             (nreverse log)))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"abXdef\" 2 5 ((cat nil 3 3 nil 2 5) (cat t 3 5 0 2 7) (cat nil 4 6 nil 2 7) (cat t 4 4 2 2 5)))""#
+        ]],
     );
 }
 
@@ -1515,7 +1608,7 @@ fn div_core_divergence_surface_overlay_category_insert_in_front_hooks() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("abXXcdef" 3 3 ((front nil 3 3 nil 3 3) (front t 3 5 0 3 3)))
     // Neomacs:   OK ("abXXcdef" 3 3 nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -1534,6 +1627,9 @@ fn div_core_divergence_surface_overlay_category_insert_in_front_hooks() {
             (overlay-end o)
             (nreverse log)))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"abXXcdef\" 3 3 ((front nil 3 3 nil 3 3) (front t 3 5 0 3 3)))""#
+        ]],
     );
 }
 
@@ -1543,7 +1639,7 @@ fn div_core_divergence_surface_overlay_category_insert_behind_hooks() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("abXXcdef" 3 5 ((behind nil 3 3 nil 3 3) (behind t 3 5 0 3 5)))
     // Neomacs:   OK ("abXXcdef" 3 5 nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -1562,6 +1658,9 @@ fn div_core_divergence_surface_overlay_category_insert_behind_hooks() {
             (overlay-end o)
             (nreverse log)))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"abXXcdef\" 3 5 ((behind nil 3 3 nil 3 3) (behind t 3 5 0 3 5)))""#
+        ]],
     );
 }
 
@@ -1571,7 +1670,7 @@ fn div_core_divergence_surface_frame_parameters_buffer_list_modeline() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ((no-accept-focus) (modeline . t) nil ("*scratch*") nil)
     // Neomacs:   OK (nil nil (font-parameter) nil nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((params (frame-parameters (selected-frame))))
   (list (assq 'no-accept-focus params)
@@ -1581,6 +1680,9 @@ fn div_core_divergence_surface_frame_parameters_buffer_list_modeline() {
                 (cdr (assq 'buffer-list params)))
         (cdr (assq 'buried-buffer-list params))))
 "##,
+        expect_test::expect![[
+            r#""OK ((no-accept-focus) (modeline . t) nil (\"*scratch*\") nil)""#
+        ]],
     );
 }
 
@@ -1590,7 +1692,7 @@ fn div_core_divergence_surface_text_category_modification_hooks() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (#("abXdef" 1 2 (category probe-text-cat3) 3 4 (category probe-text-cat3)) ((4 6)))
     // Neomacs:   OK (#("abXdef" 1 2 (category probe-text-cat3) 3 4 (category probe-text-cat3)) nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -1603,6 +1705,9 @@ fn div_core_divergence_surface_text_category_modification_hooks() {
     (delete-region 4 6)
     (list (buffer-string) (nreverse log))))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"abXdef\" 1 2 (category probe-text-cat3) 3 4 (category probe-text-cat3)) ((4 6)))""#
+        ]],
     );
 }
 
@@ -1612,7 +1717,7 @@ fn div_core_divergence_surface_window_scroll_error_and_state_combo() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ((err beginning-of-buffer 13 13 201 50) (ok 201 145 201))
     // Neomacs:   OK ((err end-of-buffer 1 1 93 50) (ok 189 189 201))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (let ((b (get-buffer-create " *probe-win-scroll*")))
@@ -1654,6 +1759,7 @@ fn div_core_divergence_surface_window_scroll_error_and_state_combo() {
            (error (list 'err (car err) (point) (window-start) (window-end nil t)))))
      (when (buffer-live-p b) (kill-buffer b)))))
 "##,
+        expect_test::expect![[r#""OK ((err beginning-of-buffer 13 13 201 50) (ok 201 141 201))""#]],
     );
 }
 
@@ -1663,7 +1769,7 @@ fn div_core_divergence_surface_recenter_window_end_state() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (80 57 201)
     // Neomacs:   OK (80 57 149)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-recenter*")))
   (unwind-protect
@@ -1678,6 +1784,7 @@ fn div_core_divergence_surface_recenter_window_end_state() {
         (list (point) (window-start) (window-end nil t)))
     (when (buffer-live-p b) (kill-buffer b))))
 "##,
+        expect_test::expect![[r#""OK (80 57 201)""#]],
     );
 }
 
@@ -1688,7 +1795,7 @@ fn div_core_divergence_surface_set_window_configuration_killed_buffer() {
     // GNU Emacs: OK (2 (" *probe-ks-a*" "*scratch*"))
     // Neomacs:   OK (2 (" *probe-ks-a*" nil))   ; leaves a window whose buffer is nil
     //            and emits a "Selecting deleted buffer" redisplay error.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (get-buffer-create " *probe-ks-a*"))
       (b (get-buffer-create " *probe-ks-b*")))
@@ -1709,6 +1816,7 @@ fn div_core_divergence_surface_set_window_configuration_killed_buffer() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (2 (\" *probe-ks-a*\" \"*scratch*\"))""#]],
     );
 }
 
@@ -1718,7 +1826,7 @@ fn div_core_divergence_surface_compare_window_configurations_split_delete() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK nil   ; split + delete leaves a configuration GNU treats as different
     // Neomacs:   OK t     ; Neomacs treats it as identical to the pre-split configuration
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (get-buffer-create " *probe-cfg-cmp2-a*")))
   (unwind-protect
@@ -1732,6 +1840,7 @@ fn div_core_divergence_surface_compare_window_configurations_split_delete() {
     (when (buffer-live-p a) (kill-buffer a))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -1742,7 +1851,7 @@ fn div_core_divergence_surface_window_configuration_register_killed_buffer() {
     // GNU Emacs: OK (2 (" *probe-winreg-a*" "*scratch*"))
     // Neomacs:   OK (2 (" *probe-winreg-a*" nil))   ; register restore leaves a nil-buffer window
     //            and emits a "Selecting deleted buffer" redisplay error.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (get-buffer-create " *probe-winreg-a*"))
       (b (get-buffer-create " *probe-winreg-b*"))
@@ -1764,6 +1873,7 @@ fn div_core_divergence_surface_window_configuration_register_killed_buffer() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (2 (\" *probe-winreg-a*\" \"*scratch*\"))""#]],
     );
 }
 
@@ -1773,7 +1883,7 @@ fn div_core_divergence_surface_frame_buffer_list_after_bury() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ((" *probe-frame-buf-a*" "*scratch*") (" *probe-frame-buf-a*" "*scratch*") (" *probe-frame-buf-b*"))
     // Neomacs:   OK ((" *probe-frame-buf-a*") (" *probe-frame-buf-a*") (" *probe-frame-buf-b*"))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (get-buffer-create " *probe-frame-buf-a*"))
       (b (get-buffer-create " *probe-frame-buf-b*")))
@@ -1789,6 +1899,9 @@ fn div_core_divergence_surface_frame_buffer_list_after_bury() {
     (mapc (lambda (x) (when (buffer-live-p x) (kill-buffer x)))
           (list a b))))
 "##,
+        expect_test::expect![[
+            r#""OK ((\" *probe-frame-buf-a*\" \"*scratch*\") (\" *probe-frame-buf-a*\" \"*scratch*\") (\" *probe-frame-buf-b*\"))""#
+        ]],
     );
 }
 
@@ -1798,7 +1911,7 @@ fn div_core_divergence_surface_next_previous_buffer_after_bury() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("*Messages*" "*scratch*" ("*Messages*") ("*Messages*"))
     // Neomacs:   OK ("*Messages*" "*scratch*" ("*Messages*" "*scratch*") ("*Messages*"))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (get-buffer-create " *probe-nextbuf-a*"))
       (b (get-buffer-create " *probe-nextbuf-b*"))
@@ -1821,6 +1934,9 @@ fn div_core_divergence_surface_next_previous_buffer_after_bury() {
     (mapc (lambda (x) (when (buffer-live-p x) (kill-buffer x)))
           (list a b c))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"*Messages*\" \"*scratch*\" (\"*Messages*\") (\"*Messages*\"))""#
+        ]],
     );
 }
 
@@ -1830,7 +1946,7 @@ fn div_core_divergence_surface_kill_buffer_live_process_hangup() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (signal nil #<killed buffer> nil (("hangup\n" signal nil)))
     // Neomacs:   OK (run (run open listen connect stop) #<killed buffer> nil nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *probe-proc-killbuf2*"))
       (log nil))
@@ -1862,6 +1978,9 @@ fn div_core_divergence_surface_kill_buffer_live_process_hangup() {
         (when (process-live-p proc) (delete-process proc)))
       result)))
 "##,
+        expect_test::expect![[
+            r#""OK (signal nil #<killed buffer> nil ((\"hangup\n\" signal nil)))""#
+        ]],
     );
 }
 
@@ -1871,7 +1990,7 @@ fn div_core_divergence_surface_delete_process_missing_sentinel() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (signal nil (("killed\n" signal)))
     // Neomacs:   OK (signal nil nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (let ((proc (make-process
@@ -1890,6 +2009,7 @@ fn div_core_divergence_surface_delete_process_missing_sentinel() {
           (process-live-p proc)
           (nreverse log))))
 "##,
+        expect_test::expect![[r#""OK (signal nil ((\"killed\n\" signal)))""#]],
     );
 }
 
@@ -1899,7 +2019,7 @@ fn div_core_divergence_surface_interrupt_process_missing_sentinel() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (signal 2 (("interrupt\n" signal 2)))
     // Neomacs:   OK (signal 2 nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (let ((proc (make-process
@@ -1926,6 +2046,7 @@ fn div_core_divergence_surface_interrupt_process_missing_sentinel() {
                  (nreverse log))
       (when (process-live-p proc) (delete-process proc)))))
 "##,
+        expect_test::expect![[r#""OK (signal 2 ((\"interrupt\n\" signal 2)))""#]],
     );
 }
 
@@ -1935,7 +2056,7 @@ fn div_core_divergence_surface_kill_process_missing_sentinel() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (signal 9 (("killed\n" signal 9)))
     // Neomacs:   OK (signal 9 nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (let ((proc (make-process
@@ -1962,6 +2083,7 @@ fn div_core_divergence_surface_kill_process_missing_sentinel() {
                  (nreverse log))
       (when (process-live-p proc) (delete-process proc)))))
 "##,
+        expect_test::expect![[r#""OK (signal 9 ((\"killed\n\" signal 9)))""#]],
     );
 }
 
@@ -1971,7 +2093,7 @@ fn div_core_divergence_surface_quit_process_sentinel_message() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (signal 3 (("quit (core dumped)\n" signal 3)))
     // Neomacs:   OK (signal 3 (("quit\n" signal 3)))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (let ((proc (make-process
@@ -1998,6 +2120,7 @@ fn div_core_divergence_surface_quit_process_sentinel_message() {
                  (nreverse log))
       (when (process-live-p proc) (delete-process proc)))))
 "##,
+        expect_test::expect![[r#""OK (signal 3 ((\"quit (core dumped)\n\" signal 3)))""#]],
     );
 }
 
@@ -2007,7 +2130,7 @@ fn div_core_divergence_surface_stop_continue_delete_process_sentinels() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (signal 9 (("run" run 0) ("killed\n" signal 9)))
     // Neomacs:   OK (signal 9 nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (let ((proc (make-process
@@ -2039,6 +2162,7 @@ fn div_core_divergence_surface_stop_continue_delete_process_sentinels() {
           (process-exit-status proc)
           (nreverse log))))
 "##,
+        expect_test::expect![[r#""OK (signal 9 ((\"run\" run 0) (\"killed\n\" signal 9)))""#]],
     );
 }
 
@@ -2048,7 +2172,7 @@ fn div_core_divergence_surface_execute_kbd_macro_command_keys() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("abc" nil nil "" [] [])
     // Neomacs:   OK ("abc" nil nil "c" [99] [97 98 99])
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((executing-kbd-macro nil)
@@ -2061,6 +2185,7 @@ fn div_core_divergence_surface_execute_kbd_macro_command_keys() {
           (this-command-keys-vector)
           (recent-keys))))
 "##,
+        expect_test::expect![[r#""OK (\"abc\" nil nil \"\" [] [])""#]],
     );
 }
 
@@ -2070,7 +2195,7 @@ fn div_core_divergence_surface_call_last_kbd_macro_from_binding() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("xy" "xy" nil "")
     // Neomacs:   ERR (error "No keyboard macro has been defined")
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((executing-kbd-macro nil)
@@ -2082,6 +2207,7 @@ fn div_core_divergence_surface_call_last_kbd_macro_from_binding() {
           executing-kbd-macro
           (this-command-keys))))
 "##,
+        expect_test::expect![[r#""OK (\"abcxy\" \"xy\" nil \"\")""#]],
     );
 }
 
@@ -2091,7 +2217,7 @@ fn div_core_divergence_surface_help_window_return_message_keys() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK "Type C-x 1 to delete the help window, C-M-v to scroll help.\n"
     // Neomacs:   OK #("Type C-x 1 to delete the help window, ESC C-v to scroll help.\n" ...)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((message-log-max t)
       (help-window-select nil))
@@ -2105,6 +2231,9 @@ fn div_core_divergence_surface_help_window_return_message_keys() {
       (kill-buffer "*probe-help-msg*"))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[
+            r#""OK \"Type C-x 1 to delete the help window, C-M-v to scroll help.\n\"""#
+        ]],
     );
 }
 
@@ -2114,7 +2243,7 @@ fn div_core_divergence_surface_help_window_selected_message_properties() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK "Type q to delete help window, C-v to scroll help.\n"
     // Neomacs:   OK #("Type q to delete help window, C-v to scroll help.\n" ...)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((message-log-max t)
       (help-window-select t))
@@ -2128,6 +2257,7 @@ fn div_core_divergence_surface_help_window_selected_message_properties() {
       (kill-buffer "*probe-help-msg2*"))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK \"Type q to delete help window, C-v to scroll help.\n\"""#]],
     );
 }
 
@@ -2137,13 +2267,16 @@ fn div_core_divergence_surface_substitute_command_keys_meta_vector() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (... #("Press ‘C-h’ then ‘C-M-v’" ...) [134217750] "C-M-v")
     // Neomacs:   OK (... #("Press ‘C-h’ then ‘ESC C-v’" ...) [27 22] "ESC C-v")
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (substitute-command-keys "\\[keyboard-quit]")
       (substitute-command-keys "Press `\\[help-command]' then `\\[scroll-other-window]'")
       (where-is-internal 'scroll-other-window nil t)
       (key-description (where-is-internal 'scroll-other-window nil t)))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"C-g\" 0 3 (font-lock-face help-key-binding face help-key-binding)) #(\"Press ‘C-h’ then ‘C-M-v’\" 7 10 (font-lock-face help-key-binding face help-key-binding) 18 23 (font-lock-face help-key-binding face help-key-binding)) [134217750] \"C-M-v\")""#
+        ]],
     );
 }
 
@@ -2153,13 +2286,16 @@ fn div_core_divergence_surface_help_key_description_escape_meta() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (#("C-M-v" ...) #("C-M-v" ...) #("C-x 1" ...) #("q" ...))
     // Neomacs:   OK (#("C-M-v" ...) #("ESC C-v" ...) #("C-x 1" ...) #("q" ...))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (help-key-description (kbd "C-M-v") nil)
       (help-key-description (kbd "ESC C-v") nil)
       (help-key-description (kbd "C-x 1") nil)
       (help-key-description (kbd "q") nil))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"C-M-v\" 0 5 (font-lock-face help-key-binding face help-key-binding)) #(\"C-M-v\" 0 5 (font-lock-face help-key-binding face help-key-binding)) #(\"C-x 1\" 0 5 (font-lock-face help-key-binding face help-key-binding)) #(\"q\" 0 1 (font-lock-face help-key-binding face help-key-binding)))""#
+        ]],
     );
 }
 
@@ -2169,7 +2305,7 @@ fn div_core_divergence_surface_escape_meta_key_description_canonicalization() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("M-a" "M-a" "C-M-a" "C-M-a" "M-a" "C-M-a" (meta) 97)
     // Neomacs:   OK ("M-a" "ESC a" "C-M-a" "ESC C-a" "M-a" "C-M-a" (meta) 97)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (key-description (kbd "M-a"))
       (key-description (kbd "ESC a"))
@@ -2180,6 +2316,9 @@ fn div_core_divergence_surface_escape_meta_key_description_canonicalization() {
       (event-modifiers ?\M-a)
       (event-basic-type ?\M-a))
 "##,
+        expect_test::expect![[
+            r#""OK (\"M-a\" \"M-a\" \"C-M-a\" \"C-M-a\" \"M-a\" \"C-M-a\" (meta) 97)""#
+        ]],
     );
 }
 
@@ -2189,7 +2328,7 @@ fn div_core_divergence_surface_meta_command_lookup_vector() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ([134217825] [27 97] [134217729] [27 1] [134217848] "M-x")
     // Neomacs:   OK ([134217825] [27 97] [134217729] [27 1] [27 120] "ESC x")
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (read-kbd-macro "M-a" nil)
       (read-kbd-macro "ESC a" nil)
@@ -2198,6 +2337,9 @@ fn div_core_divergence_surface_meta_command_lookup_vector() {
       (where-is-internal 'execute-extended-command nil t)
       (key-description (where-is-internal 'execute-extended-command nil t)))
 "##,
+        expect_test::expect![[
+            r#""OK ([134217825] [27 97] [134217729] [27 1] [134217848] \"M-x\")""#
+        ]],
     );
 }
 
@@ -2207,7 +2349,7 @@ fn div_core_divergence_surface_manual_escape_vector_key_description() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("M-x" "M-x" "ESC ESC" "M-ESC" "M-[ A" "M-x" (meta) 120)
     // Neomacs:   OK ("ESC x" "M-x" "ESC ESC" "M-ESC" "ESC [ A" "M-x" (meta) 120)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (key-description [27 120])
       (key-description [134217848])
@@ -2218,6 +2360,9 @@ fn div_core_divergence_surface_manual_escape_vector_key_description() {
       (event-modifiers 134217848)
       (event-basic-type 134217848))
 "##,
+        expect_test::expect![[
+            r#""OK (\"M-x\" \"M-x\" \"ESC ESC\" \"M-ESC\" \"M-[ A\" \"M-x\" (meta) 120)""#
+        ]],
     );
 }
 
@@ -2227,7 +2372,7 @@ fn div_core_divergence_surface_sparse_keymap_meta_where_is() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (mx mx [134217848] "M-x" [134217849] "M-y")
     // Neomacs:   OK (mx mx [27 120] "ESC x" [27 121] "ESC y")
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
   (define-key map (kbd "M-x") 'mx)
@@ -2239,6 +2384,7 @@ fn div_core_divergence_surface_sparse_keymap_meta_where_is() {
         (where-is-internal 'escy map t)
         (key-description (where-is-internal 'escy map t))))
 "##,
+        expect_test::expect![[r#""OK (mx mx [134217848] \"M-x\" [134217849] \"M-y\")""#]],
     );
 }
 
@@ -2248,13 +2394,16 @@ fn div_core_divergence_surface_substitute_command_keys_escape_meta() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (#("M-x" ...) #("M-ESC ESC" ...) [134217755 27] "M-ESC ESC")
     // Neomacs:   OK (#("ESC x" ...) #("ESC ESC ESC" ...) [27 27 27] "ESC ESC ESC")
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (substitute-command-keys "\\[execute-extended-command]")
       (substitute-command-keys "\\[keyboard-escape-quit]")
       (where-is-internal 'keyboard-escape-quit nil t)
       (key-description (where-is-internal 'keyboard-escape-quit nil t)))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"M-x\" 0 3 (font-lock-face help-key-binding face help-key-binding)) #(\"M-ESC ESC\" 0 9 (font-lock-face help-key-binding face help-key-binding)) [134217755 27] \"M-ESC ESC\")""#
+        ]],
     );
 }
 
@@ -2266,7 +2415,7 @@ fn div_core_divergence_surface_file_name_handler_operation_args_combo() {
     // write-region, and directory-files, and passes full GNU operation args.
     // Neomacs:   skips several expand-file-name handler dispatches and passes
     // truncated insert-file-contents/write-region/directory-files arg lists.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       (file-name-handler-alist nil))
@@ -2300,6 +2449,9 @@ fn div_core_divergence_surface_file_name_handler_operation_args_combo() {
           (directory-files "/probe:/dir" nil "a" t)
           (nreverse log))))
 "##,
+        expect_test::expect![[
+            r#""OK (exists \"HANDLED\" nil (\".\" \"..\" \"alpha\") ((expand-file-name (\"/probe:/x\" nil)) (file-exists-p (\"/probe:/x\")) (expand-file-name (\"/probe:/x\" nil)) (insert-file-contents (\"/probe:/x\" nil nil nil nil)) (expand-file-name (\"/probe:/out\" nil)) (write-region (1 3 \"/probe:/out\" nil silent \"/probe:/out\" nil)) (write-data 1 3 \"/probe:/out\") (expand-file-name (\"/probe:/dir\" nil)) (directory-files (\"/probe:/dir\" nil \"a\" t nil))))""#
+        ]],
     );
 }
 
@@ -2309,7 +2461,7 @@ fn div_core_divergence_surface_thread_join_error_delivery() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (nil nil (arith-error "bad"))
     // Neomacs:   OK ((join-error arith-error ("bad")) nil (arith-error "bad"))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((th (make-thread
            (lambda () (signal 'arith-error '("bad")))
@@ -2322,6 +2474,7 @@ fn div_core_divergence_surface_thread_join_error_delivery() {
           (thread-live-p th)
           (thread-last-error th))))
 "##,
+        expect_test::expect![[r#""OK (nil nil (arith-error \"bad\"))""#]],
     );
 }
 
@@ -2333,7 +2486,7 @@ fn div_core_divergence_surface_network_client_open_delete_sentinels() {
     //                               (client-sentinel "deleted\n" closed)))
     // Neomacs:   OK (listen closed ((client-sentinel "open\n" open)
     //                               (server-sentinel "open from 127.0.0.1\n" open)))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       server
@@ -2378,6 +2531,9 @@ fn div_core_divergence_surface_network_client_open_delete_sentinels() {
     (when (processp client) (delete-process client))
     (when (processp server) (delete-process server))))
 "##,
+        expect_test::expect![[
+            r#""OK (listen closed ((server-sentinel \"open from 127.0.0.1\n\" open) (client-sentinel \"deleted\n\" closed)))""#
+        ]],
     );
 }
 
@@ -2388,7 +2544,7 @@ fn div_core_divergence_surface_load_history_defvar_recording() {
     // GNU Emacs: loaded file entry records (provide . feature),
     //            (defun . function), and the defvar symbol.
     // Neomacs:   loaded file entry records provide/defun but omits defvar.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((contents
         ";;; -*- lexical-binding: t -*-
@@ -2411,6 +2567,9 @@ fn div_core_divergence_surface_load_history_defvar_recording() {
       (kill-buffer (get-file-buffer file)))
     (delete-file file)))
 "##,
+        expect_test::expect![[
+            r#""OK (t 42 9 ((provide . probe-load-history-feature) (defun . probe-load-history-fn) probe-load-history-var) (probe-load-history-var))""#
+        ]],
     );
 }
 
@@ -2420,7 +2579,7 @@ fn div_core_divergence_surface_case_table_search_and_conversion_combo() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (120 121 "xAx" "xay" 0 0 2 121 121)
     // Neomacs:   OK (88 121 "XAY" "xay" 0 0 4 121 121)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((table (copy-case-table (standard-case-table))))
   (set-case-syntax-pair ?x ?y table)
@@ -2440,6 +2599,7 @@ fn div_core_divergence_surface_case_table_search_and_conversion_combo() {
             (aref (current-case-table) ?x)
             (aref (current-case-table) ?y)))))
 "##,
+        expect_test::expect![[r#""OK (120 121 \"xAx\" \"xay\" 0 0 2 121 121)""#]],
     );
 }
 
@@ -2449,7 +2609,7 @@ fn div_core_divergence_surface_visited_file_modtime_set_clear_combo() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (((1 2 3 4000) nil) 0 t nil)
     // Neomacs:   OK (((0 1 0 0) nil) (0 1 0 0) nil nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((file (make-temp-file "neo-visit-explicit" nil ".txt" "abc")))
   (unwind-protect
@@ -2467,6 +2627,7 @@ fn div_core_divergence_surface_visited_file_modtime_set_clear_combo() {
       (kill-buffer (get-file-buffer file)))
     (delete-file file)))
 "##,
+        expect_test::expect![[r#""OK (((1 2 3 4000) nil) 0 t nil)""#]],
     );
 }
 
@@ -2476,7 +2637,7 @@ fn div_core_divergence_surface_set_visited_file_name_update_hook() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (0 0 nil ((update 0 0))) ; normalized temp-name matches
     // Neomacs:   OK (0 0 nil nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       (file-a (make-temp-file "neo-set-vfn-a" nil ".txt" "a"))
@@ -2513,6 +2674,7 @@ fn div_core_divergence_surface_set_visited_file_name_update_hook() {
     (delete-file file-a)
     (delete-file file-b)))
 "##,
+        expect_test::expect![[r#""OK (0 0 nil ((update 0 0)))""#]],
     );
 }
 
@@ -2522,7 +2684,7 @@ fn div_core_divergence_surface_keymap_parent_accessible_keymaps_combo() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (parent-cmd [3 112] ([] [3] [3]))
     // Neomacs:   OK (parent-cmd [3 112] ([] [3]))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((parent (make-sparse-keymap))
       (child (make-sparse-keymap)))
@@ -2533,6 +2695,7 @@ fn div_core_divergence_surface_keymap_parent_accessible_keymaps_combo() {
         (where-is-internal 'parent-cmd child t)
         (mapcar #'car (accessible-keymaps child))))
 "##,
+        expect_test::expect![[r#""OK (parent-cmd [3 112] ([] [3] [3]))""#]],
     );
 }
 
@@ -2542,7 +2705,7 @@ fn div_core_divergence_surface_keymap_remap_where_is_parent_child_combo() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (child-new nil nil child-new)
     // Neomacs:   OK (child-new [remap old] [remap old] child-new)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((parent (make-sparse-keymap))
       (child (make-sparse-keymap)))
@@ -2554,6 +2717,7 @@ fn div_core_divergence_surface_keymap_remap_where_is_parent_child_combo() {
         (where-is-internal 'child-new child t)
         (lookup-key child [remap old])))
 "##,
+        expect_test::expect![[r#""OK (child-new nil nil child-new)""#]],
     );
 }
 
@@ -2563,7 +2727,7 @@ fn div_core_divergence_surface_mutex_lock_blocks_other_thread() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ((t (start)) done nil (got start) "probe-mutex-block")
     // Neomacs:   OK ((nil (got start)) done nil (got start) "probe-mutex-block")
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((m (make-mutex "probe-mutex-block"))
       (log nil))
@@ -2588,6 +2752,7 @@ fn div_core_divergence_surface_mutex_lock_blocks_other_thread() {
               log
               (mutex-name m))))))
 "##,
+        expect_test::expect![[r#""OK ((t (start)) done nil (got start) \"probe-mutex-block\")""#]],
     );
 }
 
@@ -2597,7 +2762,7 @@ fn div_core_divergence_surface_thread_dynamic_binding_isolation() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (global "*scratch*" local)
     // Neomacs:   OK (main "*scratch*" local)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defvar probe-thread-dyn 'global)
@@ -2618,6 +2783,7 @@ fn div_core_divergence_surface_thread_dynamic_binding_isolation() {
       (when (buffer-live-p buf)
         (kill-buffer buf)))))
 "##,
+        expect_test::expect![[r#""OK (global \" *neovm-oracle-stdout*\" local)""#]],
     );
 }
 
@@ -2627,7 +2793,7 @@ fn div_core_divergence_surface_all_threads_includes_live_worker() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ((nil "probe-list-thread") (nil) (run))
     // Neomacs:   OK ((nil) (nil) (run))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (let ((th (make-thread
@@ -2642,6 +2808,7 @@ fn div_core_divergence_surface_all_threads_includes_live_worker() {
             (mapcar #'thread-name (all-threads))
             log))))
 "##,
+        expect_test::expect![[r#""OK ((nil \"probe-list-thread\") (nil) (run))""#]],
     );
 }
 
@@ -2651,7 +2818,7 @@ fn div_core_divergence_surface_load_history_defcustom_recording() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ((require defface probe-lh-custom defun provide) (probe-lh-custom ...))
     // Neomacs:   OK ((require defface defun provide) nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((contents
         ";;; -*- lexical-binding: t -*-
@@ -2676,6 +2843,9 @@ fn div_core_divergence_surface_load_history_defcustom_recording() {
                 entry)))
     (delete-file file)))
 "##,
+        expect_test::expect![[
+            r#""OK ((require defface probe-lh-custom defun provide) (probe-lh-custom (defun . probe-lh-alias) (provide . probe-lh)) (defface . probe-lh-face) ((require . custom) (defface . probe-lh-face) probe-lh-custom (defun . probe-lh-alias) (provide . probe-lh)))""#
+        ]],
     );
 }
 
@@ -2685,7 +2855,7 @@ fn div_core_divergence_surface_case_table_word_casing_combo() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("[ello World" "[abc Def" "[abc" "[hello]" "{foo} Bar" "{foo Bar}" t)
     // Neomacs:   OK ("[Ello World" "[Abc Def" "]Abc" "[Hello]" "{Foo} Bar" "{Foo Bar}" nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((bracket-table (copy-case-table (standard-case-table)))
       (brace-table (copy-case-table (standard-case-table))))
@@ -2721,6 +2891,9 @@ fn div_core_divergence_surface_case_table_word_casing_combo() {
      (set-case-table brace-table)
      (char-equal ?\{ ?\}))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"[ello World\" \"[abc Def\" \"[abc\" \"[hello]\" \"{foo} Bar\" \"{foo Bar}\" t)""#
+        ]],
     );
 }
 
@@ -2730,7 +2903,7 @@ fn div_core_divergence_surface_process_attributes_running_child_combo() {
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (t "/bin/sh -c sleep\\ 0.2" "")
     // Neomacs:   OK (nil "/bin/sh -c sleep 0.2" "pipe:[...]")
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process
              :name "probe-attrs-child"
@@ -2749,6 +2922,7 @@ fn div_core_divergence_surface_process_attributes_running_child_combo() {
     (when (process-live-p proc)
       (delete-process proc))))
 "##,
+        expect_test::expect![[r#""OK (t \"/bin/sh -c sleep\\\\ 0.2\" \"\")""#]],
     );
 }
 
@@ -2760,7 +2934,7 @@ fn div_core_divergence_surface_unibyte_search_raw_byte_combo() {
     //            the 0xA9 byte at position 2 (point 3) inside the é sequence.
     // Neomacs:   OK (nil nil 4 (5 3 3 1 169)) ; search-forward skips the byte
     //            embedded in é and only matches the standalone trailing byte.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (set-buffer-multibyte nil)
@@ -2782,6 +2956,7 @@ fn div_core_divergence_surface_unibyte_search_raw_byte_combo() {
                 (string-match pat (buffer-string))
                 (char-after 4)))))
 "##,
+        expect_test::expect![[r#""OK (nil nil 4 (3 3 3 1 169))""#]],
     );
 }
 
@@ -2793,7 +2968,7 @@ fn div_core_divergence_surface_unibyte_multibyte_search_mismatch() {
     //            unibyte buffer, so search-forward of (string ?é) returns nil.
     // Neomacs:   OK (3 3 nil nil)   ; search-forward incorrectly matches the
     //            multibyte char against the raw é byte sequence.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (set-buffer-multibyte nil)
@@ -2810,6 +2985,7 @@ fn div_core_divergence_surface_unibyte_multibyte_search_mismatch() {
             (re-search-forward (string ?é) nil t))
           (string-match (string ?é) (buffer-string)))))
 "##,
+        expect_test::expect![[r#""OK (3 nil nil nil)""#]],
     );
 }
 
@@ -2822,7 +2998,7 @@ fn div_core_divergence_surface_signal_process_signal_name_symbol() {
     // GNU accepts signal-name symbols (TERM) for signal-process; Neomacs only
     // accepts integer signal numbers and errors on the symbol, leaving the
     // process running with no sentinel event.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process
              :name "probe-signal-name"
@@ -2852,6 +3028,7 @@ fn div_core_divergence_surface_signal_process_signal_name_symbol() {
         (when (process-live-p proc)
           (delete-process proc))))))
 "##,
+        expect_test::expect![[r#""OK (0 signal 15 ((\"terminated\n\" signal 15)))""#]],
     );
 }
 
@@ -2867,7 +3044,7 @@ fn div_core_divergence_surface_insert_and_inherit_full_plist() {
     // GNU inherits the full property plist (including rear-nonsticky nil) for
     // the inserted char and coalesces the spans; Neomacs inherits only `face`
     // and leaves a fragmented interval with a partial plist.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert (propertize "AB" 'face 'bold 'rear-nonsticky nil))
@@ -2877,6 +3054,9 @@ fn div_core_divergence_surface_insert_and_inherit_full_plist() {
         (text-properties-at 2)
         (text-properties-at 3)))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"AXB\" 0 3 (face bold rear-nonsticky nil)) (face bold rear-nonsticky nil) (face bold rear-nonsticky nil))""#
+        ]],
     );
 }
 
@@ -2889,7 +3069,7 @@ fn div_core_divergence_surface_self_insert_command_inherits_properties() {
     // self-insert-command inherits text properties from the preceding char in
     // GNU (X gets `face bold` and the span coalesces); Neomacs inserts X with
     // no inherited properties, leaving an unpropertized gap.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert (propertize "abc" 'face 'bold))
@@ -2899,6 +3079,9 @@ fn div_core_divergence_surface_self_insert_command_inherits_properties() {
   (list (buffer-string)
         (text-properties-at 4)))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"abcXdef\" 0 4 (face bold) 4 7 (face italic)) (face bold))""#
+        ]],
     );
 }
 
@@ -2912,7 +3095,7 @@ fn div_core_divergence_surface_encode_coding_string_dos_eol() {
     // output in Neomacs, while GNU correctly applies CRLF EOL conversion.
     // The explicit utf-8-dos variant works in both, isolating the `dos`
     // (undecided base + dos EOL) alias as the divergent path.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((dos-encoded (encode-coding-string "a\nb" 'dos))
       (utf8-dos-encoded (encode-coding-string "x\ny\nz" 'utf-8-dos)))
@@ -2921,6 +3104,7 @@ fn div_core_divergence_surface_encode_coding_string_dos_eol() {
         (append dos-encoded nil)
         (append utf8-dos-encoded nil)))
 "##,
+        expect_test::expect![[r#""OK (\"a\\r\nb\" 4 (97 13 10 98) (120 13 10 121 13 10 122))""#]],
     );
 }
 
@@ -2934,7 +3118,7 @@ fn div_core_divergence_surface_encode_coding_string_mac_unix_eol() {
     // output in Neomacs (even for a newline-free string like "hi"), while GNU
     // applies the correct EOL conversion. The fully-qualified latin-1-unix and
     // utf-8-mac coding systems work in both, isolating the EOL-only aliases.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (append (encode-coding-string "a\nb" 'mac) nil)
       (append (encode-coding-string "a\nb" 'unix) nil)
@@ -2942,6 +3126,7 @@ fn div_core_divergence_surface_encode_coding_string_mac_unix_eol() {
       (append (encode-coding-string "a\nb" 'latin-1-unix) nil)
       (append (encode-coding-string "a\nb" 'utf-8-mac) nil))
 "##,
+        expect_test::expect![[r#""OK ((97 13 98) (97 10 98) (104 105) (97 10 98) (97 13 98))""#]],
     );
 }
 
@@ -2954,13 +3139,14 @@ fn div_core_divergence_surface_decode_coding_string_eol_detection() {
     // decode-coding-string with bare dos/mac aliases does not collapse CRLF/CR
     // to LF in Neomacs (raw bytes retained), and detect-coding-string fails to
     // report the dos/mac EOL variant, returning plain `undecided`.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (append (decode-coding-string "a\r\nb" 'dos) nil)
       (append (decode-coding-string "a\rb" 'mac) nil)
       (detect-coding-string "a\r\nb\r\n" t)
       (detect-coding-string "a\rb\rc" t))
 "##,
+        expect_test::expect![[r#""OK ((97 10 98) (97 10 98) undecided-dos undecided-mac)""#]],
     );
 }
 
@@ -2973,7 +3159,7 @@ fn div_core_divergence_surface_insert_file_contents_unix_keeps_cr() {
     // Reading a CRLF file with coding-system-for-read 'dos collapses CRLF->LF
     // in both. With the bare 'unix alias GNU performs no EOL conversion and
     // keeps the raw CR bytes, while Neomacs strips them.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((file (make-temp-file "neo-crlf-read" nil ".txt")))
   (unwind-protect
@@ -2996,6 +3182,7 @@ fn div_core_divergence_surface_insert_file_contents_unix_keeps_cr() {
           (list read-as-dos read-as-unix)))
     (delete-file file)))
 "##,
+        expect_test::expect![[r#""OK (\"a\nb\nc\" (97 13 10 98 13 10 99))""#]],
     );
 }
 
@@ -3011,7 +3198,7 @@ fn div_core_divergence_surface_missing_program_error_data() {
     // (Neomacs uses "Searching for program"), and GNU's call-process error
     // data has 4 elements (including the errno string) while Neomacs's has
     // only 3.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((make-err
        (condition-case err
@@ -3027,6 +3214,9 @@ fn div_core_divergence_surface_missing_program_error_data() {
   (list (list (car make-err) (length make-err) (nth 1 make-err))
         (list (car call-err) (length call-err) (nth 1 call-err))))
 "##,
+        expect_test::expect![[
+            r#""OK ((file-missing 3 \"Doing vfork\") (file-missing 4 \"Searching for program\"))""#
+        ]],
     );
 }
 
@@ -3039,7 +3229,7 @@ fn div_core_divergence_surface_start_process_missing_program_deferred() {
     // start-process with a missing program returns a live process in GNU and
     // defers the failure to an asynchronous sentinel (status exit, code 127);
     // Neomacs instead raises a synchronous file-missing error.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (condition-case err
@@ -3062,6 +3252,9 @@ fn div_core_divergence_surface_start_process_missing_program_deferred() {
               (nreverse log)))
     (error (list 'err (car err) (length (cdr err))))))
 "##,
+        expect_test::expect![[
+            r#""OK (process exit 127 ((\"exited abnormally with code 127\n\" exit 127)))""#
+        ]],
     );
 }
 
@@ -3074,7 +3267,7 @@ fn div_core_divergence_surface_replace_region_contents_function_arg() {
     // replace-region-contents accepts a function returning the replacement
     // string/buffer in GNU; Neomacs rejects a callable replacement with
     // wrong-type-argument (expects a string/buffer/vector directly).
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (with-temp-buffer
@@ -3095,6 +3288,7 @@ fn div_core_divergence_surface_replace_region_contents_function_arg() {
            (kill-buffer src)))
      (error (list 'err (car err))))))
 "##,
+        expect_test::expect![[r#""OK (\"aXYef\" \"aZZef\")""#]],
     );
 }
 
@@ -3107,7 +3301,7 @@ fn div_core_divergence_surface_write_region_bare_eol_aliases() {
     // write-region with bare unix/dos/mac EOL aliases writes empty output in
     // Neomacs. GNU writes the expected LF/CRLF/CR bytes. Fully-qualified
     // utf-8-dos works in both, isolating the bare EOL alias path.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((write-with-coding
        (lambda (coding text)
@@ -3129,6 +3323,7 @@ fn div_core_divergence_surface_write_region_bare_eol_aliases() {
         (funcall write-with-coding 'mac "a\nb")
         (funcall write-with-coding 'utf-8-dos "a\nb")))
 "##,
+        expect_test::expect![[r#""OK ((97 10 98) (97 13 10 98) (97 13 98) (97 13 10 98))""#]],
     );
 }
 
@@ -3147,7 +3342,7 @@ fn div_core_divergence_surface_insert_char_inherit_property_plist() {
     // GNU's insert-before-markers-and-inherit and insert-char INHERIT both
     // inherit the full text-property plist and coalesce intervals; Neomacs
     // inherits only `face`, leaving fragmented partial-property spans.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (with-temp-buffer
@@ -3165,6 +3360,9 @@ fn div_core_divergence_surface_insert_char_inherit_property_plist() {
    (list (buffer-string)
          (text-properties-at 2))))
 "##,
+        expect_test::expect![[
+            r#""OK ((#(\"AXB\" 0 3 (face bold rear-nonsticky nil)) (face bold rear-nonsticky nil) 3) (#(\"AXB\" 0 3 (face bold rear-nonsticky nil)) (face bold rear-nonsticky nil)))""#
+        ]],
     );
 }
 
@@ -3178,7 +3376,7 @@ fn div_core_divergence_surface_thread_signal_condition_handler() {
     // A signalled arith-error reaches the worker's condition-case handler in
     // GNU (the handler logs `caught`), but Neomacs still makes thread-join
     // report the error without running the worker's matching condition handler.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (let ((th (make-thread
@@ -3205,6 +3403,9 @@ fn div_core_divergence_surface_thread_signal_condition_handler() {
               (thread-last-error th)
               log)))))
 "##,
+        expect_test::expect![[
+            r#""OK (nil (join-err arith-error (\"bad\")) nil nil ((caught arith-error (\"bad\"))))""#
+        ]],
     );
 }
 
@@ -3217,7 +3418,7 @@ fn div_core_divergence_surface_standard_display_ascii_table_mutation() {
     // standard-display-ascii creates standard-display-table when nil and sets
     // the requested character in GNU. Neomacs errors when the table is nil, and
     // even with a preexisting display table it leaves the character entry nil.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (let ((standard-display-table nil))
@@ -3232,6 +3433,7 @@ fn div_core_divergence_surface_standard_display_ascii_table_mutation() {
    (list (type-of standard-display-table)
          (aref standard-display-table ?B))))
 "##,
+        expect_test::expect![[r#""OK ((char-table [91 65 93]) (char-table [66 66]))""#]],
     );
 }
 
@@ -3244,7 +3446,7 @@ fn div_core_divergence_surface_standard_display_graphic_table_mutation() {
     // standard-display-graphic mirrors the standard-display-ascii divergence:
     // GNU creates standard-display-table when nil and mutates existing tables;
     // Neomacs errors when nil and leaves an existing table entry unset.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (let ((standard-display-table nil))
@@ -3259,6 +3461,7 @@ fn div_core_divergence_surface_standard_display_graphic_table_mutation() {
    (list (type-of standard-display-table)
          (aref standard-display-table ?B))))
 "##,
+        expect_test::expect![[r#""OK ((char-table [0]) (char-table [1]))""#]],
     );
 }
 
@@ -3273,7 +3476,7 @@ fn div_core_divergence_surface_standard_display_default_g1_8bit() {
     // standard-display-default and standard-display-8bit create a table when
     // standard-display-table is nil in GNU but error in Neomacs; standard-display-g1
     // mutates an existing table in GNU but leaves the entry nil in Neomacs.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (let ((standard-display-table nil))
@@ -3300,6 +3503,9 @@ fn div_core_divergence_surface_standard_display_default_g1_8bit() {
                (aref standard-display-table 161)))
      (error (list 'err (car err) (cadr err))))))
 "##,
+        expect_test::expect![[
+            r#""OK ((char-table nil) (char-table nil) (char-table [2]) (char-table nil nil))""#
+        ]],
     );
 }
 
@@ -3312,7 +3518,7 @@ fn div_core_divergence_surface_interpreter_auto_mode_change_hook() {
     // set-auto-mode through interpreter-mode-alist should run
     // change-major-mode-hook before the destination mode hook; Neomacs skips
     // change-major-mode-hook on this auto-mode path.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((interpreter-mode-alist '(("probeinterp" . text-mode)))
       (auto-mode-alist nil)
@@ -3325,6 +3531,7 @@ fn div_core_divergence_surface_interpreter_auto_mode_change_hook() {
     (set-auto-mode)
     (list major-mode (nreverse log))))
 "##,
+        expect_test::expect![[r#""OK (text-mode (change text))""#]],
     );
 }
 
@@ -3337,7 +3544,7 @@ fn div_core_divergence_surface_magic_auto_mode_change_hook() {
     // set-auto-mode through magic-mode-alist and magic-fallback-mode-alist
     // should run change-major-mode-hook before text-mode-hook. Neomacs skips
     // change-major-mode-hook on both content-based auto-mode paths.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (let ((log nil)
@@ -3363,6 +3570,7 @@ fn div_core_divergence_surface_magic_auto_mode_change_hook() {
      (set-auto-mode)
      (list major-mode (nreverse log)))))
 "##,
+        expect_test::expect![[r#""OK ((text-mode (change text)) (text-mode (change text)))""#]],
     );
 }
 
@@ -3376,7 +3584,7 @@ fn div_core_divergence_surface_normal_mode_fundamental_change_hooks() {
     // normal-mode with no auto/magic mode match still calls fundamental-mode twice in GNU,
     // and each transition runs change-major-mode-hook before after-change-major-mode-hook.
     // Neomacs runs after-change-major-mode-hook but skips change-major-mode-hook.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       (auto-mode-alist nil)
@@ -3392,6 +3600,9 @@ fn div_core_divergence_surface_normal_mode_fundamental_change_hooks() {
     (normal-mode t)
     (list major-mode (nreverse log))))
 "##,
+        expect_test::expect![[
+            r#""OK (fundamental-mode ((change fundamental-mode) (after fundamental-mode) (change fundamental-mode) (after fundamental-mode)))""#
+        ]],
     );
 }
 
@@ -3404,7 +3615,7 @@ fn div_core_divergence_surface_frame_terminal_type_shape() {
     // GNU terminal objects have type `terminal`; Neomacs represents the frame
     // terminal object as a vector while otherwise passing terminal-live-p,
     // terminal-name, terminal-list membership, and terminal parameters.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((terminal (frame-terminal (selected-frame))))
   (list (type-of terminal)
@@ -3413,6 +3624,7 @@ fn div_core_divergence_surface_frame_terminal_type_shape() {
         (mapcar #'type-of (terminal-list))
         (terminal-parameter terminal 'normal-erase-is-backspace)))
 "##,
+        expect_test::expect![[r#""OK (terminal t \"initial_terminal\" (terminal) 0)""#]],
     );
 }
 
@@ -3425,7 +3637,7 @@ fn div_core_divergence_surface_standard_display_underline_table_mutation() {
     // standard-display-underline creates standard-display-table when nil and
     // mutates existing table entries in GNU; Neomacs errors when nil and leaves
     // an existing table entry nil.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (let ((standard-display-table nil))
@@ -3440,6 +3652,7 @@ fn div_core_divergence_surface_standard_display_underline_table_mutation() {
    (list (type-of standard-display-table)
          (aref standard-display-table ?B))))
 "##,
+        expect_test::expect![[r#""OK ((char-table [3]) (char-table [4]))""#]],
     );
 }
 
@@ -3452,7 +3665,7 @@ fn div_core_divergence_surface_process_send_bare_eol_coding() {
     // With process output coding set to bare dos/mac/unix, GNU applies the
     // requested EOL conversion before sending to the child process. Neomacs
     // sends plain LF for all three, and even fails to apply CRLF for utf-8-dos.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((run
        (lambda (output-coding)
@@ -3475,6 +3688,7 @@ fn div_core_divergence_surface_process_send_bare_eol_coding() {
         (funcall run 'unix)
         (funcall run 'utf-8-dos)))
 "##,
+        expect_test::expect![[r#""OK ((97 13 10 98) (97 13 98) (97 10 98) (97 13 10 98))""#]],
     );
 }
 
@@ -3487,7 +3701,7 @@ fn div_core_divergence_surface_process_filter_bare_eol_decoding() {
     // With process input coding set to bare dos/mac, GNU decodes CRLF/CR to LF
     // before invoking the process filter. Neomacs leaves raw CR bytes for bare
     // dos/mac, while utf-8-dos and binary behave like GNU.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((run
        (lambda (input-coding payload)
@@ -3508,6 +3722,7 @@ fn div_core_divergence_surface_process_filter_bare_eol_decoding() {
         (funcall run 'utf-8-dos "a\r\nb")
         (funcall run 'binary "a\r\nb")))
 "##,
+        expect_test::expect![[r#""OK ((97 10 98) (97 10 98) (97 10 98) (97 13 10 98))""#]],
     );
 }
 
@@ -3520,7 +3735,7 @@ fn div_core_divergence_surface_unicode_normalization_decomposition() {
     // GNU decomposes precomposed é to e + combining acute under NFD, and
     // compatibility-decomposes circled digit one to "1" under NFKD. Neomacs
     // leaves both forms composed/unchanged while NFKC for the fi ligature works.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (require 'ucs-normalize)
@@ -3530,6 +3745,7 @@ fn div_core_divergence_surface_unicode_normalization_decomposition() {
         (ucs-normalize-NFKC-string "ﬁ")
         (ucs-normalize-NFKD-string "①")))
 "##,
+        expect_test::expect![[r#""OK (\"é\" \"e\u{301}\" 3 \"fi\" \"1\")""#]],
     );
 }
 
@@ -3542,7 +3758,7 @@ fn div_core_divergence_surface_call_process_region_eol_encoding() {
     // call-process-region should honor coding-system-for-write when sending
     // region text to the program. GNU applies CRLF/CR/LF for utf-8-dos,
     // bare dos, mac, and unix respectively. Neomacs sends plain LF for all.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((run
        (lambda (write-coding)
@@ -3557,6 +3773,7 @@ fn div_core_divergence_surface_call_process_region_eol_encoding() {
         (funcall run 'mac)
         (funcall run 'unix)))
 "##,
+        expect_test::expect![[r#""OK ((97 13 10 98) (97 13 10 98) (97 13 98) (97 10 98))""#]],
     );
 }
 
@@ -3569,7 +3786,7 @@ fn div_core_divergence_surface_file_name_handler_copy_rename_delete_args() {
     // lists including optional args normalized to nil.
     // Neomacs dispatches copy-file/rename-file directly with truncated arg
     // lists and misses several GNU handler calls before those operations.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       (file-name-handler-alist nil))
@@ -3592,6 +3809,9 @@ fn div_core_divergence_surface_file_name_handler_copy_rename_delete_args() {
           (delete-file "/h:/c")
           (nreverse log))))
 "##,
+        expect_test::expect![[
+            r#""OK ((handled copy-file) (handled rename-file) (handled delete-file) ((expand-file-name (\"/h:/a\" nil)) (expand-file-name (\"/h:/b\" nil)) (copy-file (\"/h:/a\" \"/h:/b\" t nil nil nil)) (expand-file-name (\"/h:/b\" nil)) (directory-file-name (\"/h:/b\")) (expand-file-name (\"/h:/c\" nil)) (rename-file (\"/h:/b\" \"/h:/c\" t)) (expand-file-name (\"/h:/c\" nil)) (file-directory-p (\"/h:/c\")) (expand-file-name (\"/h:/c\" nil)) (delete-file (\"/h:/c\" nil))))""#
+        ]],
     );
 }
 
@@ -3604,7 +3824,7 @@ fn div_core_divergence_surface_insert_file_contents_literally_handler_expand() {
     // Neomacs:   OK (("/h:/f" 1) "X" ((insert-file-contents ("/h:/f" nil nil nil nil))))
     // insert-file-contents-literally still dispatches the expand-file-name
     // handler before insert-file-contents in GNU; Neomacs skips that handler.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       (file-name-handler-alist nil))
@@ -3626,6 +3846,9 @@ fn div_core_divergence_surface_insert_file_contents_literally_handler_expand() {
             (buffer-string)
             (nreverse log)))))
 "##,
+        expect_test::expect![[
+            r#""OK ((\"/h:/f\" 1) \"X\" ((expand-file-name (\"/h:/f\" nil)) (insert-file-contents (\"/h:/f\" nil nil nil nil))))""#
+        ]],
     );
 }
 
@@ -3638,7 +3861,7 @@ fn div_core_divergence_surface_overwrite_mode_self_insert_replaces_chars() {
     // self-insert-command in overwrite-mode should replace the character at
     // point. GNU replaces `c` with X and `d` with Y; Neomacs inserts X/Y
     // without deleting the overwritten characters.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -3656,6 +3879,9 @@ fn div_core_divergence_surface_overwrite_mode_self_insert_replaces_chars() {
           (point)
           overwrite-mode)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"abXdef\" 4 overwrite-mode-textual \"abXYef\" 5 overwrite-mode-textual)""#
+        ]],
     );
 }
 
@@ -3668,7 +3894,7 @@ fn div_core_divergence_surface_overwrite_mode_tab_clears_to_tabstop() {
     // In overwrite-mode, inserting TAB should replace text through the next
     // tab stop. GNU replaces b/c/d/e with one tab at column 1 (tab-width 4),
     // leaving fgh. Neomacs inserts the tab without deleting overwritten text.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdefgh")
@@ -3678,6 +3904,7 @@ fn div_core_divergence_surface_overwrite_mode_tab_clears_to_tabstop() {
   (self-insert-command 1 ?\t)
   (list (buffer-string) (point)))
 "##,
+        expect_test::expect![[r#""OK (\"a\tfgh\" 3)""#]],
     );
 }
 
@@ -3691,7 +3918,7 @@ fn div_core_divergence_surface_replace_buffer_contents_text_properties() {
     // replace-buffer-contents in GNU preserves unchanged destination text
     // properties and only takes source properties for inserted/replaced spans;
     // Neomacs replaces the whole result with the source buffer's properties.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((src (generate-new-buffer " *probe-rbc-src*")))
   (unwind-protect
@@ -3706,6 +3933,9 @@ fn div_core_divergence_surface_replace_buffer_contents_text_properties() {
                 (text-properties-at 3))))
     (kill-buffer src)))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"abXdef\" 0 2 (face italic) 2 3 (face bold) 3 6 (face italic)) (face italic) (face bold))""#
+        ]],
     );
 }
 
@@ -3719,7 +3949,7 @@ fn div_core_divergence_surface_unibyte_search_replace_raw_byte() {
     // raw byte A9 should find the byte embedded in the C3 A9 sequence first.
     // GNU replaces that embedded byte; Neomacs skips it and replaces only the
     // standalone trailing A9 byte.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (set-buffer-multibyte nil)
@@ -3731,6 +3961,7 @@ fn div_core_divergence_surface_unibyte_search_replace_raw_byte() {
       (list match-end
             (append (buffer-string) nil)))))
 "##,
+        expect_test::expect![[r#""OK (3 (195 90 65 169 66))""#]],
     );
 }
 
@@ -3743,7 +3974,7 @@ fn div_core_divergence_surface_network_filter_multibyte_string_shape() {
     // With :filter-multibyte nil and raw UTF-8 bytes sent over a local network
     // process, GNU delivers a multibyte string to the server filter, while
     // Neomacs delivers a unibyte string with the same bytes.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil)
       server
@@ -3780,6 +4011,7 @@ fn div_core_divergence_surface_network_filter_multibyte_string_shape() {
     (when (processp client) (delete-process client))
     (when (processp server) (delete-process server))))
 "##,
+        expect_test::expect![[r#""OK ((server \"é\" t 2))""#]],
     );
 }
 
@@ -3792,7 +4024,7 @@ fn div_core_divergence_surface_where_is_ignores_overriding_terminal_map() {
     // key-binding honors overriding-terminal-local-map for lookup, but
     // where-is-internal should not report bindings from that transient override
     // as stable command locations. Neomacs reports [C-c b].
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((local-map (make-sparse-keymap))
       (terminal-map (make-sparse-keymap)))
@@ -3805,6 +4037,7 @@ fn div_core_divergence_surface_where_is_ignores_overriding_terminal_map() {
           (where-is-internal 'cmd-a nil t)
           (where-is-internal 'cmd-b nil t))))
 "##,
+        expect_test::expect![[r#""OK (nil cmd-b nil nil)""#]],
     );
 }
 
@@ -3818,7 +4051,7 @@ fn div_core_divergence_surface_substitute_command_keys_terminal_override() {
     // overriding-terminal-local-map for stable command substitution and falls
     // back to M-x; Neomacs treats the transient terminal override as a real
     // command binding and substitutes C-c x.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
   (define-key map (kbd "C-c x") 'cmd-x)
@@ -3828,6 +4061,9 @@ fn div_core_divergence_surface_substitute_command_keys_terminal_override() {
           (substitute-command-keys "\\[cmd-x]")
           (command-remapping 'cmd-x))))
 "##,
+        expect_test::expect![[
+            r#""OK (cmd-x nil #(\"M-x cmd-x\" 0 9 (font-lock-face help-key-binding face help-key-binding)) nil)""#
+        ]],
     );
 }
 
@@ -3841,7 +4077,7 @@ fn div_core_divergence_surface_global_map_special_event_bindings() {
     // keymaps and binds [XF86WakeUp] to ignore. Neomacs binds [tool-bar]
     // directly to ignore, lacks [XF86WakeUp], and makes where-is-internal for
     // ignore prefer [tool-bar] instead of GNU's [XF86WakeUp].
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((global (current-global-map)))
   (let ((where (where-is-internal 'ignore nil t)))
@@ -3851,6 +4087,7 @@ fn div_core_divergence_surface_global_map_special_event_bindings() {
           where
           (key-description where))))
 "##,
+        expect_test::expect![[r#""OK (t ignore t [XF86WakeUp] \"<XF86WakeUp>\")""#]],
     );
 }
 
@@ -3863,7 +4100,7 @@ fn div_core_divergence_surface_regexp_unibyte_char_class() {
     // In GNU, the POSIX regexp class [:unibyte:] does not match a unibyte
     // string produced from the UTF-8 bytes of é here, while Neomacs reports a
     // match at offset 0. Other unicode/nonascii/word/category controls match.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-match-p "[[:nonascii:]]" "abcé")
       (string-match-p "[[:multibyte:]]" "abcé")
@@ -3871,6 +4108,7 @@ fn div_core_divergence_surface_regexp_unibyte_char_class() {
       (string-match-p "[[:word:]]+" "é")
       (string-match-p "\\cc" "中"))
 "##,
+        expect_test::expect![[r#""OK (3 3 nil 0 0)""#]],
     );
 }
 
@@ -3883,7 +4121,7 @@ fn div_core_divergence_surface_regexp_nonascii_unibyte_bytes() {
     // For a unibyte string containing raw UTF-8 bytes, GNU does not let the
     // POSIX [:nonascii:] class match the raw high byte; Neomacs reports a
     // match at offset 1. The [:unibyte:] control remains matching in both.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (set-buffer-multibyte nil)
@@ -3892,6 +4130,7 @@ fn div_core_divergence_surface_regexp_nonascii_unibyte_bytes() {
     (list (string-match-p "[[:nonascii:]]" raw)
           (string-match-p "[[:unibyte:]]+" (string-as-unibyte "aé")))))
 "##,
+        expect_test::expect![[r#""OK (nil 0)""#]],
     );
 }
 
@@ -3905,7 +4144,7 @@ fn div_core_divergence_surface_replace_match_case_table_capitalization() {
     // matched text "{bc" reads as capitalized, so case-replace capitalizes the
     // lowercase replacement "xy" to "Xy" in GNU. Neomacs ignores the case
     // table and leaves "xy".
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((table (copy-case-table (standard-case-table))))
   (set-case-syntax-pair ?\{ ?\} table)
@@ -3919,6 +4158,7 @@ fn div_core_divergence_surface_replace_match_case_table_capitalization() {
       (replace-match "xy")
       (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK \"Xy def\"""#]],
     );
 }
 
@@ -3932,7 +4172,7 @@ fn div_core_divergence_surface_case_fold_search_custom_case_pair() {
     // case-equivalent to { and finds the { at position 1 (match end 2) for both
     // search-forward and re-search-forward. Neomacs ignores the custom case
     // table and only matches the literal } at position 2 (match end 3).
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((table (copy-case-table (standard-case-table))))
   (set-case-syntax-pair ?\{ ?\} table)
@@ -3944,6 +4184,7 @@ fn div_core_divergence_surface_case_fold_search_custom_case_pair() {
             (progn (goto-char 1) (re-search-forward "}" nil t))
             (progn (goto-char 1) (search-forward "{" nil t))))))
 "##,
+        expect_test::expect![[r#""OK (2 2 2)""#]],
     );
 }
 
@@ -3957,7 +4198,7 @@ fn div_core_divergence_surface_coding_region_eol_in_buffer() {
     // (GNU: bytes a LF b, size 3); Neomacs keeps the CR.
     // encode-coding-region with 'dos should expand LF to CRLF (GNU: a CR LF b,
     // size 4); Neomacs empties the region (0 bytes).
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (with-temp-buffer
@@ -3970,6 +4211,7 @@ fn div_core_divergence_surface_coding_region_eol_in_buffer() {
    (encode-coding-region (point-min) (point-max) 'dos)
    (list (append (buffer-string) nil) (buffer-size))))
 "##,
+        expect_test::expect![[r#""OK (((97 10 98) 3) ((97 13 10 98) 4))""#]],
     );
 }
 
@@ -3985,7 +4227,7 @@ fn div_core_divergence_surface_standard_display_bulk_helpers_create_table() {
     // create standard-display-table when nil in GNU; Neomacs errors with
     // wrong-type-argument arrayp. standard-display-unicode-special-glyphs
     // also errors differently: GNU reports char-table-p, Neomacs arrayp.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (let ((standard-display-table nil))
@@ -4010,6 +4252,9 @@ fn div_core_divergence_surface_standard_display_bulk_helpers_create_table() {
                (aref standard-display-table #x2018)))
      (error (list 'err (car err) (cadr err))))))
 "##,
+        expect_test::expect![[
+            r#""OK ((char-table nil) (char-table nil) (err wrong-type-argument char-table-p))""#
+        ]],
     );
 }
 
@@ -4022,7 +4267,7 @@ fn div_core_divergence_surface_detect_coding_region_eol_type() {
     // detect-coding-region reports the CRLF EOL variant (undecided-dos) for a
     // buffer with CRLF line endings; Neomacs returns plain undecided, missing
     // EOL detection (both the highest-priority and full-list forms).
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (set-buffer-multibyte nil)
@@ -4030,5 +4275,6 @@ fn div_core_divergence_surface_detect_coding_region_eol_type() {
   (list (detect-coding-region (point-min) (point-max) t)
         (detect-coding-region (point-min) (point-max))))
 "##,
+        expect_test::expect![[r#""OK (undecided-dos (undecided-dos))""#]],
     );
 }

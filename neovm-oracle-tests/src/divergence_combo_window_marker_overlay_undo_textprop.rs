@@ -14,7 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_split_window_point_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-sw")))
     (with-current-buffer buf
@@ -47,6 +47,7 @@ fn combo_split_window_point_marker_overlay() {
                   (list after)))
             (delete-window win2)
             (kill-buffer buf))))))) "#,
+        expect_test::expect![[r#""ERR (args-out-of-range 11 11)""#]],
     );
 }
 
@@ -54,7 +55,7 @@ fn combo_split_window_point_marker_overlay() {
 fn combo_with_selected_window_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-wsw")))
     (with-current-buffer buf
@@ -90,6 +91,7 @@ fn combo_with_selected_window_marker_overlay_undo() {
                     (list after restored))))
             (delete-window win2)
             (kill-buffer buf))))))) "#,
+        expect_test::expect![[r#""ERR (args-out-of-range 6 6)""#]],
     );
 }
 
@@ -97,7 +99,7 @@ fn combo_with_selected_window_marker_overlay_undo() {
 fn combo_window_buffer_local_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-wbl")))
     (with-current-buffer buf
@@ -127,6 +129,7 @@ fn combo_window_buffer_local_marker_overlay() {
                   (list after)))
             (delete-window win2)
             (kill-buffer buf))))))) "#,
+        expect_test::expect![[r#""ERR (void-variable win-local)""#]],
     );
 }
 
@@ -134,7 +137,7 @@ fn combo_window_buffer_local_marker_overlay() {
 fn combo_window_point_tracking_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-wpt")))
     (with-current-buffer buf
@@ -171,6 +174,7 @@ fn combo_window_point_tracking_marker_overlay() {
                     (list after))))
             (delete-window win2)
             (kill-buffer buf))))))) "#,
+        expect_test::expect![[r#""ERR (args-out-of-range 6 6)""#]],
     );
 }
 
@@ -178,7 +182,7 @@ fn combo_window_point_tracking_marker_overlay() {
 fn combo_window_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-wnar")))
     (with-current-buffer buf
@@ -222,5 +226,6 @@ fn combo_window_narrow_marker_overlay_undo() {
                     (list after restored))))
             (delete-window win2)
             (kill-buffer buf))))))) "#,
+        expect_test::expect![[r#""ERR (args-out-of-range 6 20)""#]],
     );
 }

@@ -10,7 +10,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo71_babel_load_in_session() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -19,26 +19,30 @@ fn combo71_babel_load_in_session() {
    :load-file-fbound (fboundp 'org-babel-load-file)
    :lob-ingest-fbound (fboundp 'org-babel-lob-ingest)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:load-in-session-fbound t :load-file-fbound t :lob-ingest-fbound t)""#
+        ]],
     );
 }
 
 #[test]
 fn combo71_agenda_to_appt() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-agenda)
   (list
    :to-appt-fbound (fboundp 'org-agenda-to-appt)
    :appt-time-fbound (fboundp 'org-agenda-todayp)
    ))"##,
+        expect_test::expect![[r#""OK (:to-appt-fbound t :appt-time-fbound t)""#]],
     );
 }
 
 #[test]
 fn combo71_element_cache_sync() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-element)
@@ -54,13 +58,16 @@ fn combo71_element_cache_sync() {
       (condition-case nil (org-element--cache-sync (current-buffer)) (error nil)))
     (push (list :headlines (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:sync-fbound t) (:cache-active-fbound t) (:headlines 4))""#
+        ]],
     );
 }
 
 #[test]
 fn combo71_property_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n:PROPERTIES:\n:COLOR: red\n:END:\n")
@@ -75,13 +82,14 @@ fn combo71_property_values() {
             (push (list :colors vals) r)))
       (error nil))
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:values-fbound t) (:colors (\"red\" \"blue\")))""#]],
     );
 }
 
 #[test]
 fn combo71_indent_refresh() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-indent)
   (list
@@ -89,13 +97,14 @@ fn combo71_indent_refresh() {
    :indent-fbound (fboundp 'org-indent-mode)
    :add-prop-fbound (fboundp 'org-indent-add-properties)
    ))"##,
+        expect_test::expect![[r#""OK (:refresh-fbound t :indent-fbound t :add-prop-fbound t)""#]],
     );
 }
 
 #[test]
 fn combo71_timer_item_repeat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-timer)
   (list
@@ -103,13 +112,14 @@ fn combo71_timer_item_repeat() {
    :pause-fbound (fboundp 'org-timer-pause-or-continue)
    :change-times-fbound (fboundp 'org-timer-change-times-in-region)
    ))"##,
+        expect_test::expect![[r#""OK (:item-fbound t :pause-fbound t :change-times-fbound t)""#]],
     );
 }
 
 #[test]
 fn combo71_cycle_include_lists_integrate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (let ((org-cycle-include-plain-lists 'integrate))
@@ -124,13 +134,14 @@ fn combo71_cycle_include_lists_integrate() {
       (org-show-all)
       (push (list :all-items (length (org-element-map (org-element-parse-buffer) 'item #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK ((:after-fold nil) (:vis-items 0) (:all-items 4))""#]],
     );
 }
 
 #[test]
 fn combo71_babel_results_org_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -141,13 +152,14 @@ fn combo71_babel_results_org_indent() {
       (push (org-babel-execute-src-block) r)
       (push (list :table-count (length (org-element-map (org-element-parse-buffer) 'table #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK (((\"a\" \"b\") (\"c\" \"d\")) (:table-count 1))""#]],
     );
 }
 
 #[test]
 fn combo71_footnote_all_labels_crosscheck() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "A[fn:1] B[fn:2][fn:3] C[fn:1 again]\n")
@@ -163,13 +175,16 @@ fn combo71_footnote_all_labels_crosscheck() {
     (push (list :unique-ref-labels
                 (sort (delete-dups (copy-sequence (plist-get (car r) :ref-labels))) #'string-lessp)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:ref-labels (\"1\" \"2\" \"3\")) (:def-labels (\"1\" \"2\" \"3\")) (:unique-ref-labels nil))""#
+        ]],
     );
 }
 
 #[test]
 fn combo71_export_dispatch_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (list
@@ -177,5 +192,8 @@ fn combo71_export_dispatch_info() {
    :backends (mapcar #'org-export-backend-name org-export-registered-backends)
    :backend-count (length org-export-registered-backends)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:dispatch-fbound t :backends (org odt latex icalendar html ascii) :backend-count 6)""#
+        ]],
     );
 }

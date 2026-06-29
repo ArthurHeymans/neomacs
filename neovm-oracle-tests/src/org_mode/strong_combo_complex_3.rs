@@ -11,12 +11,13 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo3_export_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((src "#+TITLE: My Title\n#+AUTHOR: Me\n#+OPTIONS: toc:nil\n* H1\nBody\n** H2\nSub"))
   (let ((html (org-export-string-as src 'html t)))
     (list (string-match-p "My Title" html)
           (string-match-p "Me" html)
           (string-match-p "Table of Contents" html))))"##,
+        expect_test::expect![[r#""ERR (void-function org-export-string-as)""#]],
     );
 }
 
@@ -27,7 +28,7 @@ fn combo3_export_options() {
 #[test]
 fn combo3_heading_tree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** B\n*** C\n** D\n* E\n** F")
@@ -59,6 +60,9 @@ fn combo3_heading_tree() {
                                                   (let ((p (org-element-property :parent h)))
                                                     (when p (org-element-property :raw-value p))))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""ERR (user-error \"Cannot move past superior level or buffer limit\")""#
+        ]],
     );
 }
 
@@ -69,7 +73,7 @@ fn combo3_heading_tree() {
 #[test]
 fn combo3_inline_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nPara *bold /italic/ inside* text =code ~verb~ end")
@@ -95,6 +99,7 @@ fn combo3_inline_parent() {
           (setq p (org-element-property :parent p))))
       (push (list :italic-chain (nreverse chain)) r))
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p nil)""#]],
     );
 }
 
@@ -105,7 +110,7 @@ fn combo3_inline_parent() {
 #[test]
 fn combo3_planning_fields() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO T\nSCHEDULED: <2026-01-15 Wed>\nDEADLINE: <2026-01-20 Mon>\nCLOSED: [2026-01-10 Fri]\nBody")
@@ -127,6 +132,9 @@ fn combo3_planning_fields() {
     (push (list :dead (org-entry-get nil "DEADLINE")) r)
     (push (list :closed (org-entry-get nil "CLOSED")) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:planning ((\"S\" nil nil))) (:timestamps ((active 2026 20) (inactive 2026 10))) (:todo \"TODO\") (:sched \"<2026-01-15 Wed>\") (:dead nil) (:closed nil))""#
+        ]],
     );
 }
 
@@ -137,7 +145,7 @@ fn combo3_planning_fields() {
 #[test]
 fn combo3_blocks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n#+BEGIN_QUOTE\nQ\n#+END_QUOTE\n#+BEGIN_CENTER\nC\n#+END_CENTER\n#+BEGIN_EXPORT html\n<b>Bold</b>\n#+END_EXPORT\n#+BEGIN_VERSE\nV\n#+END_VERSE")
@@ -155,6 +163,9 @@ fn combo3_blocks() {
     (push (list :export-type (org-element-map (org-element-parse-buffer) 'export-block
                                 (lambda (e) (org-element-property :type e)))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:types (src-block quote-block center-block export-block verse-block)) (:src-value (\"(+ 1)\n\")) (:quote-content (\"Q\")) (:export-type (\"HTML\")))""#
+        ]],
     );
 }
 
@@ -165,7 +176,7 @@ fn combo3_blocks() {
 #[test]
 fn combo3_footnotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Para1[fn:1] text[fn:2] end\n\nPara2[fn:1] ref\n\n[fn:1] First definition\n[fn:2] Second definition")
@@ -183,6 +194,9 @@ fn combo3_footnotes() {
     (push (list :ref-count (length (org-element-map (org-element-parse-buffer) 'footnote-reference 'identity))) r)
     (push (list :def-count (length (org-element-map (org-element-parse-buffer) 'footnote-definition 'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:refs (\"1\" \"2\" \"1\")) (:defs ((\"1\" \"First definition\") (\"2\" \"Second definition\"))) (:ref-count 3) (:def-count 2))""#
+        ]],
     );
 }
 
@@ -193,7 +207,7 @@ fn combo3_footnotes() {
 #[test]
 fn combo3_links() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\n[[http://a.com][A]] and [[file:b.el]] and [[id:xxx][C]] and [[mailto:d@e.com]]")
@@ -209,6 +223,9 @@ fn combo3_links() {
     (push (list :types (org-element-map (org-element-parse-buffer) 'link
                           (lambda (l) (org-element-property :type l)))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:links ((\"http\" \"//a.com\" \"http://a.com\") (\"file\" \"b.el\" \"file:b.el\") (\"id\" \"xxx\" \"id:xxx\") (\"mailto\" \"d@e.com\" \"mailto:d@e.com\"))) (:count 4) (:types (\"http\" \"file\" \"id\" \"mailto\")))""#
+        ]],
     );
 }
 
@@ -219,7 +236,7 @@ fn combo3_links() {
 #[test]
 fn combo3_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+TITLE: Test\n#+AUTHOR: Me\n#+DATE: 2026-01-15\n#+OPTIONS: toc:nil\n#+FILETAGS: :t1:t2:\n#+STARTUP: overview\n#+CATEGORY: c")
@@ -231,6 +248,9 @@ fn combo3_keywords() {
     ;; collect-keywords
     (push (list :collected (org-collect-keywords '("TITLE" "AUTHOR" "DATE" "OPTIONS" "FILETAGS"))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:keywords ((\"TITLE\" \"Test\") (\"AUTHOR\" \"Me\") (\"DATE\" \"2026-01-15\") (\"OPTIONS\" \"toc:nil\") (\"FILETAGS\" \":t1:t2:\") (\"STARTUP\" \"overview\") (\"CATEGORY\" \"c\"))) (:collected ((\"TITLE\" \"Test\") (\"AUTHOR\" \"Me\") (\"DATE\" \"2026-01-15\") (\"OPTIONS\" \"toc:nil\") (\"FILETAGS\" \":t1:t2:\"))))""#
+        ]],
     );
 }
 
@@ -241,7 +261,7 @@ fn combo3_keywords() {
 #[test]
 fn combo3_entities() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text \\alpha \\beta \\gamma \\Agrave \\copy")
@@ -254,6 +274,9 @@ fn combo3_entities() {
     ;; entity count
     (push (list :count (length (org-element-map (org-element-parse-buffer) 'entity 'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:entities ((\"alpha\" \"α\" \"\\\\alpha\") (\"beta\" \"β\" \"\\\\beta\") (\"gamma\" \"γ\" \"\\\\gamma\") (\"Agrave\" \"À\" \"\\\\`{A}\") (\"copy\" \"©\" \"\\\\textcopyright{}\"))) (:count 5))""#
+        ]],
     );
 }
 
@@ -264,7 +287,7 @@ fn combo3_entities() {
 #[test]
 fn combo3_latex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text $x^2$ $$y=mx+b$$ and \\(z\\) \\[w\\]")
@@ -275,6 +298,9 @@ fn combo3_latex() {
     ;; count
     (push (list :count (length (org-element-map (org-element-parse-buffer) 'latex-fragment 'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:fragments (\"$x^2$\" \"$$y=mx+b$$\" \"\\\\(z\\\\)\" \"\\\\[w\\\\]\")) (:count 4))""#
+        ]],
     );
 }
 
@@ -285,7 +311,7 @@ fn combo3_latex() {
 #[test]
 fn combo3_timestamps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\nSCHEDULED: <2026-01-15 Wed>\n* U\n<2026-01-20>--<2026-01-25>\n* V\n[2026-01-30]")
@@ -300,6 +326,9 @@ fn combo3_timestamps() {
     ;; count
     (push (list :count (length (org-element-map (org-element-parse-buffer) 'timestamp 'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:timestamps ((active-range 2026 1 20 nil) (inactive 2026 1 30 nil))) (:count 2))""#
+        ]],
     );
 }
 
@@ -310,7 +339,7 @@ fn combo3_timestamps() {
 #[test]
 fn combo3_macros() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+MACRO: greeting Hello $1!\n{{{greeting(World)}}} and {{{greeting(Elisp)}}}")
@@ -327,6 +356,7 @@ fn combo3_macros() {
       (org-macro-replace-all org-macro-templates)
       (push (list :before raw :after (buffer-string)) r))
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (error \"Undefined Org macro: greeting; aborting\")""#]],
     );
 }
 
@@ -337,7 +367,7 @@ fn combo3_macros() {
 #[test]
 fn combo3_stats() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T [1/2]\n- [X] a\n- [ ] b\n- [X] c")
@@ -353,6 +383,9 @@ fn combo3_stats() {
     ;; verify buffer
     (push (list :content (buffer-substring-no-properties (line-beginning-position) (line-end-position))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init (\"[1/2]\")) (:after-update (\"[2/3]\")) (:content \"* T [2/3]\"))""#
+        ]],
     );
 }
 
@@ -363,7 +396,7 @@ fn combo3_stats() {
 #[test]
 fn combo3_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\nCLOCK: [2026-01-11 14:00]--[2026-01-11 15:00] =>  1:00\n:END:")
@@ -379,5 +412,6 @@ fn combo3_clock() {
     (goto-char (point-min))
     (push (list :string (org-clock-get-clock-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (error \"Invalid date: \")""#]],
     );
 }

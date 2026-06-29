@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx143_imenu_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -18,13 +18,14 @@ fn div_cx143_imenu_availability() {
             (boundp 'imenu-sort-function)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil t t)""#]],
     );
 }
 
 #[test]
 fn div_cx143_speedbar_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -34,13 +35,14 @@ fn div_cx143_speedbar_availability() {
             (boundp 'speedbar-update-speed)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx143_cscope_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -49,13 +51,14 @@ fn div_cx143_cscope_availability() {
             (boundp 'cscope-initial-directory)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored file-missing)""#]],
     );
 }
 
 #[test]
 fn div_cx143_ebrowse_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -65,13 +68,14 @@ fn div_cx143_ebrowse_availability() {
             (boundp 'ebrowse-search-path)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx143_imenu_basic_emacs_lisp_index() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -83,13 +87,14 @@ fn div_cx143_imenu_basic_emacs_lisp_index() {
               (assq 'Functions index))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx143_imenu_jump_to_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -101,13 +106,14 @@ fn div_cx143_imenu_jump_to_function() {
         (list pos (point) (buffer-substring (line-beginning-position) (line-end-position)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil 21 \"(defun beta () :b)\")""#]],
     );
 }
 
 #[test]
 fn div_cx143_which_func_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -117,13 +123,14 @@ fn div_cx143_which_func_mode_availability() {
             (boundp 'which-func-format)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx143_imenu_add_to_menubar_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'imenu-add-to-menubar)
@@ -131,13 +138,14 @@ fn div_cx143_imenu_add_to_menubar_availability() {
           (boundp 'imenu-menubar-modified-list))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx143_gtags_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'ggtags)
@@ -145,13 +153,14 @@ fn div_cx143_gtags_availability() {
           (boundp 'ggtags-executable-directory))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx143_imenu_rescan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -164,13 +173,14 @@ fn div_cx143_imenu_rescan() {
                 (consp index-2)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx143_which_function_in_emacs_lisp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -180,13 +190,14 @@ fn div_cx143_which_function_in_emacs_lisp() {
       (which-function))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"neo-cx143-fn2\"""#]],
     );
 }
 
 #[test]
 fn div_cx143_imenu_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -212,5 +223,6 @@ fn div_cx143_imenu_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }

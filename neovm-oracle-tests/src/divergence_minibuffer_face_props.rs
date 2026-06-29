@@ -13,7 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_mfp_all_completions_string_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((cs (let ((completion-styles '(basic)))
              (completion-all-completions "a" '("apple" "apricot" "banana") nil 1)))
@@ -22,24 +22,30 @@ fn div_mfp_all_completions_string_properties() {
         (text-properties-at 1 s)
         (text-properties-at 2 s)))
 "##,
+        expect_test::expect![[
+            r#""OK ((face completions-common-part) (face completions-first-difference) nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_mfp_all_completions_base_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((completion-styles '(basic)))
   (completion-all-completions "a" '("apple" "apricot") nil 0))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"apple\" 0 1 (face (completions-common-part completions-first-difference))) #(\"apricot\" 0 1 (face (completions-common-part completions-first-difference))) . 0)""#
+        ]],
     );
 }
 
 #[test]
 fn div_mfp_insert_strings_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -48,13 +54,16 @@ fn div_mfp_insert_strings_properties() {
             (text-properties-at 1)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"apple\napricot\" (completion--string \"apple\" cursor-face completions-highlight mouse-face highlight))""#
+        ]],
     );
 }
 
 #[test]
 fn div_mfp_completion_face_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (facep 'completions-common-part)
       (facep 'completions-first-difference)
@@ -63,6 +72,9 @@ fn div_mfp_completion_face_attributes() {
       (face-attribute 'completions-common-part :foreground)
       (face-attribute 'completions-first-difference :foreground))
 "##,
+        expect_test::expect![[
+            r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] unspecified unspecified)""#
+        ]],
     );
 }
 
@@ -71,7 +83,7 @@ fn div_mfp_format_prompt_no_inline_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // The prompt face is applied at display time via minibuffer-prompt-properties,
     // not stored on the format-prompt string itself.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (format-prompt "Prompt" "d")))
   (list (text-properties-at 0 p)
@@ -79,16 +91,18 @@ fn div_mfp_format_prompt_no_inline_face() {
         (text-properties-at (- (length p) 1) p)
         p))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil \"Prompt (default d): \")""#]],
     );
 }
 
 #[test]
 fn div_mfp_minibuffer_message_no_active() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e (minibuffer-message "msg %s" "x") (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"msg x\"""#]],
     );
 }
 
@@ -97,7 +111,7 @@ fn div_mfp_display_completion_list_error_parity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // display-completion-list in batch errors identically (wrong-type-argument
     // on a buffer position) — no divergence in the error path.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-current-buffer (get-buffer-create "*mfp-comp*")
@@ -106,5 +120,8 @@ fn div_mfp_display_completion_list_error_parity() {
       (text-properties-at 1))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""Type M-x minibuffer-choose-completion on a completion to select it.\nType M-x minibuffer-next-completion or M-x minibuffer-previous-completion to move point between completions.\n\n3 possible completions:\napple\napricot\nbananaOK nil""#
+        ]],
     );
 }

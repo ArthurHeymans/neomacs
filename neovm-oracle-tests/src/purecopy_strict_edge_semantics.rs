@@ -30,5 +30,10 @@ fn oracle_purecopy_is_identity_alias_at_runtime() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t 42 (wrong-number-of-arguments (purecopy 0)) (wrong-number-of-arguments (purecopy 2)))""#
+        ]],
+    );
 }

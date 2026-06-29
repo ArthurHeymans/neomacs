@@ -19,7 +19,7 @@ fn oracle_prop_search_forward_basic() {
                     (goto-char (point-min))
                     (list (search-forward "hello" nil t)
                           (point)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (6 6)""#]]);
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn oracle_prop_search_forward_bound() {
                     (goto-char (point-min))
                     (list (search-forward "ccc" 8 t)
                           (search-forward "ccc" nil t)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (nil 12)""#]]);
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn oracle_prop_search_forward_count() {
                     (goto-char (point-min))
                     (search-forward "ab" nil t 3)
                     (point))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 9""#]]);
 }
 
 #[test]
@@ -56,7 +56,7 @@ fn oracle_prop_search_forward_not_found() {
                     (insert "hello world")
                     (goto-char (point-min))
                     (search-forward "xyz" nil t))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ fn oracle_prop_search_backward_basic() {
                     (goto-char (point-max))
                     (list (search-backward "beta" nil t)
                           (point)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (18 18)""#]]);
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn oracle_prop_search_backward_bound() {
                     ;; bound=10 means don't search before position 10
                     (list (search-backward "aaa" 10 t)
                           (search-backward "bbb" nil t)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (nil 13)""#]]);
 }
 
 #[test]
@@ -97,7 +97,7 @@ fn oracle_prop_search_backward_count() {
                     (goto-char (point-max))
                     (search-backward "xx" nil t 2)
                     (point))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 10""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +116,10 @@ fn oracle_prop_re_search_backward_basic() {
                           (match-string 1)
                           (match-string 2)
                           (point)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"z-789\" \"z\" \"789\" 19)""#]],
+    );
 }
 
 #[test]
@@ -130,7 +133,10 @@ fn oracle_prop_re_search_backward_bound() {
                     (list (re-search-backward "[a-z]+-[0-9]+" 10 t)
                           (when (match-string 0)
                             (match-string 0))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (19 \"c-333\")""#]],
+    );
 }
 
 #[test]
@@ -145,7 +151,10 @@ fn oracle_prop_re_search_backward_collect_all() {
                       (while (re-search-backward "\\b[a-z]at\\b" nil t)
                         (setq matches (cons (match-string 0) matches)))
                       matches))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"cat\" \"sat\" \"mat\" \"bat\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +171,7 @@ fn oracle_prop_looking_at_p_basic() {
                     (list (looking-at-p "hello")
                           (looking-at-p "world")
                           (looking-at-p "hel.*")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil t)""#]]);
 }
 
 #[test]
@@ -178,7 +187,7 @@ fn oracle_prop_looking_at_p_preserves_match_data() {
                         (goto-char (point-min))
                         (looking-at-p "test"))
                       (= before (match-beginning 1))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK t""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +224,12 @@ fn oracle_prop_search_extract_pipeline() {
                                       (cons (nreverse pairs)
                                             records)))))))
                       (nreverse records)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"name\" . \"Alice\")) ((\"name\" . \"Bob\") (\"age\" . \"25\")) ((\"name\" . \"Carol\") (\"role\" . \"dev\")))""#
+        ]],
+    );
 }
 
 #[test]
@@ -236,5 +250,8 @@ fn oracle_prop_search_bidirectional_bracket_match() {
                       (let ((inner-start (point)))
                         (list inner-start end
                               (buffer-substring inner-start end)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (12 17 \"(x y)\")""#]],
+    );
 }

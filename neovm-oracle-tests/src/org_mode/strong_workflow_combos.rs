@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn strong_gtd_task_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (setq org-todo-keywords '((sequence "NEXT" "WAITING" "DONE")))
@@ -25,6 +25,9 @@ fn strong_gtd_task_workflow() {
       (forward-line)
       (let ((s3 (list (org-get-todo-state) (org-get-heading t t t t))))
         (list s1 s2 s3)))))"##,
+        expect_test::expect![[
+            r#""OK ((nil \"NEXT Process inbox\") (nil \"WAITING Delegate task\") (\"DONE\" \"Completed task\"))""#
+        ]],
     );
 }
 
@@ -35,7 +38,7 @@ fn strong_gtd_task_workflow() {
 #[test]
 fn strong_project_planning_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Project Alpha\n** TODO Design phase\nDEADLINE: <2026-02-01>\n** TODO Implementation\nDEADLINE: <2026-03-01>\n** TODO Testing\nDEADLINE: <2026-04-01>")
@@ -49,6 +52,9 @@ fn strong_project_planning_workflow() {
               tasks))
       (forward-line))
     (nreverse tasks)))"##,
+        expect_test::expect![[
+            r#""OK ((\"Project Alpha\" nil nil) (\"TODO Design phase\" nil \"<2026-02-01>\") (\"TODO Implementation\" nil \"<2026-03-01>\") (\"TODO Testing\" nil \"<2026-04-01>\"))""#
+        ]],
     );
 }
 
@@ -59,7 +65,7 @@ fn strong_project_planning_workflow() {
 #[test]
 fn strong_meeting_notes_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Meeting 2026-01-15\n** Attendees\n- Alice\n- Bob\n** Action items\n*** TODO Alice: Prepare report\nDEADLINE: <2026-01-20>\n*** TODO Bob: Review code\nDEADLINE: <2026-01-18>\n** Notes\nDiscussion points here")
@@ -70,6 +76,9 @@ fn strong_meeting_notes_workflow() {
                               (org-element-property :raw-value h)
                               (org-element-property :todo-keyword h))))))
     headlines))"##,
+        expect_test::expect![[
+            r#""OK ((1 \"Meeting 2026-01-15\" nil) (2 \"Attendees\" nil) (2 \"Action items\" nil) (3 \"TODO Alice: Prepare report\" nil) (3 \"TODO Bob: Review code\" nil) (2 \"Notes\" nil))""#
+        ]],
     );
 }
 
@@ -80,7 +89,7 @@ fn strong_meeting_notes_workflow() {
 #[test]
 fn strong_time_tracking_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Coding\n:LOGBOOK:\nCLOCK: [2026-01-15 09:00]--[2026-01-15 10:30] =>  1:30\nCLOCK: [2026-01-15 11:00]--[2026-01-15 12:00] =>  1:00\n:END:\n* Meetings\n:LOGBOOK:\nCLOCK: [2026-01-15 14:00]--[2026-01-15 15:00] =>  1:00\n:END:")
@@ -89,6 +98,7 @@ fn strong_time_tracking_workflow() {
                    (lambda (c)
                      (list (org-element-property :duration c))))))
     clocks))"##,
+        expect_test::expect![[r#""OK ((\"1:30\") (\"1:00\") (\"1:00\"))""#]],
     );
 }
 
@@ -99,7 +109,7 @@ fn strong_time_tracking_workflow() {
 #[test]
 fn strong_habit_tracking_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO Exercise\nSCHEDULED: <2026-01-15 .+1d/2d>\n:PROPERTIES:\n:STYLE: habit\n:END:")
@@ -108,6 +118,7 @@ fn strong_habit_tracking_workflow() {
         (style (org-entry-get nil "STYLE"))
         (repeat (org-get-repeat)))
     (list sched style repeat)))"##,
+        expect_test::expect![[r#""OK (\"<2026-01-15 .+1d/2d>\" \"habit\" \".+1d/2d\")""#]],
     );
 }
 
@@ -118,7 +129,7 @@ fn strong_habit_tracking_workflow() {
 #[test]
 fn strong_contact_management_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Alice Smith\n:PROPERTIES:\n:EMAIL: alice@example.com\n:PHONE: 123-456\n:CATEGORY: work\n:END:\n* Bob Jones\n:PROPERTIES:\n:EMAIL: bob@example.com\n:PHONE: 789-012\n:CATEGORY: personal\n:END:")
@@ -133,6 +144,9 @@ fn strong_contact_management_workflow() {
               contacts))
       (forward-line))
     (nreverse contacts)))"##,
+        expect_test::expect![[
+            r#""OK ((\"Alice Smith\" \"alice@example.com\" \"123-456\" \"work\") (\"Bob Jones\" \"bob@example.com\" \"789-012\" \"personal\"))""#
+        ]],
     );
 }
 
@@ -143,7 +157,7 @@ fn strong_contact_management_workflow() {
 #[test]
 fn strong_reading_list_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (setq org-todo-keywords '((sequence "TO-READ" "READING" "FINISHED")))
@@ -159,6 +173,9 @@ fn strong_reading_list_workflow() {
               books))
       (forward-line))
     (nreverse books)))"##,
+        expect_test::expect![[
+            r#""OK ((\"TO-READ Book A\" nil nil nil) (\"READING Book B\" nil \"50%\" nil) (\"FINISHED Book C\" nil nil \"5\"))""#
+        ]],
     );
 }
 
@@ -169,7 +186,7 @@ fn strong_reading_list_workflow() {
 #[test]
 fn strong_bug_tracking_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (setq org-todo-keywords '((sequence "BUG" "FIXING" "FIXED" "CLOSED")))
@@ -185,6 +202,9 @@ fn strong_bug_tracking_workflow() {
               bugs))
       (forward-line))
     (nreverse bugs)))"##,
+        expect_test::expect![[
+            r#""OK ((\"BUG Login fails\" nil \"high\" \"Alice\") (\"FIXING UI glitch\" nil \"low\" \"Bob\") (\"FIXED Memory leak\" nil \"medium\" \"Charlie\"))""#
+        ]],
     );
 }
 
@@ -195,7 +215,7 @@ fn strong_bug_tracking_workflow() {
 #[test]
 fn strong_journal_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* 2026-01-15\n** Morning\nGood start to the day\n** Afternoon\nProductive meeting\n** Evening\nRelaxing")
@@ -205,6 +225,9 @@ fn strong_journal_workflow() {
                         (list (org-element-property :level h)
                               (org-element-property :raw-value h))))))
     headlines))"##,
+        expect_test::expect![[
+            r#""OK ((1 \"2026-01-15\") (2 \"Morning\") (2 \"Afternoon\") (2 \"Evening\"))""#
+        ]],
     );
 }
 
@@ -215,7 +238,7 @@ fn strong_journal_workflow() {
 #[test]
 fn strong_recipe_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Pasta Carbonara\n** Ingredients\n- 200g spaghetti\n- 100g pancetta\n- 2 eggs\n** Steps\n1. Cook pasta\n2. Fry pancetta\n3. Mix eggs and cheese\n4. Combine all")
@@ -225,6 +248,9 @@ fn strong_recipe_workflow() {
                         (list (org-element-property :level h)
                               (org-element-property :raw-value h))))))
     headlines))"##,
+        expect_test::expect![[
+            r#""OK ((1 \"Pasta Carbonara\") (2 \"Ingredients\") (2 \"Steps\"))""#
+        ]],
     );
 }
 
@@ -235,7 +261,7 @@ fn strong_recipe_workflow() {
 #[test]
 fn strong_workout_tracking_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* 2026-01-15 Workout\n** Cardio\n- 30 min running\n- 15 min cycling\n** Strength\n- 3x10 bench press\n- 3x10 squats\n:PROPERTIES:\n:DURATION: 60min\n:CALORIES: 500\n:END:")
@@ -245,6 +271,9 @@ fn strong_workout_tracking_workflow() {
                         (list (org-element-property :level h)
                               (org-element-property :raw-value h))))))
     headlines))"##,
+        expect_test::expect![[
+            r#""OK ((1 \"2026-01-15 Workout\") (2 \"Cardio\") (2 \"Strength\"))""#
+        ]],
     );
 }
 
@@ -255,7 +284,7 @@ fn strong_workout_tracking_workflow() {
 #[test]
 fn strong_travel_planning_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Trip to Paris\n** Flights\n*** TODO Book outbound\nDEADLINE: <2026-02-01>\n*** TODO Book return\nDEADLINE: <2026-02-01>\n** Hotels\n*** TODO Book hotel\nDEADLINE: <2026-02-15>\n** Activities\n- Visit Eiffel Tower\n- Louvre Museum\n- Notre Dame")
@@ -266,6 +295,9 @@ fn strong_travel_planning_workflow() {
                               (org-element-property :raw-value h)
                               (org-element-property :todo-keyword h))))))
     headlines))"##,
+        expect_test::expect![[
+            r#""OK ((1 \"Trip to Paris\" nil) (2 \"Flights\" nil) (3 \"TODO Book outbound\" nil) (3 \"TODO Book return\" nil) (2 \"Hotels\" nil) (3 \"TODO Book hotel\" nil) (2 \"Activities\" nil))""#
+        ]],
     );
 }
 
@@ -276,7 +308,7 @@ fn strong_travel_planning_workflow() {
 #[test]
 fn strong_shopping_list_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Groceries\n- [ ] Milk\n- [ ] Bread\n- [ ] Eggs\n- [X] Butter\n* Hardware\n- [ ] Screws\n- [ ] Paint\n- [X] Brushes")
@@ -289,6 +321,7 @@ fn strong_shopping_list_workflow() {
     (goto-char (point-min))
     (let ((h2 (buffer-substring-no-properties (line-beginning-position) (line-end-position))))
       (list h1 h2))))"##,
+        expect_test::expect![[r#""OK (\"* Groceries\" \"* Groceries\")""#]],
     );
 }
 
@@ -299,7 +332,7 @@ fn strong_shopping_list_workflow() {
 #[test]
 fn strong_kanban_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (setq org-todo-keywords '((sequence "BACKLOG" "TODO" "IN-PROGRESS" "DONE")))
@@ -311,6 +344,9 @@ fn strong_kanban_workflow() {
         (push (list (org-get-todo-state) (org-get-heading t t t t)) board))
       (forward-line))
     (nreverse board)))"##,
+        expect_test::expect![[
+            r#""OK ((nil \"BACKLOG Feature A\") (nil \"TODO Feature B\") (nil \"IN-PROGRESS Feature C\") (nil \"DONE Feature D\") (nil \"BACKLOG Feature E\"))""#
+        ]],
     );
 }
 
@@ -321,7 +357,7 @@ fn strong_kanban_workflow() {
 #[test]
 fn strong_daily_planner_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* 2026-01-15 Wednesday\n** TODO Morning routine\nSCHEDULED: <2026-01-15 08:00>\n** TODO Team standup\nSCHEDULED: <2026-01-15 10:00>\n** TODO Code review\nSCHEDULED: <2026-01-15 14:00>\n** TODO End of day\nSCHEDULED: <2026-01-15 17:00>")
@@ -331,6 +367,9 @@ fn strong_daily_planner_workflow() {
                     (list (org-element-property :raw-value h)
                           (org-element-property :todo-keyword h))))))
     tasks))"##,
+        expect_test::expect![[
+            r#""OK ((\"2026-01-15 Wednesday\" nil) (\"Morning routine\" \"TODO\") (\"Team standup\" \"TODO\") (\"Code review\" \"TODO\") (\"End of day\" \"TODO\"))""#
+        ]],
     );
 }
 
@@ -341,7 +380,7 @@ fn strong_daily_planner_workflow() {
 #[test]
 fn strong_inventory_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Electronics\n** Laptop\n:PROPERTIES:\n:QTY: 5\n:COST: 999\n:END:\n** Monitor\n:PROPERTIES:\n:QTY: 10\n:COST: 299\n:END:\n* Furniture\n** Desk\n:PROPERTIES:\n:QTY: 20\n:COST: 199\n:END:")
@@ -352,6 +391,9 @@ fn strong_inventory_workflow() {
                           (org-entry-get nil "QTY")
                           (org-entry-get nil "COST"))))))
     items))"##,
+        expect_test::expect![[
+            r#""OK ((\"Electronics\" \"20\" \"199\") (\"Laptop\" \"20\" \"199\") (\"Monitor\" \"20\" \"199\") (\"Furniture\" \"20\" \"199\") (\"Desk\" \"20\" \"199\"))""#
+        ]],
     );
 }
 
@@ -362,7 +404,7 @@ fn strong_inventory_workflow() {
 #[test]
 fn strong_project_status_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (setq org-todo-keywords '((sequence "PLANNING" "ACTIVE" "BLOCKED" "COMPLETE")))
@@ -374,6 +416,9 @@ fn strong_project_status_workflow() {
                               (org-element-property :raw-value h)
                               (org-element-property :todo-keyword h))))))
     headlines))"##,
+        expect_test::expect![[
+            r#""OK ((1 \"PLANNING Project A\" nil) (2 \"ACTIVE Module 1\" nil) (3 \"Task 1.1\" \"DONE\") (3 \"Task 1.2\" \"TODO\") (2 \"BLOCKED Module 2\" nil) (3 \"WAITING Task 2.1\" nil) (1 \"COMPLETE Project B\" nil))""#
+        ]],
     );
 }
 
@@ -384,7 +429,7 @@ fn strong_project_status_workflow() {
 #[test]
 fn strong_expense_tracking_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* January 2026\n** Food\n| Date | Item | Amount |\n|------+-------+--------|\n| 01/15 | Lunch | 12.50 |\n| 01/16 | Dinner | 25.00 |\n** Transport\n| Date | Item | Amount |\n|------+-------+--------|\n| 01/15 | Bus | 2.50 |\n| 01/16 | Taxi | 15.00 |")
@@ -393,6 +438,7 @@ fn strong_expense_tracking_workflow() {
                    (lambda (t)
                      (length (org-element-contents t))))))
     tables))"##,
+        expect_test::expect![[r#""OK (4 4)""#]],
     );
 }
 
@@ -403,7 +449,7 @@ fn strong_expense_tracking_workflow() {
 #[test]
 fn strong_goal_tracking_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* 2026 Goals\n** Fitness\n*** TODO Run marathon\nDEADLINE: <2026-06-01>\n:PROPERTIES:\n:PROGRESS: 30%\n:END:\n*** TODO Lose 10kg\nDEADLINE: <2026-12-31>\n:PROPERTIES:\n:PROGRESS: 20%\n:END:\n** Career\n*** TODO Get promotion\nDEADLINE: <2026-09-01>\n*** TODO Learn Rust\nDEADLINE: <2026-03-01>")
@@ -415,6 +461,7 @@ fn strong_goal_tracking_workflow() {
                             (org-element-property :todo-keyword h)
                             (org-entry-get nil "PROGRESS")))))))
     goals))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -425,7 +472,7 @@ fn strong_goal_tracking_workflow() {
 #[test]
 fn strong_release_planning_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Release v2.0\n** TODO Feature A\n:PROPERTIES:\n:ESTIMATE: 5d\n:END:\n** TODO Feature B\n:PROPERTIES:\n:ESTIMATE: 3d\n:END:\n** DONE Bugfix 1\n:PROPERTIES:\n:ESTIMATE: 1d\n:END:\n** TODO Feature C\n:PROPERTIES:\n:ESTIMATE: 8d\n:END:")
@@ -436,6 +483,9 @@ fn strong_release_planning_workflow() {
                              (org-element-property :todo-keyword h)
                              (org-entry-get nil "ESTIMATE"))))))
     features))"##,
+        expect_test::expect![[
+            r#""OK ((\"Release v2.0\" nil \"8d\") (\"TODO Feature A\" nil \"8d\") (\"TODO Feature B\" nil \"8d\") (\"DONE Bugfix 1\" nil \"8d\") (\"TODO Feature C\" nil \"8d\"))""#
+        ]],
     );
 }
 
@@ -446,7 +496,7 @@ fn strong_release_planning_workflow() {
 #[test]
 fn strong_book_notes_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Deep Work by Cal Newport\n** Chapter 1: Deep Work is Valuable\nKey insight: Deep work is becoming increasingly rare and valuable.\n** Chapter 2: Deep Work is Rare\nDistractions are everywhere.\n** Chapter 3: Deep Work is Meaningful\nFocus leads to fulfillment.\n** Action Items\n*** TODO Block 2 hours daily for deep work\n*** TODO Turn off notifications")
@@ -456,6 +506,9 @@ fn strong_book_notes_workflow() {
                         (list (org-element-property :level h)
                               (org-element-property :raw-value h))))))
     headlines))"##,
+        expect_test::expect![[
+            r#""OK ((1 \"Deep Work by Cal Newport\") (2 \"Chapter 1: Deep Work is Valuable\") (2 \"Chapter 2: Deep Work is Rare\") (2 \"Chapter 3: Deep Work is Meaningful\") (2 \"Action Items\") (3 \"TODO Block 2 hours daily for deep work\") (3 \"TODO Turn off notifications\"))""#
+        ]],
     );
 }
 
@@ -466,7 +519,7 @@ fn strong_book_notes_workflow() {
 #[test]
 fn strong_event_planning_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Annual Conference 2026\n** TODO Book venue\nDEADLINE: <2026-03-01>\n:PROPERTIES:\n:BUDGET: 5000\n:END:\n** TODO Invite speakers\nDEADLINE: <2026-04-01>\n** TODO Arrange catering\nDEADLINE: <2026-05-01>\n** DONE Set date\nCLOSED: [2026-01-15]")
@@ -478,6 +531,9 @@ fn strong_event_planning_workflow() {
                           (org-entry-get nil "DEADLINE")
                           (org-entry-get nil "BUDGET"))))))
     tasks))"##,
+        expect_test::expect![[
+            r#""OK ((\"Annual Conference 2026\" nil nil nil) (\"TODO Book venue\" nil nil nil) (\"TODO Invite speakers\" nil nil nil) (\"TODO Arrange catering\" nil nil nil) (\"DONE Set date\" nil nil nil))""#
+        ]],
     );
 }
 
@@ -488,7 +544,7 @@ fn strong_event_planning_workflow() {
 #[test]
 fn strong_learning_log_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Rust Programming\n** TODO Ownership and Borrowing\nSCHEDULED: <2026-01-15>\n** DONE Variables and Types\nCLOSED: [2026-01-10]\n** TODO Error Handling\nSCHEDULED: <2026-01-20>\n* Emacs Lisp\n** DONE Basic Functions\nCLOSED: [2026-01-05]\n** TODO Macros\nSCHEDULED: <2026-01-25>")
@@ -498,6 +554,9 @@ fn strong_learning_log_workflow() {
                      (list (org-element-property :raw-value h)
                            (org-element-property :todo-keyword h))))))
     topics))"##,
+        expect_test::expect![[
+            r#""OK ((\"Rust Programming\" nil) (\"TODO Ownership and Borrowing\" nil) (\"DONE Variables and Types\" nil) (\"TODO Error Handling\" nil) (\"Emacs Lisp\" nil) (\"DONE Basic Functions\" nil) (\"TODO Macros\" nil))""#
+        ]],
     );
 }
 
@@ -508,7 +567,7 @@ fn strong_learning_log_workflow() {
 #[test]
 fn strong_health_tracking_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* 2026-01-15 Health Log\n** Weight\n:PROPERTIES:\n:VALUE: 75kg\n:END:\n** Blood Pressure\n:PROPERTIES:\n:SYSTOLIC: 120\n:DIASTOLIC: 80\n:END:\n** Exercise\n- 30 min running\n- 15 min stretching\n** Sleep\n:PROPERTIES:\n:HOURS: 7.5\n:QUALITY: good\n:END:")
@@ -520,6 +579,9 @@ fn strong_health_tracking_workflow() {
                             (org-entry-get nil "SYSTOLIC")
                             (org-entry-get nil "HOURS"))))))
     entries))"##,
+        expect_test::expect![[
+            r#""OK ((\"2026-01-15 Health Log\" nil nil \"7.5\") (\"Weight\" nil nil \"7.5\") (\"Blood Pressure\" nil nil \"7.5\") (\"Exercise\" nil nil \"7.5\") (\"Sleep\" nil nil \"7.5\"))""#
+        ]],
     );
 }
 
@@ -530,7 +592,7 @@ fn strong_health_tracking_workflow() {
 #[test]
 fn strong_subscription_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Subscriptions\n** Netflix\n:PROPERTIES:\n:COST: 15.99\n:RENEWAL: 2026-02-01\n:STATUS: active\n:END:\n** Spotify\n:PROPERTIES:\n:COST: 9.99\n:RENEWAL: 2026-01-20\n:STATUS: active\n:END:\n** Gym\n:PROPERTIES:\n:COST: 49.99\n:RENEWAL: 2026-03-01\n:STATUS: cancelled\n:END:")
@@ -542,6 +604,9 @@ fn strong_subscription_workflow() {
                          (org-entry-get nil "RENEWAL")
                          (org-entry-get nil "STATUS"))))))
     subs))"##,
+        expect_test::expect![[
+            r#""OK ((\"Subscriptions\" \"49.99\" \"2026-03-01\" \"cancelled\") (\"Netflix\" \"49.99\" \"2026-03-01\" \"cancelled\") (\"Spotify\" \"49.99\" \"2026-03-01\" \"cancelled\") (\"Gym\" \"49.99\" \"2026-03-01\" \"cancelled\"))""#
+        ]],
     );
 }
 
@@ -552,7 +617,7 @@ fn strong_subscription_workflow() {
 #[test]
 fn strong_plant_watering_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Plants\n** TODO Water fern\nSCHEDULED: <2026-01-15 .+3d>\n:PROPERTIES:\n:LOCATION: Living room\n:END:\n** TODO Water cactus\nSCHEDULED: <2026-01-15 .+14d>\n:PROPERTIES:\n:LOCATION: Bedroom\n:END:\n** TODO Water orchid\nSCHEDULED: <2026-01-15 .+7d>\n:PROPERTIES:\n:LOCATION: Kitchen\n:END:")
@@ -563,6 +628,9 @@ fn strong_plant_watering_workflow() {
                            (org-element-property :todo-keyword h)
                            (org-entry-get nil "LOCATION"))))))
     plants))"##,
+        expect_test::expect![[
+            r#""OK ((\"Plants\" nil \"Kitchen\") (\"TODO Water fern\" nil \"Kitchen\") (\"TODO Water cactus\" nil \"Kitchen\") (\"TODO Water orchid\" nil \"Kitchen\"))""#
+        ]],
     );
 }
 
@@ -573,7 +641,7 @@ fn strong_plant_watering_workflow() {
 #[test]
 fn strong_car_maintenance_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Car Maintenance 2026\n** DONE Oil change\nCLOSED: [2026-01-10]\n:PROPERTIES:\n:MILEAGE: 50000\n:COST: 45\n:END:\n** TODO Tire rotation\nDEADLINE: <2026-04-01>\n:PROPERTIES:\n:MILEAGE: 50000\n:END:\n** TODO Brake inspection\nDEADLINE: <2026-06-01>")
@@ -585,5 +653,8 @@ fn strong_car_maintenance_workflow() {
                           (org-entry-get nil "MILEAGE")
                           (org-entry-get nil "COST"))))))
     tasks))"##,
+        expect_test::expect![[
+            r#""OK ((\"Car Maintenance 2026\" nil nil nil) (\"DONE Oil change\" nil nil nil) (\"TODO Tire rotation\" nil nil nil) (\"TODO Brake inspection\" nil nil nil))""#
+        ]],
     );
 }

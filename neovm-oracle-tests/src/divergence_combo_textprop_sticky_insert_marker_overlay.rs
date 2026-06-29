@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_textprop_sticky_insert_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "tsi")))
     (with-current-buffer buf
@@ -39,6 +39,7 @@ fn combo_textprop_sticky_insert_marker_overlay() {
                 (overlay-end ov)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -46,7 +47,7 @@ fn combo_textprop_sticky_insert_marker_overlay() {
 fn combo_textprop_sticky_narrow_insert_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "tni")))
     (with-current-buffer buf
@@ -74,6 +75,7 @@ fn combo_textprop_sticky_narrow_insert_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -81,7 +83,7 @@ fn combo_textprop_sticky_narrow_insert_undo() {
 fn combo_textprop_sticky_clone_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "tci")))
     (with-current-buffer buf
@@ -110,6 +112,7 @@ fn combo_textprop_sticky_clone_insert() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -117,7 +120,7 @@ fn combo_textprop_sticky_clone_insert() {
 fn combo_textprop_sticky_multi_insert_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "tmi")))
     (with-current-buffer buf
@@ -152,6 +155,7 @@ fn combo_textprop_sticky_multi_insert_overlay() {
                 (overlay-end ov2)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -159,7 +163,7 @@ fn combo_textprop_sticky_multi_insert_overlay() {
 fn combo_textprop_insert_undo_marker_overlay_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "tiu")))
     (with-current-buffer buf
@@ -189,5 +193,6 @@ fn combo_textprop_insert_undo_marker_overlay_narrow() {
                 (overlay-end ov)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

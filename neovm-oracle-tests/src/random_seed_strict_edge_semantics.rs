@@ -46,5 +46,10 @@ fn oracle_random_string_seed_exact_sequence_and_error_edges() {
      (random 10 20)
    (error (list (car err) (cdr err)))))"#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 897 359 0 0) (897 359 0 0)) (6 14 16) (args-out-of-range (0)) (args-out-of-range (-1)) t t (wrong-number-of-arguments (random 2)))""#
+        ]],
+    );
 }

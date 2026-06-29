@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_dynamic_let_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dyn-test-var 'default)
   (let ((buf (generate-new-buffer "dlm")))
@@ -32,6 +32,7 @@ fn combo_dynamic_let_marker_overlay_undo() {
                 (buffer-string)
                 (get-text-property 1 'seg))))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -39,7 +40,7 @@ fn combo_dynamic_let_marker_overlay_undo() {
 fn combo_dynamic_let_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dyn-narrow-var 'base)
   (let ((buf (generate-new-buffer "dnm")))
@@ -64,6 +65,7 @@ fn combo_dynamic_let_narrow_marker() {
                 (buffer-substring (point-min) (point-max))
                 (get-text-property (point-min) 'z))))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -71,7 +73,7 @@ fn combo_dynamic_let_narrow_marker() {
 fn combo_dynamic_let_clone_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dyn-clone-var 'shared)
   (let ((buf (generate-new-buffer "dlc")))
@@ -98,6 +100,7 @@ fn combo_dynamic_let_clone_overlay() {
                   (get-text-property 1 'seg))))))
     (kill-buffer clone)
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-variable clone)""#]],
     );
 }
 
@@ -105,7 +108,7 @@ fn combo_dynamic_let_clone_overlay() {
 fn combo_dynamic_let_multi_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dyn-multi-var 'global)
   (let ((b1 (generate-new-buffer "dm1"))
@@ -129,6 +132,7 @@ fn combo_dynamic_let_multi_buffer() {
       (list r1 r2 dyn-multi-var))
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -136,7 +140,7 @@ fn combo_dynamic_let_multi_buffer() {
 fn combo_dynamic_let_overlay_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dyn-let-ov-var 'init)
   (let ((buf (generate-new-buffer "dlo")))
@@ -162,5 +166,6 @@ fn combo_dynamic_let_overlay_narrow_undo() {
                 (buffer-substring (point-min) (point-max))
                 (get-text-property (point-min) 'z))))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }

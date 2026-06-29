@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_builtin_link_export_backends_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'ol-doi)
   (require 'ol-man)
@@ -16,6 +16,9 @@ fn org_builtin_link_export_backends_combo() {
    (org-man-export "printf(3)" "Printf" 'html)
    (org-man-export "printf(3)" nil 'latex)
    (org-man-export "printf(3)" "Printf" 'ascii)))"#,
+        expect_test::expect![[
+            r#""OK (\"<a href=\\\"https://doi.org/10.1000/xyz123\\\">Paper</a>\" \"\\\\href{https://doi.org/10.1000/xyz123}{Paper}\" \"<https://doi.org/10.1000/xyz123>\" \"<a target=\\\"_blank\\\" href=\\\"http://man.he.net/?topic=printf(3)&section=all\\\">Printf</a>\" \"\\\\href{http://man.he.net/?topic=printf(3)&section=all}{printf(3)}\" \"[Printf] (<http://man.he.net/?topic=printf(3)&section=all>)\")""#
+        ]],
     );
 }
 
@@ -23,7 +26,7 @@ fn org_builtin_link_export_backends_combo() {
 fn org_man_export_sections_markup_links_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-man)
   (with-temp-buffer
@@ -45,6 +48,9 @@ fn org_man_export_sections_markup_links_combo() {
             (not (null (string-match-p "\\\\fIdemo \\\\-\\\\-help\\\\fP" man)))
             (not (null (string-match-p "https://example.org" man)))
             man))))"##,
+        expect_test::expect![[
+            r#""OK (t t t t t t \".SH \\\"NAME\\\"\n.PP\ndemo - short description\n.SH \\\"SYNOPSIS\\\"\n.PP\n\\\\fIdemo \\\\-\\\\-help\\\\fP\n.SH \\\"DESCRIPTION\\\"\n.PP\nText with \\\\fBbold\\\\fP, \\\\fIitalic\\\\fP, and https://example.org \\\\fBat\\\\fP \\\\fIlink\\\\fP.\n\")""#
+        ]],
     );
 }
 
@@ -52,7 +58,7 @@ fn org_man_export_sections_markup_links_combo() {
 fn org_link_abbrev_radio_custom_reveal_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -159,6 +165,7 @@ fn org_link_abbrev_radio_custom_reveal_export_combo() {
                     (org-get-heading t t t t)
                      (buffer-substring-no-properties
                       (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -166,7 +173,7 @@ fn org_link_abbrev_radio_custom_reveal_export_combo() {
 fn org_link_export_html_latex_structure_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ox-html)
@@ -216,6 +223,9 @@ fn org_link_export_html_latex_structure_deep_state_combo() {
               (replace-regexp-in-string
               "sec:org[[:alnum:]-]+" "sec:org-id"
               latex))))))"##,
+        expect_test::expect![[
+            r#""ERR (user-error \"Org export aborted.  Unable to resolve link: \\\"No match for fuzzy expression: *Heading\\\"\nSee ‘org-export-with-broken-links’\")""#
+        ]],
     );
 }
 
@@ -223,7 +233,7 @@ fn org_link_export_html_latex_structure_deep_state_combo() {
 fn org_link_export_footnote_anchor_custom_id_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ox-html)
@@ -268,5 +278,8 @@ fn org_link_export_footnote_anchor_custom_id_deep_state_combo() {
                "sec:org[[:alnum:]-]+" "sec:org-id"
                (replace-regexp-in-string "org[[:alnum:]-]\\{8,\\}" "orgHASH"
                                          html))))))))"##,
+        expect_test::expect![[
+            r#""ERR (user-error \"Org export aborted.  Unable to resolve link: \\\"some-id\\\"\nSee ‘org-export-with-broken-links’\")""#
+        ]],
     );
 }

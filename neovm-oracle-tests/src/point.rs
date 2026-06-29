@@ -10,7 +10,8 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_point_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(point)");
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect("(point)", expect_test::expect![[r#""OK 1""#]]);
     assert_ok_eq("1", &oracle, &neovm);
 }
 
@@ -18,7 +19,10 @@ fn oracle_prop_point_basics() {
 fn oracle_prop_point_wrong_arity_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(point nil)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(point nil)",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments point 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-number-of-arguments");
 }
 

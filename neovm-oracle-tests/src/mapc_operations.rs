@@ -24,7 +24,10 @@ fn oracle_prop_mapc_returns_original_list() {
                     (list (eq original returned)
                           returned
                           (length returned)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t (10 20 30 40 50) 5)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -46,7 +49,7 @@ fn oracle_prop_mapc_accumulate_side_effects() {
                             (setq call-count (1+ call-count)))
                           '(2 3 5 7 11))
                     (list sum product call-count))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (28 2310 5)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +80,10 @@ fn oracle_prop_mapc_vs_mapcar_return_difference() {
                      (equal mapcar-result (nreverse (let ((c nil))
                                                      (mapc (lambda (x) (setq c (cons (* x 10) c))) input)
                                                      c)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10 20 30 40 50) t (1 2 3 4 5) (10 20 30 40 50) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +132,12 @@ fn oracle_prop_mapc_complex_lambda_string_processing() {
     (makunbound 'neovm--test-mapc-errors)
     (makunbound 'neovm--test-mapc-warnings)
     (makunbound 'neovm--test-mapc-info)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"disk full\" \"timeout\" \"crash\") (\"low memory\" \"high cpu\") (\"started\" \"connected\" \"ready\") 3)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +174,10 @@ fn oracle_prop_mapc_nested_lists() {
                 (apply '+ result))))
     (makunbound 'neovm--test-mapc-flat)
     (fmakunbound 'neovm--test-mapc-flatten)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7 8 9 10) 10 55)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +212,12 @@ fn oracle_prop_mapc_populate_hash_table_from_alist() {
           (let ((total 0))
             (mapc (lambda (p) (setq total (+ total (cdr p)))) pairs)
             total))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"apple\" \"banana\" \"date\" \"cherry\" \"elderberry\") (4 3 2 2 1) 5 12)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -241,7 +260,12 @@ fn oracle_prop_mapc_chained_pipeline() {
                      graded ", ")
           invalid-count
           (length graded))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"alice:95(A), carol:87(B), dave:73(C), frank:91(A), grace:88(B)\" 4 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +292,10 @@ fn oracle_prop_mapc_with_error_handling() {
   (list (nreverse (mapcar (lambda (s) (cdr s)) successes))
         (length failures)
         (mapcar (lambda (f) (cdr f)) (nreverse failures))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((20 27 15 3) 2 (div-by-zero div-by-zero))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -294,5 +321,8 @@ fn oracle_prop_mapc_stateful_closure() {
         (caddr state)
         ;; Compute average (integer division)
         (/ (cadr state) (car state))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 180 42 18)""#]],
+    );
 }

@@ -77,7 +77,12 @@ fn oracle_prop_json_proc_path_query() {
           (funcall 'neovm--jp-get-path data "meta.version")))
     (fmakunbound 'neovm--jp-split)
     (fmakunbound 'neovm--jp-get-path)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((version . 2) (created . \"2024-01-01\")) \"Alice\" 30 \"NYC\" \"10001\" 40 (admin active) nil nil 2)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +167,10 @@ fn oracle_prop_json_proc_path_set() {
     (fmakunbound 'neovm--jp-split2)
     (fmakunbound 'neovm--jp-set-path)
     (fmakunbound 'neovm--jp-get-path2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (99 42 3 nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +220,12 @@ fn oracle_prop_json_proc_array_transform() {
       (mapcar (lambda (s) (cons (cdr (assq 'name s))
                                 (cdr (assq 'grade s))))
               graded))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"Alice\" \"Bob\" \"Carol\" \"Dave\" \"Eve\") (90 75 88 62 95) (\"Alice\" \"Carol\" \"Eve\") 82 ((\"Alice\" . \"A\") (\"Bob\" . \"C\") (\"Carol\" . \"B\") (\"Dave\" . \"F\") (\"Eve\" . \"A\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -261,7 +274,12 @@ fn oracle_prop_json_proc_flatten() {
             ;; Total number of leaf entries
             (length flat))))
     (fmakunbound 'neovm--jp-flatten)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"active\" \"meta.version\" \"user.address.city\" \"user.address.zip\" \"user.age\" \"user.name\") \"Alice\" \"NYC\" 2 t 6)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +341,12 @@ fn oracle_prop_json_proc_diff() {
             ;; Unchanged keys
             (cdr (assq 'unchanged diff)))))
     (fmakunbound 'neovm--jp-diff)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"email\") (\"role\") ((\"age\" 30 31) (\"city\" \"NYC\" \"SFO\")) (\"active\" \"name\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -446,7 +469,12 @@ fn oracle_prop_json_proc_full_pipeline() {
     (fmakunbound 'neovm--jp-fp-split)
     (fmakunbound 'neovm--jp-fp-get)
     (fmakunbound 'neovm--jp-fp-flatten)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"localhost\" 300 \"info\") ((\"database.host\" \"localhost\" \"db.prod.internal\") (\"database.pool-size\" 10 20) (\"database.port\" 5432 5433) (\"logging.level\" \"info\" \"warn\")) (\"database.ssl\" \"logging.format\") t 20 \"json\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -523,5 +551,10 @@ fn oracle_prop_json_proc_merge_with_strategy() {
           (let ((merged (funcall 'neovm--jp-merge base override :concat)))
             (cdr (assq 'features merged)))))
     (fmakunbound 'neovm--jp-merge)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"App\" 2 (export import) \"db.prod\" t \"added\") (1 (search filter) \"localhost\") (search filter export import))""#
+        ]],
+    );
 }

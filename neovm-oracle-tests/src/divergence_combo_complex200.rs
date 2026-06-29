@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx200_mega_milestone_1_coding_charset_undo_overlay_marker_narrow_process_timer_env() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX200=v1" process-environment)))
@@ -58,13 +58,14 @@ fn div_cx200_mega_milestone_1_coding_charset_undo_overlay_marker_narrow_process_
           (kill-buffer buf)
           (list state (buffer-live-p buf)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 2 16)""#]],
     );
 }
 
 #[test]
 fn div_cx200_mega_milestone_2_eieio_clloop_pcase_advice_closure_coding_obarray_secure_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -111,6 +112,7 @@ fn div_cx200_mega_milestone_2_eieio_clloop_pcase_advice_closure_coding_obarray_s
                 snapshot))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
@@ -118,7 +120,7 @@ fn div_cx200_mega_milestone_2_eieio_clloop_pcase_advice_closure_coding_obarray_s
 fn div_cx200_mega_milestone_3_process_buflocal_textprop_overlay_marker_undo_narrow_coding_env_exitcode_timer()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX200=v2" process-environment)))
@@ -155,6 +157,7 @@ fn div_cx200_mega_milestone_3_process_buflocal_textprop_overlay_marker_undo_narr
         (kill-buffer buf))
       (list snapshot (buffer-live-p buf)))))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     );
 }
 
@@ -162,7 +165,7 @@ fn div_cx200_mega_milestone_3_process_buflocal_textprop_overlay_marker_undo_narr
 fn div_cx200_mega_milestone_4_pcase_rx_syntax_search_replace_format_time_advice_clloop_register_window_config()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
       (t0 (encode-time 30 30 14 16 6 2026 nil))
@@ -205,13 +208,14 @@ fn div_cx200_mega_milestone_4_pcase_rx_syntax_search_replace_format_time_advice_
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }
 
 #[test]
 fn div_cx200_mega_milestone_5_all_twelve_subsystems_full_chaos_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX200=v3" process-environment)))
@@ -273,5 +277,8 @@ fn div_cx200_mega_milestone_5_all_twelve_subsystems_full_chaos_stress() {
                   (hash-table-count ht)
                   (aref rec 2))))))))
 "##,
+        expect_test::expect![[
+            r#""ERR (wrong-number-of-arguments (closure (t) nil :overridden) 1)""#
+        ]],
     );
 }

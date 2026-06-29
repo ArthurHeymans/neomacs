@@ -43,7 +43,12 @@ fn oracle_prop_tpp_propertize_multi_independent() {
                                ;; Verify property count changed
                                (length (text-properties-at 0 s))
                                (length (text-properties-at 0 s2)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((bold \"tooltip\" highlight (space :width 10) t 42) (bold \"tooltip\" highlight (space :width 10) nil 42) 12 10)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +78,12 @@ fn oracle_prop_tpp_put_get_roundtrip_regions() {
                                      result))
                          (setq i (+ i 2))))
                      (nreverse result)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 bold nil) (2 bold nil) (4 italic nil) (6 italic alpha) (8 italic alpha) (10 italic alpha) (12 nil alpha) (14 nil nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +114,12 @@ fn oracle_prop_tpp_remove_selective_layered() {
                                          (get-text-property i 'mouse-face s))
                                    survey)))
                      (nreverse survey)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 nil \"tip\" highlight) (1 nil \"tip\" highlight) (2 nil \"tip\" highlight) (3 nil nil highlight) (4 nil nil highlight) (5 bold nil highlight) (6 bold nil nil) (7 bold nil nil) (8 bold \"tip\" nil) (9 bold \"tip\" nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +146,12 @@ fn oracle_prop_tpp_properties_at_exhaustive() {
                          (setq result
                                (cons (list i (length plist) plist) result))))
                      (nreverse result)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 6 (c 3 b 2 a 1)) (1 4 (c 3 b 2)) (2 2 (c 3)) (3 2 (d 4)) (4 4 (f 6 e 5)) (5 4 (f 6 e 5)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +198,12 @@ fn oracle_prop_tpp_syntax_highlight_overlay_pattern() {
             (setq faces (cons (cons i (get-text-property i 'face code)) faces)))
           (nreverse faces)))
     (fmakunbound 'neovm--test-highlight-region)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 . font-lock-comment-face) (1 . font-lock-keyword-face) (2 . font-lock-keyword-face) (3 . font-lock-keyword-face) (4 . font-lock-keyword-face) (5 . font-lock-keyword-face) (6 . font-lock-comment-face) (7 . font-lock-function-name-face) (8 . font-lock-function-name-face) (9 . font-lock-function-name-face) (10 . font-lock-comment-face) (11 . font-lock-comment-face) (12 . font-lock-comment-face) (13 . font-lock-comment-face) (14 . font-lock-comment-face) (15 . font-lock-comment-face) (16 . font-lock-builtin-face) (17 . font-lock-comment-face) (18 . font-lock-comment-face) (19 . font-lock-comment-face) (20 . font-lock-comment-face) (21 . font-lock-comment-face) (22 . font-lock-comment-face))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +310,12 @@ fn oracle_prop_tpp_markup_to_properties() {
               (setq pos (or (next-property-change pos result) (length result))))
             (nreverse boundaries))))
     (fmakunbound 'neovm--test-apply-markup)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello world and universe with code!\" 35 bold italic font-lock-constant-face nil ((0) (6 . bold) (11) (16 . italic) (24) (30 . font-lock-constant-face) (34)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -321,7 +351,12 @@ fn oracle_prop_tpp_set_text_properties_wholesale() {
                      (length (text-properties-at 0 s))
                      (length (text-properties-at 3 s))
                      (length (text-properties-at 7 s))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (bold \"old\" highlight nil nil test-cat 99 test-cat bold \"old\" 6 4 6)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -351,7 +386,10 @@ fn oracle_prop_tpp_add_vs_put_semantics() {
                      ;; Property counts
                      (length (text-properties-at 0 s1))
                      (length (text-properties-at 0 s2))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 2 3 10 2 nil 6 4)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -408,5 +446,8 @@ fn oracle_prop_tpp_word_frequency_annotator() {
           ;; second "the"
           (get-text-property 15 'word-freq annotated)))
     (fmakunbound 'neovm--test-annotate-freqs)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"the cat sat on the mat the cat\" 3 2 1 1 3)""#]],
+    );
 }

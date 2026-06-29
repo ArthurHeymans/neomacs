@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_km_lookup_key_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((m (make-sparse-keymap)))
   (define-key m "a" 'act-a)
@@ -19,13 +19,14 @@ fn div_km_lookup_key_basic() {
         (lookup-key m "b")
         (lookup-key m "\C-c\C-d")))
 "##,
+        expect_test::expect![[r#""OK (act-a nil act-cc)""#]],
     );
 }
 
 #[test]
 fn div_km_keymap_parent_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-sparse-keymap)) (c (make-sparse-keymap)))
   (define-key p "a" 'parent-act)
@@ -34,13 +35,14 @@ fn div_km_keymap_parent_inheritance() {
         (keymap-parent c)
         (lookup-key p "a")))
 "##,
+        expect_test::expect![[r#""OK (parent-act (keymap (97 . parent-act)) parent-act)""#]],
     );
 }
 
 #[test]
 fn div_km_keymap_parent_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((g (make-sparse-keymap)) (m (make-sparse-keymap)) (l (make-sparse-keymap)))
   (define-key g "x" 'grand)
@@ -49,13 +51,14 @@ fn div_km_keymap_parent_chain() {
   (set-keymap-parent m g)
   (list (lookup-key l "x") (lookup-key l "y")))
 "##,
+        expect_test::expect![[r#""OK (grand mid)""#]],
     );
 }
 
 #[test]
 fn div_km_local_overrides_global() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((gm (make-sparse-keymap)) (lm (make-sparse-keymap)))
@@ -65,13 +68,14 @@ fn div_km_local_overrides_global() {
     (use-local-map lm)
     (key-binding "a")))
 "##,
+        expect_test::expect![[r#""OK local-act""#]],
     );
 }
 
 #[test]
 fn div_km_minor_mode_overrides_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((gm (make-sparse-keymap)) (lm (make-sparse-keymap))
@@ -85,13 +89,14 @@ fn div_km_minor_mode_overrides_local() {
           (fake-mode t))
       (key-binding "a"))))
 "##,
+        expect_test::expect![[r#""OK local-act""#]],
     );
 }
 
 #[test]
 fn div_km_text_property_local_map_at_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((gm (make-sparse-keymap)) (tm (make-sparse-keymap)))
   (define-key gm "a" 'global-act)
@@ -103,13 +108,14 @@ fn div_km_text_property_local_map_at_point() {
     (goto-char 2)
     (key-binding "a")))
 "##,
+        expect_test::expect![[r#""OK text-act""#]],
     );
 }
 
 #[test]
 fn div_km_overlay_keymap_at_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((gm (make-sparse-keymap)) (om (make-sparse-keymap)))
   (define-key gm "a" 'global-act)
@@ -122,35 +128,38 @@ fn div_km_overlay_keymap_at_point() {
     (goto-char 2)
     (key-binding "a")))
 "##,
+        expect_test::expect![[r#""OK overlay-act""#]],
     );
 }
 
 #[test]
 fn div_km_current_active_maps_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (length (current-active-maps t)))
 "##,
+        expect_test::expect![[r#""OK 1""#]],
     );
 }
 
 #[test]
 fn div_km_current_active_maps_include_global() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (if (memq global-map (current-active-maps t)) t nil))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_km_where_is_internal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((m (make-sparse-keymap)))
   (define-key m "a" 'target)
@@ -158,39 +167,42 @@ fn div_km_where_is_internal() {
   (define-key m "c" 'target)
   (sort (where-is-internal 'target m) (lambda (a b) (string< (key-description a) (key-description b)))))
 "##,
+        expect_test::expect![[r#""OK ([97] [99])""#]],
     );
 }
 
 #[test]
 fn div_km_command_remapping() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((m (make-sparse-keymap)))
   (define-key m [remap forward-char] 'my-forward)
   (list (lookup-key m [remap forward-char])
         (command-remapping 'forward-char m)))
 "##,
+        expect_test::expect![[r#""OK (my-forward nil)""#]],
     );
 }
 
 #[test]
 fn div_km_accessible_keymaps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((m (make-sparse-keymap)) (sub (make-sparse-keymap)))
   (define-key m "a" 'act)
   (define-key m "p" sub)
   (length (accessible-keymaps m)))
 "##,
+        expect_test::expect![[r#""OK 2""#]],
     );
 }
 
 #[test]
 fn div_km_map_keymap_collect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((m (make-sparse-keymap)) (acc nil))
   (define-key m "a" 1)
@@ -198,13 +210,14 @@ fn div_km_map_keymap_collect() {
   (map-keymap (lambda (k v) (push (cons k v) acc)) m)
   (sort acc (lambda (a b) (< (car a) (car b)))))
 "##,
+        expect_test::expect![[r#""OK ((97 . 1) (98 . 2))""#]],
     );
 }
 
 #[test]
 fn div_km_keymapp_and_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((m (define-prefix-command 'neo-prefix-map)))
   (define-key m "a" 'act)
@@ -212,18 +225,20 @@ fn div_km_keymapp_and_prefix() {
         (fboundp 'neo-prefix-map)
         (lookup-key m "a")))
 "##,
+        expect_test::expect![[r#""OK (t t act)""#]],
     );
 }
 
 #[test]
 fn div_km_lookup_key_returns_keymap_for_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((m (make-sparse-keymap)) (sub (make-sparse-keymap)))
   (define-key sub "a" 'deep)
   (define-key m "p" sub)
   (keymapp (lookup-key m "p")))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

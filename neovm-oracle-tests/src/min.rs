@@ -10,10 +10,16 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_min_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_int, neovm_int) = eval_oracle_and_neovm("(min 1 9 -3)");
+    let (oracle_int, neovm_int) = crate::common::eval_oracle_and_neovm_expect(
+        "(min 1 9 -3)",
+        expect_test::expect![[r#""OK -3""#]],
+    );
     assert_ok_eq("-3", &oracle_int, &neovm_int);
 
-    let (oracle_mixed, neovm_mixed) = eval_oracle_and_neovm("(min 1 2.5)");
+    let (oracle_mixed, neovm_mixed) = crate::common::eval_oracle_and_neovm_expect(
+        "(min 1 2.5)",
+        expect_test::expect![[r#""OK 1""#]],
+    );
     assert_ok_eq("1", &oracle_mixed, &neovm_mixed);
 }
 
@@ -21,10 +27,16 @@ fn oracle_prop_min_basics() {
 fn oracle_prop_min_error_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (arity_oracle, arity_neovm) = eval_oracle_and_neovm("(min)");
+    let (arity_oracle, arity_neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(min)",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments min 0)""#]],
+    );
     assert_err_kind(&arity_oracle, &arity_neovm, "wrong-number-of-arguments");
 
-    let (type_oracle, type_neovm) = eval_oracle_and_neovm(r#"(min 1 "x")"#);
+    let (type_oracle, type_neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(min 1 "x")"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \"x\")""#]],
+    );
     assert_err_kind(&type_oracle, &type_neovm, "wrong-type-argument");
 }
 

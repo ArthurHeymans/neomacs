@@ -12,7 +12,10 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 fn oracle_prop_make_symbol_creates_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(symbolp (make-symbol "test"))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(symbolp (make-symbol "test"))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
@@ -20,7 +23,10 @@ fn oracle_prop_make_symbol_creates_symbol() {
 fn oracle_prop_make_symbol_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(symbol-name (make-symbol "my-sym"))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(symbol-name (make-symbol "my-sym"))"#,
+        expect_test::expect![[r#""OK \"my-sym\"""#]],
+    );
     assert_ok_eq(r#""my-sym""#, &o, &n);
 }
 
@@ -35,7 +41,10 @@ fn oracle_prop_make_symbol_reuses_name_string_object() {
         (list (eq name (symbol-name sym))
               name
               (symbol-name sym)))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (t \"aZc\" \"aZc\")""#]],
+    );
     assert_ok_eq(r#"(t "aZc" "aZc")"#, &o, &n);
 }
 
@@ -48,7 +57,7 @@ fn oracle_prop_make_symbol_not_interned() {
                     (list (symbolp s)
                           (eq s 'hello)
                           (equal (symbol-name s) "hello")))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil t)""#]]);
 }
 
 #[test]
@@ -60,7 +69,7 @@ fn oracle_prop_make_symbol_each_unique() {
                         (b (make-symbol "test")))
                     (list (eq a b)
                           (equal (symbol-name a) (symbol-name b))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (nil t)""#]]);
 }
 
 #[test]
@@ -73,7 +82,7 @@ fn oracle_prop_make_symbol_set_value() {
                     (set s (1+ (symbol-value s)))
                     (set s (1+ (symbol-value s)))
                     (symbol-value s))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 2""#]]);
 }
 
 #[test]
@@ -86,7 +95,10 @@ fn oracle_prop_make_symbol_plist() {
                     (put s 'range '(0 100))
                     (list (get s 'type)
                           (get s 'range)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (integer (0 100))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +123,10 @@ fn oracle_prop_make_symbol_gensym_pattern() {
                               (symbol-name s2)
                               (symbol-name s3)
                               (eq s1 s2)))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"g1\" \"g2\" \"tmp3\" nil)""#]],
+    );
 }
 
 #[test]
@@ -135,7 +150,12 @@ fn oracle_prop_gensym_counter_prefix_and_uninterned_contracts() {
      (eq a (make-symbol (symbol-name a)))
      (equal (symbol-name a)
             (symbol-name (make-symbol (symbol-name a)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"g7\" nil t) (\"tmp8\" nil t) (\"g9\" nil t) (\"4210\" nil t)) 11 nil t)""#
+        ]],
+    );
 }
 
 #[test]
@@ -155,5 +175,8 @@ fn oracle_prop_make_symbol_as_unique_key() {
                             (cdr (assq k3 table))
                             ;; Interned 'key won't match any
                             (assq 'key table))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"first\" \"second\" \"third\" nil)""#]],
+    );
 }

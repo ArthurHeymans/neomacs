@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_agenda_tags_and_todo_views_file_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-agenda)
@@ -49,6 +49,9 @@ CLOSED: [2026-05-26 Tue]
       (when (get-buffer org-agenda-buffer-name)
         (kill-buffer org-agenda-buffer-name))
       (delete-file file))))"##,
+        expect_test::expect![[
+            r#""OK (t t t nil \"Headlines with TAGS match: +work\nPress ‘C-u r’ to search again\nProbe:  TODO Alpha                                                       :work:\nProbe:  DONE Gamma                                                       :work:\n\" \"Global list of TODO items of type: ALL\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\nProbe:  TODO Alpha                                                       :work:\n\")""#
+        ]],
     );
 }
 
@@ -56,7 +59,7 @@ CLOSED: [2026-05-26 Tue]
 fn org_table_recalculate_delete_column_formula_rewrite_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -81,6 +84,9 @@ fn org_table_recalculate_delete_column_formula_rewrite_combo() {
         (list after-calc
               after-sort
               (buffer-substring-no-properties (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (\"| Name | Qty | Price | Total |\n|------+-----+-------+-------|\n| b    |   2 |     3 |     6 |\n| a    |   5 |     4 |    20 |\n#+TBLFM: $4=$2*$3\n\" \"| Name | Qty | Price | Total |\n|------+-----+-------+-------|\n| b    |   2 |     3 |     6 |\n| a    |   5 |     4 |    20 |\n#+TBLFM: $4=$2*$3\n\" \"| Name | Qty | Total |\n|------+-----+-------|\n| b    |   2 |     6 |\n| a    |   5 |    20 |\n#+TBLFM: $3=$2*$INVALID\n\")""#
+        ]],
     );
 }
 
@@ -88,7 +94,7 @@ fn org_table_recalculate_delete_column_formula_rewrite_combo() {
 fn org_table_copy_move_column_row_to_lisp_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (with-temp-buffer
@@ -111,5 +117,8 @@ fn org_table_copy_move_column_row_to_lisp_combo() {
               after-col
               (buffer-substring-no-properties (point-min) (point-max))
               (org-table-to-lisp))))))"#,
+        expect_test::expect![[
+            r#""OK (\"| A | B |\n|---+---|\n| 1 | 2 |\n| 2 | 4 |\n\" \"| B | A |\n|---+---|\n| 2 | 1 |\n| 4 | 2 |\n\" \"| B | A |\n| 2 | 1 |\n|---+---|\n| 4 | 2 |\n\" ((#(\"B\" 0 1 (face org-table)) #(\"A\" 0 1 (face org-table))) (#(\"2\" 0 1 (face org-table)) #(\"1\" 0 1 (face org-table))) hline (#(\"4\" 0 1 (face org-table)) #(\"2\" 0 1 (face org-table)))))""#
+        ]],
     );
 }

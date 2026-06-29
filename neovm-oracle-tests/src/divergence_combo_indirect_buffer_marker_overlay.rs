@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_clone_buffer_marker_overlay_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cln\")))\n\
          (with-current-buffer buf\n\
@@ -44,6 +44,7 @@ fn combo_clone_buffer_marker_overlay_textprop_undo() {
          (overlay-end ov))))\n\
          (kill-buffer clone)\n\
          (kill-buffer buf))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -51,7 +52,7 @@ fn combo_clone_buffer_marker_overlay_textprop_undo() {
 fn combo_indirect_buffer_overlay_shared_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ind\")))\n\
          (with-current-buffer buf\n\
@@ -80,6 +81,7 @@ fn combo_indirect_buffer_overlay_shared_undo() {
          (overlay-end ov))))\n\
          (kill-buffer ind)\n\
          (kill-buffer buf))))",
+        expect_test::expect![[r#""ERR (args-out-of-range 14 18)""#]],
     );
 }
 
@@ -87,7 +89,7 @@ fn combo_indirect_buffer_overlay_shared_undo() {
 fn combo_clone_buffer_narrow_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cnm\")))\n\
          (with-current-buffer buf\n\
@@ -115,6 +117,7 @@ fn combo_clone_buffer_narrow_marker_overlay() {
          (buffer-string)))))\n\
          (kill-buffer clone)\n\
          (kill-buffer buf))))",
+        expect_test::expect![[r#""ERR (void-variable clone)""#]],
     );
 }
 
@@ -122,7 +125,7 @@ fn combo_clone_buffer_narrow_marker_overlay() {
 fn combo_clone_buffer_revert_undo_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cru\")))\n\
          (with-current-buffer buf\n\
@@ -157,6 +160,7 @@ fn combo_clone_buffer_revert_undo_textprop() {
          (overlay-end ov)))))\n\
          (kill-buffer clone)\n\
          (kill-buffer buf))))",
+        expect_test::expect![[r#""ERR (void-variable clone)""#]],
     );
 }
 
@@ -164,7 +168,7 @@ fn combo_clone_buffer_revert_undo_textprop() {
 fn combo_multi_buffer_marker_cross_ref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((b1 (generate-new-buffer \"mb1\"))\n\
          (b2 (generate-new-buffer \"mb2\")))\n\
@@ -198,5 +202,6 @@ fn combo_multi_buffer_marker_cross_ref() {
          (overlay-end ov))))\n\
          (kill-buffer b1)\n\
          (kill-buffer b2))))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }

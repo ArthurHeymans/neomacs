@@ -61,7 +61,12 @@ fn oracle_prop_sched_earliest_deadline_first() {
                                     ;; Total time used
                                     (apply #'+ (mapcar (lambda (j) (nth 1 j)) jobs))))))
                       (fmakunbound 'neovm--test-edf-schedule)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((task-e 0 1 4 ok) (task-c 1 3 6 ok) (task-b 3 8 8 ok) (task-a 8 11 10 late) (task-d 11 15 15 ok) (task-f 15 21 20 late)) (task-a task-f) 6 2 21)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +122,10 @@ fn oracle_prop_sched_interval_scheduling() {
                                                        (- (nth 2 iv) (nth 1 iv)))
                                                      selected)))))
                       (fmakunbound 'neovm--test-interval-schedule)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((meeting-a 0 3) (meeting-c 3 6) (meeting-f 7 9)) 3 t 8)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +199,12 @@ fn oracle_prop_sched_topological_sort() {
                           '(x y z p q)
                           '((x . y) (y . z) (p . q))))
                       (fmakunbound 'neovm--test-topo-sort)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((setup compile link test deploy) t) ((a b c d) t) ((p q x y z) t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -259,7 +272,12 @@ fn oracle_prop_sched_bin_packing_first_fit() {
                                   ;; Total wasted space
                                   (apply #'+ (mapcar #'car result)))))
                       (fmakunbound 'neovm--test-bin-pack)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 (file-a . 3) (file-b . 5) (file-c . 2)) (0 (file-d . 7) (file-f . 1) (file-i . 2)) (0 (file-e . 4) (file-g . 6)) (7 (file-h . 3))) 4 t t 7)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +352,12 @@ fn oracle_prop_sched_round_robin() {
                                     ;; Total execution time = clock at end
                                     (nth 1 (car log))))))
                       (fmakunbound 'neovm--test-round-robin)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((P1 3 3) (P2 6 3) (P3 9 3) (P4 12 3) (P1 15 3) (P2 16 1) (P3 19 3) (P1 22 3) (P1 23 1)) ((P1 10 23 23 13) (P2 4 16 16 12) (P3 6 19 19 13) (P4 3 12 12 9)) 17 11 3)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -448,5 +471,8 @@ fn oracle_prop_sched_priority_preemptive() {
                                     ;; Verify all processes completed
                                     (= (length info) (length processes))))))
                       (fmakunbound 'neovm--test-priority-schedule)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }

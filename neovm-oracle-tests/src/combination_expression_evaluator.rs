@@ -82,7 +82,12 @@ fn oracle_prop_expr_eval_tokenizer() {
         (funcall 'neovm--ee-tokenize "let x = 5")
         (funcall 'neovm--ee-tokenize ""))
     (fmakunbound 'neovm--ee-tokenize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((num . 2) (op . \"+\") (num . 3) (op . \"*\") (num . 4)) ((id . \"x\") (op . \"=\") (num . 10)) ((id . \"foo\") (op . \"(\") (num . 1) (op . \",\") (num . 2) (op . \")\")) ((id . \"a\") (op . \"<=\") (id . \"b\") (op . \"&&\") (id . \"c\") (op . \"!=\") (num . 0)) ((op . \"(\") (id . \"x\") (op . \"+\") (id . \"y\") (op . \")\") (op . \"*\") (op . \"(\") (id . \"x\") (op . \"-\") (id . \"y\") (op . \")\")) ((op . \"!\") (id . \"true\")) ((id . \"let\") (id . \"x\") (op . \"=\") (num . 5)) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +216,10 @@ fn oracle_prop_expr_eval_arithmetic_precedence() {
     (fmakunbound 'neovm--ee2-parse-expr)
     (fmakunbound 'neovm--ee2-eval)
     (makunbound 'neovm--ee2-tokens)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 14 20 5 5 1 26 15 -2 -7 42 55)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -317,7 +325,10 @@ fn oracle_prop_expr_eval_variables_and_let() {
                       (- d (+ a b))))
                  nil))
     (fmakunbound 'neovm--ee3-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (30 8 30 12 11 15 20)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +442,10 @@ fn oracle_prop_expr_eval_comparisons_and_booleans() {
                       (if (== n 0) 0 1)))
                  nil))
     (fmakunbound 'neovm--ee4-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t t t t t t 1 0 7 12 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -561,7 +575,10 @@ fn oracle_prop_expr_eval_functions() {
                 (funcall 'neovm--ee5-eval '(call fib 7) env)
                 (funcall 'neovm--ee5-eval '(call fib 10) env))))
     (fmakunbound 'neovm--ee5-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (49 60 (5 3 0) (1 120 3628800) (0 1 13 55))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -711,7 +728,10 @@ fn oracle_prop_expr_eval_full_calculator() {
                         0))
                    env)))
     (fmakunbound 'neovm--ee6-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (error \"Lisp nesting exceeds ‘max-lisp-eval-depth’\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -807,5 +827,10 @@ fn oracle_prop_expr_eval_error_handling() {
     (fmakunbound 'neovm--ee7-ok-p)
     (fmakunbound 'neovm--ee7-val)
     (fmakunbound 'neovm--ee7-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok . 30) (ok . 27) (err . \"division by zero\") (err . \"division by zero\") (err . \"unbound: x\") (err . \"division by zero\") (ok . 3) (err . \"division by zero\"))""#
+        ]],
+    );
 }

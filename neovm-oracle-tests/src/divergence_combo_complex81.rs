@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx81_backtrace_frame_inside_catch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (frames)
   (let ((fns (list (lambda () (push :level-2 frames))
@@ -16,13 +16,14 @@ fn div_cx81_backtrace_frame_inside_catch() {
     (funcall (cadr fns))
     (nreverse frames)))
 "##,
+        expect_test::expect![[r#""ERR (void-variable fns)""#]],
     );
 }
 
 #[test]
 fn div_cx81_mapatoms_collect_interned_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (intern "neo-cx81-symbol-alpha")
 (intern "neo-cx81-symbol-beta")
@@ -33,13 +34,16 @@ fn div_cx81_mapatoms_collect_interned_symbols() {
                 (push s collected))))
   (sort (mapcar #'symbol-name collected) #'string<))
 "##,
+        expect_test::expect![[
+            r#""OK (\"neo-cx81-symbol-alpha\" \"neo-cx81-symbol-beta\" \"neo-cx81-symbol-gamma\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx81_features_after_require() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((before features))
   (condition-case e
@@ -50,13 +54,16 @@ fn div_cx81_features_after_require() {
                    :added (cl-set-difference features before)))
     (error (list :errored (car e)))))
 "##,
+        expect_test::expect![[
+            r#""OK (:before (rx pcase cl-macs gv cl-extra help-mode mule-util warnings icons cl-loaddefs cl-lib rmc iso-transl tooltip cconv eldoc paren electric uniquify ediff-hook vc-hooks lisp-float-type elisp-mode mwheel term/x-win x-win term/common-win x-dnd touch-screen tool-bar dnd fontset image regexp-opt fringe tabulated-list replace newcomment text-mode lisp-mode prog-mode register page tab-bar menu-bar rfn-eshadow isearch easymenu timer select scroll-bar mouse jit-lock font-lock syntax font-core term/tty-colors frame minibuffer nadvice seq simple cl-generic indonesian philippine cham georgian utf-8-lang misc-lang vietnamese tibetan thai tai-viet lao korean japanese eucjp-ms cp51932 hebrew greek romanian slovak czech european ethiopic indian cyrillic chinese composite emoji-zwj charscript charprop case-table epa-hook jka-cmpr-hook help abbrev obarray oclosure cl-preloaded button loaddefs theme-loaddefs faces cus-face macroexp files window text-properties overlay sha1 md5 base64 format env code-pages mule custom widget keymap hashtable-print-readable backquote threads dbusbind inotify lcms2 dynamic-setting system-font-setting font-render-setting cairo gtk x-toolkit xinput2 x multi-tty move-toolbar make-network-process tty-child-frames emacs) :after (subr-x rx pcase cl-macs gv cl-extra help-mode mule-util warnings icons cl-loaddefs cl-lib rmc iso-transl tooltip cconv eldoc paren electric uniquify ediff-hook vc-hooks lisp-float-type elisp-mode mwheel term/x-win x-win term/common-win x-dnd touch-screen tool-bar dnd fontset image regexp-opt fringe tabulated-list replace newcomment text-mode lisp-mode prog-mode register page tab-bar menu-bar rfn-eshadow isearch easymenu timer select scroll-bar mouse jit-lock font-lock syntax font-core term/tty-colors frame minibuffer nadvice seq simple cl-generic indonesian philippine cham georgian utf-8-lang misc-lang vietnamese tibetan thai tai-viet lao korean japanese eucjp-ms cp51932 hebrew greek romanian slovak czech european ethiopic indian cyrillic chinese composite emoji-zwj charscript charprop case-table epa-hook jka-cmpr-hook help abbrev obarray oclosure cl-preloaded button loaddefs theme-loaddefs faces cus-face macroexp files window text-properties overlay sha1 md5 base64 format env code-pages mule custom widget keymap hashtable-print-readable backquote threads dbusbind inotify lcms2 dynamic-setting system-font-setting font-render-setting cairo gtk x-toolkit xinput2 x multi-tty move-toolbar make-network-process tty-child-frames emacs) :added (cl-seq subr-x))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx81_featurep_after_provide() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (provide 'neo-cx81-feature-x)
 (list (featurep 'neo-cx81-feature-x)
@@ -64,13 +71,16 @@ fn div_cx81_featurep_after_provide() {
       (memq 'neo-cx81-feature-x features)
       (assq 'neo-cx81-feature-x load-history))
 "##,
+        expect_test::expect![[
+            r#""OK (t nil (neo-cx81-feature-x cl-seq subr-x rx pcase cl-macs gv cl-extra help-mode mule-util warnings icons cl-loaddefs cl-lib rmc iso-transl tooltip cconv eldoc paren electric uniquify ediff-hook vc-hooks lisp-float-type elisp-mode mwheel term/x-win x-win term/common-win x-dnd touch-screen tool-bar dnd fontset image regexp-opt fringe tabulated-list replace newcomment text-mode lisp-mode prog-mode register page tab-bar menu-bar rfn-eshadow isearch easymenu timer select scroll-bar mouse jit-lock font-lock syntax font-core term/tty-colors frame minibuffer nadvice seq simple cl-generic indonesian philippine cham georgian utf-8-lang misc-lang vietnamese tibetan thai tai-viet lao korean japanese eucjp-ms cp51932 hebrew greek romanian slovak czech european ethiopic indian cyrillic chinese composite emoji-zwj charscript charprop case-table epa-hook jka-cmpr-hook help abbrev obarray oclosure cl-preloaded button loaddefs theme-loaddefs faces cus-face macroexp files window text-properties overlay sha1 md5 base64 format env code-pages mule custom widget keymap hashtable-print-readable backquote threads dbusbind inotify lcms2 dynamic-setting system-font-setting font-render-setting cairo gtk x-toolkit xinput2 x multi-tty move-toolbar make-network-process tty-child-frames emacs) nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx81_autoload_resolve_on_call() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (autoloadp (symbol-function 'forward-char))
@@ -79,13 +89,14 @@ fn div_cx81_autoload_resolve_on_call() {
           (fboundp 'no-such-fn-zzz))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx81_mapbacktrace_inside_signal_handler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (frames)
   (condition-case e
@@ -96,13 +107,14 @@ fn div_cx81_mapbacktrace_inside_signal_handler() {
                    t)))
   (list (length frames) (car frames)))
 "##,
+        expect_test::expect![[r#""OK (0 nil)""#]],
     );
 }
 
 #[test]
 fn div_cx81_load_history_inspection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((cl-lib-entry (cl-find-if (lambda (e) (eq (car e) (locate-library "cl-lib")))
                                   load-history)))
@@ -110,13 +122,14 @@ fn div_cx81_load_history_inspection() {
         (car cl-lib-entry)
         (listp (cdr cl-lib-entry))))
 "##,
+        expect_test::expect![[r#""OK (nil nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx81_documentation_for_subr_and_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((fn-with-doc (lambda () "doc for fn" :result)))
   (list (documentation 'car)
@@ -125,13 +138,37 @@ fn div_cx81_documentation_for_subr_and_lambda() {
         (documentation fn-with-doc)
         (documentation-property 'neo-cx81-no-such 'variable-documentation)))
 "##,
+        expect_test::expect![
+            [r#"OK ("Return the car of LIST.  If LIST is nil, return nil.
+Error if LIST is not nil and not a cons cell.  See also ‘car-safe’.
+
+See Info node ‘(elisp)Cons Cells’ for a discussion of related basic
+Lisp concepts such as car, cdr, cons cell and list.
+
+(fn LIST)" #("Move point N characters forward (backward if N is negative).
+On reaching end or beginning of buffer, stop and signal error.
+Interactively, N is the numeric prefix argument.
+If N is omitted or nil, move point 1 character forward.
+
+Depending on the bidirectional context, the movement may be to the
+right or to the left on the screen.  This is in contrast with
+<right>, which see.
+
+(fn &optional N)" 359 366 (font-lock-face help-key-binding face help-key-binding)) "Return the car of LIST.  If LIST is nil, return nil.
+Error if LIST is not nil and not a cons cell.  See also ‘car-safe’.
+
+See Info node ‘(elisp)Cons Cells’ for a discussion of related basic
+Lisp concepts such as car, cdr, cons cell and list.
+
+(fn LIST)" "doc for fn" nil)"#]
+        ],
     );
 }
 
 #[test]
 fn div_cx81_help_function_arglist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((fn (lambda (a b &optional c &rest d) (list a b c d))))
@@ -140,13 +177,14 @@ fn div_cx81_help_function_arglist() {
             (help-function-arglist (symbol-function 'list))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK ((a b &optional c &rest d) (arg1) (&rest rest))""#]],
     );
 }
 
 #[test]
 fn div_cx81_inner_backtrace_through_unwind_protect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (trace)
   (unwind-protect
@@ -159,13 +197,14 @@ fn div_cx81_inner_backtrace_through_unwind_protect() {
       (error (push :cleanup-caught trace))))
   trace)
 "##,
+        expect_test::expect![[r#""ERR (error \"induced\")""#]],
     );
 }
 
 #[test]
 fn div_cx81_profiler_memory_with_marker_overlay_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((before (garbage-collect)))
@@ -189,13 +228,14 @@ fn div_cx81_profiler_memory_with_marker_overlay_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx81_symbol_plist_metadata() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((sym (intern "neo-cx71-meta-sym")))
   (put sym 'variable-documentation "test doc")
@@ -210,13 +250,14 @@ fn div_cx81_symbol_plist_metadata() {
         (remprop sym 'neo-cx81-custom)
         (get sym 'neo-cx81-custom)))
 "##,
+        expect_test::expect![[r#""ERR (void-function remprop)""#]],
     );
 }
 
 #[test]
 fn div_cx81_obarray_hash_table_internals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ob (make-obarray 31)))
   (dotimes (i 20)
@@ -229,5 +270,6 @@ fn div_cx81_obarray_hash_table_internals() {
         (intern-soft "sym-19" ob)
         (intern-soft "sym-20" ob)))
 "##,
+        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
     );
 }

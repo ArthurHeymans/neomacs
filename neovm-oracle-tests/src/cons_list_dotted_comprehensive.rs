@@ -53,7 +53,12 @@ fn oracle_prop_cons_with_all_value_types() {
       ;; nested cons
       (cons (cons 1 2) (cons 3 4))
       (cons (cons (cons 'a 'b) 'c) 'd))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 . 2) (0 . 0) (-1 . -2) (0 . 0) (1.5 . 2.5) (0.0 . -0.0) (10000000000.0 . 1e-10) (\"hello\" . \"world\") (\"\" . \"nonempty\") (\"a\") (foo . bar) (t) (nil) (nil . t) (97 . 122) (10 . 9) ([1 2 3] . [4 5 6]) ([] . []) (42 . \"forty-two\") (sym . [1 2]) (97 . 3.14) (nil . []) (t . \"true\") ((1 . 2) 3 . 4) (((a . b) . c) . d))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +100,12 @@ fn oracle_prop_list_arity_range() {
       ;; length of list results
       (length (list 1 2 3 4 5))
       (length (list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (a) (1 2) (\"x\" \"y\" \"z\") (t nil t nil) (1 2 3 4 5) (a b c d e f) (1.0 2.0 3.0 4.0 5.0 6.0 7.0) (97 98 99 100 101 102 103 104) (0 1 2 3 4 5 6 7 8 9) (1 \"two\" three 4.0 53 [6] nil t (7) (8 . 9) 10 (11 12)) ((1 2) (3 4) (5 6)) 3 0 5 0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +147,12 @@ fn oracle_prop_dotted_pair_operations() {
         (equal (cons 'a 'b) (cons 'a 'b))
         (equal (cons 1 2) (cons 1 2))
         (eq (cons 'a 'b) (cons 'a 'b))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (a b 1 2 \"hello\" 42 nil something x y z \"(a . b)\" \"(1 . 2)\" \"(x y . z)\" t t t t t nil nil t t nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +193,12 @@ fn oracle_prop_list_star_behavior() {
         (cl-list* 1 2 3 4 5 '(6 7))
         (proper-list-p (cl-list* 1 2 3 4 5 '(6 7)))
         (proper-list-p (cl-list* 1 2 3))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (42 nil a (1 . 2) t (1 2 . 3) t (a b c . d) t (1 2 3 4 5) t (a b c) t (1 2 . 3) t (1 2 3 4 5 6 7) 7 nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +246,12 @@ fn oracle_prop_deeply_nested_cons() {
               (nthcdr 2 right)
               (nthcdr 3 right)
               (nthcdr 4 right))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((((1 . 2) . 3) . 4) . 5) (((1 . 2) . 3) . 4) 5 ((1 . 2) . 3) 4 (1 . 2) 3 t ((1 2 3 4 . 5) t 1 2 3 4 5 nil (1 2 3 4 . 5) (2 3 4 . 5) (3 4 . 5) (4 . 5) 5))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +295,12 @@ fn oracle_prop_proper_list_p_comprehensive() {
       (let ((circ (cons 1 (cons 2 nil))))
         (setcdr (cdr circ) circ)
         (safe-length circ)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (0 0 1 3 5 3 5 nil nil nil nil nil nil nil nil nil nil 3 2 5 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +343,12 @@ fn oracle_prop_nthcdr_on_dotted_lists() {
       (nth 0 '(10 20 30 . 40))
       (nth 1 '(10 20 30 . 40))
       (nth 2 '(10 20 30 . 40)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a b c) (b c) (c) nil nil (a b . c) (b . c) c (x . y) y t nil nil nil (d e . f) f a b 10 20 30)""#
+        ]],
+    );
 }
 
 #[test]
@@ -357,7 +392,12 @@ fn oracle_prop_nthcdr_circular_and_improper_tail_edges() {
          (car (nthcdr 6 l))
          (car (nthcdr (1+ (ash 1 80)) l)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (c (wrong-type-argument listp (a b . c)) (wrong-type-argument listp c) (t (x y . z)) (a b a d a a) (p0 p1 c0 c0 c1 c0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -404,7 +444,10 @@ fn oracle_prop_length_vs_safe_length() {
       (safe-length 42)
       (safe-length "hello")
       (safe-length 'sym))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 1 3 10 0 1 3 10 1 2 3 4 5 1 11 5 0 0 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -442,7 +485,12 @@ fn oracle_prop_last_on_various_lists() {
       (cdr (last '(1 2 3)))
       (car (last '(a b . c)))
       (cdr (last '(a b . c))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3) (a) nil (w) (5) (4 5) (3 4 5) (1 2 3 4 5) (1 2 3 4 5) nil (b . c) (1 . 2) (z . w) (c . d) (b c . d) (a b c . d) (a b c . d) 3 nil b c)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -485,7 +533,12 @@ fn oracle_prop_butlast_nbutlast_comprehensive() {
       (let ((l1 '(a b c d e))
             (l2 (list 'a 'b 'c 'd 'e)))
         (equal (butlast l1 2) (nbutlast l2 2))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2) (1 2) (1) nil nil (1 2 3) nil nil (1 2 3 4) (1 2 3 4 5 6 7) (1 2 3 4) (1 2 3) nil (1 2 3 4 5) nil ((1 2 3) (1 2 3 4 5) t) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -554,7 +607,10 @@ fn oracle_prop_copy_tree_vs_copy_sequence() {
           (eq (copy-sequence str) str)
           (equal (copy-sequence vec) vec)
           (eq (copy-sequence vec) vec))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t nil t nil)""#]],
+    );
 }
 
 #[test]
@@ -579,7 +635,12 @@ fn oracle_copy_tree_vectors_and_records_copies_vectors_recursively() {
    copy-deep))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t nil nil nil ([(changed y) (new)] (tail . [(changed y) (new)])) ([(x y) (z)] (tail . [(x y) (z)])))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -620,7 +681,10 @@ fn oracle_prop_tree_equal_patterns() {
         ;; nil vs empty list
         (cl-tree-equal nil '())
         (cl-tree-equal '() nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil nil nil t nil t nil t nil t t nil t nil t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -662,7 +726,12 @@ fn oracle_prop_make_list_and_number_sequence() {
       ;; reverse of number-sequence
       (reverse (number-sequence 1 5))
       (equal (reverse (number-sequence 1 5)) (number-sequence 5 1 -1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (x) (0 0 0 0 0) (nil nil nil) (t t t t) ((a b) (a b) (a b)) (((1 2) (1 2) (1 2)) t t) (1 2 3 4 5) (1 3 5) (5 4 3 2 1) (0) (1) (0 3 6 9) (-5 -3 -1 1 3 5) 10 10 (x x x 1 2 3) (a a 10 11 12) (5 4 3 2 1) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -713,7 +782,12 @@ fn oracle_prop_cons_mutation_comprehensive() {
         (setcar (nthcdr 3 l) 4)
         (setcar (nthcdr 4 l) 5)
         l))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a 2 3) (1 . z) ((X b) (c d)) (1 2 3 . 99) (x . y) ((1 2 3) 3 3) ((changed 2 3) (1 2 3)) (1 2 3 4 5))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -756,7 +830,12 @@ fn oracle_prop_cons_alist_integration() {
                 (assq 'a list-alist)
                 (cdr (assq 'a dotted-alist))
                 (cdr (assq 'a list-alist))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a . 1) (b . 2) (c . 3) (d . 4) nil ((\"x\" . 1) (\"y\" . 2) (\"z\" . 3) nil) (a . 1) (b . 2) nil (((city . \"NYC\") (age . 30) (name . \"Alice\")) \"Alice\" 30 \"NYC\") ((a . 1) (a 1) 1 (1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -802,7 +881,12 @@ fn oracle_prop_append_nconc_cons_combinations() {
       (append '(1) '(2) '(3) '(4) '(5) '(6) '(7) '(8) '(9) '(10))
       ;; Nested append
       (append (append '(1 2) '(3)) (append '(4) '(5 6))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4) (a b c) (1 2 3) (1 2 3) nil (1 2 3 . 4) (a b . c) x (1 2 3 . 4) (a . b) (1 2 3 4) (x y z) (1 2) ((1 2 3 4) nil t) (1 2 3 4 5 6 7 8 9 10) (1 2 3 4 5 6))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -842,5 +926,10 @@ fn oracle_prop_membership_operations_on_cons() {
       (memq 'a '(a b . c))
       (memq 'b '(a b . c))
       (member 2 '(1 2 . 3)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((b c d) nil (nil b) (t nil) (\"b\" \"c\") ((1 2) (3 4)) (3 4) ((c d e) 3 c) (a c d) (1 3 1) (a b c) (1 2 3) (\"a\" \"c\") ((2) (3)) (a b . c) (b . c) (2 . 3))""#
+        ]],
+    );
 }

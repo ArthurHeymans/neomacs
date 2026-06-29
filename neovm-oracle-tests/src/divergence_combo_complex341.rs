@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx341_char_syntax_full_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c) (list c (char-syntax c)))
         '(?a ?A ?0 ?9 ?_ ?-
@@ -16,13 +16,16 @@ fn div_cx341_char_syntax_full_matrix() {
           ?\" ?\' ?\` ?\; ?, ?.
           ?\\ ?? ?! ?# ?$ ?% ?& ?* ?+ ?< ?> ?@ ?/ ?| ?~ ?^))
 "##,
+        expect_test::expect![[
+            r#""OK ((97 119) (65 119) (48 119) (57 119) (95 95) (45 95) (40 40) (41 41) (91 40) (93 41) (123 40) (125 41) (34 34) (39 46) (96 46) (59 46) (44 46) (46 46) (92 92) (63 46) (33 46) (35 46) (36 119) (37 119) (38 95) (42 95) (43 95) (60 95) (62 95) (64 46) (47 95) (124 95) (126 46) (94 46))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx341_with_syntax_table_local_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((outer-at (char-syntax ?@))
       (outer-dash (char-syntax ?-)))
@@ -32,13 +35,14 @@ fn div_cx341_with_syntax_table_local_restore() {
     (list (char-syntax ?@) (char-syntax ?-)
           outer-at outer-dash)))
 "##,
+        expect_test::expect![[r#""OK (119 95 46 95)""#]],
     )
 }
 
 #[test]
 fn div_cx341_syntax_ppss_through_string_and_comment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "(defun foo ()\n  \"docstring with \\\"esc\\\"\"\n  (+ 1 2)) ; comment\n")
@@ -51,13 +55,14 @@ fn div_cx341_syntax_ppss_through_string_and_comment() {
         (nth 0 (syntax-ppss 1))
         (nth 0 (syntax-ppss 40))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil 34 17 0 1)""#]],
     )
 }
 
 #[test]
 fn div_cx341_parse_partial_sexp_nested_parens() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "(outer (mid (inner deep) mid-again) outer-tail)")
@@ -70,13 +75,16 @@ fn div_cx341_parse_partial_sexp_nested_parens() {
         (scan-sexps (point) 2)
         (condition-case e (scan-lists (point) 99 0) (error (car e)))))
 "##,
+        expect_test::expect![[
+            r#""ERR (scan-error \"Containing expression ends prematurely\" 47 48)""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx341_forward_comment_line_and_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "before ; line comment\nalpha\nbefore2 /* block\nmulti-line */ after")
@@ -88,13 +96,14 @@ fn div_cx341_forward_comment_line_and_block() {
       (forward-comment 1)
       (list p1 p2 (point) (char-after)))))
 "##,
+        expect_test::expect![[r#""OK (8 8 8 59)""#]],
     )
 }
 
 #[test]
 fn div_cx341_syntax_table_per_buffer_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx341-a*"))
       (buf-b (get-buffer-create " *neo-cx341-b*")))
@@ -110,13 +119,14 @@ fn div_cx341_syntax_table_per_buffer_switch() {
     (kill-buffer buf-b)
     (list at-a at-b)))
 "##,
+        expect_test::expect![[r#""OK (119 46)""#]],
     )
 }
 
 #[test]
 fn div_cx341_word_motion_under_custom_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (set-syntax-table (make-syntax-table))
@@ -131,13 +141,14 @@ fn div_cx341_word_motion_under_custom_syntax() {
       (backward-word 1)
       (list p1 p2 (point) (char-after)))))
 "##,
+        expect_test::expect![[r#""OK (15 31 16 99)""#]],
     )
 }
 
 #[test]
 fn div_cx341_string_to_syntax_syntax_class_to_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (syntax-class-to-char (string-to-syntax "w"))
@@ -151,13 +162,14 @@ fn div_cx341_string_to_syntax_syntax_class_to_char() {
           (string-to-syntax "( "))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
     )
 }
 
 #[test]
 fn div_cx341_up_down_list_navigation_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "(a (b (c (d) e) f) g)")
@@ -172,13 +184,14 @@ fn div_cx341_up_down_list_navigation_nested() {
       (let ((up2 (point)))
         (list deep up1 up2)))))
 "##,
+        expect_test::expect![[r#""OK (8 16 19)""#]],
     )
 }
 
 #[test]
 fn div_cx341_syntax_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -209,5 +222,6 @@ fn div_cx341_syntax_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

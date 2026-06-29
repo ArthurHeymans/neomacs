@@ -29,5 +29,10 @@ fn oracle_repository_metadata_optional_args_and_dirty_availability() {
      (error (cons (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil nil nil nil (void-function emacs-repository-get-dirty))""#
+        ]],
+    );
 }

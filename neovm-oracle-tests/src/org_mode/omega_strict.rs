@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn omega_all_type_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (list
@@ -30,6 +30,9 @@ fn omega_all_type_edge_cases() {
    (org-element-type '((dummy)) t)
    (org-element-type '("string") t)
    (org-element-type '(1 2) t)))"##,
+        expect_test::expect![[
+            r#""OK (plain-text nil nil dummy dummy dummy nil anonymous anonymous nil)""#
+        ]],
     );
 }
 
@@ -40,7 +43,7 @@ fn omega_all_type_edge_cases() {
 #[test]
 fn omega_all_type_p_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (list
@@ -51,6 +54,7 @@ fn omega_all_type_p_edge_cases() {
    (org-element-type-p '(foo) '(bar baz))
    (org-element-type-p "string" 'plain-text)
    (org-element-type-p '((foo)) 'anonymous)))"##,
+        expect_test::expect![[r#""OK (t (foo) (foo bar) nil nil t t)""#]],
     );
 }
 
@@ -61,7 +65,7 @@ fn omega_all_type_p_edge_cases() {
 #[test]
 fn omega_all_class_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (list
@@ -85,6 +89,9 @@ fn omega_all_class_edge_cases() {
           (headline `(headline (:title (,datum) :secondary (:title)))))
      (org-element-put-property datum :parent headline)
      (org-element-class datum))))"##,
+        expect_test::expect![[
+            r#""OK (element object element object object element element element object object object object)""#
+        ]],
     );
 }
 
@@ -95,7 +102,7 @@ fn omega_all_class_edge_cases() {
 #[test]
 fn omega_all_property_raw_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let ((results nil))
@@ -110,6 +117,9 @@ fn omega_all_property_raw_edge_cases() {
                   (org-element-property-raw :begin1 element 'default))
             results))
     (nreverse results)))"##,
+        expect_test::expect![[
+            r#""OK ((nil default nil default) (nil default nil default) (nil default nil default) (nil default nil default))""#
+        ]],
     );
 }
 
@@ -120,7 +130,7 @@ fn omega_all_property_raw_edge_cases() {
 #[test]
 fn omega_all_property_raw_non_standard() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let ((results nil))
@@ -133,6 +143,7 @@ fn omega_all_property_raw_non_standard() {
                   (org-element-property-raw :begin1 element 'default))
             results))
     (nreverse results)))"##,
+        expect_test::expect![[r#""OK ((nil default 1 1) (nil default 1 1) (nil default 1 1))""#]],
     );
 }
 
@@ -143,7 +154,7 @@ fn omega_all_property_raw_non_standard() {
 #[test]
 fn omega_all_property_raw_standard_array() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let ((results nil))
@@ -155,6 +166,7 @@ fn omega_all_property_raw_standard_array() {
                   (org-element-property-raw :begin1 element 'default))
             results))
     (nreverse results)))"##,
+        expect_test::expect![[r#""OK ((test test nil default) (test test nil default))""#]],
     );
 }
 
@@ -165,7 +177,7 @@ fn omega_all_property_raw_standard_array() {
 #[test]
 fn omega_all_property_raw_plist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let ((results nil))
@@ -178,6 +190,7 @@ fn omega_all_property_raw_plist() {
                   (org-element-property-raw :begin1 element 'default))
             results))
     (nreverse results)))"##,
+        expect_test::expect![[r#""OK ((1 1 nil default) (1 1 nil default) (1 1 nil default))""#]],
     );
 }
 
@@ -188,7 +201,7 @@ fn omega_all_property_raw_plist() {
 #[test]
 fn omega_all_property_raw_mixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let ((results nil))
@@ -201,6 +214,9 @@ fn omega_all_property_raw_mixed() {
                   (org-element-property-raw :begin1 element 'default))
             results))
     (nreverse results)))"##,
+        expect_test::expect![[
+            r#""OK ((test test nil default) (test test nil default) (test test nil default))""#
+        ]],
     );
 }
 
@@ -211,7 +227,7 @@ fn omega_all_property_raw_mixed() {
 #[test]
 fn omega_all_property_raw_general() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let ((results nil))
@@ -224,6 +240,7 @@ fn omega_all_property_raw_general() {
                   (org-element-property-raw :begin1 element 'default))
             results))
     (nreverse results)))"##,
+        expect_test::expect![[r#""OK ((test test 1 1) (test test 1 1) (test test 1 1))""#]],
     );
 }
 
@@ -234,7 +251,7 @@ fn omega_all_property_raw_general() {
 #[test]
 fn omega_all_property_deferred() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (list
@@ -282,6 +299,7 @@ fn omega_all_property_deferred() {
                                     (org-element-deferred-create
                                      nil (lambda (_) 1)))))))
      (org-element-property :foo el))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -292,12 +310,13 @@ fn omega_all_property_deferred() {
 #[test]
 fn omega_all_property_2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let ((el (org-element-create 'dummy '(:foo bar))))
     (eq (org-element-property :foo el)
         (org-element-property-2 el :foo))))"##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -308,12 +327,13 @@ fn omega_all_property_2() {
 #[test]
 fn omega_all_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let ((el (org-element-create 'dummy '(:parent bar))))
     (eq (org-element-property :parent el)
         (org-element-parent el))))"##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -324,7 +344,7 @@ fn omega_all_parent() {
 #[test]
 fn omega_all_properties_resolve() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (let ((el (org-element-create
@@ -343,6 +363,7 @@ fn omega_all_properties_resolve() {
       ;; Resolve unconditionally.
       (setq el (org-element-properties-resolve el 'force))
       (list r1 (org-element-property-raw :bar el)))))"##,
+        expect_test::expect![[r#""ERR (void-function nil)""#]],
     );
 }
 
@@ -353,7 +374,7 @@ fn omega_all_properties_resolve() {
 #[test]
 fn omega_all_secondary_p_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (require 'org)
@@ -382,6 +403,7 @@ fn omega_all_secondary_p_edge_cases() {
           (let* ((el (org-element-create 'dummy '(:secondary (:foo))))
                  (child (org-element-create "string" `(:parent ,el))))
             (org-element-put-property el :bar (list child)) child))))))"##,
+        expect_test::expect![[r#""OK (:title :foo nil nil)""#]],
     );
 }
 
@@ -392,7 +414,7 @@ fn omega_all_secondary_p_edge_cases() {
 #[test]
 fn omega_all_map_plain_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (require 'org)
@@ -408,6 +430,7 @@ Some other text
             (org-element-parse-buffer) 'plain-text
           (lambda (s) (when (string-match "text" s) (cl-incf count))))
         count))))"##,
+        expect_test::expect![[r#""OK 2""#]],
     );
 }
 
@@ -418,11 +441,12 @@ Some other text
 #[test]
 fn omega_all_map_secondary_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   ;; Applies to secondary strings.
   (org-element-map '("some " (bold nil "bold") "text") 'bold 'identity))"##,
+        expect_test::expect![[r#""OK ((bold nil \"bold\"))""#]],
     );
 }
 
@@ -433,7 +457,7 @@ fn omega_all_map_secondary_string() {
 #[test]
 fn omega_all_map_enter_secondary_first() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (require 'org)
@@ -444,6 +468,7 @@ fn omega_all_map_enter_secondary_first() {
       (org-element-property
        :name
        (org-element-map (org-element-parse-buffer) 'entity 'identity nil t)))))"##,
+        expect_test::expect![[r#""OK \"alpha\"""#]],
     );
 }
 
@@ -454,7 +479,7 @@ fn omega_all_map_enter_secondary_first() {
 #[test]
 fn omega_all_map_no_recursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (require 'org)
@@ -464,6 +489,7 @@ fn omega_all_map_no_recursion() {
       (goto-char (point-min))
       (org-element-map
           (org-element-parse-buffer) 'entity 'identity nil nil 'center-block))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -474,7 +500,7 @@ fn omega_all_map_no_recursion() {
 #[test]
 fn omega_all_map_with_affiliated() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (require 'org)
@@ -484,6 +510,9 @@ fn omega_all_map_with_affiliated() {
       (goto-char (point-min))
       (org-element-map
           (org-element-at-point) 'plain-text 'identity nil nil nil t))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"1\" 0 1 (:parent (#(\"1\" 0 1 (:parent #3))))) #(\"a\" 0 1 (:parent (#(\"a\" 0 1 (:parent #3))))) #(\"2\" 0 1 (:parent (#(\"2\" 0 1 (:parent #3))))) #(\"b\" 0 1 (:parent (#(\"b\" 0 1 (:parent #3))))))""#
+        ]],
     );
 }
 
@@ -494,7 +523,7 @@ fn omega_all_map_with_affiliated() {
 #[test]
 fn omega_all_map_first_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (require 'org)
@@ -505,6 +534,7 @@ fn omega_all_map_first_match() {
       (org-element-property
        :raw-value
        (org-element-map (org-element-parse-buffer) 'headline #'identity nil t)))))"##,
+        expect_test::expect![[r#""OK \"H1\"""#]],
     );
 }
 
@@ -515,7 +545,7 @@ fn omega_all_map_first_match() {
 #[test]
 fn omega_all_map_accumulate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (require 'org)
@@ -525,6 +555,7 @@ fn omega_all_map_accumulate() {
       (goto-char (point-min))
       (mapcar (lambda (h) (org-element-property :raw-value h))
               (org-element-map (org-element-parse-buffer) 'headline #'identity)))))"##,
+        expect_test::expect![[r#""OK (\"H1\" \"H2\" \"H3\")""#]],
     );
 }
 
@@ -535,13 +566,14 @@ fn omega_all_map_accumulate() {
 #[test]
 fn omega_all_ast_map_types_t() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   ;; TYPES = t.
   (org-element-ast-map
    (org-element-create 'anonymous nil "a" "b" (org-element-create 'bold))
    t #'org-element-type))"##,
+        expect_test::expect![[r#""OK (plain-text plain-text bold)""#]],
     );
 }
 
@@ -552,7 +584,7 @@ fn omega_all_ast_map_types_t() {
 #[test]
 fn omega_all_ast_map_ignore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   ;; IGNORE.
@@ -560,6 +592,7 @@ fn omega_all_ast_map_ignore() {
     (org-element-ast-map
      (org-element-create 'anonymous nil "a" "b" bold)
      t #'org-element-type (list bold))))"##,
+        expect_test::expect![[r#""OK (plain-text plain-text)""#]],
     );
 }
 
@@ -570,7 +603,7 @@ fn omega_all_ast_map_ignore() {
 #[test]
 fn omega_all_ast_map_fun_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (require 'org)
@@ -581,6 +614,7 @@ fn omega_all_ast_map_fun_list() {
       (org-element-map
           (org-element-parse-buffer)
           t '(org-element-property :raw-value node)))))"##,
+        expect_test::expect![[r#""OK (\"H1\" \"H2\")""#]],
     );
 }
 
@@ -591,7 +625,7 @@ fn omega_all_ast_map_fun_list() {
 #[test]
 fn omega_all_ast_map_extra_secondary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (list
@@ -610,6 +644,7 @@ fn omega_all_ast_map_extra_secondary() {
      `(:foo ,(org-element-create 'bold))
      (org-element-create 'bold))
     'bold #'org-element-type)))"##,
+        expect_test::expect![[r#""OK ((bold bold) (bold))""#]],
     );
 }
 
@@ -620,7 +655,7 @@ fn omega_all_ast_map_extra_secondary() {
 #[test]
 fn omega_all_ast_map_no_secondary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (list
@@ -639,6 +674,7 @@ fn omega_all_ast_map_no_secondary() {
      `(:secondary (:foo) :foo ,(org-element-create 'bold))
      (org-element-create 'bold))
     'bold #'org-element-type)))"##,
+        expect_test::expect![[r#""OK ((bold) (bold bold))""#]],
     );
 }
 
@@ -649,7 +685,7 @@ fn omega_all_ast_map_no_secondary() {
 #[test]
 fn omega_all_ast_map_deferred() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (list
@@ -668,5 +704,6 @@ fn omega_all_ast_map_deferred() {
      `(:secondary (:foo) :foo ,(org-element-deferred-create nil (lambda (_) "a")))
      (org-element-create 'bold))
     t #'org-element-type)))"##,
+        expect_test::expect![[r#""OK ((dummy bold) (dummy plain-text bold))""#]],
     );
 }

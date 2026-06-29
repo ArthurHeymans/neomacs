@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_tps_forward_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tps-fwd ()
     ((buf-name :initarg :buf :accessor tf-buf :initform "")
@@ -78,6 +78,7 @@ fn combo_eieio_tps_forward_search() {
               (overlay-start ov) (overlay-end ov)
               my-tf-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -85,7 +86,7 @@ fn combo_eieio_tps_forward_search() {
 fn combo_eieio_tps_backward_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tps-rev ()
     ((buf-name :initarg :buf :accessor tr-buf :initform "")
@@ -151,6 +152,7 @@ fn combo_eieio_tps_backward_search() {
               (overlay-start ov) (overlay-end ov)
               my-tr-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -158,7 +160,7 @@ fn combo_eieio_tps_backward_search() {
 fn combo_eieio_tps_non_strict_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tps-nonstrict ()
     ((buf-name :initarg :buf :accessor tn-buf :initform "")
@@ -227,6 +229,7 @@ fn combo_eieio_tps_non_strict_search() {
               (overlay-start ov) (overlay-end ov)
               my-tn-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -234,7 +237,7 @@ fn combo_eieio_tps_non_strict_search() {
 fn combo_eieio_tps_overlay_effect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tps-ov ()
     ((buf-name :initarg :buf :accessor to-buf :initform "")
@@ -309,6 +312,7 @@ fn combo_eieio_tps_overlay_effect() {
               (overlay-start ov2) (overlay-end ov2)
               my-to-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -316,7 +320,7 @@ fn combo_eieio_tps_overlay_effect() {
 fn combo_eieio_tps_undo_redo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tps-undo ()
     ((buf-name :initarg :buf :accessor tu-buf :initform "")
@@ -394,5 +398,6 @@ fn combo_eieio_tps_undo_redo() {
               (overlay-start ov) (overlay-end ov)
               my-tu-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }

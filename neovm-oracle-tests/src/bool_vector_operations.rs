@@ -29,7 +29,10 @@ fn oracle_prop_bool_vector_make_and_predicate() {
     (length bv-true)
     (length bv-false)
     (length bv-empty)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (t t t nil nil nil nil nil 10 10 0)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -56,7 +59,12 @@ fn oracle_prop_bool_vector_aref_aset() {
     (aset bv 3 nil)
     (let ((after-clear (list (aref bv 2) (aref bv 3) (aref bv 4))))
       (list (nreverse result) after-clear))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((t nil nil t nil nil nil t nil nil nil nil nil nil nil t) (nil nil nil))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +116,10 @@ fn oracle_prop_bool_vector_bitset_operations() {
     (fmakunbound 'neovm--test-bv-clear-bit)
     (fmakunbound 'neovm--test-bv-test-bit)
     (fmakunbound 'neovm--test-bv-popcount)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (7 5 (t nil t nil t t))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +142,10 @@ fn oracle_prop_bool_vector_length_various() {
   (length (make-bool-vector 64 nil))
   (length (make-bool-vector 100 t))
   (length (make-bool-vector 255 nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (0 1 7 8 9 31 32 33 64 100 255)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +177,12 @@ fn oracle_prop_bool_vector_init_values() {
                             pattern))
         (setq i (1+ i)))
       (list all-t all-nil (nreverse pattern)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (t t ((nil t) (nil t) (nil t) (nil t) (nil t) (nil t) (nil t) (nil t) (nil t) (nil t)))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +234,12 @@ fn oracle_prop_bool_vector_sieve_of_eratosthenes() {
         (list primes-50 primes-2 primes-1 count-100
               (and has-2 t) (and has-47 t) no-49 no-50))
     (fmakunbound 'neovm--test-bv-sieve)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((2 3 5 7 11 13 17 19 23 29 31 37 41 43 47) (2) nil 25 t t t t)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -333,5 +357,8 @@ fn oracle_prop_bool_vector_bit_manipulation() {
     (fmakunbound 'neovm--test-bv-hamming)
     (fmakunbound 'neovm--test-bv-reverse)
     (fmakunbound 'neovm--test-bv-gray-encode)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (42 255 0 3 8 8 128 96 (0 1 3 2 6 7 5 4) (1 1 1 1 1 1 1))""#],
+    );
 }

@@ -27,7 +27,10 @@ fn oracle_plistp_matches_gnu_proper_even_length_contract() {
    (plistp circle)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil nil nil t nil)""#]],
+    );
 }
 
 #[test]
@@ -46,7 +49,10 @@ fn oracle_plist_get_tolerates_malformed_plists() {
          (plist-get x 'missing))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil nil nil (2 nil))""#]],
+    );
 }
 
 #[test]
@@ -69,7 +75,12 @@ fn oracle_plist_member_and_put_validate_malformed_tails() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument (plistp (a 1 b . bad-tail))) nil (wrong-type-argument (plistp (a 1 b . bad-tail))) (wrong-type-argument (plistp not-a-list)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -98,7 +109,12 @@ fn oracle_plist_member_matches_key_before_tail_validation() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (b) (wrong-type-argument plistp (a 1 b)) nil (b . bad-tail) (wrong-type-argument plistp (a 1 b . bad-tail)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -118,7 +134,10 @@ fn oracle_plist_put_preserves_tail_and_mutates_existing_pair() {
    (plist-member extended 'b)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t (a 1 b 22 c 3) (a 1 b 22 c 3) (c 3) (b 22 c 3))""#]],
+    );
 }
 
 #[test]
@@ -136,5 +155,10 @@ fn oracle_plist_predicate_argument_uses_call_result() {
    plist))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil 1 1 (\"name\" 9 \"NAME\" 2) (\"name\" 9 \"NAME\" 2) (\"name\" 9 \"NAME\" 2))""#
+        ]],
+    );
 }

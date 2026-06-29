@@ -9,13 +9,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn network_process_contact() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((server (make-network-process :name "neo-srv2-xxx" :server t :host 'local
                :service t :family 'ipv4 :noquery t)))
   (let ((local (process-contact server :local)))
     (prog1 (list (processp server) (eq (process-status server) 'listen)
                  (vectorp local) (integerp (aref local (1- (length local)))))
       (delete-process server))))"##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -23,7 +24,7 @@ fn network_process_contact() {
 fn tcp_server_client() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((received nil) (server nil) (port nil))
   (setq server (make-network-process :name "neo-srv-xxx" :server t :host 'local
                  :service t :family 'ipv4 :noquery t
@@ -39,6 +40,7 @@ fn tcp_server_client() {
                    (accept-process-output nil 0.02) (setq k (1+ k))))
     (delete-process client) (delete-process server)
     (list received cresp)))"##,
+        expect_test::expect![[r#""OK (\"hi-server\" \"ack\")""#]],
     );
 }
 
@@ -46,9 +48,12 @@ fn tcp_server_client() {
 fn ash_bignum() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (ash 1 70) (ash (ash 1 70) -65) (logand (1- (ash 1 64)) (ash 1 63))
         (logcount (1- (ash 1 40))) (expt 3 50))"##,
+        expect_test::expect![[
+            r#""OK (1180591620717411303424 32 9223372036854775808 40 717897987691852588770249)""#
+        ]],
     );
 }
 
@@ -56,13 +61,14 @@ fn ash_bignum() {
 fn char_fold_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(require 'char-fold)
 (with-temp-buffer
   (insert "the cafe is open")
   (goto-char (point-min))
   (let ((case-fold-search t))
     (list (re-search-forward (char-fold-to-regexp "cafe") nil t))))"##,
+        expect_test::expect![[r#""OK (9)""#]],
     );
 }
 
@@ -70,9 +76,10 @@ fn char_fold_search() {
 fn format_message_quotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((text-quoting-style 'curve))
   (list (format-message "use `foo' here") (substitute-command-keys "\\`C-c\\' test")))"##,
+        expect_test::expect![[r#""OK (\"use ‘foo’ here\" \"\\\\‘C-c\\\\’ test\")""#]],
     );
 }
 
@@ -80,9 +87,10 @@ fn format_message_quotes() {
 fn kbd_key_desc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (key-description (kbd "C-c C-x")) (key-description (kbd "M-RET"))
         (listify-key-sequence (kbd "C-a")) (key-description [?\C-a ?\M-b]))"##,
+        expect_test::expect![[r#""OK (\"C-c C-x\" \"M-RET\" (1) \"C-a M-b\")""#]],
     );
 }
 
@@ -90,8 +98,9 @@ fn kbd_key_desc() {
 fn ngettext_fn() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (ngettext "%d file" "%d files" 1) (ngettext "%d file" "%d files" 2))"##,
+        expect_test::expect![[r#""OK (\"%d file\" \"%d files\")""#]],
     );
 }
 
@@ -99,10 +108,11 @@ fn ngettext_fn() {
 fn number_special_floats() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (= 1.0e+INF 1.0e+INF) (isnan 0.0e+NaN)
         (> 1.0e+INF most-positive-fixnum) (format "%s" 1.0e+INF)
         (ftruncate 3.7) (fround 2.5) (ffloor -1.5) (fceiling 1.2))"##,
+        expect_test::expect![[r#""OK (t t t \"1.0e+INF\" 3.0 2.0 -2.0 2.0)""#]],
     );
 }
 
@@ -110,11 +120,12 @@ fn number_special_floats() {
 fn string_pixel_logical() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "ab\tcd")
   (goto-char (point-max))
   (list (current-column) (char-before) (line-beginning-position)))"##,
+        expect_test::expect![[r#""OK (10 100 1)""#]],
     );
 }
 
@@ -122,7 +133,7 @@ fn string_pixel_logical() {
 fn text_property_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(require 'text-property-search)
 (with-temp-buffer
   (insert "aaBBBcc")
@@ -130,5 +141,6 @@ fn text_property_search() {
   (goto-char (point-min))
   (let ((m (text-property-search-forward 'hi t t)))
     (list (prop-match-beginning m) (prop-match-end m))))"##,
+        expect_test::expect![[r#""OK (3 6)""#]],
     );
 }

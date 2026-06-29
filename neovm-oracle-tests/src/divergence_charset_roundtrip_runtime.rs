@@ -9,11 +9,12 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn charset_encode_specific() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (encode-coding-char ?A 'utf-8)
         (multibyte-char-to-unibyte ?é)
         (decode-char 'latin-iso8859-1 233)
         (encode-char ?A 'ascii))"##,
+        expect_test::expect![[r#""OK (\"A\" 233 nil 65)""#]],
     );
 }
 
@@ -21,10 +22,11 @@ fn charset_encode_specific() {
 fn euc_jp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((s "テスト123"))
   (list (string= s (decode-coding-string (encode-coding-string s 'euc-jp) 'euc-jp))
         (length (encode-coding-string s 'euc-jp))))"##,
+        expect_test::expect![[r#""OK (t 9)""#]],
     );
 }
 
@@ -32,10 +34,11 @@ fn euc_jp() {
 fn gb_big5() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((s1 "中文") (s2 "繁體"))
   (list (string= s1 (decode-coding-string (encode-coding-string s1 'gbk) 'gbk))
         (string= s2 (decode-coding-string (encode-coding-string s2 'big5) 'big5))))"##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -43,9 +46,10 @@ fn gb_big5() {
 fn iso2022_jp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((s "漢字テスト"))
   (string= s (decode-coding-string (encode-coding-string s 'iso-2022-jp) 'iso-2022-jp)))"##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -53,10 +57,11 @@ fn iso2022_jp() {
 fn koi8_cyrillic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((s "Привет"))
   (list (string= s (decode-coding-string (encode-coding-string s 'koi8-r) 'koi8-r))
         (length (encode-coding-string s 'koi8-r))))"##,
+        expect_test::expect![[r#""OK (t 6)""#]],
     );
 }
 
@@ -64,10 +69,11 @@ fn koi8_cyrillic() {
 fn shift_jis() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((s "日本語 abc"))
   (list (string= s (decode-coding-string (encode-coding-string s 'shift_jis) 'shift_jis))
         (length (encode-coding-string s 'shift_jis))))"##,
+        expect_test::expect![[r#""OK (t 10)""#]],
     );
 }
 
@@ -76,8 +82,9 @@ fn shift_jis() {
 fn divergence_decode_iso8859_15_charset_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (decode-coding-string (unibyte-string 233 164) 'iso-8859-15)
       (get-text-property 0 'charset (decode-coding-string (unibyte-string 164) 'iso-8859-15)))"##,
+        expect_test::expect![[r#""OK (#(\"é€\" 0 2 (charset iso-8859-15)) iso-8859-15)""#]],
     );
 }

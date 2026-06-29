@@ -28,5 +28,8 @@ fn oracle_buffer_line_statistics_counts_raw_crlf_bytes_like_gnu() {
        (buffer-line-statistics)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((3 3 2.3333333333333335) (2 1 1.0) (2 2 2.0))""#],
+    );
 }

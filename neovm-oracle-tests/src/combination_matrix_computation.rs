@@ -87,7 +87,12 @@ fn oracle_prop_matrix_creation_and_access() {
     (fmakunbound 'neovm--mc-cols)
     (fmakunbound 'neovm--mc-row)
     (fmakunbound 'neovm--mc-col)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 0 0 0) (0 0 0 0) (0 0 0 0)) ((5 5) (5 5)) ((42)) (3 4) (1 3 5 7 9) ((10 0) (0 20)) ((1 2 3) (7 8 9) (1 4 7) (2 5 8) (3 6 9)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +158,12 @@ fn oracle_prop_matrix_arithmetic() {
     (fmakunbound 'neovm--mc-add)
     (fmakunbound 'neovm--mc-sub)
     (fmakunbound 'neovm--mc-scale)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((8 10 12) (14 16 18)) ((-6 -6 -6) (-6 -6 -6)) ((6 6 6) (6 6 6)) ((0 0 0) (0 0 0)) ((3 6 9) (12 15 18)) ((0 0 0) (0 0 0)) ((-1 -2 -3) (-4 -5 -6)) t ((23 28 33) (38 43 48)) ((5 0) (0 5)) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +225,12 @@ fn oracle_prop_matrix_transpose_and_identity() {
         (funcall 'neovm--mc-transpose '((1 2) (3 4))))
     (fmakunbound 'neovm--mc-transpose)
     (fmakunbound 'neovm--mc-identity)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 4) (2 5) (3 6)) ((1 2 3)) ((1) (2) (3)) t t ((1)) ((1 0) (0 1)) ((1 0 0) (0 1 0) (0 0 1)) ((1 0 0 0) (0 1 0 0) (0 0 1 0) (0 0 0 1)) t ((1 3) (2 4)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +321,12 @@ fn oracle_prop_matrix_mult_comprehensive() {
     (fmakunbound 'neovm--mc-dot)
     (fmakunbound 'neovm--mc-mult)
     (fmakunbound 'neovm--mc-identity)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((27 30 33) (61 68 75) (95 106 117)) ((76 100) (103 136)) t t ((32)) ((4 5 6) (8 10 12) (12 15 18)) ((19 22) (43 50)) t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -381,7 +401,12 @@ fn oracle_prop_matrix_determinant_general() {
         (funcall 'neovm--mc-minor '((1 2 3) (4 5 6) (7 8 9)) 1 1))
     (fmakunbound 'neovm--mc-minor)
     (fmakunbound 'neovm--mc-det)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 -2 25 1 0 1 0 -306 -1 30 1 1 ((5 6) (8 9)) ((1 3) (7 9)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -448,7 +473,12 @@ fn oracle_prop_matrix_trace_and_hadamard() {
         (funcall 'neovm--mc-hadamard '((2 3) (4 5)) '((2 3) (4 5))))
     (fmakunbound 'neovm--mc-trace)
     (fmakunbound 'neovm--mc-hadamard)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 12 15 42 t ((5 12) (21 32)) ((2 0) (0 5)) ((0 0) (0 0)) t ((4 9) (16 25)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -507,7 +537,12 @@ fn oracle_prop_matrix_kronecker_product() {
         ;; Kronecker with zero matrix
         (funcall 'neovm--mc-kronecker '((1 2) (3 4)) '((0 0) (0 0))))
     (fmakunbound 'neovm--mc-kronecker)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 5 0 10) (6 7 12 14) (0 15 0 20) (18 21 24 28)) ((1 2 0 0) (3 4 0 0) (0 0 1 2) (0 0 3 4)) ((1 0 2 0) (0 1 0 2) (3 0 4 0) (0 3 0 4)) ((3 6) (9 12)) ((5 10) (15 20)) (6 6) ((0 0 0 0) (0 0 0 0) (0 0 0 0) (0 0 0 0)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -600,7 +635,12 @@ fn oracle_prop_matrix_row_echelon() {
     (fmakunbound 'neovm--mc-set!)
     (fmakunbound 'neovm--mc-swap-rows!)
     (fmakunbound 'neovm--mc-ref)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 2 3) (0 1 2) (0 0 1)) ((2 1 -1) (0 1 1) (0 0 -2)) ((1 2 3) (0 1 2) (0 0 0)) ((1 2 3) (0 -3 -6)) ((1 0 0) (0 1 0) (0 0 1)) ((7)) ((1 0) (0 1)) ((1 2 3 4) (0 -1 -2 -3) (0 0 0 0) (0 0 0 0)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -655,7 +695,10 @@ fn oracle_prop_matrix_equality_epsilon() {
         ;; Single element
         (funcall 'neovm--mc-approx-equal '((3.14)) '((3.14159)) 0.01))
     (fmakunbound 'neovm--mc-approx-equal)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -754,7 +797,12 @@ fn oracle_prop_matrix_power() {
     (fmakunbound 'neovm--mc-mult)
     (fmakunbound 'neovm--mc-identity)
     (fmakunbound 'neovm--mc-power)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 0) (0 1)) t ((1 2) (0 1)) ((1 3) (0 1)) ((1 5) (0 1)) ((4 0) (0 9)) ((8 0) (0 27)) t t t ((0 0) (0 0)) ((1 3 3) (0 1 3) (0 0 1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -835,7 +883,10 @@ fn oracle_prop_matrix_linear_solver() {
     (fmakunbound 'neovm--mc-get)
     (fmakunbound 'neovm--mc-set!)
     (fmakunbound 'neovm--mc-solve)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2) (2 1) (0 5 3) ((84 . 30) (18 . 10)) (3 3))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -907,7 +958,12 @@ fn oracle_prop_matrix_from_list_and_frobenius() {
     (fmakunbound 'neovm--mc-to-list)
     (fmakunbound 'neovm--mc-frobenius-sq)
     (fmakunbound 'neovm--mc-map)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 2 3) (4 5 6)) ((1 2) (3 4)) ((42)) ((1 2 3) (4 5 6) (7 8 9)) (1 2 3 4 5 6) t 3 30 0 9 ((-1 -2) (-3 -4)) ((2 4 6) (8 10 12)) ((1 2) (3 4)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1012,5 +1068,8 @@ fn oracle_prop_matrix_integration_properties() {
     (fmakunbound 'neovm--mc-trace)
     (fmakunbound 'neovm--mc-transpose)
     (fmakunbound 'neovm--mc-scale)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (-2 5 t t t t -1 5 1 0 t)""#]],
+    );
 }

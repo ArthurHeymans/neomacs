@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_seven_marker_overlay_textprop_buflocal_clone_narrow_setf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "s7a")))
     (with-current-buffer buf
@@ -50,6 +50,7 @@ fn combo_seven_marker_overlay_textprop_buflocal_clone_narrow_setf() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -57,7 +58,7 @@ fn combo_seven_marker_overlay_textprop_buflocal_clone_narrow_setf() {
 fn combo_seven_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "s7b")))
     (with-current-buffer buf
@@ -99,6 +100,7 @@ fn combo_seven_replace_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -106,7 +108,7 @@ fn combo_seven_replace_undo() {
 fn combo_seven_multi_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "s7c")))
     (with-current-buffer buf
@@ -153,6 +155,7 @@ fn combo_seven_multi_overlay_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -160,7 +163,7 @@ fn combo_seven_multi_overlay_undo() {
 fn combo_seven_textprop_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "s7d")))
     (with-current-buffer buf
@@ -204,6 +207,7 @@ fn combo_seven_textprop_replace_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -211,7 +215,7 @@ fn combo_seven_textprop_replace_undo() {
 fn combo_seven_setf_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "s7e")))
     (with-current-buffer buf
@@ -254,5 +258,6 @@ fn combo_seven_setf_replace_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

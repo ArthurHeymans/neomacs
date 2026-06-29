@@ -6,7 +6,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx54_superword_subword_toggle_kill_undo_marker_overlay_textprop_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -29,6 +29,7 @@ fn div_cx54_superword_subword_toggle_kill_undo_marker_overlay_textprop_narrow_me
                   (overlay-start ov) (text-properties-at 1)))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -36,7 +37,7 @@ fn div_cx54_superword_subword_toggle_kill_undo_marker_overlay_textprop_narrow_me
 fn div_cx54_process_output_env_coding_exitcode_timer_narrow_overlay_textprop_undo_evaporate_display_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (timer-fired se)
   (run-with-timer 0 nil (lambda () (setq timer-fired :t)))
@@ -72,13 +73,14 @@ fn div_cx54_process_output_env_coding_exitcode_timer_narrow_overlay_textprop_und
                      (if se (string-match "code 6" se) nil))))
       (kill-buffer buf))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx54_json_xml_dom_serialize_parse_chain_with_hash_multibyte_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'json) (require 'dom) (require 'xml)
@@ -99,6 +101,7 @@ fn div_cx54_json_xml_dom_serialize_parse_chain_with_hash_multibyte_mega() {
               (secure-hash 'md5 xml-str))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -106,7 +109,7 @@ fn div_cx54_json_xml_dom_serialize_parse_chain_with_hash_multibyte_mega() {
 fn div_cx54_cl_defmethod_full_hierarchy_eql_static_around_before_after_primary_advice_error_call_next_undo_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defclass neo-cx54-a () ((val :initarg :val)))
@@ -131,6 +134,9 @@ fn div_cx54_cl_defmethod_full_hierarchy_eql_static_around_before_after_primary_a
           (neo-cx54-fn :kw)
           (length (nreverse log)))))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"Unsupported qualifiers in function neo-cx54-fn: (:static)\")""#
+        ]],
     );
 }
 
@@ -138,7 +144,7 @@ fn div_cx54_cl_defmethod_full_hierarchy_eql_static_around_before_after_primary_a
 fn div_cx54_window_config_register_split_merge_narrow_widen_marker_overlay_textprop_display_dedicated_hscroll_vscroll_margins_fringes_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((buf (get-buffer-create " *neo-cx54-wc*")))
@@ -173,6 +179,7 @@ fn div_cx54_window_config_register_split_merge_narrow_widen_marker_overlay_textp
             (kill-buffer buf))))
   (error (list :errored)))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -180,7 +187,7 @@ fn div_cx54_window_config_register_split_merge_narrow_widen_marker_overlay_textp
 fn div_cx54_set_buffer_multibyte_undo_redo_narrow_widen_marker_overlay_textprop_display_evaporate_env_exitcode_coding_timer_full_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (timer-fired)
   (run-with-timer 0 nil (lambda () (setq timer-fired :t)))
@@ -219,13 +226,14 @@ fn div_cx54_set_buffer_multibyte_undo_redo_narrow_widen_marker_overlay_textprop_
                   (overlayp ov) (overlay-start ov)
                   (text-properties-at 1) (buffer-string))))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx54_weak_hash_key_value_eviction_after_gc_multiple_types_marker_cons_vector_string_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht-k (make-hash-table :weakness 'key :test 'eq))
       (ht-v (make-hash-table :weakness 'value :test 'eq)))
@@ -241,13 +249,14 @@ fn div_cx54_weak_hash_key_value_eviction_after_gc_multiple_types_marker_cons_vec
           (hash-table-count ht-k) (hash-table-count ht-v)
           (gethash :stable ht-k) (gethash :key2 ht-v))))
 "##,
+        expect_test::expect![[r#""OK (3 2 1 1 :sym-k :stable-val)""#]],
     );
 }
 
 #[test]
 fn div_cx54_regex_casefold_replace_undo_marker_overlay_narrow_display_textprop_evaporate_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-fold-search t))
   (with-temp-buffer
@@ -271,13 +280,14 @@ fn div_cx54_regex_casefold_replace_undo_marker_overlay_narrow_display_textprop_e
               (overlayp ov) (overlay-start ov)
               (text-properties-at 1) (current-column)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx54_read_eval_backquote_destructuring_lexical_macro_propertized_hash_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (let ((data '((("café" . 1) ("世界" . 2))))
@@ -289,13 +299,14 @@ fn div_cx54_read_eval_backquote_destructuring_lexical_macro_propertized_hash_meg
             (mapcar (lambda (n) (gethash n ht)) names)
             (secure-hash 'md5 (prin1-to-string ht))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx54_cl_coerce_list_vector_string_char_cycle_propertized_multibyte_hash_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s (propertize "café世界😀" 'face 'bold 'mouse-face 'highlight))
        (l (cl-coerce s 'list))
@@ -310,6 +321,9 @@ fn div_cx54_cl_coerce_list_vector_string_char_cycle_propertized_multibyte_hash_m
         (hash-table-count ht)
         (secure-hash 'sha256 (apply #'string l))))
 "##,
+        expect_test::expect![[
+            r#""OK (7 7 7 7 (face bold mouse-face highlight) nil t 1 \"c330814a9a47c252806bdcf58f1a7365165dcd21e8c9e73eea2515e8721fc769\")""#
+        ]],
     );
 }
 
@@ -317,7 +331,7 @@ fn div_cx54_cl_coerce_list_vector_string_char_cycle_propertized_multibyte_hash_m
 fn div_cx54_print_circle_gensym_struct_vector_propertized_escape_length_level_circle_roundtrip_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (cl-defstruct neo-cx54-rec a b c)
@@ -338,13 +352,14 @@ fn div_cx54_print_circle_gensym_struct_vector_propertized_escape_length_level_ci
               (string-match "#:" p)
               (string-match "#[0-9]=" p))))))
 "##,
+        expect_test::expect![[r#""OK (99 t 1 57 nil)""#]],
     );
 }
 
 #[test]
 fn div_cx54_coding_system_priority_category_base_aliases_eol_change_combined_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((prio (coding-system-priority-list)))
   (list (length prio)
@@ -355,5 +370,8 @@ fn div_cx54_coding_system_priority_category_base_aliases_eol_change_combined_meg
         (coding-system-change-eol-conversion 'utf-8 'dos)
         (coding-system-change-eol-conversion 'utf-8 'mac)))
 "##,
+        expect_test::expect![[
+            r#""OK (20 ((utf-8 utf-8 coding-category-utf-8 utf-8) (utf-8-auto utf-8-auto coding-category-utf-8-auto utf-8) (utf-8-with-signature utf-8-with-signature coding-category-utf-8-sig utf-8) (latin-1 iso-latin-1 coding-category-charset charset) (emacs-mule emacs-mule coding-category-emacs-mule emacs-mule) (big5 chinese-big5 coding-category-big5 big5)) utf-8-dos utf-8-mac)""#
+        ]],
     );
 }

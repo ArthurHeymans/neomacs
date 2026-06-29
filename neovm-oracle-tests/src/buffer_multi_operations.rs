@@ -62,7 +62,12 @@ fn oracle_prop_multi_buffer_create_switch_isolate() {
     (when (buffer-live-p buf-a) (kill-buffer buf-a))
     (when (buffer-live-p buf-b) (kill-buffer buf-b))
     (when (buffer-live-p buf-c) (kill-buffer buf-c))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""\n        OK (\"Alpha content line 1\n        Alpha content line 2\n        \" \"Bravo: 0 1 4 9 16 \" \"Charlie\" 42 18 7 t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +113,12 @@ fn oracle_prop_buffer_rename_and_uniquify() {
                   (buffer-live-p buf2)))))))
     (when (buffer-live-p buf1) (kill-buffer buf1))
     (when (buffer-live-p buf2) (kill-buffer buf2))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\" *neovm-rename-test-1*\" \" *neovm-rename-test-2*\" \" *neovm-renamed-alpha*\" \" *neovm-rename-test-2*\" t t t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +166,10 @@ fn oracle_prop_buffer_kill_lifecycle() {
     (when (buffer-live-p b1) (kill-buffer b1))
     (when (buffer-live-p b2) (kill-buffer b2))
     (when (buffer-live-p b3) (kill-buffer b3))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t t t) (t nil t) t t \"content-1\" \"content-3\" t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +217,10 @@ fn oracle_prop_buffer_local_variables() {
       (when (buffer-live-p buf-x) (kill-buffer buf-x))
       (when (buffer-live-p buf-y) (kill-buffer buf-y))
       (makunbound 'neovm--bmo-test-var))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (x-value y-value global-default x-modified y-value t nil)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +288,10 @@ fn oracle_prop_cross_buffer_text_aggregation() {
     (when (buffer-live-p src1) (kill-buffer src1))
     (when (buffer-live-p src2) (kill-buffer src2))
     (when (buffer-live-p dest) (kill-buffer dest))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (8 5 (\"apple\" \"banana\" \"cherry\" \"date\" \"fig\"))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +342,12 @@ fn oracle_prop_nested_with_current_buffer_save_excursion() {
                   p-point-after p-buf-after))))))
     (when (buffer-live-p buf-p) (kill-buffer buf-p))
     (when (buffer-live-p buf-q) (kill-buffer buf-q))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 \" *neovm-nest-p*\" (3 \" *neovm-nest-q*\" (8 \" *neovm-nest-p*\") 3 \" *neovm-nest-q*\") 8 \" *neovm-nest-p*\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +392,12 @@ fn oracle_prop_buffer_local_default_and_kill_local() {
                   (default-value 'neovm--bmo-kill-var))))))
       (when (buffer-live-p buf) (kill-buffer buf))
       (makunbound 'neovm--bmo-kill-var))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (overridden the-default the-default nil second-override the-default)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -420,5 +449,10 @@ fn oracle_prop_buffer_list_batch_operations() {
                 sizes-after)))))
     (dolist (b bufs)
       (when (buffer-live-p b) (kill-buffer b)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\" *neovm-batch-0*\" 7 1) (\" *neovm-batch-1*\" 14 2) (\" *neovm-batch-2*\" 21 3) (\" *neovm-batch-3*\" 28 4) (\" *neovm-batch-4*\" 35 5)) 105 15 (0 0 21 28 35))""#
+        ]],
+    );
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_two_buffers_shared_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cross-buf-snap ()
     ((label :initarg :label :accessor cbs-label :initform "")
@@ -59,6 +59,7 @@ fn combo_eieio_two_buffers_shared_marker() {
       (kill-buffer buf1)
       (kill-buffer buf2)
       result-str)))"#,
+        expect_test::expect![[r#""ERR (cl-no-applicable-method cbs-label t)""#]],
     );
 }
 
@@ -66,7 +67,7 @@ fn combo_eieio_two_buffers_shared_marker() {
 fn combo_eieio_two_buffers_overlay_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass dual-buf-snap ()
     ((label :initarg :label :accessor dbs-label :initform "")
@@ -114,6 +115,7 @@ fn combo_eieio_two_buffers_overlay_edit() {
         (kill-buffer buf1)
         (kill-buffer buf2)
         result-str)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -121,7 +123,7 @@ fn combo_eieio_two_buffers_overlay_edit() {
 fn combo_eieio_cross_buffer_copy_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass copy-props-snap ()
     ((label :initarg :label :accessor cps-label :initform "")
@@ -159,6 +161,7 @@ fn combo_eieio_cross_buffer_copy_props() {
         (kill-buffer buf1)
         (kill-buffer buf2)
         result-str)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -166,7 +169,7 @@ fn combo_eieio_cross_buffer_copy_props() {
 fn combo_eieio_cross_buffer_narrow_sequential() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass seq-narrow-snap ()
     ((label :initarg :label :accessor sns-label :initform "")
@@ -220,6 +223,7 @@ fn combo_eieio_cross_buffer_narrow_sequential() {
         (kill-buffer buf1)
         (kill-buffer buf2)
         result-str)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -227,7 +231,7 @@ fn combo_eieio_cross_buffer_narrow_sequential() {
 fn combo_eieio_cross_buffer_undo_sequential() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cross-undo-snap ()
     ((label :initarg :label :accessor cus-label :initform "")
@@ -278,5 +282,6 @@ fn combo_eieio_cross_buffer_undo_sequential() {
         (kill-buffer buf1)
         (kill-buffer buf2)
         result-str)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

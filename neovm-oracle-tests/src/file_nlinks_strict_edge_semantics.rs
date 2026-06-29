@@ -36,5 +36,8 @@ fn oracle_file_nlinks_regular_hardlink_missing_and_type_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 2 nil nil (wrong-number-of-arguments ((1 . 1) 0)))""#]],
+    );
 }

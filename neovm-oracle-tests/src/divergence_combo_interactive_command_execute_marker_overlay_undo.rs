@@ -15,7 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_call_interactively_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun combo--ci-cmd ()
     (interactive)
@@ -52,6 +52,7 @@ fn combo_call_interactively_marker_overlay_undo() {
             (fmakunbound 'combo--ci-cmd)
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -59,7 +60,7 @@ fn combo_call_interactively_marker_overlay_undo() {
 fn combo_command_execute_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun combo--ce-cmd ()
     (interactive)
@@ -97,6 +98,7 @@ fn combo_command_execute_marker_overlay_undo() {
             (fmakunbound 'combo--ce-cmd)
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -104,7 +106,7 @@ fn combo_command_execute_marker_overlay_undo() {
 fn combo_this_last_command_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun combo--tlc-cmd ()
     (interactive)
@@ -139,6 +141,7 @@ fn combo_this_last_command_marker_overlay_undo() {
             (fmakunbound 'combo--tlc-cmd)
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -146,7 +149,7 @@ fn combo_this_last_command_marker_overlay_undo() {
 fn combo_interactive_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun combo--nar-cmd ()
     (interactive)
@@ -189,6 +192,7 @@ fn combo_interactive_narrow_marker_overlay_undo() {
             (fmakunbound 'combo--nar-cmd)
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -196,7 +200,7 @@ fn combo_interactive_narrow_marker_overlay_undo() {
 fn combo_interactive_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun combo--bl-cmd ()
     (interactive)
@@ -236,5 +240,6 @@ fn combo_interactive_buffer_local_marker_overlay_undo() {
             (fmakunbound 'combo--bl-cmd)
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

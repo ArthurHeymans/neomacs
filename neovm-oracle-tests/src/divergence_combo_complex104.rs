@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx104_treesit_available_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (treesit-available-p)
@@ -17,13 +17,14 @@ fn div_cx104_treesit_available_p() {
           (fboundp 'treesit-query-capture))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx104_treesit_language_availability_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (mapcar (lambda (lang)
@@ -32,13 +33,16 @@ fn div_cx104_treesit_language_availability_matrix() {
               html css json yaml toml dockerfile))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((python nil) (c nil) (c++ nil) (javascript nil) (typescript nil) (rust nil) (go nil) (bash nil) (html nil) (css nil) (json nil) (yaml nil) (toml nil) (dockerfile nil))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx104_treesit_parser_lifecycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -51,13 +55,14 @@ fn div_cx104_treesit_parser_lifecycle() {
                   (treesit-node-type root))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx104_treesit_node_at_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -70,13 +75,14 @@ fn div_cx104_treesit_node_at_point() {
                   (treesit-node-type node))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx104_treesit_query_language_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'treesit-query-compile)
@@ -86,13 +92,14 @@ fn div_cx104_treesit_query_language_basics() {
           (boundp 'treesit-font-lock-defaults))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx104_treesit_thing_at_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -104,13 +111,14 @@ fn div_cx104_treesit_thing_at_point() {
             (list (consp bounds))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx104_treesit_search_forward_gop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'treesit-search-subtree)
@@ -121,13 +129,14 @@ fn div_cx104_treesit_search_forward_gop() {
           (fboundp 'treesit-node-end))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx104_treesit_explore_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -137,13 +146,14 @@ fn div_cx104_treesit_explore_mode_availability() {
             (boundp 'treesit-font-lock-feature-list)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx104_treesit_parser_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'treesit-parser-list)
@@ -153,13 +163,14 @@ fn div_cx104_treesit_parser_list() {
           (fboundp 'treesit-parser-delete))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx104_treesit_node_field_names() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'treesit-node-field-name)
@@ -169,13 +180,14 @@ fn div_cx104_treesit_node_field_names() {
           (fboundp 'treesit-node-child-count))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx104_treesit_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((ts-avail (treesit-available-p)))
@@ -200,13 +212,14 @@ fn div_cx104_treesit_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }
 
 #[test]
 fn div_cx104_treesit_node_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'treesit-node-p)
@@ -217,13 +230,14 @@ fn div_cx104_treesit_node_predicates() {
           (fboundp 'treesit-node-leaf-p))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t nil nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx104_treesit_install_language() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'treesit-install-language-grammar)
@@ -231,5 +245,6 @@ fn div_cx104_treesit_install_language() {
           (boundp 'treesit-language-source-alist))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }

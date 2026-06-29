@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_p7_decode_encode_coding_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (decode-coding-char ?\341 'utf-8)
       (encode-coding-char ?é 'utf-8)
@@ -19,13 +19,14 @@ fn div_p7_decode_encode_coding_char() {
       (encode-coding-char ?日 'utf-8)
       (length (encode-coding-char ?日 'utf-8)))
 "##,
+        expect_test::expect![[r#""ERR (void-function decode-coding-char)""#]],
     );
 }
 
 #[test]
 fn div_p7_charset_info_introspection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (charset-plist 'ascii)
       (charset-dimension 'ascii)
@@ -35,13 +36,14 @@ fn div_p7_charset_info_introspection() {
       (charset-id 'ascii)
       (charset-info 'unicode-bmp))
 "##,
+        expect_test::expect![[r#""ERR (void-function charset-id)""#]],
     );
 }
 
 #[test]
 fn div_p7_format_decode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (insert "plain text content here")
@@ -49,5 +51,6 @@ fn div_p7_format_decode() {
         (buffer-string)))
 "##,
         &["format.el"],
+        expect_test::expect![[r#""ERR (error \"Unknown format unix\")""#]],
     );
 }

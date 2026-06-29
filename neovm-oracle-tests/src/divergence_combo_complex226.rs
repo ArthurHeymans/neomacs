@@ -8,20 +8,21 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx226_eldoc_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'eldoc-mode)
       (boundp 'eldoc-idle-delay)
       (boundp 'eldoc-documentation-function)
       (boundp 'eldoc-echo-area-use-multiline-p))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx226_find_function_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -33,13 +34,14 @@ fn div_cx226_find_function_availability() {
             (boundp 'find-function-recenter-line)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx226_find_function_search_for_subr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((loc (find-function-search-for-symbol 'car nil nil)))
@@ -47,13 +49,14 @@ fn div_cx226_find_function_search_for_subr() {
             (bufferp (car loc))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx226_find_variable_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((loc (find-function-search-for-symbol 'load-path nil nil)))
@@ -61,25 +64,27 @@ fn div_cx226_find_variable_search() {
             (bufferp (car loc))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx226_eldoc_documentation_function_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'eldoc-documentation-functions)
       (boundp 'eldoc-documentation-strategy)
       (boundp 'eldoc-minor-mode-string))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx226_xref_find_definitions_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -91,25 +96,27 @@ fn div_cx226_xref_find_definitions_availability() {
             (boundp 'xref-marker-ring-length)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx226_help_function_definitions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'help-function-arglist)
       (fboundp 'help-C-file-name)
       (fboundp 'find-lisp-object-file-name))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx226_locate_library_cl_lib() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((path (locate-library "cl-lib")))
@@ -118,13 +125,14 @@ fn div_cx226_locate_library_cl_lib() {
             (file-name-extension path)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t \"elc\")""#]],
     );
 }
 
 #[test]
 fn div_cx226_symbol_file_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((file (symbol-file 'car)))
@@ -132,13 +140,14 @@ fn div_cx226_symbol_file_query() {
             (when file (file-exists-p file))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx226_eldoc_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((lib-path (locate-library "cl-lib")))
@@ -165,5 +174,6 @@ fn div_cx226_eldoc_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

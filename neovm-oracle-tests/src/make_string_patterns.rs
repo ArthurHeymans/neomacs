@@ -36,7 +36,10 @@ fn oracle_prop_make_string_zero_length_edge_cases() {
   (concat (make-string 0 ?a) "hello" (make-string 0 ?z))
   ;; Zero-length is not eq to literal "" but is equal
   (equal (make-string 0 ?a) (make-string 0 ?b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" 0 0 nil t nil t t t t \"hello\" t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +75,12 @@ fn oracle_prop_make_string_large_and_multibyte_sizes() {
     (list (length s) (string-bytes s)
           ;; each char is 3 bytes in UTF-8
           (= (string-bytes s) (* 3 (length s))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5000 5000 120 120 nil) (2000 t 945 945 t) (3000 6000 200 200 t) (t t) (10 30 t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +125,12 @@ fn oracle_prop_make_string_multibyte_flag_comprehensive() {
           (multibyte-string-p s1)
           (multibyte-string-p s2)
           (multibyte-string-p s3))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil nil t t t (t 200) (t 2) t t t (5 5 t t) (3 3 3 nil nil t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +169,12 @@ fn oracle_prop_make_string_unicode_codepoints() {
           (equal latin cjk)
           (< (string-bytes latin) (string-bytes cjk))
           (= (length latin) (length greek) (length cjk)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((4 233 233 t) (3 19990 9) (5 1044 t) (3 1593) (4 8704) (10 9472 9472) (nil nil t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +214,12 @@ fn oracle_prop_make_string_with_string_operations() {
   (string< (make-string 3 ?a) (make-string 4 ?a))
   (string= (make-string 3 ?a) (make-string 3 ?a))
   (string= (make-string 3 ?a) (make-string 4 ?a)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"<<<content>>>\" \"xxxx\" \"\" \"xxxxx\" (0 nil 0) \"bbbbb\" \"AAAA\" \"aaaa\" (122 122 122 122) t (\"aaa\" \"bbb\" \"ccc\") t t t nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +257,10 @@ fn oracle_prop_make_string_measurement_functions() {
           (string-width cjk)))
   ;; seq-length on make-string result
   (seq-length (make-string 7 ?q)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10 10 t 10 20 t 10 30 10 20 nil nil t t t) (5 10) 7)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +309,12 @@ fn oracle_prop_make_string_aset_complex_mutations() {
       (aset s i (aref half i))
       (aset s (- len 1 i) (aref half i)))
     (list s (string= s (concat (string ?a ?b ?c ?d ?e ?e ?d ?c ?b ?a))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"*-*-*-*-\" \"0123456789\" (t \"hello!\" \"hello!\") (\"aa\\351aa\" 5 nil 97 233 97) (\"abcdeedcba\" t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -328,5 +359,10 @@ fn oracle_prop_make_string_string_algorithm_patterns() {
                      (pad-len (max 0 (- 5 (length s)))))
                 (concat (make-string pad-len ?0) s)))
             nums)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r##########""OK (\"abcabcabcabc\" (\"###\" \"#######\" \"##\" \"#####\" \"#########\" \"#\" \"####\") \"012345\" \"ABABABABAB\" \"one---two---three\" (\"00001\" \"00023\" \"00456\" \"00007\" \"00089\"))""##########
+        ]],
+    );
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_catch_throw_through_nested_unwind_protect_with_buffer_edits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ctu\")))\n\
          (with-current-buffer buf\n\
@@ -32,6 +32,7 @@ fn deficiency_catch_throw_through_nested_unwind_protect_with_buffer_edits() {
          (goto-char (point-min))\n\
          (insert \"CLEANUP\"))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -39,7 +40,7 @@ fn deficiency_catch_throw_through_nested_unwind_protect_with_buffer_edits() {
 fn deficiency_condition_case_with_buffer_mods_and_marker_recovery() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ccb\")))\n\
          (with-current-buffer buf\n\
@@ -63,6 +64,7 @@ fn deficiency_condition_case_with_buffer_mods_and_marker_recovery() {
          (get-text-property 1 'zone)\n\
          (get-text-property 5 'zone))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (error \"Invalid error symbol\" test-error)""#]],
     );
 }
 
@@ -70,7 +72,7 @@ fn deficiency_condition_case_with_buffer_mods_and_marker_recovery() {
 fn deficiency_nested_catch_with_insertion_type_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"nci\")))\n\
          (with-current-buffer buf\n\
@@ -90,6 +92,7 @@ fn deficiency_nested_catch_with_insertion_type_markers() {
          (marker-insertion-type m1)\n\
          (marker-insertion-type m2))))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -97,7 +100,7 @@ fn deficiency_nested_catch_with_insertion_type_markers() {
 fn deficiency_unwind_protect_restores_point_after_error_in_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"upn\")))\n\
          (with-current-buffer buf\n\
@@ -120,6 +123,7 @@ fn deficiency_unwind_protect_restores_point_after_error_in_narrow() {
          (get-text-property 1 'block)\n\
          (get-text-property 8 'block)))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (error \"Invalid error symbol\" test-error)""#]],
     );
 }
 
@@ -127,7 +131,7 @@ fn deficiency_unwind_protect_restores_point_after_error_in_narrow() {
 fn deficiency_throw_across_buffer_switch_with_overlay_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf1 (generate-new-buffer \"ob1\"))\n\
          (buf2 (generate-new-buffer \"ob2\")))\n\
@@ -149,6 +153,7 @@ fn deficiency_throw_across_buffer_switch_with_overlay_cleanup() {
          (overlay-get ov 'role)))))))))\n\
          (kill-buffer buf1)\n\
          (kill-buffer buf2)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -156,7 +161,7 @@ fn deficiency_throw_across_buffer_switch_with_overlay_cleanup() {
 fn deficiency_deeply_nested_condition_case_with_prop_interval_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"dnc\")))\n\
          (with-current-buffer buf\n\
@@ -181,6 +186,7 @@ fn deficiency_deeply_nested_condition_case_with_prop_interval_stress() {
          (cl-loop for i from 1 to (buffer-size)\n\
          collect (cons i (get-text-property i 'idx))))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (error \"Invalid error symbol\" inner-signal)""#]],
     );
 }
 
@@ -188,7 +194,7 @@ fn deficiency_deeply_nested_condition_case_with_prop_interval_stress() {
 fn deficiency_catch_from_within_mapcar_with_buffer_side_effects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cmw\")))\n\
          (with-current-buffer buf\n\
@@ -207,6 +213,7 @@ fn deficiency_catch_from_within_mapcar_with_buffer_side_effects() {
          '(1 2 3 4 5 6 7 8 9)))))\n\
          results)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -214,7 +221,7 @@ fn deficiency_catch_from_within_mapcar_with_buffer_side_effects() {
 fn deficiency_unwind_protect_in_recursive_edit_simulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"urs\")))\n\
          (with-current-buffer buf\n\
@@ -246,6 +253,7 @@ fn deficiency_unwind_protect_in_recursive_edit_simulation() {
          cleanup-log))))\n\
          (list result cleanup-log)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (error \"Invalid error symbol\" recursive-exit)""#]],
     );
 }
 
@@ -253,7 +261,7 @@ fn deficiency_unwind_protect_in_recursive_edit_simulation() {
 fn deficiency_throw_past_dolist_with_overlay_evaporation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"tdo\")))\n\
          (with-current-buffer buf\n\
@@ -277,6 +285,7 @@ fn deficiency_throw_past_dolist_with_overlay_evaporation() {
          (overlay-end o))\n\
          (list (overlay-get o 'idx) 'gone)))))))))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -284,7 +293,7 @@ fn deficiency_throw_past_dolist_with_overlay_evaporation() {
 fn deficiency_multiple_unwind_protect_layers_with_undo_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mul\")))\n\
          (with-current-buffer buf\n\
@@ -318,5 +327,6 @@ fn deficiency_multiple_unwind_protect_layers_with_undo_boundary() {
          (get-text-property 1 'section)\n\
          (get-text-property 8 'section))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 3)""#]],
     );
 }

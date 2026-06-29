@@ -14,7 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_marker_copy_set_position_insertion_type_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-mcs")))
     (with-current-buffer buf
@@ -65,6 +65,7 @@ fn combo_marker_copy_set_position_insertion_type_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -72,7 +73,7 @@ fn combo_marker_copy_set_position_insertion_type_overlay_undo() {
 fn combo_marker_set_marker_buffer_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-msmb")))
     (with-current-buffer buf
@@ -114,6 +115,7 @@ fn combo_marker_set_marker_buffer_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -121,7 +123,7 @@ fn combo_marker_set_marker_buffer_overlay_undo() {
 fn combo_marker_narrow_set_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-mnsm")))
     (with-current-buffer buf
@@ -162,6 +164,7 @@ fn combo_marker_narrow_set_marker_overlay_undo() {
                                 (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -169,7 +172,7 @@ fn combo_marker_narrow_set_marker_overlay_undo() {
 fn combo_marker_buffer_local_copy_set_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-mbl")))
     (with-current-buffer buf
@@ -215,6 +218,7 @@ fn combo_marker_buffer_local_copy_set_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -222,7 +226,7 @@ fn combo_marker_buffer_local_copy_set_overlay_undo() {
 fn combo_marker_delete_region_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-mdr")))
     (with-current-buffer buf
@@ -262,5 +266,6 @@ fn combo_marker_delete_region_overlay_undo() {
                                 (get-text-property 21 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

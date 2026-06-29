@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx319_marker_copy_independence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -19,13 +19,14 @@ fn div_cx319_marker_copy_independence() {
           (marker-position m2)
           (eq m1 m2))))
 "##,
+        expect_test::expect![[r#""OK (8 5 nil)""#]],
     )
 }
 
 #[test]
 fn div_cx319_marker_insertion_type_front_vs_rear() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -40,13 +41,14 @@ fn div_cx319_marker_insertion_type_front_vs_rear() {
           (marker-position m-front)
           (marker-position m-rear))))
 "##,
+        expect_test::expect![[r#""OK (t nil 6 5)""#]],
     )
 }
 
 #[test]
 fn div_cx319_marker_adjusts_on_insert_and_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -57,13 +59,14 @@ fn div_cx319_marker_adjusts_on_insert_and_delete() {
       (delete-region 3 6)
       (list after-ins (marker-position m-ins) (buffer-string)))))
 "##,
+        expect_test::expect![[r#""OK (8 5 \"0123456789\")""#]],
     )
 }
 
 #[test]
 fn div_cx319_marker_after_kill_buffer_is_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx319-kill*")))
   (with-current-buffer buf (insert "content"))
@@ -71,13 +74,14 @@ fn div_cx319_marker_after_kill_buffer_is_nil() {
     (kill-buffer buf)
     (list (marker-buffer m) (marker-position m))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx319_marker_in_different_buffer_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx319-mk-a*"))
       (buf-b (get-buffer-create " *neo-cx319-mk-b*")))
@@ -91,13 +95,14 @@ fn div_cx319_marker_in_different_buffer_switch() {
       (kill-buffer buf-b)
       (list pos (eq buf buf-b) (marker-buffer m))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     )
 }
 
 #[test]
 fn div_cx319_multiple_markers_track_same_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -110,13 +115,14 @@ fn div_cx319_multiple_markers_track_same_insert() {
           (marker-position m2)
           (marker-position m3))))
 "##,
+        expect_test::expect![[r#""OK (3 8 10)""#]],
     )
 }
 
 #[test]
 fn div_cx319_marker_buffer_narrowing_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -126,13 +132,14 @@ fn div_cx319_marker_buffer_narrowing_interaction() {
           (point-min) (point-max)
           (buffer-substring (point-min) (point-max)))))
 "##,
+        expect_test::expect![[r#""OK (15 5 20 \"EFGHIJKLMNOPQRS\")""#]],
     )
 }
 
 #[test]
 fn div_cx319_marker_set_to_zero_and_one() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "test")
@@ -143,13 +150,14 @@ fn div_cx319_marker_set_to_zero_and_one() {
           (markerp m1)
           (markerp m2))))
 "##,
+        expect_test::expect![[r#""OK (1 1 t t)""#]],
     )
 }
 
 #[test]
 fn div_cx319_marker_creation_and_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -161,13 +169,14 @@ fn div_cx319_marker_creation_and_query() {
           (eq (marker-buffer m1) (current-buffer))
           (eq (marker-buffer m2) (current-buffer)))))
 "##,
+        expect_test::expect![[r#""OK (t 5 8 t t)""#]],
     )
 }
 
 #[test]
 fn div_cx319_marker_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -196,5 +205,6 @@ fn div_cx319_marker_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (void-variable m2)""#]],
     )
 }

@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx141_widget_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -18,13 +18,14 @@ fn div_cx141_widget_availability() {
             (boundp 'widget-editable-list)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx141_custom_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -35,13 +36,14 @@ fn div_cx141_custom_availability() {
             (boundp 'custom-buffer-verbose-help)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx141_defcustom_with_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -54,13 +56,16 @@ fn div_cx141_defcustom_with_type() {
             (custom-variable-type 'neo-cx141-var)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (((funcall #'(closure (t) nil :default))) :default (symbol))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx141_custom_variable_persistence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((before (default-value 'neo-cx141-persist)))
@@ -70,13 +75,14 @@ fn div_cx141_custom_variable_persistence() {
         (list before after-set)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-variable)""#]],
     );
 }
 
 #[test]
 fn div_cx141_custom_theme_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -86,13 +92,14 @@ fn div_cx141_custom_theme_availability() {
             (boundp 'custom-safe-themes)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx141_widget_button_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -104,13 +111,16 @@ fn div_cx141_widget_button_creation() {
               (widget-get btn :format))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((item :button-prefix \"\" :button-suffix \"\" :value-create widget-push-button-value-create :format \"%[%v%]\") (closure (t) (&rest _) (message \"clicked\")) \"%[%v%]\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx141_widget_editable_field() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -121,13 +131,16 @@ fn div_cx141_widget_editable_field() {
               (widget-value field))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((default :convert-widget widget-value-convert-widget :keymap (keymap (menu-bar keymap (custom menu-item \"Custom\" (keymap \"Custom\" (Customize menu-item \"Customize\" nil :filter #[257 \"\\302\\300\u{2}!\\301\\\"\\207\" [(lambda (&rest junk) (let ((menu (custom-menu-create 'customize))) (if (consp menu) (cdr menu) menu))) \"Customize\" easy-menu-filter-return] 4 \"\n\n(fn MENU)\"]) (\\ Apply\\  menu-item \" Apply \" Custom-set :enable (or (eq t '(modified)) (seq-some #[257 \"\\301\u{1}\\302\\\"\\300>\\207\" [(modified) widget-get :custom-state] 4 (\"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/cus-edit.elc\" . 21547)] custom-options)) :help \"Apply settings (for the current session only).\") (\\ Apply\\ and\\ Save\\ ) (\\ Undo\\ Edits\\  menu-item \" Undo Edits \" Custom-reset-current :enable (or (eq t '(modified)) (seq-some #[257 \"\\301\u{1}\\302\\\"\\300>\\207\" [(modified) widget-get :custom-state] 4 (\"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/cus-edit.elc\" . 21547)] custom-options)) :help \"Restore customization buffer to reflect existing settings.\") (\\ Reset\\ Customizations\\  menu-item \" Reset Customizations \" Custom-reset-saved :enable (or (eq t '(modified set changed rogue)) (seq-some #[257 \"\\301\u{1}\\302\\\"\\300>\\207\" [(modified set changed rogue) widget-get :custom-state] 4 (\"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/cus-edit.elc\" . 21547)] custom-options)) :help \"Undo any settings applied only for the current session.\") (\\ Erase\\ Customizations\\ ) (\\ Toggle\\ hiding\\ all\\ values\\  menu-item \" Toggle hiding all values \" custom-toggle-hide-all-widgets :enable (or (eq t 't) (seq-some #[257 \"\\301\u{1}\\302\\\"\\300>\\207\" [t widget-get :custom-state] 4 (\"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/cus-edit.elc\" . 21547)] custom-options)) :help \"Toggle hiding all values.\") (\\ Help\\ for\\ Customize\\  menu-item \" Help for Customize \" Custom-help :enable (or (eq t 't) (seq-some #[257 \"\\301\u{1}\\302\\\"\\300>\\207\" [t widget-get :custom-state] 4 (\"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/cus-edit.elc\" . 21547)] custom-options)) :help \"Get help for using Customize.\") (\\ Exit\\  menu-item \" Exit \" Custom-buffer-done :enable (or (eq t 't) (seq-some #[257 \"\\301\u{1}\\302\\\"\\300>\\207\" [t widget-get :custom-state] 4 (\"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/cus-edit.elc\" . 21547)] custom-options)) :help \"Exit Customize.\")))) (24 keymap (19 . Custom-save)) (3 keymap (3 . Custom-set)) (5 . widget-end-of-line) (11 . widget-kill-line) (13 . widget-field-activate) (touchscreen-begin . widget-button-click) (down-mouse-1 . widget-button-click) (down-mouse-2 . widget-button-click) (backtab . widget-backward) (S-tab . widget-backward) (27 keymap (9 . widget-complete)) (9 . widget-forward)) :format \"%v\" :help-echo \"M-TAB: complete field; RET: enter value\" :value \"\" :prompt-internal widget-field-prompt-internal :prompt-history widget-field-history :prompt-value widget-field-prompt-value :action widget-field-action :validate widget-field-validate :valid-regexp \"\" :error \"Field's value doesn't match allowed forms\" :value-create widget-field-value-create :value-set widget-field-value-set :value-delete widget-field-value-delete :value-get widget-field-value-get :match widget-field-match :custom-show #[514 \"\\300\u{1}!\\301\\302\u{2}\\\"\\203\u{c}\\0\\303\\207\\211G\\304V\\203\u{15}\\0\\303\\207\\305\\207\" [pp-to-string string-search \"\n\" nil 40 t] 6 (\"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/cus-edit.elc\" . 57942)]) \"initial text\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx141_widget_checkbox_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -138,13 +151,14 @@ fn div_cx141_widget_checkbox_creation() {
               (widget-value chk))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx141_widget_choice_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -156,13 +170,16 @@ fn div_cx141_widget_choice_creation() {
               (widget-value ch))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((default :convert-widget widget-types-convert-widget :copy widget-types-copy :format \"%[%t%]: %v\" :case-fold t :tag \"choice\" :void (item :format \"invalid (%t)\n\") :value-create widget-choice-value-create :value-get widget-child-value-get :value-inline widget-child-value-inline :default-get widget-choice-default-get :mouse-down-action widget-choice-mouse-down-action :action widget-choice-action :error \"Make a choice\" :validate widget-choice-validate :match widget-choice-match :match-inline widget-choice-match-inline :custom-show t) :a)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx141_custom_group_definition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -173,13 +190,14 @@ fn div_cx141_custom_group_definition() {
             (get 'neo-cx141-group 'custom-group)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx141_custom_save_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'custom-save-all)
@@ -187,13 +205,14 @@ fn div_cx141_custom_save_query() {
           (boundp 'custom-saved))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx141_widget_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -219,5 +238,6 @@ fn div_cx141_widget_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

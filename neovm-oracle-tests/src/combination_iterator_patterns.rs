@@ -54,7 +54,12 @@ fn oracle_prop_iter_range_iterator() {
        (funcall 'neovm--iter-collect (funcall 'neovm--iter-range 1 1000 100)))
     (fmakunbound 'neovm--iter-range)
     (fmakunbound 'neovm--iter-collect)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 1 2 3 4 5 6 7 8 9) (0 3 6 9 12 15 18) nil (-10 -6 -2 2) (0) (1 101 201 301 401 501 601 701 801 901))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +138,12 @@ fn oracle_prop_iter_filter_iterator() {
     (fmakunbound 'neovm--iter-range)
     (fmakunbound 'neovm--iter-filter)
     (fmakunbound 'neovm--iter-collect)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 2 4 6 8 10 12 14 16 18) (3 6 9 12 15 18 21 24 27) (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47) nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +214,12 @@ fn oracle_prop_iter_map_iterator() {
     (fmakunbound 'neovm--iter-range)
     (fmakunbound 'neovm--iter-map)
     (fmakunbound 'neovm--iter-collect)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 4 9 16 25 36 49) (\"10\" \"11\" \"12\" \"13\" \"14\") (-1 -2 -3 -4 -5) nil (3 5 7 9 11))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +304,12 @@ fn oracle_prop_iter_take_drop_iterators() {
     (fmakunbound 'neovm--iter-take)
     (fmakunbound 'neovm--iter-drop)
     (fmakunbound 'neovm--iter-collect)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 1 2 3 4) nil (0 1 2 3 4) (3 4 5 6 7 8 9) nil (0 1 2 3 4) (5 6 7))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -365,7 +385,12 @@ fn oracle_prop_iter_chain_iterator() {
     (fmakunbound 'neovm--iter-range)
     (fmakunbound 'neovm--iter-chain)
     (fmakunbound 'neovm--iter-collect)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 1 2 3 4 10 11 12 13 14) (1 2 3) (1 2 3) nil (0 1 2 10 11 12 100 101 102))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -437,7 +462,12 @@ fn oracle_prop_iter_zip_iterator() {
     (fmakunbound 'neovm--iter-range)
     (fmakunbound 'neovm--iter-zip)
     (fmakunbound 'neovm--iter-collect)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 . 100) (1 . 101) (2 . 102) (3 . 103) (4 . 104)) ((0 . 100) (1 . 101) (2 . 102)) nil ((0 . 0) (1 . 1) (2 . 4) (3 . 9) (4 . 16) (5 . 25) (6 . 36) (7 . 49)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -593,7 +623,12 @@ fn oracle_prop_iter_lazy_pipeline() {
     (fmakunbound 'neovm--iter-zip)
     (fmakunbound 'neovm--iter-collect)
     (fmakunbound 'neovm--iter-is-prime)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:pipeline1 ((2 . 4) (3 . 9) (5 . 25) (7 . 49) (11 . 121) (13 . 169) (17 . 289) (19 . 361)) :pipeline2 (18 24 30 36) :pipeline3 ((0 . 0) (2 . 3) (4 . 6) (6 . 9) (8 . 12) (10 . 15) (12 . 18) (14 . 21) (16 . 24) (18 . 27)) :pipeline4 (0 1 2 100 101 102) :prime-square-sum 1027 :p1-length 8 :p2-length 4 :p3-length 10 :p4-length 6)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -699,5 +734,10 @@ fn oracle_prop_iter_enumerate_reduce() {
     (fmakunbound 'neovm--iter-filter)
     (fmakunbound 'neovm--iter-map)
     (fmakunbound 'neovm--iter-collect)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 . 10) (1 . 11) (2 . 12) (3 . 13) (4 . 14)) 5050 3628800 361 \"0:100 1:101 2:102 3:103 4:104 \")""#
+        ]],
+    );
 }

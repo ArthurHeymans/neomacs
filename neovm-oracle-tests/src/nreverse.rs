@@ -10,10 +10,16 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_nreverse_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_list, neovm_list) = eval_oracle_and_neovm("(nreverse '(1 2 3))");
+    let (oracle_list, neovm_list) = crate::common::eval_oracle_and_neovm_expect(
+        "(nreverse '(1 2 3))",
+        expect_test::expect![[r#""OK (3 2 1)""#]],
+    );
     assert_ok_eq("(3 2 1)", &oracle_list, &neovm_list);
 
-    let (oracle_nil, neovm_nil) = eval_oracle_and_neovm("(nreverse nil)");
+    let (oracle_nil, neovm_nil) = crate::common::eval_oracle_and_neovm_expect(
+        "(nreverse nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle_nil, &neovm_nil);
 }
 
@@ -21,7 +27,10 @@ fn oracle_prop_nreverse_basics() {
 fn oracle_prop_nreverse_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(nreverse 1)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(nreverse 1)",
+        expect_test::expect![[r#""ERR (wrong-type-argument arrayp 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 

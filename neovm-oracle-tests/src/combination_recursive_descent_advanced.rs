@@ -122,7 +122,12 @@ fn oracle_prop_rd_adv_json_tokenizer() {
     (fmakunbound 'neovm--json-is-digit)
     (fmakunbound 'neovm--json-tokenize)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((number . 42)) ((number . -3.14)) ((string . \"hello\")) ((boolean . t)) ((boolean)) ((null)) ((string . \"hello\nworld\")) ((string . \"a\tb\\\\c\")) ((string . \"quote: \\\"hi\\\"\")) ((lbrace . \"{\") (string . \"key\") (colon . \":\") (string . \"value\") (rbrace . \"}\")) ((lbracket . \"[\") (number . 1) (comma . \",\") (number . 2) (comma . \",\") (number . 3) (rbracket . \"]\")) ((lbrace . \"{\") (string . \"a\") (colon . \":\") (lbracket . \"[\") (number . 1) (comma . \",\") (boolean . t) (comma . \",\") (null) (rbracket . \"]\") (rbrace . \"}\")) ((lbrace . \"{\") (string . \"x\") (colon . \":\") (number . 42) (rbrace . \"}\")) ((lbrace . \"{\") (rbrace . \"}\")) ((lbracket . \"[\") (rbracket . \"]\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +289,12 @@ fn oracle_prop_rd_adv_json_parser_full() {
     (fmakunbound 'neovm--jp-parse)
     (makunbound 'neovm--jp-tokens)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((number 42) (number -3.14) (string \"hello\") (boolean t) (boolean nil) (null) (object ((\"name\" (string \"Alice\")) (\"age\" (number 30)))) (array ((number 1) (number 2) (number 3))) (object nil) (array nil) (array ((object ((\"a\" (number 1)))) (object ((\"b\" (number 2)))))) (object ((\"items\" (array ((number 10) (number 20) (number 30)))))) (object ((\"msg\" (string \"hello\nworld\")))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -423,7 +433,12 @@ fn oracle_prop_rd_adv_json_deep_nesting() {
     (fmakunbound 'neovm--jpn-parse)
     (makunbound 'neovm--jpn-tokens)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((array ((array ((number 1) (number 2))) (array ((number 3) (array ((number 4) (number 5))))))) (object ((\"a\" (object ((\"b\" (object ((\"c\" (number 42)))))))))) (object ((\"data\" (array ((object ((\"id\" (number 1)) (\"tags\" (array ((string \"a\") (string \"b\")))))) (object ((\"id\" (number 2)) (\"tags\" (array nil))))))))) (object ((\"str\" (string \"hello\")) (\"num\" (number 42)) (\"float\" (number 3.14)) (\"bool_t\" (boolean t)) (\"bool_f\" (boolean nil)) (\"nul\" (null)) (\"arr\" (array ((number 1)))) (\"obj\" (object nil)))) (array ((string \"str\") (number 42) (boolean t) (boolean nil) (null) (array nil) (object nil))) (object ((\"a\" (object nil)) (\"b\" (array nil)) (\"c\" (object ((\"d\" (array nil))))))) (array ((number -1) (number -2.5) (object ((\"x\" (number -100)))))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -616,7 +631,12 @@ fn oracle_prop_rd_adv_json_ast_queries() {
     (fmakunbound 'neovm--jpq-collect-leaves)
     (makunbound 'neovm--jpq-tokens)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((string \"Alice\") (number 30) (array ((number 95) (number 87) (number 92))) (string \"NYC\") (number 10001) (number 95) (number 92) nil 16 (\"Alice\" 30 95 87 92 \"NYC\" 10001))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -771,7 +791,12 @@ fn oracle_prop_rd_adv_json_error_recovery() {
     (makunbound 'neovm--jpe-tokens)
     (makunbound 'neovm--jpe-errors)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((result (object ((\"a\" (number 1)) (\"b\" (number 2)))) errors nil) (result (object ((\"a\" (number 1)))) errors (\"expected rbrace got nil\")) (result (object ((\"a\" (number 1)))) errors (\"expected colon got (number . 1)\")) (result (array ((number 1) (number 2) (number 3) (error \"recovered\"))) errors (\"unexpected token (rbracket)\")) (result (null) errors (\"unexpected end\")) (result (object ((\"x\" (array ((number 1) (number 2)))) (\"y\" (object ((\"z\" (boolean t))))))) errors nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -933,5 +958,10 @@ fn oracle_prop_rd_adv_json_serialize_roundtrip() {
     (fmakunbound 'neovm--jps-serialize)
     (makunbound 'neovm--jps-tokens)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((input \"42\" serialized \"42\" round-trip-equal t) (input \"\\\"hello\\\"\" serialized \"\\\"hello\\\"\" round-trip-equal t) (input \"true\" serialized \"true\" round-trip-equal t) (input \"false\" serialized \"false\" round-trip-equal t) (input \"null\" serialized \"null\" round-trip-equal t) (input \"[1,2,3]\" serialized \"[1,2,3]\" round-trip-equal t) (input \"{\\\"a\\\":1,\\\"b\\\":2}\" serialized \"{\\\"a\\\":1,\\\"b\\\":2}\" round-trip-equal t) (input \"{\\\"x\\\":[1,true,null],\\\"y\\\":{\\\"z\\\":\\\"hi\\\"}}\" serialized \"{\\\"x\\\":[1,true,null],\\\"y\\\":{\\\"z\\\":\\\"hi\\\"}}\" round-trip-equal t) (input \"[]\" serialized \"[]\" round-trip-equal t) (input \"{}\" serialized \"{}\" round-trip-equal t))""#
+        ]],
+    );
 }

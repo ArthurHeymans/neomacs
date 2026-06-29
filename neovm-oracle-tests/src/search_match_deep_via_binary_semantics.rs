@@ -10,13 +10,14 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_string_match_three_groups_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (string-match "\\([a-z]+\\) \\([a-z]+\\) \\([0-9]+\\)" "hello world 42")
   (list (match-string 0 "hello world 42")
         (match-string 1 "hello world 42")
         (match-string 2 "hello world 42")
         (match-string 3 "hello world 42")))"#,
+        expect_test::expect![[r#""OK (\"hello world 42\" \"hello\" \"world\" \"42\")""#]],
     );
     assert_ok_eq("(\"hello world 42\" \"hello\" \"world\" \"42\")", &o, &n);
 }
@@ -26,9 +27,10 @@ fn oracle_string_match_three_groups_via_binary() {
 #[test]
 fn oracle_posix_string_match_vs_string_match_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(list (posix-string-match "[a-z]+" "hello")
                 (string-match "[a-z]+" "hello"))"#,
+        expect_test::expect![[r#""OK (0 0)""#]],
     );
     assert_ok_eq("(0 0)", &o, &n);
 }
@@ -38,8 +40,9 @@ fn oracle_posix_string_match_vs_string_match_via_binary() {
 #[test]
 fn oracle_looking_at_alternation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*laa*")) (erase-buffer) (insert "foobar") (goto-char 1) (looking-at "foo"))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &o, &n);
 }
@@ -47,8 +50,9 @@ fn oracle_looking_at_alternation() {
 #[test]
 fn oracle_looking_at_alternation_no_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*lab*")) (erase-buffer) (insert "foobar") (goto-char 1) (looking-at "bar\\|baz"))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
     assert_ok_eq("nil", &o, &n);
 }
@@ -58,7 +62,7 @@ fn oracle_looking_at_alternation_no_match() {
 #[test]
 fn oracle_replace_match_literal_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (set-buffer (get-buffer-create "*rml*"))
   (erase-buffer)
@@ -67,6 +71,7 @@ fn oracle_replace_match_literal_via_binary() {
   (re-search-forward "[a-z]+" nil t)
   (replace-match "X" t)
   (buffer-string))"#,
+        expect_test::expect![[r#""OK \"X world\"""#]],
     );
     assert_ok_eq("\"X world\"", &o, &n);
 }
@@ -76,7 +81,7 @@ fn oracle_replace_match_literal_via_binary() {
 #[test]
 fn oracle_match_data_is_marker_list_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (set-buffer (get-buffer-create "*md*"))
   (erase-buffer)
@@ -84,6 +89,7 @@ fn oracle_match_data_is_marker_list_via_binary() {
   (goto-char 1)
   (re-search-forward "[a-z]+" nil t)
   (consp (match-data)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &o, &n);
 }
@@ -93,8 +99,9 @@ fn oracle_match_data_is_marker_list_via_binary() {
 #[test]
 fn oracle_search_forward_with_bound() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*sf*")) (erase-buffer) (insert "abc def ghi") (goto-char 1) (search-forward "def" nil t))"#,
+        expect_test::expect![[r#""OK 8""#]],
     );
     assert_ok_eq("8", &o, &n);
 }
@@ -102,8 +109,9 @@ fn oracle_search_forward_with_bound() {
 #[test]
 fn oracle_search_backward_finds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*sb*")) (erase-buffer) (insert "abc def ghi") (goto-char 11) (search-backward "def" nil t))"#,
+        expect_test::expect![[r#""OK 5""#]],
     );
     assert_ok_eq("5", &o, &n);
 }

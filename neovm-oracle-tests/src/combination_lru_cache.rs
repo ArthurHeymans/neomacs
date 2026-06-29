@@ -86,7 +86,12 @@ fn oracle_prop_lru_cache_basic() {
     (fmakunbound 'neovm--lru-put)
     (fmakunbound 'neovm--lru-keys)
     (fmakunbound 'neovm--lru-size)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"c\" \"b\") 3) (\"a\" \"c\" \"b\") ((\"d\" \"c\") 3 nil 1 4))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +149,10 @@ fn oracle_prop_lru_cache_update_existing() {
     (fmakunbound 'neovm--lru2-create)
     (fmakunbound 'neovm--lru2-get)
     (fmakunbound 'neovm--lru2-put)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (100 20 30 (\"z\" \"y\" \"x\") 3 (20 40 3))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +219,12 @@ fn oracle_prop_lru_cache_eviction_order() {
     (fmakunbound 'neovm--lru3-create)
     (fmakunbound 'neovm--lru3-get)
     (fmakunbound 'neovm--lru3-put)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"d\" \"b\" \"c\" \"a\") ((\"evict-a\" nil) (\"evict-c\" nil)) (\"f\") 2 4 5 6)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +298,10 @@ fn oracle_prop_lru_cache_hit_miss_ratio() {
     (fmakunbound 'neovm--lrus-get)
     (fmakunbound 'neovm--lrus-put)
     (fmakunbound 'neovm--lrus-stats)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((4 2 6 66) (5 3 8 62))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -371,7 +387,10 @@ fn oracle_prop_lru_cache_ttl() {
     (fmakunbound 'neovm--lrut-advance-time)
     (fmakunbound 'neovm--lrut-put)
     (fmakunbound 'neovm--lrut-get)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (100 nil nil 300 1 (\"c\"))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -466,7 +485,12 @@ fn oracle_prop_lru_cache_two_level() {
     (fmakunbound 'neovm--lru2l-level-put)
     (fmakunbound 'neovm--lru2l-create)
     (fmakunbound 'neovm--lru2l-get)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((fetched . 2) (fetched . 4) (fetched . 6) (l2-hit . 2) (l2-hit . 4) (fetched . 8) (fetched . 10) (fetched . 12) (fetched . 6)) 7)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -521,5 +545,8 @@ fn oracle_prop_lru_cache_capacity_one() {
     (fmakunbound 'neovm--lru1-create)
     (fmakunbound 'neovm--lru1-get)
     (fmakunbound 'neovm--lru1-put)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 nil 2 20 nil 3 1 (\"c\"))""#]],
+    );
 }

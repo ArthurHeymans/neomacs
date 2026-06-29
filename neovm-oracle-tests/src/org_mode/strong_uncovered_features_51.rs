@@ -11,12 +11,15 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf51_list_struct() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  - B\n  - C\n- D")
   (goto-char (point-min))
   (org-list-struct))"##,
+        expect_test::expect![[
+            r#""OK ((1 0 \"- \" nil nil nil 17) (5 2 \"- \" nil nil nil 11) (11 2 \"- \" nil nil nil 17) (17 0 \"- \" nil nil nil 20))""#
+        ]],
     );
 }
 
@@ -27,12 +30,13 @@ fn uf51_list_struct() {
 #[test]
 fn uf51_list_prevs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  - B\n  - C\n- D")
   (let ((struct (org-list-struct)))
     (org-list-prevs-alist struct)))"##,
+        expect_test::expect![[r#""OK ((1) (5) (11 . 5) (17 . 1))""#]],
     );
 }
 
@@ -43,12 +47,13 @@ fn uf51_list_prevs() {
 #[test]
 fn uf51_list_parents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  - B\n  - C\n- D")
   (let ((struct (org-list-struct)))
     (org-list-parents-alist struct)))"##,
+        expect_test::expect![[r#""OK ((1) (5 . 1) (11 . 1) (17))""#]],
     );
 }
 
@@ -59,13 +64,14 @@ fn uf51_list_parents() {
 #[test]
 fn uf51_list_nth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  - B\n  - C\n- D")
   (let ((struct (org-list-struct)))
     (list (org-list-get-nth 0 struct)
           (org-list-get-nth 1 struct))))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (3 . 3) 2)""#]],
     );
 }
 
@@ -76,13 +82,14 @@ fn uf51_list_nth() {
 #[test]
 fn uf51_list_item_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  - B\n  - C\n- D")
   (let ((struct (org-list-struct)))
     (list (org-list-get-item-end 1 struct)
           (org-list-get-item-end 2 struct))))"##,
+        expect_test::expect![[r#""OK (17 nil)""#]],
     );
 }
 
@@ -93,13 +100,14 @@ fn uf51_list_item_end() {
 #[test]
 fn uf51_list_item_begin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  - B\n  - C\n- D")
   (let ((struct (org-list-struct)))
     (list (org-list-get-item-begin 1 struct)
           (org-list-get-item-begin 2 struct))))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (0 . 0) 2)""#]],
     );
 }
 
@@ -110,7 +118,7 @@ fn uf51_list_item_begin() {
 #[test]
 fn uf51_list_bullet() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  1. B\n  2. C\n+ D")
@@ -118,6 +126,7 @@ fn uf51_list_bullet() {
     (list (org-list-get-bullet 1 struct)
           (org-list-get-bullet 2 struct)
           (org-list-get-bullet 3 struct))))"##,
+        expect_test::expect![[r#""OK (\"- \" nil nil)""#]],
     );
 }
 
@@ -128,7 +137,7 @@ fn uf51_list_bullet() {
 #[test]
 fn uf51_list_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- [X] A\n- [ ] B\n- [-] C")
@@ -136,6 +145,7 @@ fn uf51_list_checkbox() {
     (list (org-list-get-checkbox 1 struct)
           (org-list-get-checkbox 2 struct)
           (org-list-get-checkbox 3 struct))))"##,
+        expect_test::expect![[r#""OK (\"[X]\" nil nil)""#]],
     );
 }
 
@@ -146,7 +156,7 @@ fn uf51_list_checkbox() {
 #[test]
 fn uf51_list_depth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  - B\n    - C\n- D")
@@ -154,6 +164,7 @@ fn uf51_list_depth() {
     (list (org-list-get-depth 1 struct)
           (org-list-get-depth 2 struct)
           (org-list-get-depth 3 struct))))"##,
+        expect_test::expect![[r#""ERR (void-function org-list-get-depth)""#]],
     );
 }
 
@@ -164,7 +175,7 @@ fn uf51_list_depth() {
 #[test]
 fn uf51_list_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  - B\n  - C\n- D")
@@ -172,6 +183,7 @@ fn uf51_list_parent() {
     (list (org-list-get-parent 1 struct)
           (org-list-get-parent 2 struct)
           (org-list-get-parent 3 struct))))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (3 . 3) 2)""#]],
     );
 }
 
@@ -182,13 +194,14 @@ fn uf51_list_parent() {
 #[test]
 fn uf51_list_children() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  - B\n  - C\n- D")
   (let ((struct (org-list-struct)))
     (list (org-list-get-children 1 struct)
           (org-list-get-children 2 struct))))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (3 . 3) 2)""#]],
     );
 }
 
@@ -199,13 +212,14 @@ fn uf51_list_children() {
 #[test]
 fn uf51_list_siblings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  - B\n  - C\n- D")
   (let ((struct (org-list-struct)))
     (list (org-list-get-siblings 1 struct)
           (org-list-get-siblings 2 struct))))"##,
+        expect_test::expect![[r#""ERR (void-function org-list-get-siblings)""#]],
     );
 }
 
@@ -216,11 +230,12 @@ fn uf51_list_siblings() {
 #[test]
 fn uf51_list_top() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Before\n- A\n  - B\n  - C\n- D\nAfter")
   (org-list-get-top-point))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
     );
 }
 
@@ -231,11 +246,12 @@ fn uf51_list_top() {
 #[test]
 fn uf51_list_bottom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Before\n- A\n  - B\n  - C\n- D\nAfter")
   (org-list-get-bottom-point))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
     );
 }
 
@@ -246,7 +262,7 @@ fn uf51_list_bottom() {
 #[test]
 fn uf51_at_item() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Before\n- item\n  continued\nAfter")
@@ -260,6 +276,7 @@ fn uf51_at_item() {
     (forward-line)
     (push (list :after (org-at-item-p)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:before nil) (:item t) (:cont nil) (:after nil))""#]],
     );
 }
 
@@ -270,7 +287,7 @@ fn uf51_at_item() {
 #[test]
 fn uf51_at_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- [X] a\n- [ ] b\n- no box")
@@ -282,6 +299,7 @@ fn uf51_at_checkbox() {
     (forward-line)
     (push (list :3 (org-at-item-checkbox-p)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:1 t) (:2 t) (:3 nil))""#]],
     );
 }
 
@@ -292,13 +310,14 @@ fn uf51_at_checkbox() {
 #[test]
 fn uf51_toggle_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- [X] a\n- [ ] b\n- [-] c")
   (goto-char (point-min))
   (org-toggle-checkbox)
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"- [ ] a\n- [ ] b\n- [-] c\"""#]],
     );
 }
 
@@ -309,13 +328,14 @@ fn uf51_toggle_checkbox() {
 #[test]
 fn uf51_toggle_checkbox_univ() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- [X] a\n- [ ] b\n- [-] c")
   (goto-char (point-min))
   (org-toggle-checkbox '(4))
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"- a\n- [ ] b\n- [-] c\"""#]],
     );
 }
 
@@ -326,13 +346,14 @@ fn uf51_toggle_checkbox_univ() {
 #[test]
 fn uf51_reset_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n- [X] a\n- [X] b\n- [-] c")
   (goto-char (point-min))
   (org-reset-checkbox-state-subtree)
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"* T\n- [ ] a\n- [ ] b\n- [ ] c\"""#]],
     );
 }
 
@@ -343,13 +364,14 @@ fn uf51_reset_checkbox() {
 #[test]
 fn uf51_update_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T [1/2]\n- [X] a\n- [ ] b")
   (goto-char (point-min))
   (org-update-checkbox-count)
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"* T [1/2]\n- [X] a\n- [ ] b\"""#]],
     );
 }
 
@@ -360,7 +382,7 @@ fn uf51_update_count() {
 #[test]
 fn uf51_update_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n- [X] a\n- [X] b\n- [ ] c")
@@ -368,6 +390,7 @@ fn uf51_update_parent() {
   (search-forward "[ ] c")
   (org-update-parent-checkboxes)
   (buffer-string))"##,
+        expect_test::expect![[r#""ERR (void-function org-update-parent-checkboxes)""#]],
     );
 }
 
@@ -378,13 +401,14 @@ fn uf51_update_parent() {
 #[test]
 fn uf51_fix_box() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- [X] A\n- [ ] B\n- [ ] C")
   (let ((struct (org-list-struct)))
     (org-list-struct-fix-box struct (org-list-parents-alist struct))
     (buffer-string)))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (3 . 4) 2)""#]],
     );
 }
 
@@ -395,7 +419,7 @@ fn uf51_fix_box() {
 #[test]
 fn uf51_set_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- [X] a\n- [ ] b")
@@ -404,6 +428,7 @@ fn uf51_set_checkbox() {
     (org-list-set-checkbox 1 struct "[ ]")
     (org-list-struct-apply struct)
     (buffer-string)))"##,
+        expect_test::expect![[r#""ERR (void-function org-list-struct-apply)""#]],
     );
 }
 
@@ -414,7 +439,7 @@ fn uf51_set_checkbox() {
 #[test]
 fn uf51_list_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- [X] a\n- [ ] b")
@@ -422,5 +447,6 @@ fn uf51_list_toggle() {
   (let ((struct (org-list-struct)))
     (org-list-toggle-checkbox nil struct)
     (buffer-string)))"##,
+        expect_test::expect![[r#""ERR (void-function org-list-toggle-checkbox)""#]],
     );
 }

@@ -99,7 +99,10 @@ fn oracle_prop_ds_adv_doubly_linked_list() {
                           (let ((fwd2 (funcall to-list-fwd))
                                 (bwd2 (funcall to-list-bwd)))
                             (list fwd1 bwd1 fwd2 bwd2)))))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((5 10 20 30) (5 10 20 30) (5 10 30) (5 10 30))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +218,10 @@ fn oracle_prop_ds_adv_avl_bst() {
                               (aref (aref nodes root) 0))))
                       (fmakunbound 'neovm--avl-insert)
                       (fmakunbound 'neovm--avl-inorder))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable update-height)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +289,12 @@ fn oracle_prop_ds_adv_skip_list_like() {
                           (length (aref layers 0))
                           (length (aref layers 1))
                           (length (aref layers 2))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((2 5 8 11 14 17 20 23 26 29 32 35 38 41 44 47) (2 8 14 20 26 32 38 44) (2 14 26 38) (t . 1) (t . 6) (t . 28) (nil . 6) (nil . 28) 16 8 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -380,7 +391,10 @@ fn oracle_prop_ds_adv_lru_cache_full() {
                                   (list keys1 val-a keys2 keys3 val-b
                                         keys4 val-c
                                         (hash-table-count table)))))))))))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 83 75)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -472,7 +486,12 @@ fn oracle_prop_ds_adv_trie_autocomplete() {
                                   ;; Count total unique completions from ""
                                   (length (funcall autocomplete ""))))
                             (fmakunbound 'neovm--trie-collect))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t nil t nil (\"app\" \"apple\" \"application\" \"apply\") (\"ban\" \"banana\" \"band\") (\"car\" \"card\" \"care\") nil 11)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -561,5 +580,10 @@ fn oracle_prop_ds_adv_priority_queue_heap() {
                           ;; Heap is now empty
                           size
                           (funcall heap-peek))))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 . critical-bug) ((1 critical-bug) (1 security-patch) (2 deploy) (3 code-review) (3 testing) (4 meeting) (5 email)) 0 nil)""#
+        ]],
+    );
 }

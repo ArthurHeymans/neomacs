@@ -78,7 +78,10 @@ fn oracle_prop_automata_adv_dfa_basic_operations() {
                 (car (funcall 'neovm--adv-dfa-run trans 'q0 comp-accepts "bba")))))))
     (fmakunbound 'neovm--adv-dfa-run)
     (fmakunbound 'neovm--adv-dfa-complement-accepts)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil nil nil nil nil (t t t nil t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +175,10 @@ fn oracle_prop_automata_adv_nfa_epsilon_transitions() {
     (fmakunbound 'neovm--adv-eps-closure)
     (fmakunbound 'neovm--adv-nfa-step)
     (fmakunbound 'neovm--adv-nfa-accepts)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil nil nil nil (t t t t nil nil))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +284,10 @@ fn oracle_prop_automata_adv_subset_construction() {
     (fmakunbound 'neovm--adv-sc-eps-closure)
     (fmakunbound 'neovm--adv-nfa-to-dfa)
     (fmakunbound 'neovm--adv-sc-dfa-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (4 t t t nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +378,7 @@ fn oracle_prop_automata_adv_dfa_minimization_hopcroft() {
           (funcall 'neovm--adv-hopcroft-minimize
                    '(s0 s1 s2 s3) '(?a ?b) t4 '(s0 s3))))
     (fmakunbound 'neovm--adv-hopcroft-minimize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (3 2 1 2)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -496,7 +505,10 @@ fn oracle_prop_automata_adv_thompson_construction() {
     (fmakunbound 'neovm--adv-tc-build)
     (fmakunbound 'neovm--adv-tc-eps-closure)
     (fmakunbound 'neovm--adv-tc-simulate)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil nil nil 100 (t t t nil))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -558,7 +570,10 @@ fn oracle_prop_automata_adv_dfa_intersection_union() {
           (funcall 'neovm--adv-product-run t1 'even '(even) t2 'q0 '(q1) '(?a ?b) "a" 'union)          ;; nil (odd, ends a)
           ))
     (fmakunbound 'neovm--adv-product-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil nil nil (even) (q1) (even) nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -611,7 +626,10 @@ fn oracle_prop_automata_adv_language_emptiness() {
           (puthash '(q2 . ?a) 'q2 t4)  ;; q2 unreachable
           (funcall 'neovm--adv-language-empty t4 'q0 '(q2) '(?a))))
     (fmakunbound 'neovm--adv-language-empty)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil t nil t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -681,7 +699,7 @@ fn oracle_prop_automata_adv_dfa_equivalence() {
           (puthash '(r . ?a) 'r tb) (puthash '(r . ?b) 'r tb)
           (funcall 'neovm--adv-dfa-equiv ta 'q '(q) tb 'r '(r) '(?a ?b))))
     (fmakunbound 'neovm--adv-dfa-equiv)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -753,7 +771,12 @@ fn oracle_prop_automata_adv_pumping_lemma() {
         (funcall 'neovm--adv-pump-test 'neovm--adv-pump-contains-ab 3 "ab"))
     (fmakunbound 'neovm--adv-pump-test)
     (fmakunbound 'neovm--adv-pump-contains-ab)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t \"\" \"a\" \"ab\") (t \"a\" \"b\" \"b\") (t \"\" \"b\" \"ab\") (t \"\" \"a\" \"bab\") too-short)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -827,5 +850,10 @@ fn oracle_prop_automata_adv_myhill_nerode() {
     (fmakunbound 'neovm--adv-mn-equiv)
     (fmakunbound 'neovm--adv-mn-classes)
     (fmakunbound 'neovm--adv-mn-even-a)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (2 ((\"\" \"aa\" \"aab\" \"aba\" \"b\" \"bb\") (\"a\" \"aaa\" \"ab\" \"abb\" \"ba\")) t nil t t)""#
+        ]],
+    );
 }

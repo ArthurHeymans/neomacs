@@ -14,7 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_open_line_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-ol")))
     (with-current-buffer buf
@@ -51,6 +51,7 @@ fn combo_open_line_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -58,7 +59,7 @@ fn combo_open_line_marker_overlay_undo() {
 fn combo_newline_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-nl")))
     (with-current-buffer buf
@@ -95,6 +96,7 @@ fn combo_newline_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -102,7 +104,7 @@ fn combo_newline_marker_overlay_undo() {
 fn combo_newline_and_indent_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-nli")))
     (with-current-buffer buf
@@ -137,6 +139,7 @@ fn combo_newline_and_indent_marker_overlay_undo() {
                                 (get-text-property 33 'code))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -144,7 +147,7 @@ fn combo_newline_and_indent_marker_overlay_undo() {
 fn combo_newline_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-nlnar")))
     (with-current-buffer buf
@@ -185,6 +188,7 @@ fn combo_newline_narrow_marker_overlay_undo() {
                                 (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -192,7 +196,7 @@ fn combo_newline_narrow_marker_overlay_undo() {
 fn combo_newline_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-nlbl")))
     (with-current-buffer buf
@@ -230,5 +234,6 @@ fn combo_newline_buffer_local_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

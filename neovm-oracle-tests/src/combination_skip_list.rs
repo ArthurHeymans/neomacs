@@ -137,7 +137,12 @@ fn oracle_prop_skip_list_create_insert_search() {
       (fmakunbound 'test-sl--random-level)
       (fmakunbound 'test-sl--search)
       (fmakunbound 'test-sl--insert))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 (\"ten\" . t) (\"five\" . t) (\"twenty\" . t) (\"fifteen\" . t) (\"one\" . t) nil nil nil (\"TEN\" . t) 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +286,12 @@ fn oracle_prop_skip_list_delete() {
       (fmakunbound 'test-sl2--search)
       (fmakunbound 'test-sl2--insert)
       (fmakunbound 'test-sl2--delete))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 t 3 nil (\"ten\" . t) (\"thirty\" . t) (\"forty\" . t) nil 3 t t 1 nil nil (\"thirty\" . t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -383,7 +393,12 @@ fn oracle_prop_skip_list_ordered_iteration() {
       (fmakunbound 'test-sl3--insert)
       (fmakunbound 'test-sl3--to-alist)
       (fmakunbound 'test-sl3--keys))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 20 30 40 50 60 70) t ((10 . \"ten\") (20 . \"twenty\") (30 . \"thirty\") (40 . \"forty\") (50 . \"fifty\") (60 . \"sixty\") (70 . \"seventy\")) 7)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -492,7 +507,12 @@ fn oracle_prop_skip_list_range_query() {
       (fmakunbound 'test-sl4--random-level)
       (fmakunbound 'test-sl4--insert)
       (fmakunbound 'test-sl4--range))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((5 . 50) (10 . 100) (15 . 150) (20 . 200) (25 . 250) (30 . 300) (35 . 350) (40 . 400) (45 . 450) (50 . 500)) ((15 . 150) (20 . 200) (25 . 250) (30 . 300) (35 . 350)) ((20 . 200)) nil ((5 . 50) (10 . 100)) ((45 . 450) (50 . 500)) 10)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -638,7 +658,12 @@ fn oracle_prop_skip_list_bulk_operations() {
       (fmakunbound 'test-sl5--insert)
       (fmakunbound 'test-sl5--delete)
       (fmakunbound 'test-sl5--keys))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (20 t 10 (1 3 5 7 9 11 13 15 17 19) t (9 . t) nil (361 . t) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -780,5 +805,10 @@ fn oracle_prop_skip_list_min_max_floor_ceiling() {
       (fmakunbound 'test-sl6--max)
       (fmakunbound 'test-sl6--floor)
       (fmakunbound 'test-sl6--ceiling))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 . \"v10\") (50 . \"v50\") (20 . \"v20\") (30 . \"v30\") nil (50 . \"v50\") (50 . \"v50\") (30 . \"v30\") (30 . \"v30\") (10 . \"v10\") (50 . \"v50\") nil)""#
+        ]],
+    );
 }

@@ -10,20 +10,21 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo72_babel_ob_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (condition-case nil (require 'ob-table) (error nil))
   (list
    :ob-table-loaded (featurep 'ob-table)
    :sbe-fbound (fboundp 'org-sbe)
    ))"##,
+        expect_test::expect![[r#""OK (:ob-table-loaded t :sbe-fbound t)""#]],
     );
 }
 
 #[test]
 fn combo72_element_put_property_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-element)
@@ -42,13 +43,16 @@ fn combo72_element_put_property_stress() {
       (push (list :level (org-element-property :level hl)) r)
       (push (list :raw (substring-no-properties (org-element-property :raw-value hl))) r))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:prop1 \"value1\") (:prop2 42) (:prop3 (a b c)) (:level 1) (:raw \"H\"))""#
+        ]],
     );
 }
 
 #[test]
 fn combo72_timer_item_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-timer)
@@ -59,26 +63,28 @@ fn combo72_timer_item_insert() {
                (push (list :inserted (buffer-string)) r))
       (error (push (list :insert-error t) r)))
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:item-insert-fbound t) (:inserted \"- 0:00:00 :: \"))""#]],
     );
 }
 
 #[test]
 fn combo72_export_async() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (list
    :async-export-fbound (boundp 'org-export-async-init-file)
    :in-background-fbound (fboundp 'org-export-in-background)
    ))"##,
+        expect_test::expect![[r#""OK (:async-export-fbound t :in-background-fbound nil)""#]],
     );
 }
 
 #[test]
 fn combo72_agenda_get_blocks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-agenda)
   (list
@@ -86,13 +92,16 @@ fn combo72_agenda_get_blocks() {
    :get-day-entries-fbound (fboundp 'org-agenda-get-day-entries)
    :get-timeline-fbound (fboundp 'org-agenda-get-timeline)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:get-blocks-fbound t :get-day-entries-fbound t :get-timeline-fbound nil)""#
+        ]],
     );
 }
 
 #[test]
 fn combo72_entities_restricted() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-entities)
   (list
@@ -101,13 +110,16 @@ fn combo72_entities_restricted() {
    :user-fbound (boundp 'org-entities-user)
    :ascii-fbound (boundp 'org-entities-ascii-explanatory)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:restricted-fbound nil :restricted nil :user-fbound t :ascii-fbound nil)""#
+        ]],
     );
 }
 
 #[test]
 fn combo72_macro_collect_macros() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+MACRO: a alice\n#+MACRO: b bob\n")
@@ -120,13 +132,16 @@ fn combo72_macro_collect_macros() {
     ;; org-macro-templates
     (push (list :templates-bound (boundp 'org-macro-templates)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:collect-fbound t) (:collected-count 6) (:templates-bound t))""#
+        ]],
     );
 }
 
 #[test]
 fn combo72_publish_current_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-publish)
   (list
@@ -135,13 +150,16 @@ fn combo72_publish_current_file() {
    :publish-fbound (fboundp 'org-publish)
    :all-fbound (fboundp 'org-publish-all)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:current-file-fbound t :current-project-fbound t :publish-fbound t :all-fbound t)""#
+        ]],
     );
 }
 
 #[test]
 fn combo72_org_log_into_drawer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (list
@@ -150,13 +168,16 @@ fn combo72_org_log_into_drawer() {
    :log-state-notes-insert-fbound (boundp 'org-log-state-notes-insert-after-drawers)
    :log-done-fbound (boundp 'org-log-done)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:log-into-drawer-fbound t :log-repeat-fbound t :log-state-notes-insert-fbound t :log-done-fbound t)""#
+        ]],
     );
 }
 
 #[test]
 fn combo72_org_export_snippet_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "@@html:<b>bold</b>@@ and @@latex:\\textbf{bold}@@\n")
@@ -167,5 +188,8 @@ fn combo72_org_export_snippet_variants() {
       (push (list :snippet-backends
                   (mapcar (lambda (s) (org-element-property :back-end s)) snippets)) r))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:snippet-count 2) (:snippet-backends (\"html\" \"latex\")))""#
+        ]],
     );
 }

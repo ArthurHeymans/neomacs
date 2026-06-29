@@ -25,7 +25,12 @@ fn oracle_take_fresh_prefix_and_large_n_copy() {
         (eq (cdr large) (cdr lst))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((changed-small b) (changed-large b c) (a b c) nil nil nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -50,7 +55,12 @@ fn oracle_take_negative_zero_type_and_improper_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil nil (wrong-type-argument (integerp x)) (a b) (wrong-type-argument (listp c)) (wrong-type-argument (listp 42)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -71,7 +81,10 @@ fn oracle_ntake_destructive_identity_and_large_n() {
         (eq large large-list)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2) (1 2) t (a b c) (a b c) t)""#]],
+    );
 }
 
 #[test]
@@ -99,5 +112,8 @@ fn oracle_ntake_negative_zero_and_error_payloads() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 43)""#]],
+    );
 }

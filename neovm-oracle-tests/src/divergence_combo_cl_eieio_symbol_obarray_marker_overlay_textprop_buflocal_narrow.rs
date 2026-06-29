@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_defclass_creates_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass sym-test-foo ()
     ((val :initarg :val :accessor stf-val :initform 0)))
@@ -59,6 +59,7 @@ fn combo_eieio_defclass_creates_symbols() {
                 (buffer-string)
                 my-obj)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (void-variable cls)""#]],
     );
 }
 
@@ -66,7 +67,7 @@ fn combo_eieio_defclass_creates_symbols() {
 fn combo_eieio_symbol_plist_class_metadata() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass annotated-class ()
     ((data :initarg :data :accessor ac-data :initform nil)
@@ -113,6 +114,7 @@ fn combo_eieio_symbol_plist_class_metadata() {
                 (buffer-string)
                 my-obj)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -120,7 +122,7 @@ fn combo_eieio_symbol_plist_class_metadata() {
 fn combo_eieio_mapatoms_find_classes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mapat-alpha ()
     ((x :initarg :x :accessor ma-x :initform 0)))
@@ -175,6 +177,7 @@ fn combo_eieio_mapatoms_find_classes() {
                 (buffer-string)
                 my-obj class-names)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (void-function eieio--class)""#]],
     );
 }
 
@@ -182,7 +185,7 @@ fn combo_eieio_mapatoms_find_classes() {
 fn combo_eieio_intern_construct_dynamic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass dyn-item ()
     ((tag :initarg :tag :accessor di-tag :initform "")
@@ -243,6 +246,7 @@ fn combo_eieio_intern_construct_dynamic() {
                 (buffer-string)
                 my-items)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -250,7 +254,7 @@ fn combo_eieio_intern_construct_dynamic() {
 fn combo_eieio_class_redefinition_preserve_instances() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass redef-test ()
     ((a :initarg :a :accessor rt-a :initform 0)
@@ -306,5 +310,6 @@ fn combo_eieio_class_redefinition_preserve_instances() {
                 (buffer-string)
                 my-obj)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (void-variable has-c)""#]],
     );
 }

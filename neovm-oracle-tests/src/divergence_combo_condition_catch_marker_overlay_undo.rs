@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_condition_catch_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ccx")))
     (with-current-buffer buf
@@ -36,6 +36,7 @@ fn combo_condition_catch_marker_overlay_undo() {
                    (marker-position m)
                    (buffer-string)))))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -43,7 +44,7 @@ fn combo_condition_catch_marker_overlay_undo() {
 fn combo_condition_catch_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ccn")))
     (with-current-buffer buf
@@ -74,6 +75,7 @@ fn combo_condition_catch_narrow_marker() {
                    (marker-position m)
                    (buffer-string)))))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -81,7 +83,7 @@ fn combo_condition_catch_narrow_marker() {
 fn combo_condition_catch_clone_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ccc")))
     (with-current-buffer buf
@@ -112,6 +114,7 @@ fn combo_condition_catch_clone_overlay() {
                      (buffer-string)))))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -119,7 +122,7 @@ fn combo_condition_catch_clone_overlay() {
 fn combo_catch_condition_multi_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cmx")))
     (with-current-buffer buf
@@ -157,6 +160,7 @@ fn combo_catch_condition_multi_error() {
                            (buffer-string))))))
           (list r1 r2))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -164,7 +168,7 @@ fn combo_catch_condition_multi_error() {
 fn combo_condition_catch_textprop_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cct")))
     (with-current-buffer buf
@@ -195,5 +199,6 @@ fn combo_condition_catch_textprop_narrow_undo() {
                    (marker-position m)
                    (buffer-string)))))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

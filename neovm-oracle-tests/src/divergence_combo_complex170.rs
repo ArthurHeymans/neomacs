@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx170_mega_eieio_clloop_hash_marker_overlay_undo_narrow_env() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -50,13 +50,14 @@ fn div_cx170_mega_eieio_clloop_hash_marker_overlay_undo_narrow_env() {
                       (text-properties-at 1))))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }
 
 #[test]
 fn div_cx170_mega_subprocess_buflocal_textprop_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx170-mega-2*")))
   (with-current-buffer buf
@@ -88,13 +89,14 @@ fn div_cx170_mega_subprocess_buflocal_textprop_marker_overlay_undo() {
       (kill-buffer buf)
       (list state (buffer-live-p buf)))))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     );
 }
 
 #[test]
 fn div_cx170_mega_advice_closure_eval_macro_kbd_register_window_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
       (calls nil))
@@ -130,13 +132,14 @@ fn div_cx170_mega_advice_closure_eval_macro_kbd_register_window_config() {
               (kill-buffer buf)
               (list snapshot (buffer-live-p buf))))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx170_mega_coding_charset_print_circle_secure_hash_obarray_cl_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((text "café 世界 😀")
        (encoded (encode-coding-string text 'utf-8))
@@ -163,13 +166,14 @@ fn div_cx170_mega_coding_charset_print_circle_secure_hash_obarray_cl_loop() {
             (get sym1 'neo-cx170-prop)
             cl-loop-result))))
 "##,
+        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
     );
 }
 
 #[test]
 fn div_cx170_mega_full_eleven_subsystem_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX170=v3" process-environment)))
@@ -215,5 +219,6 @@ fn div_cx170_mega_full_eleven_subsystem_stress() {
                 (hash-table-count ht)
                 (aref rec 2)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

@@ -7,13 +7,16 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_frame_font() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((f (selected-frame)))
   (list (frame-parameter f 'font)
         (frame-parameter f 'foreground-color)
         (frame-parameter f 'background-color)
         (frame-parameter f 'cursor-color)
         (frame-parameter f 'mouse-color)))"#,
+        expect_test::expect![[
+            r#""OK (\"tty\" \"unspecified-fg\" \"unspecified-bg\" \"white\" nil)""#
+        ]],
     );
 }
 
@@ -21,7 +24,7 @@ fn divergence_frame_font() {
 fn divergence_frame_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((f (selected-frame)))
   (list (> (frame-width f) 0)
         (> (frame-height f) 0)
@@ -29,6 +32,7 @@ fn divergence_frame_size() {
         (integerp (frame-height f))
         (fboundp 'set-frame-size)
         (fboundp 'set-frame-position)))"#,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
@@ -36,12 +40,13 @@ fn divergence_frame_size() {
 fn divergence_frame_title() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((f (selected-frame)))
   (list (stringp (frame-parameter f 'name))
         (fboundp 'modify-frame-parameters)
         (frame-parameter f 'title)
         (stringp (or (frame-parameter f 'title) ""))))"#,
+        expect_test::expect![[r#""OK (t t nil t)""#]],
     );
 }
 
@@ -49,7 +54,7 @@ fn divergence_frame_title() {
 fn divergence_frame_terminal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((f (selected-frame)))
   (list (terminal-live-p (frame-terminal f))
         (fboundp 'terminal-list)
@@ -70,6 +75,7 @@ fn divergence_frame_child_frames() {
   (fboundp 'delete-frame)
   (fboundp 'frame-parent)
   (fboundp 'frame-ancestor-p))"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\\\"\" 4 37)""##]],
     );
 }
 
@@ -77,7 +83,7 @@ fn divergence_frame_child_frames() {
 fn divergence_display_color_cells() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'display-color-cells)
   (fboundp 'display-color-p)
@@ -97,6 +103,7 @@ fn divergence_font_spec() {
   (fboundp 'font-put)
   (fboundp 'font-face-attributes)
   (fboundp 'font-xlfd-name))"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\\\"\" 5 39)""##]],
     );
 }
 
@@ -104,13 +111,14 @@ fn divergence_font_spec() {
 fn divergence_cursor_appearance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'cursor-type)
   (boundp 'x-stretch-cursor)
   (boundp 'blink-cursor-interval)
   (boundp 'blink-cursor-delay)
   (integerp blink-cursor-interval))"#,
+        expect_test::expect![[r#""OK (t t t t nil)""#]],
     );
 }
 
@@ -118,12 +126,13 @@ fn divergence_cursor_appearance() {
 fn divergence_pointer_shape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'x-pointer-shape)
   (boundp 'x-sensitive-text-pointer-shape)
   (fboundp 'x-set-selection)
   (fboundp 'x-get-selection))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -131,12 +140,13 @@ fn divergence_pointer_shape() {
 fn divergence_tooltips() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'tooltip-mode)
   (boundp 'tooltip-delay)
   (boundp 'tooltip-short-delay)
   (fboundp 'tooltip-show)
   (featurep 'tooltip))"#,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }

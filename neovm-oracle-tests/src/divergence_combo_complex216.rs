@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx216_electric_modes_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'electric-indent-mode)
       (boundp 'electric-pair-mode)
@@ -17,13 +17,14 @@ fn div_cx216_electric_modes_availability() {
       (fboundp 'electric-indent-local-mode)
       (fboundp 'electric-pair-local-mode))
 "##,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx216_subword_superword_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -41,13 +42,14 @@ fn div_cx216_subword_superword_mode() {
             (list p1 p2 p3 (subword-mode 1) (subword-mode -1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (3 8 15 t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx216_repeat_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'repeat-mode)
@@ -56,26 +58,28 @@ fn div_cx216_repeat_mode_availability() {
           (boundp 'repeat-in-progress))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx216_display_line_numbers_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'display-line-numbers-mode)
       (fboundp 'global-display-line-numbers-mode)
       (boundp 'display-line-numbers-width)
       (boundp 'display-line-numbers-type))
 "##,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx216_electric_pair_pairs_table_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'electric-pair-pairs)
       (consp electric-pair-pairs)
@@ -83,26 +87,28 @@ fn div_cx216_electric_pair_pairs_table_query() {
       (boundp 'electric-pair-preserve-balance)
       (boundp 'electric-pair-inhibit-predicate))
 "##,
+        expect_test::expect![[r#""ERR (void-variable electric-pair-pairs)""#]],
     );
 }
 
 #[test]
 fn div_cx216_electric_indent_rules_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'electric-indent-functions)
       (boundp 'electric-indent-chars)
       (boundp 'electric-indent-inhibit)
       (boundp 'electric-indent-just-newline))
 "##,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx216_so_long_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -112,26 +118,28 @@ fn div_cx216_so_long_mode_availability() {
             (boundp 'so-long-max-lines)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx216_visual_line_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'visual-line-mode)
       (fboundp 'visual-fill-column-mode)
       (boundp 'visual-line-fringe-indicators)
       (boundp 'word-wrap))
 "##,
+        expect_test::expect![[r#""OK (t nil t t)""#]],
     );
 }
 
 #[test]
 fn div_cx216_whitespace_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -143,13 +151,14 @@ fn div_cx216_whitespace_mode_availability() {
             (boundp 'whitespace-tab)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx216_electric_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -176,5 +185,6 @@ fn div_cx216_electric_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

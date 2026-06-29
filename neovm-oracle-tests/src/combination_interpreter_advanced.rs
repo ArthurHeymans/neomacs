@@ -107,7 +107,10 @@ fn oracle_prop_interp_adv_register_vm() {
                   (add 0 0 1)
                   (ret 0))))
     (fmakunbound 'neovm--test-regvm-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (7 20 91 42 15)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -202,7 +205,12 @@ fn oracle_prop_interp_adv_bytecode_compiler() {
     (fmakunbound 'neovm--test-bc-compile)
     (fmakunbound 'neovm--test-bc-emit)
     (fmakunbound 'neovm--test-bc-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((expr (+ 1 2 3) bytecode-len 5 result 6) (expr (* 2 3 4) bytecode-len 5 result 24) (expr (- 100 30 20) bytecode-len 5 result 50) (expr (+ (* 3 4) (* 5 6)) bytecode-len 7 result 42) (expr (neg 42) bytecode-len 2 result -42) (expr (dup 7) bytecode-len 2 result 7) (expr (+ (dup 5) 3) bytecode-len 4 result 8))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -328,7 +336,12 @@ fn oracle_prop_interp_adv_type_checking() {
        (funcall 'neovm--test-typed-eval
                 '(add (mul 2 3) (add "bad" 1)) nil))
     (fmakunbound 'neovm--test-typed-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((int . 7) (str . \"hello world\") (error . \"type error: add requires int, got int and str\") (error . \"type error: cat requires str, got int and int\") (int . 10) (error . \"type error: if requires bool, got int\") (int . 15) (str . \"Hello, Alice\") (error . \"type error: add requires int, got str and int\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +460,10 @@ fn oracle_prop_interp_adv_closures_env() {
                          (call (call compose dbl inc) 5)))
                 nil))
     (fmakunbound 'neovm--test-closure-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (15 37 300 12 (11 . 12))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -543,7 +559,12 @@ fn oracle_prop_interp_adv_tail_call_detection() {
                      (call f3 (ref z)))
                 t))
     (fmakunbound 'neovm--test-tco-analyze)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((fact . t)) ((+ . t) (fact)) ((foo . t) (bar) (baz . t)) ((compute) (process . t)) ((f1 . t) (f2 . t) (f3 . t)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -652,5 +673,8 @@ fn oracle_prop_interp_adv_continuations() {
                 '(+ 100 (abort 42)) nil))
     (fmakunbound 'neovm--test-cps-eval)
     (fmakunbound 'neovm--test-cps-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (7 15 42 99 15 25 11 42)""#]],
+    );
 }

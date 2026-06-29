@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx169_cl_loop_with_multiple_accumulators() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((nums '(1 2 3 4 5)))
   (cl-loop for n in nums
@@ -18,13 +18,14 @@ fn div_cx169_cl_loop_with_multiple_accumulators() {
                                  :even-count even-count
                                  :max max-val))))
 "##,
+        expect_test::expect![[r#""OK (:total 15 :even-count 2 :max 5)""#]],
     );
 }
 
 #[test]
 fn div_cx169_cl_loop_with_destructuring_hash_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
   (puthash "alpha" 1 ht)
@@ -34,13 +35,14 @@ fn div_cx169_cl_loop_with_destructuring_hash_iteration() {
                  collect (cons k v))
         (lambda (a b) (string< (car a) (car b)))))
 "##,
+        expect_test::expect![[r#""OK ((\"alpha\" . 1) (\"beta\" . 2) (\"gamma\" . 3))""#]],
     );
 }
 
 #[test]
 fn div_cx169_cl_loop_for_with_destructuring_and_multiple_into() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '(((1 . "a") (2 . "b"))
               ((3 . "c") (4 . "d")))))
@@ -50,13 +52,16 @@ fn div_cx169_cl_loop_for_with_destructuring_and_multiple_into() {
            count (> (caar sublist) 1) into big-first
            finally (return (list :all all :count i :big-first big-first))))
 "##,
+        expect_test::expect![[
+            r#""OK (:all ((1 . \"a\") (2 . \"b\") (3 . \"c\") (4 . \"d\")) :count 3 :big-first 1)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx169_cl_loop_with_for_hash_and_collect_with_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
   (puthash "a" 1 ht)
@@ -67,39 +72,44 @@ fn div_cx169_cl_loop_with_for_hash_and_collect_with_destructuring() {
            collect (cons k v) into filtered
            finally (return filtered)))
 "##,
+        expect_test::expect![[r#""OK ((\"b\" . 2) (\"c\" . 3))""#]],
     );
 }
 
 #[test]
 fn div_cx169_cl_loop_with_iterate_through_vector_indices() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v [10 20 30 40 50]))
   (cl-loop for x across v
            for i from 0
            collect (cons i x)))
 "##,
+        expect_test::expect![[r#""OK ((0 . 10) (1 . 20) (2 . 30) (3 . 40) (4 . 50))""#]],
     );
 }
 
 #[test]
 fn div_cx169_cl_loop_with_for_in_string_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "hello"))
   (cl-loop for c in-string s
            for i from 0
            collect (cons i c)))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"Expected a ‘for’ preposition, found in-string\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx169_cl_loop_with_complex_initially_finally() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (trace)
   (prog1
@@ -111,13 +121,14 @@ fn div_cx169_cl_loop_with_complex_initially_finally() {
                (return :done))
     trace))
 "##,
+        expect_test::expect![[r#""ERR (void-function return)""#]],
     );
 }
 
 #[test]
 fn div_cx169_cl_loop_with_while_until_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '(1 2 3 4 5 stop 6 7 8))
       (i 0)
@@ -129,13 +140,14 @@ fn div_cx169_cl_loop_with_while_until_combined() {
            do (cl-incf i)
            finally (return (list :count i :acc (nreverse acc)))))
 "##,
+        expect_test::expect![[r#""OK (:count 5 :acc (1 2 3 4 5))""#]],
     );
 }
 
 #[test]
 fn div_cx169_cl_loop_maximize_minimize_with_into_and_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((nums '(5 3 8 1 9 2 7 4 6 0 -1 -5 100)))
   (cl-loop for n in nums
@@ -144,13 +156,14 @@ fn div_cx169_cl_loop_maximize_minimize_with_into_and_filter() {
            finally (return (list :max-even max-even
                                  :min-odd min-odd))))
 "##,
+        expect_test::expect![[r#""OK (:max-even 100 :min-odd -5)""#]],
     );
 }
 
 #[test]
 fn div_cx169_cl_loop_with_complex_when_unless_branching() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((items '((1 . "a") (2 . "b") (3 . "c") (4 . "d"))))
   (cl-loop for (k . v) in items
@@ -158,13 +171,14 @@ fn div_cx169_cl_loop_with_complex_when_unless_branching() {
            unless (cl-evenp k) collect v into odd-strs
            finally (return (list :even even-strs :odd odd-strs))))
 "##,
+        expect_test::expect![[r#""OK (:even (\"b\" \"d\") :odd (\"a\" \"c\"))""#]],
     );
 }
 
 #[test]
 fn div_cx169_cl_loop_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
   (puthash "alpha" 1 ht)
@@ -191,5 +205,6 @@ fn div_cx169_cl_loop_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

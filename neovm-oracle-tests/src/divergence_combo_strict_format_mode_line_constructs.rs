@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_n0_format_mode_line_basic_constructs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello")
@@ -28,13 +28,14 @@ fn div_n0_format_mode_line_basic_constructs() {
         (format-mode-line "%e")
         (format-mode-line "%n")))
 "##,
+        expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\")""#]],
     );
 }
 
 #[test]
 fn div_n0_format_mode_line_with_buffer_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello world\nsecond line\nthird\n")
@@ -49,13 +50,14 @@ fn div_n0_format_mode_line_with_buffer_state() {
         (format-mode-line "%*")
         (format-mode-line "%I")))
 "##,
+        expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\" \"\" \"\")""#]],
     );
 }
 
 #[test]
 fn div_n0_format_mode_line_modified_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer (insert "x") (format-mode-line "%*"))
       (with-temp-buffer (insert "x") (set-buffer-modified-p t) (format-mode-line "%*"))
@@ -64,13 +66,14 @@ fn div_n0_format_mode_line_modified_markers() {
       (with-temp-buffer (insert "x") (setq buffer-read-only t)
                         (set-buffer-modified-p t) (format-mode-line "%*")))
 "##,
+        expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\")""#]],
     );
 }
 
 #[test]
 fn div_n0_format_mode_line_eval_and_propertize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "x")
@@ -81,13 +84,14 @@ fn div_n0_format_mode_line_eval_and_propertize() {
         (format-mode-line "%[-")
         (format-mode-line "line %l of total")))
 "##,
+        expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\" \"\")""#]],
     );
 }
 
 #[test]
 fn div_n0_format_mode_line_full_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello")
@@ -95,13 +99,14 @@ fn div_n0_format_mode_line_full_default() {
   (list (format-mode-line mode-line-format)
         (format-mode-line header-line-format)))
 "##,
+        expect_test::expect![[r#""OK (\"\" \"\")""#]],
     );
 }
 
 #[test]
 fn div_n0_format_mode_line_percent_dashes_and_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert (make-string 5000 ?x))
@@ -111,5 +116,6 @@ fn div_n0_format_mode_line_percent_dashes_and_size() {
         (format-mode-line "%I")
         (format-mode-line "%o")))
 "##,
+        expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\")""#]],
     );
 }

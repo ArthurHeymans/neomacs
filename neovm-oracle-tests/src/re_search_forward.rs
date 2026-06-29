@@ -10,13 +10,15 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_re_search_forward_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_ret, neovm_ret) = eval_oracle_and_neovm(
+    let (oracle_ret, neovm_ret) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (erase-buffer) (insert "abc xyz") (goto-char 1) (re-search-forward "xyz"))"#,
+        expect_test::expect![[r#""abc xyzOK 8""#]],
     );
     assert_ok_eq("8", &oracle_ret, &neovm_ret);
 
-    let (oracle_point, neovm_point) = eval_oracle_and_neovm(
+    let (oracle_point, neovm_point) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (erase-buffer) (insert "abc xyz") (goto-char 1) (re-search-forward "xyz") (point))"#,
+        expect_test::expect![[r#""abc xyzOK 8""#]],
     );
     assert_ok_eq("8", &oracle_point, &neovm_point);
 }
@@ -25,7 +27,10 @@ fn oracle_prop_re_search_forward_basics() {
 fn oracle_prop_re_search_forward_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(re-search-forward 1)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(re-search-forward 1)",
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -34,7 +39,10 @@ fn oracle_prop_re_search_forward_multibyte_match_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(progn (erase-buffer) (insert "αβc") (goto-char 1) (re-search-forward "c") (list (match-beginning 0) (match-end 0) (point)))"####;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""αβcOK (3 4 4)""#]],
+    );
     assert_ok_eq("(3 4 4)", &oracle, &neovm);
 }
 

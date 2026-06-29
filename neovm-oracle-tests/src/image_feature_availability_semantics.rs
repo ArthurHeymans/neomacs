@@ -22,5 +22,10 @@ fn oracle_image_primitives_follow_gnu_build_feature_availability() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (void-function imagemagick-types) nil (void-function lookup-image))""#
+        ]],
+    );
 }

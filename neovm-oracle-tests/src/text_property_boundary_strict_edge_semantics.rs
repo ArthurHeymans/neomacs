@@ -40,5 +40,10 @@ fn oracle_text_property_plain_string_boundaries_and_limit_t() {
    (previous-property-change 6 s)
    (previous-property-change 6 s 4)))"#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (0 nil nil nil nil 0 1 3 5 5 (wrong-type-argument (integer-or-marker-p t)) (wrong-type-argument (integer-or-marker-p t)) 5 5)""#
+        ]],
+    );
 }

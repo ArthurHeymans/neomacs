@@ -25,7 +25,10 @@ fn oracle_prop_merge_ordered_lists_gnu_subr_examples() {
    (error err)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((E D B C A) (E D C B A) (error \"cycle\"))""#]],
+    );
 }
 
 #[test]
@@ -43,7 +46,10 @@ fn oracle_prop_merge_ordered_lists_error_function_observes_unresolved_tail() {
    seen))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((C A B) ((A B) (B A) (B)))""#]],
+    );
 }
 
 #[test]
@@ -58,7 +64,12 @@ fn oracle_prop_merge_ordered_lists_rejects_invalid_error_candidate() {
   (error err))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (error \"Invalid candidate returned by error-function: not-a-head\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -79,5 +90,10 @@ fn oracle_prop_merge_ordered_lists_uses_eql_and_avoids_mutating_outer_list() {
    (eq (cadr lists) nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 -0.0e+NaN tail) ((1 -0.0e+NaN tail) nil (1 -0.0e+NaN)) t)""#
+        ]],
+    );
 }

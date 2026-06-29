@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_add_hook_and_run_hooks_ordering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar my-hook nil)\n\
          (setq my-hook nil)\n\
@@ -17,6 +17,7 @@ fn deficiency_add_hook_and_run_hooks_ordering() {
          (defvar my-hook-log nil)\n\
          (run-hooks 'my-hook)\n\
          (nreverse my-hook-log))",
+        expect_test::expect![[r#""OK (second first)""#]],
     );
 }
 
@@ -24,7 +25,7 @@ fn deficiency_add_hook_and_run_hooks_ordering() {
 fn deficiency_add_hook_append_vs_prepend() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar ord-hook nil)\n\
          (defvar ord-log nil)\n\
@@ -33,6 +34,7 @@ fn deficiency_add_hook_append_vs_prepend() {
          (add-hook 'ord-hook (lambda () (push 'second ord-log)) t)\n\
          (run-hooks 'ord-hook)\n\
          (nreverse ord-log))",
+        expect_test::expect![[r#""OK (first second)""#]],
     );
 }
 
@@ -40,7 +42,7 @@ fn deficiency_add_hook_append_vs_prepend() {
 fn deficiency_remove_hook_mid_execution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar rem-hook nil)\n\
          (defvar rem-log nil)\n\
@@ -53,6 +55,7 @@ fn deficiency_remove_hook_mid_execution() {
          (remove-hook 'rem-hook 'rem-fn2)\n\
          (run-hooks 'rem-hook)\n\
          (list (nreverse rem-log)))",
+        expect_test::expect![[r#""OK ((fn2 fn1 fn1))""#]],
     );
 }
 
@@ -60,7 +63,7 @@ fn deficiency_remove_hook_mid_execution() {
 fn deficiency_hook_with_args_via_run_hook_with_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar arg-hook nil)\n\
          (defvar arg-log nil)\n\
@@ -69,6 +72,7 @@ fn deficiency_hook_with_args_via_run_hook_with_args() {
          (run-hook-with-args 'arg-hook 42)\n\
          (run-hook-with-args 'arg-hook 99)\n\
          (nreverse arg-log))",
+        expect_test::expect![[r#""OK (42 99)""#]],
     );
 }
 
@@ -76,7 +80,7 @@ fn deficiency_hook_with_args_via_run_hook_with_args() {
 fn deficiency_buffer_local_hook_isolation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar blh-hook nil)\n\
          (setq blh-hook nil)\n\
@@ -92,6 +96,7 @@ fn deficiency_buffer_local_hook_isolation() {
          (run-hooks 'blh-hook))\n\
          (kill-buffer buf)\n\
          (nreverse blh-log)))",
+        expect_test::expect![[r#""OK (global local global)""#]],
     );
 }
 
@@ -99,7 +104,7 @@ fn deficiency_buffer_local_hook_isolation() {
 fn deficiency_hook_depth_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar depth-hook nil)\n\
          (defvar depth-log nil)\n\
@@ -109,6 +114,7 @@ fn deficiency_hook_depth_priority() {
          (add-hook 'depth-hook (lambda () (push 'depth-50 depth-log)) 50)\n\
          (run-hooks 'depth-hook)\n\
          (nreverse depth-log))",
+        expect_test::expect![[r#""OK (depth-10 depth-50 depth-90)""#]],
     );
 }
 
@@ -116,12 +122,13 @@ fn deficiency_hook_depth_priority() {
 fn deficiency_hook_nil_does_nothing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar nil-hook nil)\n\
          (setq nil-hook nil)\n\
          (list (run-hooks 'nil-hook)\n\
          (null nil-hook)))",
+        expect_test::expect![[r#""OK (nil t)""#]],
     );
 }
 
@@ -129,7 +136,7 @@ fn deficiency_hook_nil_does_nothing() {
 fn deficiency_run_hook_wrapped_catches_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar wrap-hook nil)\n\
          (defvar wrap-log nil)\n\
@@ -141,6 +148,7 @@ fn deficiency_run_hook_wrapped_catches_errors() {
          (run-hooks 'wrap-hook)\n\
          (error (push (car err) wrap-log)))\n\
          (nreverse wrap-log))",
+        expect_test::expect![[r#""OK (after error)""#]],
     );
 }
 
@@ -148,7 +156,7 @@ fn deficiency_run_hook_wrapped_catches_errors() {
 fn deficiency_run_hook_until_failure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar fail-hook nil)\n\
          (defvar fail-log nil)\n\
@@ -158,6 +166,7 @@ fn deficiency_run_hook_until_failure() {
          (add-hook 'fail-hook (lambda () (push 'third fail-log)))\n\
          (run-hook-with-args-until-failure 'fail-hook)\n\
          (nreverse fail-log))",
+        expect_test::expect![[r#""OK (third second)""#]],
     );
 }
 
@@ -165,7 +174,7 @@ fn deficiency_run_hook_until_failure() {
 fn deficiency_hook_symbol_value_is_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar sv-hook nil)\n\
          (setq sv-hook nil)\n\
@@ -177,5 +186,6 @@ fn deficiency_hook_symbol_value_is_list() {
          (length sv-hook)\n\
          (memq 'sv-fn1 sv-hook)\n\
          (memq 'sv-fn2 sv-hook)))",
+        expect_test::expect![[r#""OK (t 2 (sv-fn1) (sv-fn2 sv-fn1))""#]],
     );
 }

@@ -10,7 +10,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo68_capture_finalize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-capture)
   (list
@@ -19,13 +19,16 @@ fn combo68_capture_finalize() {
    :capture-put-fbound (fboundp 'org-capture-put)
    :capture-kill-fbound (fboundp 'org-capture-kill)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:finalize-fbound t :capture-get-fbound t :capture-put-fbound t :capture-kill-fbound t)""#
+        ]],
     );
 }
 
 #[test]
 fn combo68_table_named_formula_cross_ref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+name: rates\n| item | price |\n|------+-------|\n| A    |    10 |\n| B    |    25 |\n\n")
@@ -41,13 +44,16 @@ fn combo68_table_named_formula_cross_ref() {
     (goto-char (point-min))
     (push (list :table-count (length (org-element-map (org-element-parse-buffer) 'table #'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r##""OK ((:after-recalc \"#+name: rates\n| item | price |\n|------+-------|\n| A    |    10 |\n| B    |    25 |\n\n#+name: orders\n| item | qty | total |\n|------+-----+-------|\n| A    |   3 |     0 |\n| B    |   2 |     0 |\n#+TBLFM: $3=$2*remote(rates,@@#$3)\n\") (:table-count 2))""##
+        ]],
     );
 }
 
 #[test]
 fn combo68_babel_results_html() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -60,13 +66,16 @@ fn combo68_babel_results_html() {
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r##""OK (\"<b>bold</b>\" (:result-count 0) (:buffer \"#+begin_src emacs-lisp :results html\n\\\"<b>bold</b>\\\"\n#+end_src\n\n#+RESULTS:\n#+begin_export html\n<b>bold</b>\n#+end_export\n\"))""##
+        ]],
     );
 }
 
 #[test]
 fn combo68_export_body_only_all_backends() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-ascii)
@@ -81,13 +90,14 @@ fn combo68_export_body_only_all_backends() {
               (push (list :ok (and out (> (length out) 0))) r))
           (error (push (list :error t) r))))
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK ((:error t) (:error t) (:error t))""#]],
     );
 }
 
 #[test]
 fn combo68_element_parse_secondary_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-element)
@@ -97,13 +107,14 @@ fn combo68_element_parse_secondary_string() {
                      "*bold* /italic/" 'bold)))
         (list :result-type (when result (type-of result))))
     (error (list :error t))))"##,
+        expect_test::expect![[r#""OK (:error t)""#]],
     );
 }
 
 #[test]
 fn combo68_entities_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-entities)
@@ -118,13 +129,14 @@ fn combo68_entities_replace() {
    (let ((ent (org-entity-get "sum")))
      (list :sum-ascii (nth 1 ent)
            :sum-latex (nth 2 ent))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 14 38)""#]],
     );
 }
 
 #[test]
 fn combo68_insert_heading_force_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- item 1\n- item 2\n")
@@ -138,13 +150,14 @@ fn combo68_insert_heading_force_mode() {
                (push (list :after-insert (buffer-string)) r))
       (error (push (list :insert-error t) r)))
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:after-insert \"- item 1\n- item 2\n* New heading\n\"))""#]],
     );
 }
 
 #[test]
 fn combo68_babel_get_src_block_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-core)
@@ -161,13 +174,16 @@ fn combo68_babel_get_src_block_info() {
         (let ((params (nth 2 info)))
           (push (list :var-param (cdr (assoc :var params))) r))))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:info-not-nil t) (:language \"emacs-lisp\") (:body \"(+ x 10)\") (:var-param (x . 5)))""#
+        ]],
     );
 }
 
 #[test]
 fn combo68_agenda_file_skip_archive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-agenda)
   (list
@@ -176,13 +192,16 @@ fn combo68_agenda_file_skip_archive() {
    :skip-function-fbound (boundp 'org-agenda-skip-function)
    :skip-scheduled-if-done (boundp 'org-agenda-skip-scheduled-if-done)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:skip-archived-trees-fbound t :skip-comment-trees-fbound t :skip-function-fbound t :skip-scheduled-if-done t)""#
+        ]],
     );
 }
 
 #[test]
 fn combo68_org_table_goto_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| a | b | c |\n|---+---+---|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n")
@@ -199,5 +218,8 @@ fn combo68_org_table_goto_line() {
     ;; get current cell
     (push (list :current-cell (org-table-get nil nil)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:goto-line-fbound t) (:current-line-fbound t) (:goto-col-fbound t) (:current-cell \"1\"))""#
+        ]],
     );
 }

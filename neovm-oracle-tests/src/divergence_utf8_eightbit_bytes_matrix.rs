@@ -13,7 +13,7 @@ macro_rules! sb {
         #[test]
         fn $name() {
             return_if_neovm_enable_oracle_proptest_not_set!();
-            assert_oracle_parity(&format!(
+            crate::common::assert_oracle_parity(&format!(
                 "(string-bytes (decode-coding-string (unibyte-string {}) 'utf-8))",
                 $byte
             ));

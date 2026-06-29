@@ -98,7 +98,10 @@ fn oracle_prop_process_algebra_sequential_composition() {
     (fmakunbound 'neovm--pa-seq)
     (fmakunbound 'neovm--pa-step)
     (fmakunbound 'neovm--pa-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((a b c) (x y) nil t (a b c x y) (a b c) (a b c t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +175,12 @@ fn oracle_prop_process_algebra_parallel_interleaving() {
            all-valid)))
     (fmakunbound 'neovm--pa2-interleave)
     (fmakunbound 'neovm--pa2-count-interleavings)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a 1) (1 a)) (3 ((a b 1) (a 1 b) (1 a b))) ((x y)) (6 t) 10 t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +292,10 @@ fn oracle_prop_process_algebra_choice_operator() {
     (fmakunbound 'neovm--pa3-initials)
     (fmakunbound 'neovm--pa3-resolve)
     (fmakunbound 'neovm--pa3-trace)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((a) (c) (a c) (a b) (c d) (a) nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +398,12 @@ fn oracle_prop_process_algebra_channel_communication() {
     (fmakunbound 'neovm--pa4-send)
     (fmakunbound 'neovm--pa4-recv)
     (fmakunbound 'neovm--pa4-sync)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((matched . 42) nil ((synced pipe 42)) blocked (matched . 99) ((synced pipe 42) (synced pipe 99)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -488,7 +504,10 @@ fn oracle_prop_process_algebra_deadlock_detection() {
     (fmakunbound 'neovm--pa5-reachable)
     (fmakunbound 'neovm--pa5-has-cycle-from)
     (fmakunbound 'neovm--pa5-detect-deadlock)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil (A B) (A B C) (A B) (C B A) nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -590,7 +609,12 @@ fn oracle_prop_process_algebra_trace_semantics() {
     (fmakunbound 'neovm--pa6-all-traces)
     (fmakunbound 'neovm--pa6-trace-subset)
     (fmakunbound 'neovm--pa6-prefixes)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a b) (a c)) ((a b)) ((a b) (a c) (a d)) t nil t (nil (a) (a b) (a b c)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -670,5 +694,10 @@ fn oracle_prop_process_algebra_hiding_restriction() {
     (fmakunbound 'neovm--pa7-restrict-trace)
     (fmakunbound 'neovm--pa7-abstract-tau)
     (fmakunbound 'neovm--pa7-alphabet)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a tau c tau e) (a b c d e) (tau tau tau tau tau) (a c e) nil (tau a tau b) (a b c) (a tau tau d))""#
+        ]],
+    );
 }

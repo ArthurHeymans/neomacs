@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx184_eieio_dispatch_inheritance_chain_call_next() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -28,13 +28,14 @@ fn div_cx184_eieio_dispatch_inheritance_chain_call_next() {
             (neo-cx184-chain (make-instance 'neo-cx184-root))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx184_eieio_qualifier_chain_ordering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -54,13 +55,16 @@ fn div_cx184_eieio_qualifier_chain_ordering() {
           (list r (nreverse calls)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (:result (:around-enter :before :primary :after :around-exit))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx184_eieio_no_applicable_method_signal_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -75,13 +79,14 @@ fn div_cx184_eieio_no_applicable_method_signal_handling() {
           (error (list :caught-other (car err))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:caught-no-applicable)""#]],
     );
 }
 
 #[test]
 fn div_cx184_eieio_method_combination_plus() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -94,13 +99,14 @@ fn div_cx184_eieio_method_combination_plus() {
       (neo-cx184-mc-call (make-instance 'neo-cx184-mc)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx184_eieio_method_combination_max() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -113,13 +119,14 @@ fn div_cx184_eieio_method_combination_max() {
       (neo-cx184-maxc-call (make-instance 'neo-cx184-maxc)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx184_eieio_eql_specializer_with_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -134,13 +141,14 @@ fn div_cx184_eieio_eql_specializer_with_class() {
             (neo-cx184-eq-call "other")))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:eql :class :default)""#]],
     );
 }
 
 #[test]
 fn div_cx184_eieio_two_argument_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -156,13 +164,14 @@ fn div_cx184_eieio_two_argument_dispatch() {
               (neo-cx184-bidi b a))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:ab :ba)""#]],
     );
 }
 
 #[test]
 fn div_cx184_eieio_cl_find_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -177,13 +186,14 @@ fn div_cx184_eieio_cl_find_method() {
               (= (length methods) 3))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx184_eieio_class_slots_shared_across_instances() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -204,13 +214,14 @@ fn div_cx184_eieio_class_slots_shared_across_instances() {
                 (slot-value b 'tag)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (5 5 10 10 :a :b)""#]],
     );
 }
 
 #[test]
 fn div_cx184_eieio_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -248,5 +259,6 @@ fn div_cx184_eieio_with_marker_overlay_undo_narrow_mega() {
                       (text-properties-at 1))))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

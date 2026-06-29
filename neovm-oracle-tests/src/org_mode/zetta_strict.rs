@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn zetta_all_deadline_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -28,6 +28,9 @@ fn zetta_all_deadline_combinations() {
      ;; Remove with C-u.
      (with-temp-buffer (org-mode) (insert "* H\nDEADLINE: <2012-03-29>")
        (goto-char (point-min)) (org-deadline '(4)) (buffer-string)))))"##,
+        expect_test::expect![[
+            r#""OK (\"* H\nDEADLINE: <2012-03-29 Thu>\" \"* H\nDEADLINE: <2014-03-04 Tue>\" \"* H\nDEADLINE: <2012-03-29 Thu +2y>\" \"* H\n\")""#
+        ]],
     );
 }
 
@@ -38,7 +41,7 @@ fn zetta_all_deadline_combinations() {
 #[test]
 fn zetta_all_schedule_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -56,6 +59,9 @@ fn zetta_all_schedule_combinations() {
      ;; Remove with C-u.
      (with-temp-buffer (org-mode) (insert "* H\nSCHEDULED: <2012-03-29>")
        (goto-char (point-min)) (org-schedule '(4)) (buffer-string)))))"##,
+        expect_test::expect![[
+            r#""OK (\"* H\nSCHEDULED: <2012-03-29 Thu>\" \"* H\nSCHEDULED: <2014-03-04 Tue>\" \"* H\nSCHEDULED: <2012-03-29 Thu +2y>\" \"* H\n\")""#
+        ]],
     );
 }
 
@@ -66,7 +72,7 @@ fn zetta_all_schedule_combinations() {
 #[test]
 fn zetta_all_set_property_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -81,6 +87,9 @@ fn zetta_all_set_property_combinations() {
        (let ((org-adapt-indentation nil) (org-property-format "%s %s"))
          (org-set-property "TEST" "t"))
        (buffer-string)))))"##,
+        expect_test::expect![[
+            r#""OK (\":PROPERTIES:\n:TEST: t\n:END:\n\" \"* H\n:PROPERTIES:\n:TEST: t\n:END:\n\")""#
+        ]],
     );
 }
 
@@ -91,7 +100,7 @@ fn zetta_all_set_property_combinations() {
 #[test]
 fn zetta_all_delete_property_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -105,6 +114,7 @@ fn zetta_all_delete_property_combinations() {
      ;; Delete from headline.
      (with-temp-buffer (org-mode) (insert "* H\n:PROPERTIES:\n:TEST: t\n:END:")
        (goto-char (point-min)) (org-delete-property "TEST") (buffer-string)))))"##,
+        expect_test::expect![[r#""OK (\"\" \":PROPERTIES:\n:TEST1: t\n:END:\" \"* H\n\")""#]],
     );
 }
 
@@ -115,7 +125,7 @@ fn zetta_all_delete_property_combinations() {
 #[test]
 fn zetta_all_entry_get_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -144,6 +154,7 @@ fn zetta_all_entry_get_combinations() {
      ;; Not found.
      (with-temp-buffer (org-mode) (insert "* H\n:PROPERTIES:\n:A: 1\n:END:")
        (goto-char (point-min)) (org-entry-get (point) "B")))))"##,
+        expect_test::expect![[r#""OK (\"1\" \"1\" \"1\" \"1 2 3\" \"\" nil \"1\" nil)""#]],
     );
 }
 
@@ -154,7 +165,7 @@ fn zetta_all_entry_get_combinations() {
 #[test]
 fn zetta_all_entry_put_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -174,6 +185,9 @@ fn zetta_all_entry_put_combinations() {
      ;; Set property without drawer.
      (with-temp-buffer (org-mode) (insert "* H")
        (goto-char (point-min)) (org-entry-put (point) "A" "1") (buffer-string)))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"* TODO H\" 0 8 (org-todo-head \"TODO\")) #(\"* H\" 0 3 (org-todo-head nil)) \"* [#A] H\" \"* H\n:PROPERTIES:\n:A:        2\n:END:\" \"* H\n:PROPERTIES:\n:A:        1\n:END:\n\")""#
+        ]],
     );
 }
 
@@ -184,7 +198,7 @@ fn zetta_all_entry_put_combinations() {
 #[test]
 fn zetta_all_refile_get_targets_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-refile)
@@ -195,6 +209,9 @@ fn zetta_all_refile_get_targets_combinations() {
       (goto-char (point-min))
       (mapcar (lambda (r) (car r))
               (org-refile-get-targets)))))"##,
+        expect_test::expect![[
+            r#""OK (\"Project A\" \"Design\" \"UI\" \"Implementation\" \"Project B\" \"Testing\" \"Unit tests\" \"Integration tests\" \"Archive\")""#
+        ]],
     );
 }
 
@@ -205,7 +222,7 @@ fn zetta_all_refile_get_targets_combinations() {
 #[test]
 fn zetta_all_clock_table_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -215,6 +232,7 @@ fn zetta_all_clock_table_combinations() {
       (goto-char (point-min))
       (let ((table (org-clock-get-table-data (current-buffer) '(:maxlevel 2))))
         (car table)))))"##,
+        expect_test::expect![[r#""OK #<killed buffer>""#]],
     );
 }
 
@@ -225,7 +243,7 @@ fn zetta_all_clock_table_combinations() {
 #[test]
 fn zetta_all_footnote_action_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -238,6 +256,7 @@ fn zetta_all_footnote_action_combinations() {
        (insert "Text[fn:1]\n\n[fn:1] Definition.")
        (goto-char (point-min)) (search-forward "[fn:1]")
        (org-footnote-action) (looking-at "Definition.")))))"##,
+        expect_test::expect![[r#""OK (\"Text[fn:1]\n\n* Footnotes\n\n[fn:1] \n\" nil)""#]],
     );
 }
 
@@ -248,7 +267,7 @@ fn zetta_all_footnote_action_combinations() {
 #[test]
 fn zetta_all_list_struct_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -257,6 +276,7 @@ fn zetta_all_list_struct_combinations() {
       (goto-char (point-min))
       (let ((struct (org-list-struct)))
         (length struct)))))"##,
+        expect_test::expect![[r#""OK 5""#]],
     );
 }
 
@@ -267,7 +287,7 @@ fn zetta_all_list_struct_combinations() {
 #[test]
 fn zetta_all_toggle_checkbox_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -281,6 +301,7 @@ fn zetta_all_toggle_checkbox_combinations() {
      ;; Toggle to intermediate.
      (with-temp-buffer (org-mode) (insert "- [X] item")
        (goto-char (point-min)) (org-toggle-checkbox 'checkbox) (buffer-string)))))"##,
+        expect_test::expect![[r#""OK (\"- item\" \"- [ ] item\" \"- [ ] item\")""#]],
     );
 }
 
@@ -291,7 +312,7 @@ fn zetta_all_toggle_checkbox_combinations() {
 #[test]
 fn zetta_all_cycle_list_bullet_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -309,6 +330,7 @@ fn zetta_all_cycle_list_bullet_combinations() {
      ;; Argument: previous.
      (with-temp-buffer (org-mode) (insert "+ item")
        (goto-char (point-min)) (org-cycle-list-bullet 'previous) (buffer-string)))))"##,
+        expect_test::expect![[r#""OK (\"  + item\" \"1. item\" \"+ item\" \"- item\")""#]],
     );
 }
 
@@ -319,7 +341,7 @@ fn zetta_all_cycle_list_bullet_combinations() {
 #[test]
 fn zetta_all_timer_secs_to_hms_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-timer)
   (list
@@ -331,6 +353,9 @@ fn zetta_all_timer_secs_to_hms_combinations() {
    (org-timer-hms-to-secs (org-timer-secs-to-hms 30))
    (org-timer-hms-to-secs (org-timer-secs-to-hms 130))
    (org-timer-hms-to-secs (org-timer-secs-to-hms 3690))))"##,
+        expect_test::expect![[
+            r#""OK (\"0:00:30\" \"0:02:10\" \"1:01:30\" \"-1:01:30\" 30 130 3690)""#
+        ]],
     );
 }
 
@@ -341,13 +366,14 @@ fn zetta_all_timer_secs_to_hms_combinations() {
 #[test]
 fn zetta_all_timer_fix_incomplete_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-timer)
   (list
    (org-timer-fix-incomplete "1:02:03")
    (org-timer-fix-incomplete "02:03")
    (org-timer-fix-incomplete "03")))"##,
+        expect_test::expect![[r#""OK (\"1:02:03\" \"0:02:03\" \"0:00:03\")""#]],
     );
 }
 
@@ -358,7 +384,7 @@ fn zetta_all_timer_fix_incomplete_combinations() {
 #[test]
 fn zetta_all_duration_to_minutes_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-duration)
   (list
@@ -370,6 +396,7 @@ fn zetta_all_duration_to_minutes_combinations() {
    (org-duration-to-minutes "2")
    (org-duration-to-minutes "")
    (floatp (org-duration-to-minutes "1:01"))))"##,
+        expect_test::expect![[r#""OK (61.0 80.5 130.0 1502.0 150.0 2.0 0.0 t)""#]],
     );
 }
 
@@ -380,7 +407,7 @@ fn zetta_all_duration_to_minutes_combinations() {
 #[test]
 fn zetta_all_duration_from_minutes_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-duration)
   (list
@@ -391,6 +418,9 @@ fn zetta_all_duration_from_minutes_combinations() {
    (let ((org-duration-format '(("h" . nil) ("min" . t)))) (org-duration-from-minutes 60))
    (let ((org-duration-format '(("h" . nil) ("min" . nil)))) (org-duration-from-minutes 50))
    (let ((org-duration-format '(("h" . t) ("min" . t)))) (org-duration-from-minutes 50))))"##,
+        expect_test::expect![[
+            r#""OK (\"1:00\" \"1:01:30\" \"1:01\" \"1h\" \"1h 0min\" \"50min\" \"0h 50min\")""#
+        ]],
     );
 }
 
@@ -401,7 +431,7 @@ fn zetta_all_duration_from_minutes_combinations() {
 #[test]
 fn zetta_all_duration_p_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-duration)
   (list
@@ -416,6 +446,7 @@ fn zetta_all_duration_p_combinations() {
    ;; Invalid.
    (org-duration-p "3::12")
    (org-duration-p "3:2")))"##,
+        expect_test::expect![[r#""OK (0 0 0 0 0 0 0 0 nil nil)""#]],
     );
 }
 
@@ -426,7 +457,7 @@ fn zetta_all_duration_p_combinations() {
 #[test]
 fn zetta_all_columns_compile_format_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-colview)
   (list
@@ -442,6 +473,9 @@ fn zetta_all_columns_compile_format_combinations() {
    (org-columns-compile-format "%ITEM{+}")
    ;; With operator and printf.
    (org-columns-compile-format "%ITEM{+;%.1f}")))"##,
+        expect_test::expect![[
+            r#""OK (((\"ITEM\" \"ITEM\" nil nil nil)) ((\"ITEM\" \"ITEM\" nil nil nil) (\"TODO\" \"TODO\" nil nil nil)) ((\"ITEM\" \"ITEM\" 10 nil nil)) ((\"ITEM\" \"some title\" nil nil nil)) ((\"ITEM\" \"ITEM\" nil \"+\" nil)) ((\"ITEM\" \"ITEM\" nil \"+\" \"%.1f\")))""#
+        ]],
     );
 }
 
@@ -452,7 +486,7 @@ fn zetta_all_columns_compile_format_combinations() {
 #[test]
 fn zetta_all_columns_uncompile_format_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-colview)
   (list
@@ -468,6 +502,9 @@ fn zetta_all_columns_uncompile_format_combinations() {
    (org-columns-uncompile-format '(("ITEM" "ITEM" nil "+" nil)))
    ;; With operator and printf.
    (org-columns-uncompile-format '(("ITEM" "ITEM" nil "+" "%.1f")))))"##,
+        expect_test::expect![[
+            r#""OK (\"%ITEM\" \"%ITEM %TODO\" \"%10ITEM\" \"%ITEM(some title)\" \"%ITEM{+}\" \"%ITEM{+;%.1f}\")""#
+        ]],
     );
 }
 
@@ -478,7 +515,7 @@ fn zetta_all_columns_uncompile_format_combinations() {
 #[test]
 fn zetta_all_macro_replace_all_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-macro)
   (let ((org-mode-hook nil))
@@ -498,6 +535,9 @@ fn zetta_all_macro_replace_all_combinations() {
        (insert "#+MACRO: in inner\n#+MACRO: out {{{in}}} outer\n{{{out}}}")
        (goto-char (point-min)) (org-macro-initialize-templates)
        (org-macro-replace-all org-macro-templates) (buffer-string)))))"##,
+        expect_test::expect![[
+            r##""OK (\"#+MACRO: A B\n1 B 3\" \"#+MACRO: macro $1 $2\nsome text\" \"#+MACRO: in inner\n#+MACRO: out {{{in}}} outer\ninner outer\")""##
+        ]],
     );
 }
 
@@ -508,7 +548,7 @@ fn zetta_all_macro_replace_all_combinations() {
 #[test]
 fn zetta_all_archive_subtree_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-archive)
   (let ((org-mode-hook nil))
@@ -516,6 +556,7 @@ fn zetta_all_archive_subtree_combinations() {
       (insert "* Top\n** DONE One\n** TODO Two")
       (goto-char (point-min)) (forward-line 1) (org-archive-subtree)
       (buffer-substring-no-properties (point-min) (point-max)))))"##,
+        expect_test::expect![[r#""ERR (error \"No file associated to buffer\")""#]],
     );
 }
 
@@ -526,7 +567,7 @@ fn zetta_all_archive_subtree_combinations() {
 #[test]
 fn zetta_all_datetree_find_date_create_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-datetree)
   (let ((org-mode-hook nil)
@@ -541,5 +582,8 @@ fn zetta_all_datetree_find_date_create_combinations() {
      (with-temp-buffer (org-mode) (insert "* 2012\n")
        (org-datetree-find-date-create '(3 29 2012))
        (org-trim (buffer-string))))))"##,
+        expect_test::expect![[
+            r#""OK (\"* 2012\n\n** 2012-03 March\n\n*** 2012-03-29 Thursday\" \"* 2012\n\n** 2012-03 March\n\n*** 2012-03-29 Thursday\")""#
+        ]],
     );
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx353_format_all_specifiers_complete_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%d" 42)
       (format "%i" 42)
@@ -34,13 +34,16 @@ fn div_cx353_format_all_specifiers_complete_matrix() {
       (format "%%")
       (format "%3$s %2$s %1$s" "c" "b" "a"))
 "##,
+        expect_test::expect![[
+            r#""OK (\"42\" \"42\" \"   42\" \"42   |\" \"00042\" \"+42\" \"100\" \"ff\" \"FF\" \"1010\" \"A\" \"β\" \"1.234568e+04\" \"12345.678900\" \"1e-05\" \"3.14\" \"     3.142\" \"hello\" \"        hi|\" \"hi        |\" \"(1 \\\"two\\\" 3)\" \"%\" \"a b c\")""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx353_format_message_backtick_quotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format-message "plain text")
       (format-message "with `quotes' here")
@@ -48,13 +51,16 @@ fn div_cx353_format_message_backtick_quotes() {
       (format-message "val1 `%s' val2 `%s'" "a" "b")
       (format "with `quotes' here"))
 "##,
+        expect_test::expect![[
+            r#""OK (\"plain text\" \"with ‘quotes’ here\" \"value: 42\" \"val1 ‘a’ val2 ‘b’\" \"with `quotes' here\")""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx353_format_multibyte_padding_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%20s|" "hello")
       (format "%-20s|" "hello")
@@ -63,26 +69,30 @@ fn div_cx353_format_multibyte_padding_width() {
       (format "%20s|" "世界")
       (format "%-20s|" "世界"))
 "##,
+        expect_test::expect![[
+            r#""OK (\"               hello|\" \"hello               |\" \"                café|\" \"café                |\" \"                世界|\" \"世界                |\")""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx353_format_with_special_floats_nan_inf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (format "%f" (/ 1.0 0.0)) (error (cons :err (car e))))
       (condition-case e (format "%d" (/ 1.0 0.0)) (error (cons :err (car e))))
       (condition-case e (format "%e" (/ 0.0 0.0)) (error (cons :err (car e))))
       (condition-case e (format "%g" (/ -1.0 0.0)) (error (cons :err (car e)))))
 "##,
+        expect_test::expect![[r#""OK (\"inf\" \"inf\" \"-nan\" \"-inf\")""#]],
     )
 }
 
 #[test]
 fn div_cx353_format_with_bignum_and_ratio() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((big (expt 2 128))
       (ratio 355/113))
@@ -94,13 +104,14 @@ fn div_cx353_format_with_bignum_and_ratio() {
         (format "%f" ratio)
         (format "%.10f" ratio)))
 "##,
+        expect_test::expect![[r#""ERR (void-variable 355/113)""#]],
     )
 }
 
 #[test]
 fn div_cx353_format_spec_make_and_use_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((spec (format-spec-make ?a "alpha" ?b "beta" ?c "gamma" ?d "delta")))
   (list (format-spec "%a-%b-%c-%d" spec)
@@ -109,13 +120,14 @@ fn div_cx353_format_spec_make_and_use_complex() {
         (condition-case e (format-spec "%z-missing" spec) (error (car e)))
         (format-spec "%%literal" spec)))
 "##,
+        expect_test::expect![[r#""ERR (void-function format-spec-make)""#]],
     )
 }
 
 #[test]
 fn div_cx353_format_dynamic_field_width_star() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%*d" 5 42)
       (format "%-*d|" 5 42)
@@ -123,13 +135,14 @@ fn div_cx353_format_dynamic_field_width_star() {
       (format "%-*s|" 10 "hi")
       (format "%*.*f" 10 3 3.14159))
 "##,
+        expect_test::expect![[r#""ERR (error \"Invalid format operation %*\")""#]],
     )
 }
 
 #[test]
 fn div_cx353_number_to_string_string_to_number_all_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (number-to-string 42)
       (number-to-string -42)
@@ -150,26 +163,28 @@ fn div_cx353_number_to_string_string_to_number_all_edge() {
       (string-to-number "")
       (string-to-number "  42  "))
 "##,
+        expect_test::expect![[r#""ERR (void-variable 1/3)""#]],
     )
 }
 
 #[test]
 fn div_cx353_format_positional_args_mixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%2$s %1$s" "world" "hello")
       (format "%1$d + %2$d = %3$d" 2 3 5)
       (format "%s = %2$d (or %d)" "x" 99)
       (format "%3$-10s|" "a" "b" "c"))
 "##,
+        expect_test::expect![[r#""ERR (error \"Not enough arguments for format string\")""#]],
     )
 }
 
 #[test]
 fn div_cx353_format_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((spec (format-spec-make ?a "alpha" ?b "beta"))
       (big (expt 2 64))
@@ -198,5 +213,6 @@ fn div_cx353_format_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (void-function format-spec-make)""#]],
     )
 }

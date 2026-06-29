@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo60_babel_var_table_reference() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -26,13 +26,14 @@ fn combo60_babel_var_table_reference() {
       (push (org-babel-execute-src-block) r)
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK ((30 70) (:result-count 0))""#]],
     );
 }
 
 #[test]
 fn combo60_agenda_custom_command_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-agenda)
@@ -47,13 +48,16 @@ fn combo60_agenda_custom_command_structure() {
      :names (mapcar #'cadr org-agenda-custom-commands)
      :types (mapcar #'caddr org-agenda-custom-commands)
      :matches (mapcar #'cadddr org-agenda-custom-commands))))"##,
+        expect_test::expect![[
+            r#""OK (:command-count 2 :keys (\"w\" \"h\") :names (\"Work\" \"Home\") :types (tags-todo tags) :matches (\"work\" \"home\"))""#
+        ]],
     );
 }
 
 #[test]
 fn combo60_capture_template_multi_target() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-capture)
@@ -71,13 +75,16 @@ fn combo60_capture_template_multi_target() {
     (push (list :keys (mapcar #'car templates)) r)
     (push (list :descs (mapcar #'cadr templates)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:count 4) (:keys (\"t\" \"j\" \"p\" \"w\")) (:descs (\"Todo\" \"Journal\" \"Protocol\" \"Web\")))""#
+        ]],
     );
 }
 
 #[test]
 fn combo60_babel_tangle_file_write() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-tangle)
@@ -100,7 +107,7 @@ fn combo60_babel_tangle_file_write() {
 #[test]
 fn combo60_persist_basic_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-persist)
   (list
@@ -117,13 +124,16 @@ fn combo60_persist_basic_operations() {
                :written (not (null written))))
      (error (list :persist-error (car e))))
    ))"##,
+        expect_test::expect![[
+            r#""OK ((:register-fbound t) (:read-fbound t) (:write-fbound t) (:gc-fbound t) (:registered nil :written nil))""#
+        ]],
     );
 }
 
 #[test]
 fn combo60_plot_table_extract() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-plot)
@@ -137,13 +147,16 @@ fn combo60_plot_table_extract() {
     ;; number of data rows
     (push (list :row-count (length (org-element-map (org-element-parse-buffer) 'table-row #'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:plot-fbound t) (:table-to-lisp ((\"X\" \"Y\") hline (\"1\" \"2\") (\"3\" \"4\") (\"5\" \"6\"))) (:row-count 5))""#
+        ]],
     );
 }
 
 #[test]
 fn combo60_babel_ob_sh_integration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-sh)
@@ -156,13 +169,16 @@ fn combo60_babel_ob_sh_integration() {
       ;; check result
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"ob-sh\")""#
+        ]],
     );
 }
 
 #[test]
 fn combo60_export_with_include_directive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-ascii)
@@ -178,13 +194,14 @@ fn combo60_export_with_include_directive() {
         (error (push (list :export-error (car e)) r)))
       (condition-case nil (delete-file inc-file) (error nil))
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK ((:export-ok t))""#]],
     );
 }
 
 #[test]
 fn combo60_startup_visibility_settings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (setq org-startup-folded 'overview)
@@ -203,13 +220,16 @@ fn combo60_startup_visibility_settings() {
     (goto-char (point-min))
     (push (list :after-show-A-invisible (get-char-property (point) 'invisible)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:A-invisible nil) (:A1-invisible org-fold-outline) (:after-show-A-invisible nil))""#
+        ]],
     );
 }
 
 #[test]
 fn combo60_babel_var_complex_nested_reference() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -233,5 +253,6 @@ fn combo60_babel_var_complex_nested_reference() {
       (push (org-babel-execute-src-block) r)
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK (14 (:result-count 0))""#]],
     );
 }

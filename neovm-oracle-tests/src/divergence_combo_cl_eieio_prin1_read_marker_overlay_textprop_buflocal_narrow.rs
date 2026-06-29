@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_prin1_read_roundtrip_alists() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass entry ()
     ((key :initarg :key :accessor en-key :initform "")
@@ -56,6 +56,7 @@ fn combo_eieio_prin1_read_roundtrip_alists() {
                 (buffer-string)
                 my-entries))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -63,7 +64,7 @@ fn combo_eieio_prin1_read_roundtrip_alists() {
 fn combo_eieio_prin1_nested_data_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass node ()
     ((id :initarg :id :accessor nd-id :initform 0)
@@ -114,6 +115,7 @@ fn combo_eieio_prin1_nested_data_roundtrip() {
                   (buffer-string)
                   my-nodes))))
     (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -121,7 +123,7 @@ fn combo_eieio_prin1_nested_data_roundtrip() {
 fn combo_eieio_prin1_vector_hash_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass record ()
     ((fields :initarg :fields :accessor rc-fields :initform nil)
@@ -165,6 +167,7 @@ fn combo_eieio_prin1_vector_hash_roundtrip() {
                   (buffer-string)
                   my-recs))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -172,7 +175,7 @@ fn combo_eieio_prin1_vector_hash_roundtrip() {
 fn combo_eieio_prin1_plist_roundtrip_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass config ()
     ((key :initarg :key :accessor cf-key :initform "")
@@ -221,6 +224,7 @@ fn combo_eieio_prin1_plist_roundtrip_narrow() {
                   (buffer-string)
                   my-configs))))
     (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -228,7 +232,7 @@ fn combo_eieio_prin1_plist_roundtrip_narrow() {
 fn combo_eieio_prin1_string_escape_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass text-fragment ()
     ((content :initarg :content :accessor tf-content :initform "")
@@ -271,5 +275,6 @@ fn combo_eieio_prin1_string_escape_roundtrip() {
                 (buffer-string)
                 my-frags)))
     (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

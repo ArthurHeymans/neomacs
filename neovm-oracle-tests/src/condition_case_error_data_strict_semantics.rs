@@ -14,10 +14,11 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_condition_case_error_symbol_is_car_of_err() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // GNU eval.c `signal_or_quit` binds VAR to `(ERROR-SYMBOL . SIGNAL-DATA)`.
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(condition-case err
          (signal 'error '("test"))
        (error (car err)))"#,
+        expect_test::expect![[r#""OK error""#]],
     );
     assert_ok_eq("error", &oracle, &neovm);
 }
@@ -25,10 +26,11 @@ fn oracle_condition_case_error_symbol_is_car_of_err() {
 #[test]
 fn oracle_condition_case_error_message_is_first_data_element() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(condition-case err
          (signal 'error '("my message"))
        (error (car (cdr err))))"#,
+        expect_test::expect![[r#""OK \"my message\"""#]],
     );
     assert_ok_eq("\"my message\"", &oracle, &neovm);
 }
@@ -36,10 +38,11 @@ fn oracle_condition_case_error_message_is_first_data_element() {
 #[test]
 fn oracle_condition_case_error_data_is_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(condition-case err
          (signal 'error '("msg"))
        (error (listp err)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &oracle, &neovm);
 }

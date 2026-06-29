@@ -10,10 +10,16 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_string_match_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_hit, neovm_hit) = eval_oracle_and_neovm(r#"(string-match "b+" "abbb")"#);
+    let (oracle_hit, neovm_hit) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-match "b+" "abbb")"#,
+        expect_test::expect![[r#""OK 1""#]],
+    );
     assert_ok_eq("1", &oracle_hit, &neovm_hit);
 
-    let (oracle_miss, neovm_miss) = eval_oracle_and_neovm(r#"(string-match "z+" "abbb")"#);
+    let (oracle_miss, neovm_miss) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-match "z+" "abbb")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle_miss, &neovm_miss);
 }
 
@@ -21,7 +27,10 @@ fn oracle_prop_string_match_basics() {
 fn oracle_prop_string_match_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-match 1 "abc")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-match 1 "abc")"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -29,19 +38,34 @@ fn oracle_prop_string_match_wrong_type_error() {
 fn oracle_prop_string_match_char_class_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-match "[z-a]" "z")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-match "[z-a]" "z")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-match "[^z-a]" "x")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-match "[^z-a]" "x")"#,
+        expect_test::expect![[r#""OK 0""#]],
+    );
     assert_ok_eq("0", &oracle, &neovm);
 
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-match "[]a]+" "]aa")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-match "[]a]+" "]aa")"#,
+        expect_test::expect![[r#""OK 0""#]],
+    );
     assert_ok_eq("0", &oracle, &neovm);
 
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-match "[[]+" "[[[")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-match "[[]+" "[[[")"#,
+        expect_test::expect![[r#""OK 0""#]],
+    );
     assert_ok_eq("0", &oracle, &neovm);
 
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-match "[\\]" "\\")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-match "[\\]" "\\")"#,
+        expect_test::expect![[r#""OK 0""#]],
+    );
     assert_ok_eq("0", &oracle, &neovm);
 }
 
@@ -69,7 +93,12 @@ fn oracle_prop_string_match_zero_length_at_start_position() {
           (setq pos (1+ pos))))
     (setq n (1+ n)))
   (nreverse steps))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 0 1 \"a\") (2 2 3 \"b\") (4 4 5 \"c\") (5 5 5 \"\") (5 5 5 \"\"))""#
+        ]],
+    );
     assert_ok_eq(
         r#"((0 0 1 "a") (2 2 3 "b") (4 4 5 "c") (5 5 5 "") (5 5 5 ""))"#,
         &oracle,

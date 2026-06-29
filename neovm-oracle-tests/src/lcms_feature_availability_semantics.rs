@@ -19,5 +19,8 @@ fn oracle_lcms_primitives_follow_gnu_build_feature_availability() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t (0.9501657210094707 1.0 1.087653624622009))""#]],
+    );
 }

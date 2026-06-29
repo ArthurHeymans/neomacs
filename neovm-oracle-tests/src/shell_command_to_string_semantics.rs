@@ -19,7 +19,12 @@ fn oracle_prop_shell_command_to_string_basic_output_and_status() {
    (error err)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"alpha\nbeta\n\" \"kept\" (wrong-type-argument stringp 42))""#
+        ]],
+    );
 }
 
 #[test]
@@ -32,7 +37,7 @@ fn oracle_prop_shell_command_to_string_respects_shell_variables() {
   (shell-command-to-string "abc"))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK \"neo:abc\"""#]]);
 }
 
 #[test]
@@ -46,5 +51,8 @@ fn oracle_prop_shell_command_to_string_uses_current_default_directory() {
    (shell-command-to-string "pwd")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"/tmp/nix-shell.XcUf3d/\" \"/tmp/nix-shell.XcUf3d\n\")""#]],
+    );
 }

@@ -13,10 +13,16 @@ use super::common::{
 fn oracle_prop_make_list_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(make-list 5 0)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(make-list 5 0)",
+        expect_test::expect![[r#""OK (0 0 0 0 0)""#]],
+    );
     assert_ok_eq("(0 0 0 0 0)", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(make-list 3 'x)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(make-list 3 'x)",
+        expect_test::expect![[r#""OK (x x x)""#]],
+    );
     assert_ok_eq("(x x x)", &o, &n);
 }
 
@@ -24,7 +30,10 @@ fn oracle_prop_make_list_basic() {
 fn oracle_prop_make_list_zero_length() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(make-list 0 'anything)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(make-list 0 'anything)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -63,14 +72,22 @@ fn oracle_make_list_fixnat_error_payloads() {
          (eq (car made) (cadr made))
          (eq (cadr made) (caddr made)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument (wholenump -1)) (wrong-type-argument (wholenump 1.2)) (wrong-type-argument (wholenump nil)) (((shared) (shared) (shared)) t t t))""#
+        ]],
+    );
 }
 
 #[test]
 fn oracle_prop_make_list_with_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(make-list 4 nil)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(make-list 4 nil)",
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
+    );
     assert_ok_eq("(nil nil nil nil)", &o, &n);
 }
 
@@ -81,7 +98,8 @@ fn oracle_prop_make_list_with_complex_init() {
     // Same object repeated — all elements eq
     let form = "(let ((lst (make-list 3 '(a b))))
                   (eq (car lst) (cadr lst)))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK t""#]]);
     assert_ok_eq("t", &o, &n);
 }
 
@@ -89,7 +107,10 @@ fn oracle_prop_make_list_with_complex_init() {
 fn oracle_prop_make_list_length_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(length (make-list 10 42))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(length (make-list 10 42))",
+        expect_test::expect![[r#""OK 10""#]],
+    );
     assert_ok_eq("10", &o, &n);
 }
 

@@ -5,85 +5,93 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx486_minibufferp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (minibufferp) (windowp (minibuffer-window)))
 "##,
+        expect_test::expect![[r#""OK (nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx486_window_minibuffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(window-minibuffer-p (selected-window))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx486_minibuffer_active() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (active-minibuffer-window) (minibuffer-window-active-p (minibuffer-window)))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx486_set_minibuffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (set-minibuffer-window (selected-window))
   (error (car e)))
 "##,
+        expect_test::expect![[r#""OK error""#]],
     );
 }
 
 #[test]
 fn div_cx486_minibuffer_contents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (minibuffer-contents)
   (error (car e)))
 "##,
+        expect_test::expect![[r#""OK \"\"""#]],
     );
 }
 
 #[test]
 fn div_cx486_minibuffer_prompt() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (minibuffer-prompt)
   (error (car e)))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx486_minibuffer_selected() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(minibuffer-selected-window)
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx486_minibuffer_depth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(minibuffer-depth)
 "##,
+        expect_test::expect![[r#""OK 0""#]],
     );
 }
 
 #[test]
 fn div_cx486_completing_read_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(completing-read-default "test: " '("a" "b" "c") nil nil nil nil "a")
 "##,
     );
@@ -92,7 +100,7 @@ fn div_cx486_completing_read_default() {
 #[test]
 fn div_cx486_completing_read_col() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(condition-case e
     (completing-read "select: " '("alpha" "beta" "gamma") nil t nil nil "alpha")
   (error (car e)))
@@ -103,7 +111,7 @@ fn div_cx486_completing_read_col() {
 #[test]
 fn div_cx486_read_from_minibuffer_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(condition-case e
     (read-from-minibuffer "enter: " nil nil nil nil nil)
   (error (car e)))
@@ -114,7 +122,7 @@ fn div_cx486_read_from_minibuffer_deep() {
 #[test]
 fn div_cx486_read_string_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(condition-case e
     (read-string "enter: " "default")
   (error (car e)))
@@ -125,7 +133,7 @@ fn div_cx486_read_string_deep() {
 #[test]
 fn div_cx486_read_no_input() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(condition-case e
     (read-no-blanks-input "enter: " "default")
   (error (car e)))
@@ -136,16 +144,17 @@ fn div_cx486_read_no_input() {
 #[test]
 fn div_cx486_read_passwd() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(fboundp 'read-passwd)
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
 #[test]
 fn div_cx486_read_answer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(condition-case e
     (read-answer "question (y/n): " '(("y" ?y "yes") ("n" ?n "no")))
   (error (car e)))

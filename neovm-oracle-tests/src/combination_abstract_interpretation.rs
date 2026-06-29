@@ -108,7 +108,12 @@ fn oracle_prop_abs_interp_extended_sign_domain() {
     (funcall 'neovm--esd-meet 'neg 'neg)       ;; neg
     ;; Absorption: join(a, meet(a,b)) = a
     (funcall 'neovm--esd-join 'non-neg (funcall 'neovm--esd-meet 'non-neg 'pos))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (non-neg non-pos non-zero top non-neg non-neg non-zero top pos zero bot zero pos neg non-zero bot pos neg non-neg)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +209,12 @@ fn oracle_prop_abs_interp_extended_arithmetic() {
     (funcall 'neovm--ea-div 'zero 'pos)          ;; zero
     (funcall 'neovm--ea-div 'pos 'zero)          ;; bot (div by zero)
     (funcall 'neovm--ea-div 'bot 'pos)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (pos neg top non-neg non-pos non-neg top pos pos neg zero non-neg non-pos non-neg non-zero bot non-neg non-neg non-pos non-pos zero bot bot)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -344,7 +354,10 @@ fn oracle_prop_abs_interp_transfer_functions_advanced() {
           (funcall 'neovm--ait-get final2 'x)   ;; top
           (funcall 'neovm--ait-get final2 'y)   ;; top (join pos and neg)
           (funcall 'neovm--ait-get final2 'z))))))"#; // top (top * top)
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (pos neg top pos pos pos (top top top))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -456,7 +469,12 @@ fn oracle_prop_abs_interp_widening_fixpoint() {
       (list (cons 'x 'pos) (cons 'y 'pos))
       (lambda (s) (funcall 'neovm--aiw-set s 'x (funcall 'neovm--aiw-add (funcall 'neovm--aiw-get s 'x) (funcall 'neovm--aiw-get s 'y))))
       20)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((state ((x . top)) converged t iterations 2) (state ((x . top)) converged t iterations 2) (state ((x . top) (y . neg)) converged t iterations 2) (state ((x . pos) (y . pos)) converged t iterations 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -611,7 +629,10 @@ fn oracle_prop_abs_interp_cfg_analysis() {
               (funcall 'neovm--aicfg-get b4-2 'y)  ;; top (join pos neg)
               (funcall 'neovm--aicfg-get b4-2 'z)  ;; top (pos + top)
               )))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (bot bot bot bot iterations (bot bot bot))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -704,5 +725,10 @@ fn oracle_prop_abs_interp_factorial_analysis() {
           (funcall 'neovm--aif-add (funcall 'neovm--aif-fibonacci 'pos) (funcall 'neovm--aif-fibonacci 'pos))
           ;; fact(zero) + fib(zero) = pos (1 + 0 = 1)
           (funcall 'neovm--aif-add (funcall 'neovm--aif-factorial 'zero) (funcall 'neovm--aif-fibonacci 'zero)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (pos pos pos pos pos zero zero bot top pos top pos pos pos)""#
+        ]],
+    );
 }

@@ -51,5 +51,10 @@ fn oracle_prop_gnu_subr_define_error_parent_and_property_contracts() {
     (dolist (s syms)
       (put s 'error-conditions nil)
       (put s 'error-message nil))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((neovm-define-error-parent-a error) \"A\" (neovm-define-error-child neovm-define-error-parent-a error neovm-define-error-parent-b) \"Child\" (neovm-define-error-nil-message neovm-define-error-parent-a error) nil (neovm-define-error-unknown-symbol neovm-define-error-missing-symbol-parent) \"Unknown symbol parent\" (caught-parent-a (neovm-define-error-child payload)) (unknown-list-parent-error error \"Unknown signal ‘neovm-define-error-missing-list-parent’\"))""#
+        ]],
+    );
 }

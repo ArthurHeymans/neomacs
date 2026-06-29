@@ -8,18 +8,21 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx77_syntax_class_of_chars_in_default_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c) (list c (char-syntax c)))
         '(?a ?A ?0 ?_ ?- ?\s ?\t ?\( ?\) ?\" ?\; ?. ?, ?' ?\\ ?# ?$ ?% ?& ?* ?+ ?< ?> ?@ ?/ ?| ?~))
 "##,
+        expect_test::expect![[
+            r#""OK ((97 119) (65 119) (48 119) (95 95) (45 95) (32 32) (9 32) (40 40) (41 41) (34 34) (59 46) (46 46) (44 46) (39 46) (92 92) (35 46) (36 119) (37 119) (38 95) (42 95) (43 95) (60 95) (62 95) (64 46) (47 95) (124 95) (126 46))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx77_modify_syntax_entry_locally_in_temp_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((st (copy-syntax-table (syntax-table))))
@@ -32,13 +35,14 @@ fn div_cx77_modify_syntax_entry_locally_in_temp_buffer() {
           (char-syntax ?!)
           (char-syntax ?a))))
 "##,
+        expect_test::expect![[r#""OK (119 95 46 119)""#]],
     );
 }
 
 #[test]
 fn div_cx77_scan_sexps_paren_matching() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "alpha (beta (gamma) delta) epsilon")
@@ -49,13 +53,14 @@ fn div_cx77_scan_sexps_paren_matching() {
         (scan-lists (point) -1 0)
         (condition-case e (scan-sexps (point) 99) (error (car e)))))
 "##,
+        expect_test::expect![[r#""OK (27 35 27 nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx77_forward_comment_across_line_and_block_comments() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "before ; line comment\nalpha\nbefore2 /* block\nmulti-line */ after")
@@ -67,13 +72,14 @@ fn div_cx77_forward_comment_across_line_and_block_comments() {
       (forward-comment 1)
       (list p1 p2 (point) (char-after)))))
 "##,
+        expect_test::expect![[r#""OK (8 8 8 59)""#]],
     );
 }
 
 #[test]
 fn div_cx77_parse_partial_sexp_state_machine() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "(defun foo ()\n  \"docstring\"\n  (let ((x 1)) ; comment\n    (+ x 1)))")
@@ -84,13 +90,16 @@ fn div_cx77_parse_partial_sexp_state_machine() {
         (syntax-ppss 10)
         (syntax-ppss 30)))
 "##,
+        expect_test::expect![[
+            r#""OK ((1 1 8 nil nil nil 0 nil nil (1) nil) (1 1 17 nil nil nil 0 nil nil (1) nil) (4 37 38 nil nil nil 0 nil nil (1 31 36 37) nil) (3 58 59 nil nil nil 0 nil nil (1 31 58) nil) (1 1 8 nil nil nil 0 nil nil (1) nil) (1 1 17 nil nil nil 1 nil nil (1) nil))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx77_comment_styles_default_semicolon_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "code1\n; full comment\ncode2 ;; inline comment\ncode3\n/* block c1\nblock c2 */ code4")
@@ -99,13 +108,14 @@ fn div_cx77_comment_styles_default_semicolon_block() {
         (comment-end-1 (condition-case e (comment-forward 1) (error :err))))
     (list comment-start-1 comment-end-1 (point) (char-after))))
 "##,
+        expect_test::expect![[r#""OK (nil nil 31 105)""#]],
     );
 }
 
 #[test]
 fn div_cx77_syntax_of_quote_and_string_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "\"string with \\\"escapes\\\" inside\" rest")
@@ -119,13 +129,14 @@ fn div_cx77_syntax_of_quote_and_string_chars() {
           in-string-after-10 in-string-after-30
           start-of-string)))
 "##,
+        expect_test::expect![[r#""OK (nil 34 34 34 1)""#]],
     );
 }
 
 #[test]
 fn div_cx77_syntax_table_make_and_modify_per_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx77-a*"))
       (buf-b (get-buffer-create " *neo-cx77-b*")))
@@ -141,13 +152,14 @@ fn div_cx77_syntax_table_make_and_modify_per_buffer() {
     (kill-buffer buf-b)
     (list a-syntax b-syntax)))
 "##,
+        expect_test::expect![[r#""OK (119 95)""#]],
     );
 }
 
 #[test]
 fn div_cx77_matching_paren_jump() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "outer (inner [nested {leaf} nested] inner) outer")
@@ -159,13 +171,14 @@ fn div_cx77_matching_paren_jump() {
       (forward-list)
       (list forward-paren backward-pos (point)))))
 "##,
+        expect_test::expect![[r#""OK (36 14 36)""#]],
     );
 }
 
 #[test]
 fn div_cx77_word_motion_under_custom_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (set-syntax-table (make-syntax-table))
@@ -180,13 +193,14 @@ fn div_cx77_word_motion_under_custom_syntax() {
       (backward-word 1)
       (list p1 p2 (point) (char-after)))))
 "##,
+        expect_test::expect![[r#""OK (15 31 16 99)""#]],
     );
 }
 
 #[test]
 fn div_cx77_syntax_describe_and_class_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (syntax-class-to-char (string-to-syntax "w"))
@@ -199,13 +213,14 @@ fn div_cx77_syntax_describe_and_class_table() {
           (string-to-syntax "( "))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
     );
 }
 
 #[test]
 fn div_cx77_syntax_table_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -234,5 +249,8 @@ fn div_cx77_syntax_table_marker_overlay_undo_narrow_mega() {
             (overlayp ov) (overlay-start ov)
             (text-properties-at 1)))))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"Changes to be undone are outside visible portion of buffer\")""#
+        ]],
     );
 }

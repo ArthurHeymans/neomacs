@@ -82,7 +82,12 @@ fn oracle_prop_cps_arithmetic_expression_converter() {
                 exprs))
     (fmakunbound 'neovm--cps-adv-direct-eval)
     (fmakunbound 'neovm--cps-adv-cps-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((42 42 42 t) ((+ 1 2) 3 3 t) ((* 3 (+ 4 5)) 27 27 t) ((- (* 6 7) (+ 8 9)) 25 25 t) ((let1 x 10 (+ x x)) 20 20 t) ((let1 a 3 (let1 b 4 (+ (* a a) (* b b)))) 25 25 t) ((let1 x 5 (- (* x x) (+ x 1))) 19 19 t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +168,10 @@ fn oracle_prop_cps_if_lambda_application() {
                       10)))
     (fmakunbound 'neovm--cps-adv-eval2)
     (fmakunbound 'neovm--cps-adv-run2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 99 11 49 1 999 0 16)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +240,12 @@ fn oracle_prop_cps_administrative_beta_reduction() {
                 exprs))
     (fmakunbound 'neovm--cps-adv-transform)
     (fmakunbound 'neovm--cps-adv-count-nodes)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:expr (+ 1 2) :nodes 13) (:expr (* 3 4) :nodes 13) (:expr (+ (* 2 3) (* 4 5)) :nodes 33))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -308,7 +321,10 @@ fn oracle_prop_cps_defunctionalization() {
     (fmakunbound 'neovm--cps-adv-apply-cont)
     (fmakunbound 'neovm--cps-adv-defunc-eval)
     (fmakunbound 'neovm--cps-adv-defunc-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 3 12 26 20 25 15)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -382,7 +398,12 @@ fn oracle_prop_cps_multiple_return_values() {
     (fmakunbound 'neovm--cps-adv-minmax-k)
     (fmakunbound 'neovm--cps-adv-stats-k)
     (fmakunbound 'neovm--cps-adv-divmod-sum-k)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 2) (14 2) (3 1) (1 9) (42 42) (nil nil) (150 5 30) (7 1 7) 5 16 (5 0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -486,7 +507,12 @@ fn oracle_prop_cps_abort_resume_continuations() {
     (fmakunbound 'neovm--cps-adv-safe-nth)
     (fmakunbound 'neovm--cps-adv-with-handler)
     (fmakunbound 'neovm--cps-adv-with-resume)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:ok 1) (:abort (:empty-list head)) (:ok 30) (:abort (:index-out-of-bounds 10 3)) (:handled (:empty-list head)) 42 0 c)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -580,7 +606,10 @@ fn oracle_prop_cps_trampoline_advanced() {
     (fmakunbound 'neovm--cps-adv-list-sum-k)
     (fmakunbound 'neovm--cps-adv-reverse-k)
     (fmakunbound 'neovm--cps-adv-map-k)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 1024 243 15 0 (5 4 3 2 1) (11 21 31) 55)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -656,7 +685,10 @@ fn oracle_prop_cps_one_pass_transform() {
     (fmakunbound 'neovm--cps-adv-trivial-p)
     (fmakunbound 'neovm--cps-adv-onepass)
     (fmakunbound 'neovm--cps-adv-onepass-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 12 7 12 26 10 13 30)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -757,7 +789,12 @@ fn oracle_prop_cps_selective_effectful() {
     (fmakunbound 'neovm--cps-adv-pure-eval)
     (fmakunbound 'neovm--cps-adv-selective)
     (fmakunbound 'neovm--cps-adv-selective-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:result 3 :store ((x . 10) (y . 20) (z . 30))) (:result 12 :store ((x . 10) (y . 20) (z . 30))) (:result 10 :store ((x . 10) (y . 20) (z . 30))) (:result 25 :store ((x . 10) (y . 20) (z . 30))) (:result 30 :store ((x . 10) (y . 20) (z . 30))) (:result 40 :store ((x . 10) (y . 20) (z . 30))) (:result 16 :store ((x . 10) (y . 20) (z . 30))) (t nil nil t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -844,5 +881,10 @@ fn oracle_prop_cps_state_monad() {
     (fmakunbound 'neovm--cps-adv-state-bind)
     (fmakunbound 'neovm--cps-adv-state-return)
     (fmakunbound 'neovm--cps-adv-state-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:val 42 :state 42) (:val 42 :state 100) (:val nil :state 11) (:val 10 :state 15) (:val 3 :state 3))""#
+        ]],
+    );
 }

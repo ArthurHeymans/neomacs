@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_narrow_clone_buflocal_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ncb")))
     (with-current-buffer buf
@@ -46,6 +46,7 @@ fn combo_narrow_clone_buflocal_marker_overlay_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -53,7 +54,7 @@ fn combo_narrow_clone_buflocal_marker_overlay_undo() {
 fn combo_narrow_clone_buflocal_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ncr")))
     (with-current-buffer buf
@@ -91,6 +92,7 @@ fn combo_narrow_clone_buflocal_replace_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -98,7 +100,7 @@ fn combo_narrow_clone_buflocal_replace_undo() {
 fn combo_narrow_clone_buflocal_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "nct")))
     (with-current-buffer buf
@@ -135,6 +137,7 @@ fn combo_narrow_clone_buflocal_textprop_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -142,7 +145,7 @@ fn combo_narrow_clone_buflocal_textprop_undo() {
 fn combo_narrow_clone_buflocal_setf_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ncs")))
     (with-current-buffer buf
@@ -179,6 +182,7 @@ fn combo_narrow_clone_buflocal_setf_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -186,7 +190,7 @@ fn combo_narrow_clone_buflocal_setf_undo() {
 fn combo_narrow_clone_buflocal_multi_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "nco")))
     (with-current-buffer buf
@@ -229,5 +233,6 @@ fn combo_narrow_clone_buflocal_multi_overlay_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

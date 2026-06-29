@@ -29,7 +29,10 @@ fn oracle_add_to_ordered_list_orders_by_symbol_property_table() {
     (put 'xs 'list-order nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""ERR (void-variable xs)""#],
+    );
 }
 
 #[test]
@@ -55,7 +58,10 @@ fn oracle_add_to_ordered_list_nil_and_nonnumeric_order_rules() {
     (put 'xs 'list-order nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""ERR (void-variable xs)""#],
+    );
 }
 
 #[test]
@@ -81,7 +87,10 @@ fn oracle_add_to_ordered_list_membership_is_eq_not_equal() {
     (put 'xs 'list-order nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""ERR (void-variable xs)""#],
+    );
 }
 
 #[test]
@@ -99,5 +108,10 @@ fn oracle_add_to_ordered_list_requires_symbol_value_and_not_lexical() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((setting-constant (nil)) (void-variable (missing-list-var)))""#
+        ],
+    );
 }

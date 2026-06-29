@@ -7,13 +7,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_thread_first() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (thread-first 5
     (+ 3)
     (* 2)
     (- 1))
   (= (thread-first 5 (+ 3) (* 2) (- 1)) 15)) "#,
+        expect_test::expect![[r#""ERR (void-function thread-first)""#]],
     );
 }
 
@@ -21,13 +22,14 @@ fn divergence_thread_first() {
 fn divergence_thread_last() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (thread-last '(1 2 3)
     (mapcar #'1+)
     (-filter #'cl-evenp)
     (length))
   (= (thread-last '(1 2 3) (mapcar #'1+) (-filter #'cl-evenp) (length)) 1)) "#,
+        expect_test::expect![[r#""ERR (void-function thread-last)""#]],
     );
 }
 
@@ -35,7 +37,7 @@ fn divergence_thread_last() {
 fn divergence_thread_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (thread-first "hello"
     (concat " " "world")
@@ -44,6 +46,7 @@ fn divergence_thread_nested() {
            (concat " " "world")
            (upcase))
          "HELLO WORLD")) "#,
+        expect_test::expect![[r#""ERR (void-function thread-first)""#]],
     );
 }
 
@@ -51,7 +54,7 @@ fn divergence_thread_nested() {
 fn divergence_dash_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp '-map)
   (fboundp '-filter)
@@ -59,6 +62,7 @@ fn divergence_dash_functions() {
   (fboundp '-flatten)
   (featurep 'dash)
   (featurep 'dash-functional)) "#,
+        expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]],
     );
 }
 
@@ -66,7 +70,7 @@ fn divergence_dash_functions() {
 fn divergence_dash_list_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp '-first)
   (fboundp '-last)
@@ -74,6 +78,7 @@ fn divergence_dash_list_ops() {
   (fboundp '-drop)
   (fboundp '-take)
   (fboundp '-partition)) "#,
+        expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]],
     );
 }
 
@@ -81,7 +86,7 @@ fn divergence_dash_list_ops() {
 fn divergence_s_expression_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'sexp-at-point)
   (fboundp 'forward-sexp)
@@ -89,6 +94,7 @@ fn divergence_s_expression_ops() {
   (fboundp 'kill-sexp)
   (fboundp 'mark-sexp)
   (fboundp 'transpose-sexps)) "#,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
@@ -96,12 +102,13 @@ fn divergence_s_expression_ops() {
 fn divergence_lisp_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'lisp-mode)
   (fboundp 'emacs-lisp-mode)
   (fboundp 'lisp-interaction-mode)
   (featurep 'lisp-mode)) "#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -109,7 +116,7 @@ fn divergence_lisp_mode() {
 fn divergence_elisp_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'eval-buffer)
   (fboundp 'eval-region)
@@ -117,6 +124,7 @@ fn divergence_elisp_eval() {
   (fboundp 'eval-expression)
   (fboundp 'eval-defun)
   (fboundp 'edebug-defun)) "#,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
@@ -124,12 +132,13 @@ fn divergence_elisp_eval() {
 fn divergence_checkdoc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'checkdoc)
   (fboundp 'checkdoc-current-buffer)
   (fboundp 'checkdoc-file)
   (featurep 'checkdoc)) "#,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     );
 }
 
@@ -137,7 +146,7 @@ fn divergence_checkdoc() {
 fn divergence_ert_testing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'ert-deftest)
   (fboundp 'ert-run-tests-interactively)
@@ -145,5 +154,6 @@ fn divergence_ert_testing() {
   (fboundp 'should)
   (fboundp 'should-not)
   (fboundp 'should-error)) "#,
+        expect_test::expect![[r#""OK (t t nil nil nil nil)""#]],
     );
 }

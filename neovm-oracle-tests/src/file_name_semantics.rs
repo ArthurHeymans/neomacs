@@ -19,7 +19,12 @@ fn oracle_prop_file_name_directory_and_nondirectory_edges() {
          '("plain" "dir/file" "/root/file" "/root/dir/" "/" "")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((nil \"dir/\" \"/root/\" \"/root/dir/\" \"/\" nil) (\"plain\" \"file\" \"file\" \"\" \"\" \"\"))""#
+        ]],
+    );
 }
 
 #[test]
@@ -34,7 +39,12 @@ fn oracle_prop_directory_file_name_and_file_name_as_directory_edges() {
          '("" "." "dir" "dir/" "/" "//" "///" "/tmp///")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"./\" \"./\" \"dir/\" \"dir/\" \"/\" \"//\" \"///\") (\"\" \".\" \"dir\" \"dir\" \"/\" \"//\" \"/\" \"/tmp\"))""#
+        ]],
+    );
 }
 
 #[test]
@@ -52,7 +62,12 @@ fn oracle_prop_expand_file_name_canonicalizes_without_stat() {
    (expand-file-name "/tmp//base///file" "/ignored")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"/tmp/base/dir/a/c\" \"/tmp/base/sibling\" \"/tmp/base/dir\" \"/\" \"/..\" \"/tmp/base/file\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -71,7 +86,12 @@ fn oracle_prop_substitute_in_file_name_env_and_embedded_absolute() {
    (substitute-in-file-name "/prefix/~user-kept/tail")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"/tmp/oracle-root/leaf\" \"/tmp/oracle-root/x\" \"$NEOMACS_ORACLE_MISSING/x\" \"/tmp/oracle-root/tail\" \"/prefix/~user-kept/tail\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -90,5 +110,10 @@ fn oracle_prop_abbreviate_file_name_home_and_directory_abbrev() {
    (abbreviate-file-name "/")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"~/project/file.el\" \"/short/project/file.el\" \"~\" \"/\")""#
+        ]],
+    );
 }

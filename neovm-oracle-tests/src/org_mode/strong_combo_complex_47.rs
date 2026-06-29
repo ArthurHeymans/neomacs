@@ -12,7 +12,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo47_plan_clock_replan_reparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Task\n")
@@ -58,6 +58,9 @@ fn combo47_plan_clock_replan_reparse() {
     ;; final buffer
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init (\"Task\")) (:after-schedule (\"s\")) (:after-deadline ((\"S\" \"D\"))) (:after-props (\"2:30\" \"dev\")) (:clocking-p t) (:clocking-p-after nil) (:clock-entries 1) (:after-child ((\"S\" \"D\") (\"S\" nil))) (:buffer \"* Task\nDEADLINE: <2024-03-15 Fri> SCHEDULED: <2024-03-01 Fri>\n:PROPERTIES:\n:EFFORT:   2:30\n:CATEGORY: dev\n:END:\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\n\n** Sub-task\nSCHEDULED: <2024-03-10 Sun>\n:PROPERTIES:\n:EFFORT:   1:00\n:END:\n\"))""#
+        ]],
     );
 }
 
@@ -68,7 +71,7 @@ fn combo47_plan_clock_replan_reparse() {
 #[test]
 fn combo47_multitable_cascade_recalc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+name: input\n| a | b |\n| 10 | 20 |\n| 30 | 40 |\n\n")
@@ -108,6 +111,7 @@ fn combo47_multitable_cascade_recalc() {
     (push (list :sum-val (org-table-get "" "sum")) r)
     (push (list :prod-val (org-table-get "" "prod")) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \"\")""#]],
     );
 }
 
@@ -118,7 +122,7 @@ fn combo47_multitable_cascade_recalc() {
 #[test]
 fn combo47_edit_export_repeat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-ascii)
@@ -145,6 +149,9 @@ fn combo47_edit_export_repeat() {
       (insert "\n#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n")
       (push (list :export4 (org-export-as 'ascii nil nil t)) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:export1 \"1 Report\n========\n\n  This is a *bold* statement about /emphasized/ topics.\n\") (:export2 \"1 Report\n========\n\n  This is a *bold* statement about /emphasized/ topics.\n\n\n1.1 Details\n~~~~~~~~~~~\n\n  More text with `code' and `verbatim'.\n   Col1  Col2 \n  ------------\n   A     B    \n\") (:export3 \"1 Report\n========\n\n  This is a **important** statement about /emphasized/ topics.\n\n\n1.1 Details\n~~~~~~~~~~~\n\n  More text with `code' and `verbatim'.\n   Col1  Col2 \n  ------------\n   A     B    \n\") (:export4 \"1 Report\n========\n\n  This is a **important** statement about /emphasized/ topics.\n\n\n1.1 Details\n~~~~~~~~~~~\n\n  More text with `code' and `verbatim'.\n   Col1  Col2 \n  ------------\n   A     B    \n\n  ,----\n  | (+ 1 2)\n  `----\n\"))""#
+        ]],
     );
 }
 
@@ -155,7 +162,7 @@ fn combo47_edit_export_repeat() {
 #[test]
 fn combo47_list_reshape_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- zebra\n- apple\n- mango\n- banana\n")
@@ -198,6 +205,7 @@ fn combo47_list_reshape_sort() {
           r)
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp nil)""#]],
     );
 }
 
@@ -208,7 +216,7 @@ fn combo47_list_reshape_sort() {
 #[test]
 fn combo47_babel_session_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -240,6 +248,9 @@ fn combo47_babel_session_state() {
       (push (list :num-results
                   (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""ERR (error \"ob-emacs-lisp backend does not support sessions\")""#
+        ]],
     );
 }
 
@@ -250,7 +261,7 @@ fn combo47_babel_session_state() {
 #[test]
 fn combo47_footnote_renumber_sort_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Footnotes\n")
@@ -289,6 +300,7 @@ fn combo47_footnote_renumber_sort_cycle() {
           r)
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (void-function org-footnote-renumber-fn-n)""#]],
     );
 }
 
@@ -299,7 +311,7 @@ fn combo47_footnote_renumber_sort_cycle() {
 #[test]
 fn combo47_map_entries_mutate_remap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO A\n** DONE B\n** TODO C\n* TODO D\n* DONE E\n")
@@ -325,6 +337,9 @@ fn combo47_map_entries_mutate_remap() {
                                   (lambda () (org-get-heading t t t t))
                                   "TODO=\"TODO\"")) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init ((\"A\" \"TODO\") (\"B\" \"DONE\") (\"C\" \"TODO\") (\"D\" \"TODO\") (\"E\" \"DONE\"))) (:init-todo-only (\"A\" \"C\" \"D\")) (:after-mutate ((\"A\" \"TODO\") (\"B\" \"DONE\") (#(\"C\" 0 1 (org-todo-head \"TODO\")) #(\"DONE\" 0 4 (org-todo-head \"TODO\"))) (\"D\" \"TODO\") (\"E\" \"DONE\"))) (:after-todo-only (\"A\" \"D\")))""#
+        ]],
     );
 }
 
@@ -335,7 +350,7 @@ fn combo47_map_entries_mutate_remap() {
 #[test]
 fn combo47_parse_adopt_extract_reparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-element)
@@ -370,6 +385,9 @@ fn combo47_parse_adopt_extract_reparse() {
                                                     (org-element-property :raw-value h))))
                                  (org-element-map tree 'headline #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:init ((1 \"H1\") (2 \"H2\") (1 \"H3\") (2 \"H4\"))) (:extracted-h2 \"H1\") (:h1-children-after-extract 2) (:final ((1 \"H3\") (2 \"H4\"))))""#
+        ]],
     );
 }
 
@@ -380,7 +398,7 @@ fn combo47_parse_adopt_extract_reparse() {
 #[test]
 fn combo47_multi_export_compare() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-ascii)
@@ -405,6 +423,9 @@ fn combo47_multi_export_compare() {
         (push (list :latex-has-section (and latex-out (string-match-p "\\\\section" latex-out))) r)
         (push (list :latex-has-tabular (and latex-out (string-match-p "tabular" latex-out))) r))
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:ascii-nonempty t) (:html-nonempty t) (:latex-nonempty t) (:ascii-has-heading 2) (:html-has-bold 375) (:html-has-table 463) (:latex-has-section 0) (:latex-has-tabular 148))""#
+        ]],
     );
 }
 
@@ -415,7 +436,7 @@ fn combo47_multi_export_compare() {
 #[test]
 fn combo47_property_inherit_override_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Parent\n** Child\n*** Grandchild\n* Other\n")
@@ -441,5 +462,8 @@ fn combo47_property_inherit_override_chain() {
     (push (list :other-color (org-entry-get nil "COLOR" t)) r)
     (push (list :other-size (org-entry-get nil "SIZE" t)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:child-color \"blue\") (:child-size \"large\") (:child-color-after \"red\") (:child-size-after \"large\") (:gc-color \"red\") (:gc-size \"large\") (:other-color nil) (:other-size nil))""#
+        ]],
     );
 }

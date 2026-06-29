@@ -7,43 +7,59 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_subr_arity_car_1_1_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(subr-arity (symbol-function 'car))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(subr-arity (symbol-function 'car))"#,
+        expect_test::expect![[r#""OK (1 . 1)""#]],
+    );
     assert_ok_eq("(1 . 1)", &o, &n);
 }
 
 #[test]
 fn oracle_subr_arity_plus_variadic_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(subr-arity (symbol-function '+))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(subr-arity (symbol-function '+))"#,
+        expect_test::expect![[r#""OK (0 . many)""#]],
+    );
     assert_ok_eq("(0 . many)", &o, &n);
 }
 
 #[test]
 fn oracle_special_form_p_if_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(special-form-p 'if)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(special-form-p 'if)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_special_form_p_car_is_nil_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(special-form-p 'car)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(special-form-p 'car)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_functionp_subr_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(functionp (symbol-function 'car))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(functionp (symbol-function 'car))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_macrop_on_macro_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (defmacro nvm--fi-macro (x) (list '1+ x)) (macrop (symbol-function 'nvm--fi-macro)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &o, &n);
 }

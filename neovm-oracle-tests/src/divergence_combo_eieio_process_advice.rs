@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_eieio_advice_text_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass test-widget nil\n\
          ((name :initarg :name :accessor widget-name)\n\
@@ -28,6 +28,7 @@ fn deficiency_eieio_advice_text_edit() {
          (let ((s (buffer-string)))\n\
          (kill-buffer buf)\n\
          (list s (length s) (string= s \"[CLICK]\")))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -35,7 +36,7 @@ fn deficiency_eieio_advice_text_edit() {
 fn deficiency_closure_buflocal_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar my-counter 0)\n\
          (make-variable-buffer-local 'my-counter)\n\
@@ -53,6 +54,7 @@ fn deficiency_closure_buflocal_undo() {
          (res (funcall adder 10)))\n\
          (kill-buffer buf)\n\
          (list before-undo after-undo res)))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -60,7 +62,7 @@ fn deficiency_closure_buflocal_undo() {
 fn deficiency_overlay_narrow_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ovn\")))\n\
          (with-current-buffer buf\n\
@@ -84,6 +86,7 @@ fn deficiency_overlay_narrow_undo_chain() {
          (buffer-string)\n\
          (= (point-min) 1)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -91,7 +94,7 @@ fn deficiency_overlay_narrow_undo_chain() {
 fn deficiency_hash_closure_accumulator() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((tbl (make-hash-table :test 'equal))\n\
          (count 0))\n\
@@ -105,6 +108,7 @@ fn deficiency_hash_closure_accumulator() {
          (= (gethash \"alpha\" tbl) 3)\n\
          (= (gethash \"beta\" tbl) 2)\n\
          (= (gethash \"gamma\" tbl) 1)))))",
+        expect_test::expect![[r#""ERR (void-function hash-table-keys)""#]],
     );
 }
 
@@ -112,7 +116,7 @@ fn deficiency_hash_closure_accumulator() {
 fn deficiency_marker_ring_narrow_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mrk\")))\n\
          (with-current-buffer buf\n\
@@ -143,6 +147,7 @@ fn deficiency_marker_ring_narrow_replace() {
          (marker-position m2)\n\
          (marker-position m3))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -150,7 +155,7 @@ fn deficiency_marker_ring_narrow_replace() {
 fn deficiency_defstruct_propertize_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (point3d (:constructor mk-pt3)) x y z)\n\
          (let ((buf (generate-new-buffer \"pt3\"))\n\
@@ -173,6 +178,7 @@ fn deficiency_defstruct_propertize_undo() {
          (get-text-property 1 'point)\n\
          (get-text-property 3 'point)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -180,7 +186,7 @@ fn deficiency_defstruct_propertize_undo() {
 fn deficiency_advice_buffer_swap_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defun my-insert-hello ()\n\
          (insert \"HELLO\"))\n\
@@ -201,6 +207,7 @@ fn deficiency_advice_buffer_swap_undo() {
          (advice-remove 'my-insert-hello (lambda () (insert \"[BEFORE]\")))\n\
          (advice-remove 'my-insert-hello (lambda () (insert \"[AFTER]\")))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -208,7 +215,7 @@ fn deficiency_advice_buffer_swap_undo() {
 fn deficiency_eieio_method_hash_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass test-node nil\n\
          ((value :initarg :value :accessor node-value)\n\
@@ -229,6 +236,7 @@ fn deficiency_eieio_method_hash_state() {
          (length (node-children root))\n\
          (node-sum mid)\n\
          (= (node-sum mid) 15))))",
+        expect_test::expect![[r#""OK (27 t 1 2 15 t)""#]],
     );
 }
 
@@ -236,7 +244,7 @@ fn deficiency_eieio_method_hash_state() {
 fn deficiency_multibyte_overlay_props_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mbo\")))\n\
          (with-current-buffer buf\n\
@@ -262,6 +270,7 @@ fn deficiency_multibyte_overlay_props_undo() {
          (overlay-start ov2)\n\
          (overlay-end ov2))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -269,7 +278,7 @@ fn deficiency_multibyte_overlay_props_undo() {
 fn deficiency_cl_loop_hash_marker_buf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"clh\"))\n\
          (tbl (make-hash-table :test 'equal)))\n\
@@ -289,5 +298,6 @@ fn deficiency_cl_loop_hash_marker_buf() {
          (mapcar #'marker-position markers)\n\
          (buffer-substring 1 10))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }

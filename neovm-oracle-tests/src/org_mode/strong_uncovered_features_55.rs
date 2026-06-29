@@ -11,13 +11,14 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf55_timer_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (condition-case nil
       (org-timer-start)
     (error nil))
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"\"""#]],
     );
 }
 
@@ -28,13 +29,14 @@ fn uf55_timer_start() {
 #[test]
 fn uf55_timer_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (condition-case nil
       (org-timer-set-timer 5)
     (error nil))
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"\"""#]],
     );
 }
 
@@ -45,7 +47,7 @@ fn uf55_timer_set() {
 #[test]
 fn uf55_timer_item() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n:LOGBOOK:\n:END:")
@@ -54,6 +56,7 @@ fn uf55_timer_item() {
       (org-timer-item)
     (error nil))
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"- 0:00:00 :: * T\n:LOGBOOK:\n:END:\"""#]],
     );
 }
 
@@ -64,7 +67,7 @@ fn uf55_timer_item() {
 #[test]
 fn uf55_habit_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO Exercise\nSCHEDULED: <2026-01-15 .+2d/4d>\n:PROPERTIES:\n:STYLE: habit\n:END:")
@@ -72,6 +75,7 @@ fn uf55_habit_parse() {
   (condition-case nil
       (org-habit-parse-todo)
     (error nil)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -82,7 +86,7 @@ fn uf55_habit_parse() {
 #[test]
 fn uf55_habit_graph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO Exercise\nSCHEDULED: <2026-01-15 .+2d/4d>\n:PROPERTIES:\n:STYLE: habit\n:END:")
@@ -90,6 +94,7 @@ fn uf55_habit_graph() {
   (condition-case nil
       (org-habit-build-consistency-graph)
     (error nil)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -100,7 +105,7 @@ fn uf55_habit_graph() {
 #[test]
 fn uf55_habit_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO Exercise\nSCHEDULED: <2026-01-15 .+2d/4d>\n:PROPERTIES:\n:STYLE: habit\n:END:")
@@ -108,6 +113,7 @@ fn uf55_habit_toggle() {
   (condition-case nil
       (org-habit-toggle-display)
     (error nil)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -118,11 +124,12 @@ fn uf55_habit_toggle() {
 #[test]
 fn uf55_duration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (org-duration-to-minutes "1:30")
         (org-duration-to-minutes "2h30min")
         (org-duration-to-minutes "1d 2h")
         (org-duration-to-minutes "90min"))"##,
+        expect_test::expect![[r#""OK (90.0 150.0 1560.0 90.0)""#]],
     );
 }
 
@@ -133,10 +140,11 @@ fn uf55_duration() {
 #[test]
 fn uf55_duration_from() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (org-duration-from-minutes 90)
         (org-duration-from-minutes 150)
         (org-duration-from-minutes 1500))"##,
+        expect_test::expect![[r#""OK (\"1:30\" \"2:30\" \"1d 1:00\")""#]],
     );
 }
 
@@ -147,11 +155,12 @@ fn uf55_duration_from() {
 #[test]
 fn uf55_duration_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (org-duration-p "1:30")
         (org-duration-p "2h30min")
         (org-duration-p "invalid")
         (org-duration-p "90min"))"##,
+        expect_test::expect![[r#""OK (0 0 nil 0)""#]],
     );
 }
 
@@ -162,7 +171,10 @@ fn uf55_duration_p() {
 #[test]
 fn uf55_ts_to_now() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(org-time-stamp-to-now "<2026-01-15>")"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(org-time-stamp-to-now "<2026-01-15>")"##,
+        expect_test::expect![[r#""OK -165""#]],
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -172,10 +184,11 @@ fn uf55_ts_to_now() {
 #[test]
 fn uf55_iso_week() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (org-days-to-iso-week 0)
         (org-days-to-iso-week 1)
         (org-days-to-iso-week 7))"##,
+        expect_test::expect![[r#""OK (1 1 1)""#]],
     );
 }
 
@@ -186,7 +199,10 @@ fn uf55_iso_week() {
 #[test]
 fn uf55_today() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(org-today)"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(org-today)"##,
+        expect_test::expect![[r#""OK 739796""#]],
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -196,9 +212,10 @@ fn uf55_today() {
 #[test]
 fn uf55_current_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((t (org-current-time)))
   (list (nth 0 t) (nth 1 t)))"##,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
     );
 }
 
@@ -209,10 +226,11 @@ fn uf55_current_time() {
 #[test]
 fn uf55_float_year() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (org-float-year 2026)
         (org-float-year 2000)
         (org-float-year 1900))"##,
+        expect_test::expect![[r#""ERR (void-function org-float-year)""#]],
     );
 }
 
@@ -223,10 +241,11 @@ fn uf55_float_year() {
 #[test]
 fn uf55_date_to_day() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (org-date-to-day "2026-01-15")
         (org-date-to-day "2026-06-01")
         (org-date-to-day "2026-12-31"))"##,
+        expect_test::expect![[r#""ERR (void-function org-date-to-day)""#]],
     );
 }
 
@@ -237,9 +256,10 @@ fn uf55_date_to_day() {
 #[test]
 fn uf55_day_to_date() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (org-day-to-date (org-date-to-day "2026-01-15"))
         (org-day-to-date (org-date-to-day "2026-06-01")))"##,
+        expect_test::expect![[r#""ERR (void-function org-day-to-date)""#]],
     );
 }
 
@@ -250,10 +270,11 @@ fn uf55_day_to_date() {
 #[test]
 fn uf55_ts_to_sec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (org-time-string-to-seconds "1:30")
         (org-time-string-to-seconds "0:45")
         (org-time-string-to-seconds "2:15:30"))"##,
+        expect_test::expect![[r#""ERR (void-function org-time-string-to-seconds)""#]],
     );
 }
 
@@ -264,10 +285,11 @@ fn uf55_ts_to_sec() {
 #[test]
 fn uf55_min_to_hhmm() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (org-minutes-to-hh:mm-string 90)
         (org-minutes-to-hh:mm-string 45)
         (org-minutes-to-hh:mm-string 150))"##,
+        expect_test::expect![[r#""ERR (void-function org-minutes-to-hh:mm-string)""#]],
     );
 }
 
@@ -278,10 +300,11 @@ fn uf55_min_to_hhmm() {
 #[test]
 fn uf55_parse_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (org-parse-time-string "<2026-01-15 Wed 10:30>")
         (org-parse-time-string "[2026-01-20 Mon]")
         (org-parse-time-string "<2026-01-25>"))"##,
+        expect_test::expect![[r#""ERR (void-function org-parse-time-string)""#]],
     );
 }
 
@@ -292,8 +315,9 @@ fn uf55_parse_time() {
 #[test]
 fn uf55_fix_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (org-fix-decoded-time '(0 30 10 15 1 2026))
         (org-fix-decoded-time '(0 0 0 1 1 2026)))"##,
+        expect_test::expect![[r#""ERR (void-function org-fix-decoded-time)""#]],
     );
 }

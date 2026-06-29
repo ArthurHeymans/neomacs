@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx291_make_variable_buffer_local_permanent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx291-perm :global)
 (make-variable-buffer-local 'neo-cx291-perm)
@@ -23,13 +23,14 @@ fn div_cx291_make_variable_buffer_local_permanent() {
         (local-variable-p 'neo-cx291-perm buf-a)
         (local-variable-p 'neo-cx291-perm buf-b)))
 "##,
+        expect_test::expect![[r#""OK (:a :b :global t t)""#]],
     )
 }
 
 #[test]
 fn div_cx291_kill_local_variable_restores_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx291-kill :global)
 (let ((buf (get-buffer-create " *neo-cx291-kill*")))
@@ -41,13 +42,14 @@ fn div_cx291_kill_local_variable_restores_default() {
       (kill-buffer buf)
       (list local-before after-kill (local-variable-p 'neo-cx291-kill buf)))))
 "##,
+        expect_test::expect![[r#""OK (:local :global nil)""#]],
     )
 }
 
 #[test]
 fn div_cx291_kill_all_local_variables_except_permanent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx291-all*")))
   (with-current-buffer buf
@@ -62,13 +64,14 @@ fn div_cx291_kill_all_local_variables_except_permanent() {
       (kill-buffer buf)
       (list before-normal before-perm after-normal after-perm))))
 "##,
+        expect_test::expect![[r#""ERR (void-variable neo-cx291-normal)""#]],
     )
 }
 
 #[test]
 fn div_cx291_default_toplevel_value_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -83,13 +86,14 @@ fn div_cx291_default_toplevel_value_query() {
           (list local tl dv))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:local :default :default)""#]],
     )
 }
 
 #[test]
 fn div_cx291_local_variable_if_set_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx291-ifset*")))
   (with-current-buffer buf
@@ -98,13 +102,14 @@ fn div_cx291_local_variable_if_set_p() {
   (list (local-variable-if-set-p 'neo-cx291-ifset buf)
         (local-variable-p 'neo-cx291-ifset buf)))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     )
 }
 
 #[test]
 fn div_cx291_setq_default_does_not_overwrite_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx291-override 1)
 (let ((buf-a (get-buffer-create " *neo-cx291-ov-a*"))
@@ -118,13 +123,14 @@ fn div_cx291_setq_default_does_not_overwrite_local() {
     (kill-buffer buf-b)
     (list a-val b-val default)))
 "##,
+        expect_test::expect![[r#""OK (:a 99 99)""#]],
     )
 }
 
 #[test]
 fn div_cx291_buffer_local_let_shadowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx291-shadow :global)
 (let ((buf (get-buffer-create " *neo-cx291-shadow*")))
@@ -139,13 +145,14 @@ fn div_cx291_buffer_local_let_shadowing() {
     (kill-buffer buf)
     after-let))
 "##,
+        expect_test::expect![[r#""OK :buffer-local""#]],
     )
 }
 
 #[test]
 fn div_cx291_indirect_buffer_inherits_locals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((base (get-buffer-create " *neo-cx291-ind-base*")))
   (with-current-buffer base
@@ -161,26 +168,28 @@ fn div_cx291_indirect_buffer_inherits_locals() {
         (kill-buffer base)
         (list base-val ind-val after-set-base after-set-ind)))))
 "##,
+        expect_test::expect![[r#""ERR (void-variable neo-cx291-ind)""#]],
     )
 }
 
 #[test]
 fn div_cx291_default_boundp_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (default-boundp 'neo-cx291-never-set)
       (setq-default neo-cx291-now-set :val)
       (default-boundp 'neo-cx291-now-set)
       (default-value 'neo-cx291-now-set))
 "##,
+        expect_test::expect![[r#""OK (nil :val t :val)""#]],
     )
 }
 
 #[test]
 fn div_cx291_buflocal_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx291-mega :default)
 (let ((buf (get-buffer-create " *neo-cx291-mega*")))
@@ -206,5 +215,6 @@ fn div_cx291_buflocal_with_marker_overlay_undo_narrow_mega() {
         (kill-buffer buf)
         (list state (default-value 'neo-cx291-mega))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

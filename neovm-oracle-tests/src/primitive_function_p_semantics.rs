@@ -23,5 +23,10 @@ fn oracle_prop_subr_primitive_and_primitive_function_p_contracts() {
        (cons '+-symbol '+)
        (cons 'if-symbol 'if)
        (cons 'nil-object nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((+-function t t t) (if-special-form t nil t) (lambda-macro nil nil nil) (lambda-closure nil nil nil) (+-symbol nil nil nil) (if-symbol nil nil nil) (nil-object nil nil nil))""#
+        ]],
+    );
 }

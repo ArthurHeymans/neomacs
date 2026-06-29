@@ -25,7 +25,12 @@ fn oracle_copy_sequence_shallow_list_spine_and_dotted_error() {
           (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((mutated) tail) (changed tail) t (wrong-type-argument (listp c)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -40,7 +45,10 @@ fn oracle_copy_sequence_circular_list_error_payload() {
     (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (circular-list ((a b c a b . #2)))""#]],
+    );
 }
 
 #[test]
@@ -62,7 +70,12 @@ fn oracle_copy_sequence_string_intervals_are_copied() {
         (text-properties-at 4 copy)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"abcdef\" \"abcdef\" 1 2 (face bold) (face italic) (mouse-face highlight))""#
+        ]],
+    );
 }
 
 #[test]
@@ -90,7 +103,12 @@ fn oracle_copy_sequence_vector_record_bool_vector_identity() {
           (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil t 1 99 (t t) (nil t) (wrong-type-argument (sequencep 42)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -105,5 +123,5 @@ fn oracle_copy_sequence_empty_object_identity_observable() {
  (let ((b (make-bool-vector 0 nil))) (eq b (copy-sequence b))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t nil)""#]]);
 }

@@ -16,7 +16,10 @@ fn oracle_prop_special_forms_semantics_quote() {
   (equal '(1 (2 3) "x") (quote (1 (2 3) "x")))
   (quote nil)
   (quote t))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK ((a b c) (1 . 2) t t nil t)""#]],
+    );
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -30,7 +33,10 @@ fn oracle_prop_special_forms_semantics_function() {
   (functionp (function car))
   (function 1)
   (function '(1 2 3)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (42 9 t 1 '(1 2 3))""#]],
+    );
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -49,7 +55,10 @@ fn oracle_prop_special_forms_semantics_defconst() {
         (is-bound (boundp 'neovm--oracle-special-defconst)))
     (makunbound 'neovm--oracle-special-defconst)
     (list first second is-bound)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (10 20 t)""#]],
+    );
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -81,7 +90,10 @@ fn oracle_prop_special_forms_semantics_save_current_buffer() {
          (eq (current-buffer) orig)))
     (kill-buffer a)
     (kill-buffer b)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK ((t \"A\") t \"B!\" \"B!\" t)""#]],
+    );
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -101,7 +113,10 @@ fn oracle_prop_special_forms_semantics_interactive() {
           (funcall 'neovm--oracle-interactive-cmd 7))))
     (fmakunbound 'neovm--oracle-interactive-cmd)
     result))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (t (interactive \"p\") 7)""#]],
+    );
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -118,7 +133,10 @@ fn oracle_prop_special_forms_semantics_inline() {
     (defvar foo 1)
     (inline foo)
     'ok))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK ((void-variable foo) foo ok)""#]],
+    );
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -141,7 +159,12 @@ fn oracle_prop_special_forms_semantics_progn_prog1_eval_order() {
        (eval '(prog1))
      (error (list (car err) (cdr err))))))
 "#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil value (first second third) (wrong-type-argument (listp bad-tail)) (wrong-number-of-arguments (prog1 0)))""#
+        ]],
+    );
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -164,7 +187,12 @@ fn oracle_prop_special_forms_semantics_quote_function_arity_errors() {
      (eval '(function))
    (error (list (car err) (cdr err)))))
 "#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-number-of-arguments '2) (wrong-number-of-arguments '0) (wrong-number-of-arguments #'2) (wrong-number-of-arguments #'0))""#
+        ]],
+    );
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -189,7 +217,10 @@ fn oracle_prop_eval_lexical_environment_semantics() {
               (funcall f))))
        nil))
 "#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (42 (void-variable (x)) 1 2)""#]],
+    );
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -206,6 +237,11 @@ fn oracle_prop_eval_invalid_function_position_does_not_evaluate_args() {
      (error (list (car err) (cdr err))))
    log))
 "#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((invalid-function ((prog1 (lambda (x) x) (push 'fun log)))) nil)""#
+        ]],
+    );
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }

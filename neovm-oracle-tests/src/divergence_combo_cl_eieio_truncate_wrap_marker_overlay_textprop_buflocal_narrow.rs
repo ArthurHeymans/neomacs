@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_truncate_lines_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass truncate-snap ()
     ((step :initarg :step :accessor trs-step :initform "")
@@ -66,6 +66,7 @@ fn combo_eieio_truncate_lines_basic() {
                 (overlay-start ov) (overlay-end ov)
                 truncate-lines))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -73,7 +74,7 @@ fn combo_eieio_truncate_lines_basic() {
 fn combo_eieio_word_wrap_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass wrap-snap ()
     ((step :initarg :step :accessor ws-step :initform "")
@@ -135,6 +136,7 @@ fn combo_eieio_word_wrap_with_props() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -142,7 +144,7 @@ fn combo_eieio_word_wrap_with_props() {
 fn combo_eieio_truncate_narrow_line_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass trunc-narrow-snap ()
     ((step :initarg :step :accessor tns-step :initform "")
@@ -196,6 +198,7 @@ fn combo_eieio_truncate_narrow_line_count() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -203,7 +206,7 @@ fn combo_eieio_truncate_narrow_line_count() {
 fn combo_eieio_wrap_overlay_invisible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass wrap-invis-snap ()
     ((step :initarg :step :accessor wis-step :initform "")
@@ -258,6 +261,7 @@ fn combo_eieio_wrap_overlay_invisible() {
                 (overlay-start ov) (overlay-end ov)
                 truncate-lines word-wrap))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
     );
 }
 
@@ -265,7 +269,7 @@ fn combo_eieio_wrap_overlay_invisible() {
 fn combo_eieio_wrap_undo_marker_integrity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass wrap-undo-snap ()
     ((step :initarg :step :accessor wus-step :initform "")
@@ -319,5 +323,6 @@ fn combo_eieio_wrap_undo_marker_integrity() {
               (marker-position m1) (marker-position m2)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

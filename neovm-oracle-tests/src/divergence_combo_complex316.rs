@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx316_undo_list_capture_and_inspect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -21,13 +21,14 @@ fn div_cx316_undo_list_capture_and_inspect() {
           (> (length buffer-undo-list) before)
           (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK (2 nil \"alpha beta\")""#]],
     )
 }
 
 #[test]
 fn div_cx316_undo_boundary_creates_nil_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -40,13 +41,14 @@ fn div_cx316_undo_boundary_creates_nil_marker() {
             (> (length buffer-undo-list) after)
             (nth after buffer-undo-list)))))
 "##,
+        expect_test::expect![[r#""OK (2 3 t (t . 0))""#]],
     )
 }
 
 #[test]
 fn div_cx316_undo_chain_multiple_steps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -62,13 +64,14 @@ fn div_cx316_undo_chain_multiple_steps() {
       (let ((after-undo-2 (buffer-string)))
         (list after-3 after-undo-1 after-undo-2)))))
 "##,
+        expect_test::expect![[r#""OK (\"123\" \"1\" \"1\")""#]],
     )
 }
 
 #[test]
 fn div_cx316_undo_after_insert_and_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -79,13 +82,14 @@ fn div_cx316_undo_after_insert_and_delete() {
     (undo)
     (list before-undo (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK (\"o world\" \"\")""#]],
     )
 }
 
 #[test]
 fn div_cx316_undo_amalgamating_change_combines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -99,13 +103,14 @@ fn div_cx316_undo_amalgamating_change_combines() {
               (buffer-string))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     )
 }
 
 #[test]
 fn div_cx316_undo_with_text_property_changes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -116,13 +121,14 @@ fn div_cx316_undo_with_text_property_changes() {
     (undo)
     (list before-undo (text-properties-at 1) (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK ((face nil) nil \"\")""#]],
     )
 }
 
 #[test]
 fn div_cx316_buffer_disable_enable_undo_toggling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -136,13 +142,14 @@ fn div_cx316_buffer_disable_enable_undo_toggling() {
           (length buffer-undo-list)
           (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK (2 1 \"first no-undo-1  post\")""#]],
     )
 }
 
 #[test]
 fn div_cx316_undo_after_multiple_unrelated_changes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -155,13 +162,14 @@ fn div_cx316_undo_after_multiple_unrelated_changes() {
     (undo)
     (list after-both (buffer-string))))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     )
 }
 
 #[test]
 fn div_cx316_undo_limit_setting_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (integerp undo-limit)
       (integerp undo-strong-limit)
@@ -169,13 +177,14 @@ fn div_cx316_undo_limit_setting_query() {
       (> undo-limit 0)
       (> undo-strong-limit 0))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx316_undo_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -202,5 +211,6 @@ fn div_cx316_undo_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1) (text-properties-at 5)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

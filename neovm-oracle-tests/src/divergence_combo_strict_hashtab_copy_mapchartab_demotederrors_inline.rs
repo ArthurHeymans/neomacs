@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_o1_hash_table_copy_independence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((h (make-hash-table :test 'equal)))
   (puthash 'a 1 h)
@@ -24,13 +24,14 @@ fn div_o1_hash_table_copy_independence() {
           (gethash 'a h2)
           (gethash 'c h))))
 "##,
+        expect_test::expect![[r#""ERR (void-function hash-table-copy)""#]],
     );
 }
 
 #[test]
 fn div_o1_map_char_table_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'syntax-table nil))
       (count 0)
@@ -52,13 +53,14 @@ fn div_o1_map_char_table_iteration() {
                               ((integerp ry) nil)
                               (t (< (car rx) (car ry)))))))))
 "##,
+        expect_test::expect![[r#""OK (2 (((123 . 4194303) range-val) ((123 . 4194303) val)))""#]],
     );
 }
 
 #[test]
 fn div_o1_with_demoted_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-demoted-errors "Demoted: %S" (error "boom"))
       (with-demoted-errors "Demoted: %S" (+ 1 2))
@@ -66,13 +68,14 @@ fn div_o1_with_demoted_errors() {
           (with-demoted-errors "Demoted: %S" (signal 'arith-error '("x")))
         (error (cdr err))))
 "##,
+        expect_test::expect![[r#""OK (nil 3 nil)""#]],
     );
 }
 
 #[test]
 fn div_o1_define_inline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (define-inline probe-inline-fn (x y)
@@ -81,5 +84,6 @@ fn div_o1_define_inline() {
         (fboundp 'probe-inline-fn)
         (functionp (symbol-function 'probe-inline-fn))))
 "##,
+        expect_test::expect![[r#""OK (7 t t)""#]],
     );
 }

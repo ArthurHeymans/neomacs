@@ -46,7 +46,12 @@ fn oracle_prop_with_temp_buffer_adv_multi_cycle_insert_delete_search() {
               (delete-region (point-min) (point))
               (list after-cycle1 after-cycle2 after-cycle3
                     (buffer-string) count))))))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"alpha epsilon\" \"alpha REPLACED epsilon\" \"AlphA REPLACED epsilon\" \"REPLACED epsilon\" 3)""#
+        ]],
+    );
 }
 
 #[test]
@@ -78,7 +83,12 @@ fn oracle_prop_with_temp_buffer_adv_interleaved_insert_search_delete() {
     (list (buffer-string)
           (count-lines (point-min) (point-max))
           foo-pos)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"line1: foo\ninserted: NEW\nline3: BAZ!!!\nline4: qux\n\" 4 8)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +124,12 @@ fn oracle_prop_with_temp_buffer_adv_nested_data_flow() {
       (list word-list
             (buffer-string)
             (length word-list)))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"hello\" \"world\" \"foo\" \"bar\" \"baz\") \"hello,world,foo,bar,baz\" 5)""#
+        ]],
+    );
 }
 
 #[test]
@@ -142,7 +157,12 @@ fn oracle_prop_with_temp_buffer_adv_deeply_nested_accumulate() {
           (list v1 v2 v3 v4
                 (buffer-string)
                 (string= (buffer-string) "seed")))))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"seed\" \"SEED-L2\" \"SEED_L2_L3\" \"SEED_L2_L3-L4\" \"seed\" t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +191,10 @@ fn oracle_prop_with_temp_buffer_adv_save_excursion_inside() {
       ;; but the insertion before point shifts it
       (list before-point after-point content
             (buffer-substring after-point (+ after-point 3))))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (4 11 \"PREFIX-AAABBBCCC-SUFFIX\" \"BBB\")""#]],
+    );
 }
 
 #[test]
@@ -194,7 +217,10 @@ fn oracle_prop_with_temp_buffer_adv_save_excursion_nested() {
             (list p1 p2 p3 (point) (buffer-string))))))
     ;; After all save-excursions, point restored
     (list (point) (buffer-string))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 \"0123456X789\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +254,12 @@ fn oracle_prop_with_temp_buffer_adv_save_restriction_inside() {
             (list narrowed nmin nmax upcased-narrow))))
       ;; After save-restriction exits, restriction is removed
       (list (point-min) (point-max) (buffer-string)))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 50 \"HEADER\nDATA LINE 1\nDATA LINE 2\nDATA LINE 3\nFOOTER\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +287,12 @@ fn oracle_prop_with_temp_buffer_adv_buffer_local_vars() {
           ;; so the buffer-local binding is gone.
           (list before result neovm--wtba-testvar)))
     (makunbound 'neovm--wtba-testvar)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (global-value (local-in-temp t global-value) global-value)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +326,10 @@ fn oracle_prop_with_temp_buffer_adv_return_hash_table() {
         (gethash "city" ht)
         (gethash "lang" ht)
         (gethash "missing" ht 'default)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (4 \"Alice\" \"30\" \"NYC\" \"Lisp\" default)""#]],
+    );
 }
 
 #[test]
@@ -321,7 +360,12 @@ fn oracle_prop_with_temp_buffer_adv_return_nested_lists() {
         (nth 0 parsed)
         (nth 1 parsed)
         (nth 2 parsed)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"a\" \"b\" \"c\") (\"1\" \"2\" \"3\") (\"x\" \"y\" \"z\")) 3 (\"a\" \"b\" \"c\") (\"1\" \"2\" \"3\") (\"x\" \"y\" \"z\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +402,12 @@ fn oracle_prop_with_temp_buffer_adv_text_properties_multiple_faces() {
     ;; Position 10 (j): source=test only -- note: property at pos 10 is the last char
     (get-text-property 10 'source)
     (get-text-property 10 'category)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (bold \"test\" nil bold 42 42 special special nil nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -401,7 +450,12 @@ fn oracle_prop_with_temp_buffer_adv_split_lines_extract_fields() {
             (nreverse jobs)
             line-count
             (/ total-age line-count)))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"Alice\" \"Bob\" \"Charlie\" \"Diana\") 118 (\"Engineer\" \"Designer\" \"Manager\" \"Developer\") 4 29)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +485,12 @@ fn oracle_prop_with_temp_buffer_adv_string_builder() {
       (insert (make-string 20 ?-) "\n")
       (insert (format "  Total items: %d (%d types)\n" total non-zero))
       (list (buffer-string) total non-zero))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"=== INVENTORY ===\n-----------------\n  apple       :   3\n  cherry      :   7\n  date        :   1\n--------------------\n  Total items: 11 (3 types)\n\" 11 3)""#
+        ]],
+    );
 }
 
 #[test]
@@ -463,7 +522,12 @@ fn oracle_prop_with_temp_buffer_adv_string_builder_with_conditionals() {
                  (setq first nil))))
            (buffer-string))))
     (list result-plain result-filtered)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"1=one* 2=two 3=three* 4=four 5=five*\" \"one, three, five\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -486,7 +550,10 @@ fn oracle_prop_with_temp_buffer_adv_unwind_protect_inside() {
           (setq cleanup-ran t)))
     (error
      (list 'caught (cadr err) cleanup-ran))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (caught \"planned failure\" t)""#]],
+    );
 }
 
 #[test]
@@ -518,7 +585,12 @@ fn oracle_prop_with_temp_buffer_adv_error_in_nested_does_not_corrupt() {
             (buffer-string)
             (string= outer1 (buffer-string))
             mid-result))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"outer-level-1\" \"outer-level-1\" t (\"middle-level\" \"middle-level\" t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -550,7 +622,12 @@ fn oracle_prop_with_temp_buffer_adv_regex_parsing() {
           (length errors)
           (length warnings)
           (length infos))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"2024-01-15\" . \"disk full\") (\"2024-01-18\" . \"timeout\")) ((\"2024-01-16\" . \"low memory\")) ((\"2024-01-17\" . \"started\")) 1 1 1)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -585,5 +662,10 @@ fn oracle_prop_with_temp_buffer_adv_erase_and_reuse() {
     (push (buffer-size) results)
     (push (buffer-string) results)
     (nreverse results)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"round one\" 9 \"round two content here\" 22 \"0 1 4 9 16 \" 12 0 \"\")""#
+        ]],
+    );
 }

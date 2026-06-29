@@ -10,95 +10,200 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_
 fn oracle_prop_format_percent_d_integers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(format "%d" 42)"#);
-    assert_oracle_parity(r#"(format "%d" -42)"#);
-    assert_oracle_parity(r#"(format "%d" 0)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%d" 42)"#,
+        expect_test::expect![[r#""OK \"42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%d" -42)"#,
+        expect_test::expect![[r#""OK \"-42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%d" 0)"#,
+        expect_test::expect![[r#""OK \"0\"""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_format_percent_s_various_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(format "%s" "hello")"#);
-    assert_oracle_parity(r#"(format "%s" 42)"#);
-    assert_oracle_parity(r#"(format "%s" 'symbol)"#);
-    assert_oracle_parity(r#"(format "%s" nil)"#);
-    assert_oracle_parity(r#"(format "%s" t)"#);
-    assert_oracle_parity(r#"(format "%s" '(1 2 3))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" "hello")"#,
+        expect_test::expect![[r#""OK \"hello\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" 42)"#,
+        expect_test::expect![[r#""OK \"42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" 'symbol)"#,
+        expect_test::expect![[r#""OK \"symbol\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" nil)"#,
+        expect_test::expect![[r#""OK \"nil\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" t)"#,
+        expect_test::expect![[r#""OK \"t\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s" '(1 2 3))"#,
+        expect_test::expect![[r#""OK \"(1 2 3)\"""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_format_percent_S_prin1_style() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(format "%S" "hello")"#);
-    assert_oracle_parity(r#"(format "%S" 42)"#);
-    assert_oracle_parity(r#"(format "%S" '(1 "two" three))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" "hello")"#,
+        expect_test::expect![[r#""OK \"\\\"hello\\\"\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" 42)"#,
+        expect_test::expect![[r#""OK \"42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%S" '(1 "two" three))"#,
+        expect_test::expect![[r#""OK \"(1 \\\"two\\\" three)\"""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_format_padding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(format "%10d" 42)"#);
-    assert_oracle_parity(r#"(format "%-10d|" 42)"#);
-    assert_oracle_parity(r#"(format "%010d" 42)"#);
-    assert_oracle_parity(r#"(format "%10s" "hi")"#);
-    assert_oracle_parity(r#"(format "%-10s|" "hi")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%10d" 42)"#,
+        expect_test::expect![[r#""OK \"        42\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%-10d|" 42)"#,
+        expect_test::expect![[r#""OK \"42        |\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%010d" 42)"#,
+        expect_test::expect![[r#""OK \"0000000042\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%10s" "hi")"#,
+        expect_test::expect![[r#""OK \"        hi\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%-10s|" "hi")"#,
+        expect_test::expect![[r#""OK \"hi        |\"""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_format_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(format "%f" 3.14)"#);
-    assert_oracle_parity(r#"(format "%.2f" 3.14159)"#);
-    assert_oracle_parity(r#"(format "%e" 12345.6789)"#);
-    assert_oracle_parity(r#"(format "%g" 0.00001)"#);
-    assert_oracle_parity(r#"(format "%g" 12345.0)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%f" 3.14)"#,
+        expect_test::expect![[r#""OK \"3.140000\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%.2f" 3.14159)"#,
+        expect_test::expect![[r#""OK \"3.14\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%e" 12345.6789)"#,
+        expect_test::expect![[r#""OK \"1.234568e+04\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%g" 0.00001)"#,
+        expect_test::expect![[r#""OK \"1e-05\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%g" 12345.0)"#,
+        expect_test::expect![[r#""OK \"12345\"""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_format_hex_octal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(format "%x" 255)"#);
-    assert_oracle_parity(r#"(format "%X" 255)"#);
-    assert_oracle_parity(r#"(format "%o" 255)"#);
-    assert_oracle_parity(r#"(format "%#x" 255)"#);
-    assert_oracle_parity(r#"(format "%#o" 255)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%x" 255)"#,
+        expect_test::expect![[r#""OK \"ff\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%X" 255)"#,
+        expect_test::expect![[r#""OK \"FF\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%o" 255)"#,
+        expect_test::expect![[r#""OK \"377\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%#x" 255)"#,
+        expect_test::expect![[r#""OK \"0xff\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%#o" 255)"#,
+        expect_test::expect![[r#""OK \"0377\"""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_format_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(format "%c" 65)"#);
-    assert_oracle_parity(r#"(format "%c" ?A)"#);
-    assert_oracle_parity(r#"(format "%c" ?z)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%c" 65)"#,
+        expect_test::expect![[r#""OK \"A\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%c" ?A)"#,
+        expect_test::expect![[r#""OK \"A\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%c" ?z)"#,
+        expect_test::expect![[r#""OK \"z\"""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_format_multiple_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(format "Name: %s, Age: %d, Score: %.1f" "Alice" 30 95.5)"#);
-    assert_oracle_parity(r#"(format "%s=%s&%s=%s" "key1" "val1" "key2" "val2")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "Name: %s, Age: %d, Score: %.1f" "Alice" 30 95.5)"#,
+        expect_test::expect![[r#""OK \"Name: Alice, Age: 30, Score: 95.5\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%s=%s&%s=%s" "key1" "val1" "key2" "val2")"#,
+        expect_test::expect![[r#""OK \"key1=val1&key2=val2\"""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_format_percent_literal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(format "100%%")"#);
-    assert_oracle_parity(r#"(format "%d%%" 50)"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "100%%")"#,
+        expect_test::expect![[r#""OK \"100%\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(format "%d%%" 50)"#,
+        expect_test::expect![[r#""OK \"50%\"""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_format_no_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(format "plain text")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(format "plain text")"#,
+        expect_test::expect![[r#""OK \"plain text\"""#]],
+    );
     assert_ok_eq(r#""plain text""#, &o, &n);
 }
 
@@ -108,7 +213,10 @@ fn oracle_prop_format_complex_template() {
 
     let form = r####"(format "[%04d] %-15s %+8.2f (%s)"
                           7 "transaction" -42.5 "pending")"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"[0007] transaction       -42.50 (pending)\"""#]],
+    );
 }
 
 proptest! {

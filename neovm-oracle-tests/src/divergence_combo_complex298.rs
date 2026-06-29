@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx298_set_window_margins_fringes_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (let ((m0 (window-margins win))
@@ -21,13 +21,14 @@ fn div_cx298_set_window_margins_fringes_round_trip() {
       (set-window-fringes win (car f0) (cadr f0) (car (cddr f0)))
       (list m0 f0 m1 f1))))
 "##,
+        expect_test::expect![[r#""OK ((nil) (0 0 nil nil) (12 . 4) (0 0 nil nil))""#]],
     )
 }
 
 #[test]
 fn div_cx298_window_hscroll_set_and_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx298-hs*")))
   (with-current-buffer buf
@@ -40,13 +41,14 @@ fn div_cx298_window_hscroll_set_and_query() {
       (prog1 (list h1 h2)
         (kill-buffer buf)))))
 "##,
+        expect_test::expect![[r#""OK (50 0)""#]],
     )
 }
 
 #[test]
 fn div_cx298_pos_visible_in_window_p_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx298-pv*")))
   (with-current-buffer buf
@@ -58,13 +60,14 @@ fn div_cx298_pos_visible_in_window_p_query() {
     (prog1 (list vis1 vis-end)
       (kill-buffer buf))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx298_split_window_with_size_and_side() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((n-before (length (window-list))))
   (let ((win (split-window nil 10 'below)))
@@ -75,13 +78,14 @@ fn div_cx298_split_window_with_size_and_side() {
               (>= n-after-split (1+ n-before))
               (= n-after-delete n-before)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     )
 }
 
 #[test]
 fn div_cx298_window_vscroll_set_and_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (set-window-vscroll win 10 t)
@@ -90,13 +94,14 @@ fn div_cx298_window_vscroll_set_and_query() {
     (let ((v2 (window-vscroll win t)))
       (list v1 v2))))
 "##,
+        expect_test::expect![[r#""OK (0 0)""#]],
     )
 }
 
 #[test]
 fn div_cx298_window_dedicated_p_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (let ((before (window-dedicated-p win)))
@@ -106,13 +111,14 @@ fn div_cx298_window_dedicated_p_round_trip() {
       (let ((after-clear (window-dedicated-p win)))
         (list before after-set after-clear))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     )
 }
 
 #[test]
 fn div_cx298_window_parameters_get_set_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (set-window-parameter win 'neo-cx298-p1 :val1)
@@ -127,38 +133,41 @@ fn div_cx298_window_parameters_get_set_round_trip() {
           (assq 'neo-cx298-p2 all)
           (window-parameter win 'neo-cx298-p1))))
 "##,
+        expect_test::expect![[r#""OK (:val1 42 \"string\" t (neo-cx298-p2 . 42) nil)""#]],
     )
 }
 
 #[test]
 fn div_cx298_fit_window_to_buffer_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'fit-window-to-buffer)
       (fboundp 'shrink-window-if-larger-than-buffer)
       (fboundp 'balance-windows)
       (fboundp 'balance-windows-area))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx298_window_scroll_bar_width_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (list (integerp (window-scroll-bar-width win))
           (consp (window-scroll-bars win))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     )
 }
 
 #[test]
 fn div_cx298_window_ops_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (set-window-parameter win 'neo-cx298-mega :win-val)
@@ -187,5 +196,6 @@ fn div_cx298_window_ops_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

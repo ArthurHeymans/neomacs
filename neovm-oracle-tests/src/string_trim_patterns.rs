@@ -50,7 +50,12 @@ fn oracle_prop_string_trim_default_whitespace() {
   (string-trim-right "   ")
   ;; Internal whitespace preserved
   (string-trim "  hello   world  "))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello\" \"hello  \" \"  hello\" \"hello\" \"hello\t\" \"\thello\" \"hello\" \"hello\n\" \"\nhello\" \"hello\" \"hello \t\n\\r \" \" \t\n\\r hello\" \"hello\" \"hello\" \"hello\" \"\" \"\" \"\" \"\" \"\" \"\" \"hello   world\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +93,12 @@ fn oracle_prop_string_trim_custom_character_classes() {
   (string-trim "###comment###" "#+")
   (string-trim-left "###comment###" "#+")
   (string-trim-right "###comment###" "#+"))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r####""OK (\"hello456\" \"hello456\" \"123hello\" \"name___\" \"name___\" \"___name\" \"title---\" \"title---\" \"---title\" \"text...\" \"text...\" \"...text\" \"helloaeiou\" \"helloaeiou\" \"aeiouhell\" \"comment###\" \"comment###\" \"###comment\")""####
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +128,12 @@ fn oracle_prop_string_trim_asymmetric_patterns() {
   (string-trim "xxhelloxxxxx" "x+" "x+")
   ;; Left pattern matches multiple char types, right matches single
   (string-trim "  \t123data!!!" "[ \t0-9]+" "!+"))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r###""OK (\"middle_\" \"content\" \"[data]\" \"bold\" \"text  \" \"##value\" \"hello\" \"data\")""###
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +163,12 @@ fn oracle_prop_string_trim_complex_regexp_patterns() {
   (string-trim-left "000042" "0+")
   ;; Trim trailing whitespace and semicolons
   (string-trim-right "value;  ;" "[; \t]+"))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello . ,\" \"hello world!!!\" \"hello\" \"hello\" \"hello\" \"hello\" \"42\" \"value\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +206,12 @@ fn oracle_prop_string_trim_edge_cases() {
   ;; Result type is always a string
   (stringp (string-trim "  x  "))
   (stringp (string-trim "xxx" "x+")))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\" \"\" \"\" \"hello\" \"hello\" \"hello\" \"\" \"\" \"x\" \"a123b\" \"hello\nworld\" \"data\" \"hello\" \"hello\" t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +267,12 @@ fn oracle_prop_string_trim_pipeline() {
     (fmakunbound 'neovm--test-clean-path)
     (fmakunbound 'neovm--test-clean-comment)
     (fmakunbound 'neovm--test-clean-csv-field)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"usr/local/bin/\" \"home///\" \"relative/path\" \"This is a Lisp comment\" \"This is a shell comment\" \"This is a C comment\" \"Triple semicolon\" \"hello\" \"quoted value\" \"plain\" \"\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -287,5 +317,10 @@ fn oracle_prop_string_trim_consistency() {
        (length results)
        ;; Show actual trimmed values for verification
        (mapcar (lambda (r) (list (nth 0 r) (nth 2 r))) results)))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil 6 ((\"xxxmiddlexxx\" \"middlexxx\") (\"\n\ndata\n\n\" \"data\") (\"aaabbbccc\" \"bbbccc\") (\"---text---\" \"text---\") (\"123abc456\" \"abc456\") (\"  hello  \" \"hello\")))""#
+        ]],
+    );
 }

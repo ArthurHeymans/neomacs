@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_line_ops_narrow_overlay_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass line-snap ()
     ((step :initarg :step :accessor ls-step :initform "")
@@ -82,6 +82,7 @@ fn combo_eieio_line_ops_narrow_overlay_edit() {
               (count-lines (point-min) (point-max))
               my-ln-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -89,7 +90,7 @@ fn combo_eieio_line_ops_narrow_overlay_edit() {
 fn combo_eieio_line_ops_count_lines_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass count-snap ()
     ((step :initarg :step :accessor cs-step :initform "")
@@ -152,6 +153,7 @@ fn combo_eieio_line_ops_count_lines_narrow() {
               (count-lines (point-min) (point-max))
               my-count-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -159,7 +161,7 @@ fn combo_eieio_line_ops_count_lines_narrow() {
 fn combo_eieio_line_ops_forward_line_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass fwdln-snap ()
     ((step :initarg :step :accessor fls-step :initform "")
@@ -215,6 +217,7 @@ fn combo_eieio_line_ops_forward_line_markers() {
               (overlay-start ov) (overlay-end ov)
               my-fl-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -222,7 +225,7 @@ fn combo_eieio_line_ops_forward_line_markers() {
 fn combo_eieio_line_ops_delete_line_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass del-line-snap ()
     ((step :initarg :step :accessor dls-step :initform "")
@@ -296,6 +299,7 @@ fn combo_eieio_line_ops_delete_line_undo() {
               (overlay-live-p ov)
               my-dl-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
     );
 }
 
@@ -303,7 +307,7 @@ fn combo_eieio_line_ops_delete_line_undo() {
 fn combo_eieio_line_ops_buflocal_with_line_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass bl-line-snap ()
     ((step :initarg :step :accessor bls-step :initform "")
@@ -368,5 +372,6 @@ fn combo_eieio_line_ops_buflocal_with_line_move() {
               (count-lines (point-min) (point-max))
               my-bll-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

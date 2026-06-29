@@ -26,5 +26,8 @@ fn oracle_function_equal_closure_and_symbol_identity() {
    (function-equal '(lambda (x) x) '(lambda (x) x))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil t nil t nil nil)""#]],
+    );
 }

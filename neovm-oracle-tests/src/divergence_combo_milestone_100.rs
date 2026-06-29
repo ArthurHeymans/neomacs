@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_full_text_editing_pipeline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-pipe-log-xxx nil)
   (insert "The quick brown fox jumps over the lazy dog")
@@ -40,6 +40,7 @@ fn divergence_full_text_editing_pipeline() {
             (get-text-property 1 'category)
             (eq (get-text-property 1 'category) 'sentence-start)
             (buffer-size)))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -47,7 +48,7 @@ fn divergence_full_text_editing_pipeline() {
 fn divergence_eieio_lifecycle_with_closures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-life-xxx ()
     ((name :initarg :name :accessor test-life-name-xxx)
@@ -76,6 +77,7 @@ fn divergence_eieio_lifecycle_with_closures() {
                           (lambda (obj event)
                             (push (list 'before event)
                                   (slot-value obj 'history)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -83,7 +85,7 @@ fn divergence_eieio_lifecycle_with_closures() {
 fn divergence_buffer_churn_with_overlays_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 200 ?X))
   (let ((ovs nil) (mks nil))
@@ -107,6 +109,9 @@ fn divergence_buffer_churn_with_overlays_markers() {
             (every (lambda (m) (marker-position m)) mks)
             (= (length mks) 20)
             (= (length ovs) 20))))) "#,
+        expect_test::expect![[
+            r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXYYYYYYYYYYYYYYYXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -114,7 +119,7 @@ fn divergence_buffer_churn_with_overlays_markers() {
 fn divergence_nested_macro_eval_apply() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defmacro test-gen-fn-xxx (name base)
     (let ((fn-name (intern (format "test-%s-fn-xxx" name))))
@@ -132,6 +137,7 @@ fn divergence_nested_macro_eval_apply() {
         (= (apply 'test-double-fn-xxx '(11)) 22)
         (funcall 'test-triple-fn-xxx 4)
         (= (funcall 'test-triple-fn-xxx 4) 12))) "#,
+        expect_test::expect![[r#""OK (10 t 21 t t t 22 t 12 t)""#]],
     );
 }
 
@@ -139,7 +145,7 @@ fn divergence_nested_macro_eval_apply() {
 fn divergence_error_recovery_full_stack() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-err-log-xxx nil)
   (defun test-safe-run-xxx (fn)
@@ -160,6 +166,9 @@ fn divergence_error_recovery_full_stack() {
           (member "error: arith-error" log)
           (member 'body3 log)
           (>= (length log) 6)))) "#,
+        expect_test::expect![[
+            r#""OK ((body1 cleanup body2 cleanup \"error: error\" body3 cleanup \"error: arith-error\") (body1 cleanup body2 cleanup \"error: error\" body3 cleanup \"error: arith-error\") (cleanup body2 cleanup \"error: error\" body3 cleanup \"error: arith-error\") nil (\"error: arith-error\") (body3 cleanup \"error: arith-error\") t)""#
+        ]],
     );
 }
 
@@ -167,7 +176,7 @@ fn divergence_error_recovery_full_stack() {
 fn divergence_keymap_hierarchy_command_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-cmd-a-xxx () (interactive) "cmd-a")
   (defun test-cmd-b-xxx () (interactive) "cmd-b")
@@ -190,6 +199,9 @@ fn divergence_keymap_hierarchy_command_lookup() {
           (eq (lookup-key local-map "c") 'test-cmd-c-xxx)
           (lookup-key local-map "d")
           (commandp (lookup-key local-map "a"))))) "#,
+        expect_test::expect![[
+            r#""OK (test-cmd-c-xxx test-cmd-b-xxx test-cmd-c-xxx t t t nil t)""#
+        ]],
     );
 }
 
@@ -197,7 +209,7 @@ fn divergence_keymap_hierarchy_command_lookup() {
 fn divergence_textprop_overlay_undo_full_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((ov (make-overlay 5 9)))
@@ -223,6 +235,9 @@ fn divergence_textprop_overlay_undo_full_cycle() {
               (overlay-start ov) (overlay-end ov)
               f1 (eq f1 'italic)
               (overlay-get ov 'face)))))) "#,
+        expect_test::expect![[
+            r#""AAAAXXX-BBBB-CCCC-DDDD-EEEEYYYERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -230,7 +245,7 @@ fn divergence_textprop_overlay_undo_full_cycle() {
 fn divergence_closure_eval_obarray_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-clo-xxx 0)
   (let ((closures nil))
@@ -250,6 +265,7 @@ fn divergence_closure_eval_obarray_deep() {
               (+ (eval 'test-clo-xxx) 1))
             (= (let ((test-clo-xxx 99))
                  (+ (eval 'test-clo-xxx) 1)) 100))))) "#,
+        expect_test::expect![[r#""ERR (void-function every)""#]],
     );
 }
 
@@ -257,7 +273,7 @@ fn divergence_closure_eval_obarray_deep() {
 fn divergence_multibyte_regex_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "caf\xc3\xa9 na\xc3\xafve r\xc3\xa9sum\xc3\xa9")
   (let ((m1 (copy-marker 1))
@@ -278,6 +294,7 @@ fn divergence_multibyte_regex_replace_undo() {
             (marker-position m2)
             (get-text-property 1 'group)
             (eq (get-text-property 1 'group) 'start))))) "#,
+        expect_test::expect![[r#""cafe naïve resumeERR (void-variable s1)""#]],
     );
 }
 
@@ -285,7 +302,7 @@ fn divergence_multibyte_regex_replace_undo() {
 fn divergence_condition_case_with_overlays_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "START-ERROR-MARKER-END")
   (let ((ov (make-overlay 1 25))
@@ -309,5 +326,6 @@ fn divergence_condition_case_with_overlays_narrow() {
                (eq (overlay-get ov 'tag) 'protected)
                (marker-position m)
                (get-text-property 1 'status)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

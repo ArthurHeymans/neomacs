@@ -70,7 +70,10 @@ fn oracle_prop_fenwick_point_update_prefix_sum() {
     (fmakunbound 'neovm--fw-make)
     (fmakunbound 'neovm--fw-update)
     (fmakunbound 'neovm--fw-prefix-sum)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 5 4 10 15 23 nil 14 33 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +139,10 @@ fn oracle_prop_fenwick_range_sum() {
     (fmakunbound 'neovm--fw2-update)
     (fmakunbound 'neovm--fw2-prefix)
     (fmakunbound 'neovm--fw2-range-sum)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 25 45 75 100 9 nil 127 200)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +218,10 @@ fn oracle_prop_fenwick_build_from_array() {
     (fmakunbound 'neovm--fw3-prefix)
     (fmakunbound 'neovm--fw3-build)
     (fmakunbound 'neovm--fw3-range)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10 60 150 90) (42) (4 8 4) (9 2 15))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +282,10 @@ fn oracle_prop_fenwick_point_query() {
     (fmakunbound 'neovm--fw4-update)
     (fmakunbound 'neovm--fw4-prefix)
     (fmakunbound 'neovm--fw4-point-query)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 3 7 8 6 nil 17 3 2)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +361,10 @@ fn oracle_prop_fenwick_find_index_by_cumulative() {
     (fmakunbound 'neovm--fw5-update)
     (fmakunbound 'neovm--fw5-prefix)
     (fmakunbound 'neovm--fw5-find)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 1 2 3 4 5 6 8 nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -459,5 +474,8 @@ fn oracle_prop_fenwick_2d() {
     (fmakunbound 'neovm--fw2d-update)
     (fmakunbound 'neovm--fw2d-prefix)
     (fmakunbound 'neovm--fw2d-range)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 14 136 34 10 54 7 nil 134 236)""#]],
+    );
 }

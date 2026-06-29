@@ -33,7 +33,12 @@ fn oracle_prop_replace_match_fixedcase_nil_adapts_case() {
         (string-match "world" s)
         (setq results (cons (replace-match "planet" nil nil s) results)))
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello PLANET foo\" \"Hello Planet foo\" \"Hello planet foo\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -53,7 +58,12 @@ fn oracle_prop_replace_match_fixedcase_t_exact_replacement() {
         (string-match "lowercase" s)
         (setq results (cons (replace-match "SCREAMING" t nil s) results)))
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello pLaNeT foo\" \"Hello pLaNeT foo\" \"all SCREAMING match\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +84,12 @@ fn oracle_prop_replace_match_literal_nil_expands_backslashes() {
         (replace-match "\\2->\\1" t nil s)
         ;; \\ = literal backslash in replacement
         (replace-match "\\1\\\\\\2" t nil s)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"[key=value] pair=data\" \"value->key pair=data\" \"key\\\\value pair=data\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -92,7 +107,12 @@ fn oracle_prop_replace_match_literal_t_no_backslash_expansion() {
         (replace-match "\\1->\\2" t t s)
         ;; With LITERAL=t, backslash is literal
         (replace-match "a\\b\\c" t t s)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\\\\& pair=data\" \"\\\\1->\\\\2 pair=data\" \"a\\\\b\\\\c pair=data\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +138,12 @@ fn oracle_prop_replace_match_subexp_replace_specific_group() {
         (match-string 0 s)
         (match-string 1 s)
         (match-string 2 s)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"REPLACED age:30 city:Paris\" \"fullname:Alice age:30 city:Paris\" \"name:Bob age:30 city:Paris\" \"name:Alice\" \"name\" \"Alice\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +172,12 @@ fn oracle_prop_replace_match_after_re_search_forward_in_buffer() {
           (list whole-match dollars cents
                 after-first
                 (buffer-string)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"$42.99\" \"42\" \"99\" \"The price is EUR 42,99 and the tax is $5.00.\" \"The price is EUR 42,99 and the tax is EUR 5,00.\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +208,12 @@ fn oracle_prop_replace_match_after_string_match_multiple_groups() {
               (replace-match "09" t t s 4)
               ;; Full match replacement with back-refs
               (replace-match "\\3/\\2/\\1 \\4:\\5:\\6" t nil s))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"2026\" \"03\" \"02\" \"14\" \"30\" \"00\" \"2026-03-15T14:30:00\" \"2026-03-02T09:30:00\" \"02/03/2026 14:30:00\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +243,12 @@ fn oracle_prop_replace_match_backreferences_swap_and_transform() {
         (string-match "rgb(\\([0-9]+\\),\\([0-9]+\\),\\([0-9]+\\))" s)
         (setq results (cons (replace-match "R=\\1 G=\\2 B=\\3" t nil s) results)))
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"John Doe\" \"hello-hello world-world\" \"[foo][bar][baz]\" \"R=255 G=128 B=0\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -259,7 +299,12 @@ fn oracle_prop_replace_match_template_engine() {
             (test--expand-template "result: {{name}}" '(("name" . "a.b*c+d"))))))
       ;; Cleanup
       (fmakunbound 'test--expand-template))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Dear Alice, your order #12345 for Widget Pro is shipped.\" \"Dear Bob, your order #{{order_id}} for {{item}} is {{status}}.\" \"\" \"plain text\" \"Eve says Eve\" \"result: a.b*c+d\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -327,7 +372,12 @@ fn oracle_prop_replace_match_case_preserving_replacement() {
       (fmakunbound 'test--detect-case-pattern)
       (fmakunbound 'test--apply-case-pattern)
       (fmakunbound 'test--case-preserving-replace))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"World world WORLD\" \"The Dog sat on the dog. DOG!\" upper lower capitalized mixed \"Find BAR and Bar in bar land\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +410,12 @@ fn oracle_prop_replace_match_buffer_multipass_with_counting() {
                 round2-count
                 (buffer-string)
                 (buffer-size)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 \"REPLACED bar REPLACED baz REPLACED qux REPLACED\" 4 \"X bar X baz X qux X\" 19)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -393,5 +448,10 @@ fn oracle_prop_replace_match_save_match_data_interaction() {
             (list outer-whole outer-key outer-val
                   restored-key restored-val
                   replaced)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"alpha:100\" \"alpha\" \"100\" \"alpha\" \"100\" \"alpha=100 beta:200 gamma:300\")""#
+        ]],
+    );
 }

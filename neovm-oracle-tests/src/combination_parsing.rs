@@ -111,7 +111,10 @@ fn oracle_prop_parsing_recursive_descent_expr() {
     (fmakunbound 'neovm--test-parse-term)
     (fmakunbound 'neovm--test-parse-expr)
     (fmakunbound 'neovm--test-eval-expr)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (7 11 14 5 5 15)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +207,12 @@ fn oracle_prop_parsing_sexp_from_string() {
           (fmakunbound 'neovm--test-parse-sexp)
           (fmakunbound 'neovm--test-parse-top)
           results)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (closure (t) (input) (let ((pos 0) (len (length input))) (fset 'neovm--test-skip-ws (lambda nil (while (and (< pos len) (memq (aref input pos) '(32 9 10))) (setq pos (1+ pos))))) (fset 'neovm--test-read-atom (lambda nil (let ((start pos)) (while (and (< pos len) (not (memq (aref input pos) '(32 9 10 40 41 46)))) (setq pos (1+ pos))) (let ((token (substring input start pos))) (if (string-match \"\\\\`-?[0-9]+\\\\'\" token) (string-to-number token) (intern token)))))) (fset 'neovm--test-read-one (lambda nil (funcall 'neovm--test-skip-ws) (when (< pos len) (let ((ch (aref input pos))) (cond ((= ch 40) (setq pos (1+ pos)) (funcall 'neovm--test-skip-ws) (let ((items nil)) (while (and (< pos len) (/= (aref input pos) 41)) (setq items (cons (funcall 'neovm--test-read-one) items)) (funcall 'neovm--test-skip-ws) (when (and (< pos len) (= (aref input pos) 46) (< (1+ pos) len) (memq (aref input (1+ pos)) '(32 9))) (setq pos (1+ pos)) (let ((cdr-val (funcall 'neovm--test-read-one))) (funcall 'neovm--test-skip-ws) (let ((result cdr-val)) (dolist (item items) (setq result (cons item result))) (when (and (< pos len) (= (aref input pos) 41)) (setq pos (1+ pos))) (throw 'neovm--test-sexp-result result))))) (when (and (< pos len) (= (aref input pos) 41)) (setq pos (1+ pos))) (nreverse items))) (t (funcall 'neovm--test-read-atom))))))) (fset 'neovm--test-parse-top (lambda (s) (setq pos 0 len (length s) input s) (catch 'neovm--test-sexp-result (funcall 'neovm--test-read-one)))) (let ((results (list (funcall 'neovm--test-parse-top \"42\") (funcall 'neovm--test-parse-top \"hello\") (funcall 'neovm--test-parse-top \"(1 2 3)\") (funcall 'neovm--test-parse-top \"(a (b c) d)\") (funcall 'neovm--test-parse-top \"(x . y)\") (funcall 'neovm--test-parse-top \"(1 2 . 3)\") (funcall 'neovm--test-parse-top \"(+ (* 2 3) (- 5 1))\")))) (fmakunbound 'neovm--test-skip-ws) (fmakunbound 'neovm--test-read-atom) (fmakunbound 'neovm--test-read-one) (fmakunbound 'neovm--test-parse-sexp) (fmakunbound 'neovm--test-parse-top) results)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -288,7 +296,12 @@ fn oracle_prop_parsing_ini_config() {
           ;; All section names
           (mapcar 'car config)))
     (fmakunbound 'neovm--test-parse-ini)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 \"localhost\" \"5432\" \"8080\" \"4\" \"info\" (\"database\" \"server\" \"logging\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -439,7 +452,12 @@ fn oracle_prop_parsing_json_like() {
     (fmakunbound 'neovm--test-json-parse)
     (makunbound 'neovm--test-json-pos)
     (makunbound 'neovm--test-json-input)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"name\" . \"alice\") (\"age\" . 30)) (1 2 3) ((\"users\" ((\"id\" . 1)) ((\"id\" . 2)))) ((\"active\" . t) (\"deleted\") (\"note\")) nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -614,7 +632,10 @@ fn oracle_prop_parsing_tokenizer_parser_pipeline() {
     (fmakunbound 'neovm--test-lang-parse)
     (fmakunbound 'neovm--test-lang-eval-expr)
     (fmakunbound 'neovm--test-lang-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((30) (13 3) (8))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -710,7 +731,12 @@ fn oracle_prop_parsing_template_interpolation() {
     (fmakunbound 'neovm--test-tpl-parse)
     (fmakunbound 'neovm--test-tpl-render)
     (fmakunbound 'neovm--test-tpl-expand)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello Alice, welcome!\" \"Hi Bob, you have 5 new messages.\" \"User: carol, Role: ${role}\" \"no interpolation here\" \"XYZ\" ((literal \"before \") (var \"x\") (literal \" middle \") (var \"y\") (literal \" after\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -770,5 +796,10 @@ fn oracle_prop_parsing_balanced_delimiters() {
         (funcall 'neovm--test-check-balanced "hello (world) [foo] {bar}")
         (funcall 'neovm--test-check-balanced "((({"))
     (fmakunbound 'neovm--test-check-balanced)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (balanced balanced (unclosed \"(\" 0) (mismatch \"[\" 1 \")\" 2) (unmatched-close \")\" 0) balanced balanced (unclosed \"{\" 3))""#
+        ]],
+    );
 }

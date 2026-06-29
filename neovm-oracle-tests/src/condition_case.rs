@@ -8,7 +8,10 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 fn oracle_prop_condition_case_handles_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(condition-case nil (/ 1 0) (arith-error 42))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(condition-case nil (/ 1 0) (arith-error 42))",
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &oracle, &neovm);
 }
 
@@ -16,7 +19,10 @@ fn oracle_prop_condition_case_handles_error() {
 fn oracle_prop_condition_case_no_error_passthrough() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(condition-case nil (+ 1 2) (error 0))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(condition-case nil (+ 1 2) (error 0))",
+        expect_test::expect![[r#""OK 3""#]],
+    );
     assert_ok_eq("3", &oracle, &neovm);
 }
 
@@ -24,5 +30,8 @@ fn oracle_prop_condition_case_no_error_passthrough() {
 fn oracle_prop_condition_case_error_symbol_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(condition-case err (/ 1 0) (arith-error (car err)))");
+    crate::common::assert_oracle_parity_expect(
+        "(condition-case err (/ 1 0) (arith-error (car err)))",
+        expect_test::expect![[r#""OK arith-error""#]],
+    );
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_insert_file_contents_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass file-io-snap ()
     ((step :initarg :step :accessor fis-step :initform "")
@@ -56,6 +56,7 @@ fn combo_eieio_insert_file_contents_basic() {
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)
     (delete-file tmpfile)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -63,7 +64,7 @@ fn combo_eieio_insert_file_contents_basic() {
 fn combo_eieio_write_region_read_back() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass write-read-snap ()
     ((step :initarg :step :accessor wrs-step :initform "")
@@ -117,6 +118,7 @@ fn combo_eieio_write_region_read_back() {
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)
     (delete-file tmpfile)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -124,7 +126,7 @@ fn combo_eieio_write_region_read_back() {
 fn combo_eieio_insert_file_with_overlays_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass file-overlay-snap ()
     ((step :initarg :step :accessor fos-step :initform "")
@@ -184,6 +186,7 @@ fn combo_eieio_insert_file_with_overlays_markers() {
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)
     (delete-file tmpfile)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -191,7 +194,7 @@ fn combo_eieio_insert_file_with_overlays_markers() {
 fn combo_eieio_file_io_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass file-narrow-snap ()
     ((step :initarg :step :accessor fns-step :initform "")
@@ -246,6 +249,7 @@ fn combo_eieio_file_io_narrow() {
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)
     (delete-file tmpfile)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -253,7 +257,7 @@ fn combo_eieio_file_io_narrow() {
 fn combo_eieio_file_io_undo_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass file-undo-snap ()
     ((step :initarg :step :accessor fus-step :initform "")
@@ -304,5 +308,6 @@ fn combo_eieio_file_io_undo_restore() {
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)
     (delete-file tmpfile)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

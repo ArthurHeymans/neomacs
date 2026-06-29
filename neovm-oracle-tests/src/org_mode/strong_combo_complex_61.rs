@@ -13,7 +13,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo61_refile_actual_copy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** A1\nBody.\n** A2\nBody.\n* B\n")
@@ -31,13 +31,14 @@ fn combo61_refile_actual_copy() {
           (error (push (list :refile-error t) r)))))
     (push (list :headline-count (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:refile-error t) (:headline-count 4))""#]],
     );
 }
 
 #[test]
 fn combo61_footnote_action_delete_renumber() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "A[fn:1] B[fn:2] C[fn:3]\n[fn:1] One.\n[fn:2] Two.\n[fn:3] Three.\n")
@@ -58,13 +59,14 @@ fn combo61_footnote_action_delete_renumber() {
                         (org-element-map (org-element-parse-buffer) 'footnote-reference #'identity))) r)
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (void-function org-footnote-renumber-fn-n)""#]],
     );
 }
 
 #[test]
 fn combo61_babel_results_raw_org() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -79,13 +81,16 @@ fn combo61_babel_results_raw_org() {
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r##""OK (\"<p>raw html output</p>\" \"* org headline\n** subheading\" (:result-count 0) (:buffer \"#+begin_src emacs-lisp :results raw\n\\\"<p>raw html output</p>\\\"\n#+end_src\n\n#+RESULTS:\n<p>raw html output</p>\n\n#+begin_src emacs-lisp :results org\n\\\"* org headline\\\\n** subheading\\\"\n#+end_src\n\n#+RESULTS:\n#+begin_src org\n,* org headline\n,** subheading\n#+end_src\n\"))""##
+        ]],
     );
 }
 
 #[test]
 fn combo61_element_affiliated_all_blocks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+CAPTION: Block caption\n")
@@ -112,13 +117,16 @@ fn combo61_element_affiliated_all_blocks() {
         (push (list :src-attr-html (org-element-property :attr_html (car srcs))) r)
         (push (list :src-lang (org-element-property :language (car srcs))) r)))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:ex-caption (((#(\"Block caption\" 0 13 (:parent (#(\"Block caption\" 0 13 (:parent #7))))))))) (:ex-name \"my-block\") (:ex-attr-html (\":class special\")) (:ex-attr-latex (\":environment fancyenv\")) (:src-caption (((#(\"Src caption\" 0 11 (:parent (#(\"Src caption\" 0 11 (:parent #7))))))))) (:src-attr-html (\":width 100%\")) (:src-lang \"emacs-lisp\"))""#
+        ]],
     );
 }
 
 #[test]
 fn combo61_cycle_local_plain_lists() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (let ((org-cycle-include-plain-lists 'integrate))
@@ -138,13 +146,16 @@ fn combo61_cycle_local_plain_lists() {
       (org-show-all)
       (push (list :items-all (length (org-element-map (org-element-parse-buffer) 'item #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:heading-invis nil) (:after-fold-invis nil) (:after-children-invis nil) (:items-visible 3) (:items-all 5))""#
+        ]],
     );
 }
 
 #[test]
 fn combo61_babel_colnames_rownames() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -159,13 +170,16 @@ fn combo61_babel_colnames_rownames() {
       (push (org-babel-execute-src-block) r)
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Name\" \"Score\") hline (\"Alice\" nil) (\"Bob\" nil)) (:result-count 0))""#
+        ]],
     );
 }
 
 #[test]
 fn combo61_babel_epilogue_header_arg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-sh)
@@ -178,13 +192,16 @@ fn combo61_babel_epilogue_header_arg() {
         (error (push (list :epilogue-error (car e)) r)))
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"ob-sh\")""#
+        ]],
     );
 }
 
 #[test]
 fn combo61_clock_effort_property_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-clock)
@@ -200,13 +217,16 @@ fn combo61_clock_effort_property_interaction() {
       ;; effort + clock
       (push (list :effort-minutes (org-duration-to-minutes (or (org-entry-get nil "EFFORT") "0:00"))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:effort \"1:00\") (:clock-sum 0) (:effort-minutes 60.0))""#
+        ]],
     );
 }
 
 #[test]
 fn combo61_sort_by_clock_sum() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-clock)
@@ -224,13 +244,14 @@ fn combo61_sort_by_clock_sum() {
                      (mapcar (lambda (h) (substring-no-properties (org-element-property :raw-value h)))
                              (org-element-map (org-element-parse-buffer) 'headline #'identity))))
       (error :sort-error)))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 17 29)""#]],
     );
 }
 
 #[test]
 fn combo61_org_toggle_inline_images() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "[[file:/tmp/test.png]]\n")
@@ -245,5 +266,6 @@ fn combo61_org_toggle_inline_images() {
     ;; link still there
     (push (list :link-count (length (org-element-map (org-element-parse-buffer) 'link #'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:toggle-fbound t) (:toggled t) (:link-count 1))""#]],
     );
 }

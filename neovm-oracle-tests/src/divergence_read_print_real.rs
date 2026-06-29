@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_read_basic_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (read-from-string \"42\")
   (read-from-string \"3.14\")
@@ -17,6 +17,9 @@ fn divergence_read_basic_types() {
   (read-from-string \"(1 2 3)\")
   (read-from-string \"[1 2 3]\")
   (read-from-string \"?A\")) ",
+        expect_test::expect![[
+            r#""OK ((42 . 2) (3.14 . 4) (\"hello\" . 7) (nil . 3) (t . 1) ((1 2 3) . 7) ([1 2 3] . 7) (65 . 2))""#
+        ]],
     );
 }
 
@@ -24,12 +27,13 @@ fn divergence_read_basic_types() {
 fn divergence_print_circle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((print-circle t)
         (obj (list 'a 'b)))
   (nconc obj obj)
   (list (prin1-to-string obj)
         print-circle)) ",
+        expect_test::expect![[r##""OK (\"#1=(a b . #1#)\" t)""##]],
     );
 }
 
@@ -37,7 +41,7 @@ fn divergence_print_circle() {
 fn divergence_print_gensym_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((sym (make-symbol \"temp\")))
   (list (symbolp sym)
         (symbol-name sym)
@@ -46,6 +50,7 @@ fn divergence_print_gensym_symbols() {
           (prin1-to-string sym))
         (let ((print-gensym nil))
           (prin1-to-string sym)))) ",
+        expect_test::expect![[r#""ERR (void-function interned-p)""#]],
     );
 }
 
@@ -53,13 +58,16 @@ fn divergence_print_gensym_symbols() {
 fn divergence_print_escape_newlines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((s \"hello\\nworld\"))
   (list s
         (let ((print-escape-newlines t))
           (prin1-to-string s))
         (let ((print-escape-newlines nil))
           (prin1-to-string s)))) ",
+        expect_test::expect![[
+            r#""OK (\"hello\nworld\" \"\\\"hello\\\\nworld\\\"\" \"\\\"hello\nworld\\\"\")""#
+        ]],
     );
 }
 
@@ -67,7 +75,7 @@ fn divergence_print_escape_newlines() {
 fn divergence_format_specifiers_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (format \"hello %s\" \"world\")
   (format \"count: %d\" 42)
@@ -77,6 +85,9 @@ fn divergence_format_specifiers_real() {
   (format \"%10s\" \"hi\")
   (format \"%-10s|\" \"hi\")
   (format \"%05d\" 7)) ",
+        expect_test::expect![[
+            r#""OK (\"hello world\" \"count: 42\" \"pi: 3.14\" \"char: A\" \"% literal\" \"        hi\" \"hi        |\" \"00007\")""#
+        ]],
     );
 }
 
@@ -84,13 +95,14 @@ fn divergence_format_specifiers_real() {
 fn divergence_read_nested_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((data '((1 (2 3)) [4 5] \"six\" :kw))
         (printed (prin1-to-string data))
         (re-read (read-from-string printed)))
   (list (equal data (car re-read))
         (cdr re-read)
         (= (cdr re-read) (length printed)))) ",
+        expect_test::expect![[r#""OK (t 27 t)""#]],
     );
 }
 
@@ -98,11 +110,12 @@ fn divergence_read_nested_structures() {
 fn divergence_print_length_limit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((print-length 3))
   (list (prin1-to-string '(1 2 3 4 5))
         (prin1-to-string '[1 2 3 4 5])
         (prin1-to-string \"abcdefghij\"))) ",
+        expect_test::expect![[r#""OK (\"(1 2 3 ...)\" \"[1 2 3 ...]\" \"\\\"abcdefghij\\\"\")""#]],
     );
 }
 
@@ -110,10 +123,11 @@ fn divergence_print_length_limit() {
 fn divergence_print_level_limit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((print-level 2))
   (list (prin1-to-string '(1 (2 (3 (4)))))
         (prin1-to-string '((a (b (c))))))) ",
+        expect_test::expect![[r#""OK (\"(1 (2 ...))\" \"((a ...))\")""#]],
     );
 }
 
@@ -121,11 +135,12 @@ fn divergence_print_level_limit() {
 fn divergence_princ_vs_prin1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((s \"hello\"))
   (list (prin1-to-string s)
         (with-output-to-string (princ s))
         (substring (prin1-to-string '(a \"b\" 3)) 0))) ",
+        expect_test::expect![[r#""OK (\"\\\"hello\\\"\" \"hello\" \"(a \\\"b\\\" 3)\")""#]],
     );
 }
 
@@ -133,7 +148,7 @@ fn divergence_princ_vs_prin1() {
 fn divergence_print_escape_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((s \"caf\\u00e9\")
         (p1 (prin1-to-string s))
         (r1 (car (read-from-string p1))))
@@ -142,5 +157,6 @@ fn divergence_print_escape_multibyte() {
         p1
         (length s)
         (length r1))) ",
+        expect_test::expect![[r#""OK (t t \"\\\"café\\\"\" 4 4)""#]],
     );
 }

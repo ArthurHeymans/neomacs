@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn zeta_export_options_title() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -19,13 +19,16 @@ fn zeta_export_options_title() {
       (goto-char (point-min))
       (let ((info (org-export-get-environment)))
         (plist-get info :title)))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"My Title\" 0 8 (:parent (#(\"My Title\" 0 8 (:parent #3))))))""#
+        ]],
     );
 }
 
 #[test]
 fn zeta_export_options_author() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -34,13 +37,16 @@ fn zeta_export_options_author() {
       (goto-char (point-min))
       (let ((info (org-export-get-environment)))
         (plist-get info :author)))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"Test Author\" 0 11 (:parent (#(\"Test Author\" 0 11 (:parent #3))))))""#
+        ]],
     );
 }
 
 #[test]
 fn zeta_export_options_email() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -49,13 +55,14 @@ fn zeta_export_options_email() {
       (goto-char (point-min))
       (let ((info (org-export-get-environment)))
         (plist-get info :email)))))"##,
+        expect_test::expect![[r#""OK \"test@example.org\"""#]],
     );
 }
 
 #[test]
 fn zeta_export_options_date() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -69,13 +76,16 @@ fn zeta_export_options_date() {
                     (org-export--collect-tree-properties
                      tree (org-export-get-environment)))))
         (org-export-get-date info)))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"2024-01-15\" 0 10 (:parent (#(\"2024-01-15\" 0 10 (:parent #3))))))""#
+        ]],
     );
 }
 
 #[test]
 fn zeta_export_options_description() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -84,13 +94,14 @@ fn zeta_export_options_description() {
       (goto-char (point-min))
       (let ((info (org-export-get-environment)))
         (plist-get info :description)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn zeta_export_options_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -99,6 +110,7 @@ fn zeta_export_options_keywords() {
       (goto-char (point-min))
       (let ((info (org-export-get-environment)))
         (plist-get info :keywords)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -109,7 +121,7 @@ fn zeta_export_options_keywords() {
 #[test]
 fn zeta_export_headline_numbers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -124,13 +136,14 @@ fn zeta_export_headline_numbers() {
                      tree (org-export-get-environment)))))
         (mapcar (lambda (h) (org-export-get-headline-number h info))
                 (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK ((1) (1 1) (1 1 1) (1 2) (2) (2 1))""#]],
     );
 }
 
 #[test]
 fn zeta_export_relative_levels() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -145,13 +158,14 @@ fn zeta_export_relative_levels() {
                      tree (org-export-get-environment)))))
         (mapcar (lambda (h) (org-export-get-relative-level h info))
                 (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK (1 2 3 1)""#]],
     );
 }
 
 #[test]
 fn zeta_export_numbered_headline_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -166,13 +180,14 @@ fn zeta_export_numbered_headline_p() {
                      tree (org-export-get-environment)))))
         (mapcar (lambda (h) (org-export-numbered-headline-p h info))
                 (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn zeta_export_low_level_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil)
@@ -188,6 +203,7 @@ fn zeta_export_low_level_p() {
                      tree (org-export-get-environment)))))
         (mapcar (lambda (h) (org-export-low-level-p h info))
                 (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK (nil nil 1 2)""#]],
     );
 }
 
@@ -198,7 +214,7 @@ fn zeta_export_low_level_p() {
 #[test]
 fn zeta_export_tags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -213,13 +229,14 @@ fn zeta_export_tags() {
                      tree (org-export-get-environment)))))
         (mapcar (lambda (h) (org-export-get-tags h info))
                 (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK ((\"tag1\") (\"tag2\") nil)""#]],
     );
 }
 
 #[test]
 fn zeta_export_category() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -234,6 +251,7 @@ fn zeta_export_category() {
                      tree (org-export-get-environment)))))
         (mapcar (lambda (h) (org-export-get-category h info))
                 (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK (\"work\" \"work\")""#]],
     );
 }
 
@@ -244,7 +262,7 @@ fn zeta_export_category() {
 #[test]
 fn zeta_export_footnote_numbers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -259,13 +277,14 @@ fn zeta_export_footnote_numbers() {
                      tree (org-export-get-environment)))))
         (mapcar (lambda (ref) (org-export-get-footnote-number ref info))
                 (org-element-map tree 'footnote-reference #'identity))))))"##,
+        expect_test::expect![[r#""OK (1 2)""#]],
     );
 }
 
 #[test]
 fn zeta_export_footnote_first_reference() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -280,6 +299,7 @@ fn zeta_export_footnote_first_reference() {
                      tree (org-export-get-environment)))))
         (mapcar (lambda (ref) (org-export-footnote-first-reference-p ref info))
                 (org-element-map tree 'footnote-reference #'identity))))))"##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
@@ -290,7 +310,7 @@ fn zeta_export_footnote_first_reference() {
 #[test]
 fn zeta_export_caption() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -300,13 +320,16 @@ fn zeta_export_caption() {
       (let* ((tree (org-element-parse-buffer))
              (table (car (org-element-map tree 'table #'identity))))
         (org-export-get-caption table)))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"My caption\" 0 10 (:parent (#(\"My caption\" 0 10 (:parent #3))))))""#
+        ]],
     );
 }
 
 #[test]
 fn zeta_export_caption_short() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -317,6 +340,7 @@ fn zeta_export_caption_short() {
              (table (car (org-element-map tree 'table #'identity))))
         (list (org-export-get-caption table)
               (org-export-get-caption table t)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -327,7 +351,7 @@ fn zeta_export_caption_short() {
 #[test]
 fn zeta_export_first_last_sibling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -339,6 +363,7 @@ fn zeta_export_first_last_sibling() {
         (list
          (mapcar #'org-export-first-sibling-p headlines)
          (mapcar #'org-export-last-sibling-p headlines))))))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 1)""#]],
     );
 }
 
@@ -349,7 +374,7 @@ fn zeta_export_first_last_sibling() {
 #[test]
 fn zeta_export_node_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -359,6 +384,7 @@ fn zeta_export_node_property() {
       (let* ((tree (org-element-parse-buffer))
              (headline (car (org-element-map tree 'headline #'identity))))
         (org-export-get-node-property :CUSTOM_ID headline))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -369,7 +395,7 @@ fn zeta_export_node_property() {
 #[test]
 fn zeta_export_optional_title() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -384,6 +410,7 @@ fn zeta_export_optional_title() {
                      tree (org-export-get-environment))))
              (headline (car (org-element-map tree 'headline #'identity))))
         (org-export-get-optional-title headline info)))))"##,
+        expect_test::expect![[r#""ERR (void-function org-export-get-optional-title)""#]],
     );
 }
 
@@ -394,7 +421,7 @@ fn zeta_export_optional_title() {
 #[test]
 fn zeta_export_filter_apply() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (list
@@ -414,6 +441,7 @@ fn zeta_export_filter_apply() {
     (list (lambda (_value &rest _) "")
           (lambda (value &rest _) (concat "2" value)))
     "0" nil)))"##,
+        expect_test::expect![[r#""OK (\"210\" \"20\" \"0\" \"\")""#]],
     );
 }
 
@@ -424,7 +452,7 @@ fn zeta_export_filter_apply() {
 #[test]
 fn zeta_export_define_backend() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let (org-export-registered-backends)
@@ -432,13 +460,16 @@ fn zeta_export_define_backend() {
     (list
      (org-export-get-all-transcoders 'test)
      (org-export-get-backend 'test))))"##,
+        expect_test::expect![[
+            r#""OK (((headline . my-headline-test)) #s(org-export-backend test nil ((headline . my-headline-test)) nil nil nil nil))""#
+        ]],
     );
 }
 
 #[test]
 fn zeta_export_derived_backend() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let (org-export-registered-backends)
@@ -450,13 +481,14 @@ fn zeta_export_derived_backend() {
      (org-export-derived-backend-p 'test 'test)
      (let ((all (org-export-get-all-transcoders 'test)))
        (list (cdr (assq :headline all)))))))"##,
+        expect_test::expect![[r#""OK ((parent) t (test))""#]],
     );
 }
 
 #[test]
 fn zeta_export_get_all_transcoders() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (list
@@ -472,13 +504,16 @@ fn zeta_export_get_all_transcoders() {
      (org-export-get-all-transcoders
       (org-export-create-backend
        :parent 'b1 :transcoders '((section . ignore)))))))"##,
+        expect_test::expect![[
+            r#""OK (nil ((headline . ignore)) ((section . ignore) (headline . ignore)))""#
+        ]],
     );
 }
 
 #[test]
 fn zeta_export_get_all_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (list
@@ -494,13 +529,14 @@ fn zeta_export_get_all_options() {
      (org-export-get-all-options
       (org-export-create-backend
        :parent 'b1 :options '((:key2 value2)))))))"##,
+        expect_test::expect![[r#""OK (nil ((:key1 value1)) ((:key2 value2) (:key1 value1)))""#]],
     );
 }
 
 #[test]
 fn zeta_export_get_all_filters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (list
@@ -517,6 +553,9 @@ fn zeta_export_get_all_filters() {
      (org-export-get-all-filters
       (org-export-create-backend
        :parent 'b1 :filters '((:filter-section . ignore)))))))"##,
+        expect_test::expect![[
+            r#""OK (nil ((:filter-headline . ignore)) ((:filter-section . ignore) (:filter-headline . ignore)))""#
+        ]],
     );
 }
 
@@ -527,7 +566,7 @@ fn zeta_export_get_all_filters() {
 #[test]
 fn zeta_export_block_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -537,13 +576,14 @@ fn zeta_export_block_types() {
       (let* ((tree (org-element-parse-buffer))
              (blocks (org-element-map tree 'export-block #'identity)))
         (mapcar (lambda (b) (org-element-property :type b)) blocks))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn zeta_export_snippet_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -553,6 +593,7 @@ fn zeta_export_snippet_types() {
       (let* ((tree (org-element-parse-buffer))
              (snippets (org-element-map tree 'export-snippet #'identity)))
         (mapcar (lambda (s) (org-element-property :back-end s)) snippets))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -563,7 +604,7 @@ fn zeta_export_snippet_types() {
 #[test]
 fn zeta_export_comments() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -572,13 +613,14 @@ fn zeta_export_comments() {
       (goto-char (point-min))
       (let* ((tree (org-element-parse-buffer)))
         (length (org-element-map tree 'comment #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn zeta_export_comment_tree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -587,6 +629,7 @@ fn zeta_export_comment_tree() {
       (goto-char (point-min))
       (let* ((tree (org-element-parse-buffer)))
         (length (org-element-map tree 'headline #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -597,7 +640,7 @@ fn zeta_export_comment_tree() {
 #[test]
 fn zeta_export_read_attribute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -617,6 +660,7 @@ fn zeta_export_read_attribute() {
       :attr_html
       (with-temp-buffer (org-mode) (insert "#+ATTR_HTML: :a nil :b nil\nParagraph")
         (goto-char (point-min)) (org-element-at-point))))))"##,
+        expect_test::expect![[r#""OK ((:a \"1\" :b \"2\") nil (:a nil :b nil))""#]],
     );
 }
 
@@ -627,7 +671,7 @@ fn zeta_export_read_attribute() {
 #[test]
 fn zeta_collect_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -642,6 +686,7 @@ fn zeta_collect_keywords() {
        (insert "#+begin_example\n#+foo: bar\n#+end_example")
        (goto-char (point-min))
        (org-collect-keywords '("FOO")))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -652,7 +697,7 @@ fn zeta_collect_keywords() {
 #[test]
 fn zeta_get_outline_path() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -676,13 +721,14 @@ fn zeta_get_outline_path() {
      (with-temp-buffer (org-mode) (insert "* COMMENT This\n** COMMENT is\n*** test")
        (goto-char (point-max))
        (org-get-outline-path)))))"##,
+        expect_test::expect![[r#""OK (nil (\"H\") (\"H\") (\"H\") (\"H\") (\"This\" \"is\"))""#]],
     );
 }
 
 #[test]
 fn zeta_format_outline_path() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (list
@@ -694,6 +740,9 @@ fn zeta_format_outline_path() {
    (org-format-outline-path (list "one" "two" "three") nil ">>" "|")
    (org-format-outline-path (list "one" "two" "three" "four") 10)
    (org-format-outline-path (list "one" "two" "three" "four") 2)))"##,
+        expect_test::expect![[
+            r#""OK (#(\"one/two/three\" 0 3 (face org-level-1) 4 7 (face org-level-2) 8 13 (face org-level-3)) \"\" \"\" \">>\" #(\"one/tw o/three\" 0 3 (face org-level-1) 4 8 (face org-level-2) 9 14 (face org-level-3)) #(\">>|one|two|three\" 3 6 (face org-level-1) 7 10 (face org-level-2) 11 16 (face org-level-3)) #(\"one/two/..\" 0 3 (face org-level-1) 4 7 (face org-level-2)) #(\"on\" 0 2 (face org-level-1)))""#
+        ]],
     );
 }
 
@@ -704,7 +753,7 @@ fn zeta_format_outline_path() {
 #[test]
 fn zeta_end_of_meta_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -721,6 +770,7 @@ fn zeta_end_of_meta_data() {
      ;; With argument: skip LOGBOOK.
      (with-temp-buffer (org-mode) (insert "* H\n:LOGBOOK:\nlog\n:END:\nContents")
        (goto-char (point-min)) (org-end-of-meta-data t) (looking-at "Contents")))))"##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -731,7 +781,7 @@ fn zeta_end_of_meta_data() {
 #[test]
 fn zeta_end_of_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -750,6 +800,7 @@ fn zeta_end_of_subtree() {
      (with-temp-buffer (org-mode)
        (insert "\nText.\n* H\n** S1\n** S2\nasd\n* H2")
        (goto-char (point-min)) (org-end-of-subtree) (eobp)))))"##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -760,7 +811,7 @@ fn zeta_end_of_subtree() {
 #[test]
 fn zeta_forward_element() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -781,13 +832,14 @@ fn zeta_forward_element() {
      (with-temp-buffer (org-mode)
        (insert "\n- item1\n\n  - sub1\n\n  - sub2\n\n- item2\n\nOutside.")
        (goto-char (point-min)) (forward-line 1) (org-forward-element) (looking-at "Outside.")))))"##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn zeta_backward_element() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -812,6 +864,7 @@ fn zeta_backward_element() {
      (with-temp-buffer (org-mode)
        (insert "\n- item1\n\n  - sub1\n\n  - sub2\n\n- item2\n\nOutside.")
        (goto-line 8) (org-backward-element) (looking-at "  - sub2")))))"##,
+        expect_test::expect![[r#""OK (t t t nil nil)""#]],
     );
 }
 
@@ -822,7 +875,7 @@ fn zeta_backward_element() {
 #[test]
 fn zeta_up_element() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -843,13 +896,14 @@ fn zeta_up_element() {
      (with-temp-buffer (org-mode)
        (insert "* Top\n- item1\n\n  - sub1\n\n  - sub2\n\n- item2")
        (goto-line 4) (org-up-element) (looking-at "- item1")))))"##,
+        expect_test::expect![[r#""OK (t nil t t)""#]],
     );
 }
 
 #[test]
 fn zeta_down_element() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -865,6 +919,7 @@ fn zeta_down_element() {
      (with-temp-buffer (org-mode)
        (insert "#+BEGIN_CENTER\nParagraph.\n#+END_CENTER")
        (goto-char (point-min)) (org-down-element) (looking-at "Paragraph.")))))"##,
+        expect_test::expect![[r#""OK (nil nil t)""#]],
     );
 }
 
@@ -875,7 +930,7 @@ fn zeta_down_element() {
 #[test]
 fn zeta_move_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -890,6 +945,7 @@ fn zeta_move_subtree() {
        (insert "* A\nBody A\n* B\nBody B\n* C\nBody C")
        (goto-char (point-min)) (forward-line 2) (org-move-subtree -1)
        (buffer-substring-no-properties (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-move-subtree)""#]],
     );
 }
 
@@ -900,7 +956,7 @@ fn zeta_move_subtree() {
 #[test]
 fn zeta_promote_demote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -917,6 +973,9 @@ fn zeta_promote_demote() {
      ;; Demote subtree.
      (with-temp-buffer (org-mode) (insert "* H1\n** S1\n** S2")
        (goto-char (point-min)) (org-demote-subtree) (buffer-string)))))"##,
+        expect_test::expect![[
+            r#""OK (\"* H\" \"** H\" \"* H1\n** S1\n** S2\" \"** H1\n*** S1\n*** S2\")""#
+        ]],
     );
 }
 
@@ -927,7 +986,7 @@ fn zeta_promote_demote() {
 #[test]
 fn zeta_next_visible_heading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -948,6 +1007,7 @@ fn zeta_next_visible_heading() {
      (with-temp-buffer (org-mode)
        (insert "* H1\n* H2\n* H3\nText")
        (goto-char (point-max)) (org-previous-visible-heading 2) (looking-at "\\* H2")))))"##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -958,7 +1018,7 @@ fn zeta_next_visible_heading() {
 #[test]
 fn zeta_forward_heading_same_level() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -978,5 +1038,6 @@ fn zeta_forward_heading_same_level() {
        (insert "* H1\n** S1\n** S2\n** S3\n* H2")
        (goto-char (point-min)) (forward-line 3)
        (org-forward-heading-same-level -1) (looking-at "\\*\\* S2")))))"##,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }

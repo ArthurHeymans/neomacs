@@ -18,7 +18,12 @@ fn oracle_wrapper_hook_macroexpansion_shape() {
     (list x y)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (let (runrestofhook) (setq runrestofhook (lambda (funs global args) (if (consp funs) (if (eq t (car funs)) (funcall runrestofhook (append global (cdr funs)) nil args) (apply (car funs) (apply-partially (lambda (funs global &rest args) (funcall runrestofhook funs global args)) (cdr funs) global) args)) (apply (lambda (x y) (list x y)) args)))) (funcall runrestofhook neovm--wwh-hook (if (local-variable-p 'neovm--wwh-hook) (default-value 'neovm--wwh-hook)) (list x y)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -61,7 +66,10 @@ fn oracle_wrapper_hook_order_reentry_and_replacement() {
         (nreverse log))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable hook)""#]],
+    );
 }
 
 #[test]
@@ -97,5 +105,8 @@ fn oracle_wrapper_hook_local_t_splices_global_hook() {
       (makunbound 'neovm--wwh-hook))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
+    );
 }

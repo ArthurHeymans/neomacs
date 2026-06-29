@@ -105,7 +105,10 @@ fn oracle_prop_combination_os_scheduler_mlfq_basic() {
     (fmakunbound 'neovm--sched-quantum)
     (fmakunbound 'neovm--sched-tick)
     (fmakunbound 'neovm--sched-run-proc))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 3 2 7 0 1 3 7 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +180,10 @@ fn oracle_prop_combination_os_scheduler_priority_aging() {
     (fmakunbound 'neovm--age-wait)
     (fmakunbound 'neovm--age-tick-wait)
     (fmakunbound 'neovm--age-simulate))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 1 2) (0 0 1) (0 0 0) (0 0 0))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -250,7 +256,10 @@ fn oracle_prop_combination_os_scheduler_io_burst() {
           (nth 1 mixed)))
 
     (fmakunbound 'neovm--iob-simulate))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 10 0 4 3 2 8)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -319,7 +328,10 @@ fn oracle_prop_combination_os_scheduler_context_switch() {
           (nth 3 result-large-q)))
 
     (fmakunbound 'neovm--csw-round-robin))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (16 12 4 (3 1 2) t (3 1 2) 2 (1 2 3))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -406,7 +418,10 @@ fn oracle_prop_combination_os_scheduler_cpu_utilization() {
           (nth 0 r3) (nth 1 r3) (nth 2 r3)))
 
     (fmakunbound 'neovm--util-schedule))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 3 62 4 6 40 10 0 100)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -468,7 +483,10 @@ fn oracle_prop_combination_os_scheduler_starvation_detection() {
           r2))
 
     (fmakunbound 'neovm--starv-detect))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -560,5 +578,10 @@ fn oracle_prop_combination_os_scheduler_fair_share() {
             (list a-cpu b-cpu (>= b-cpu (* 2 (1- a-cpu)))))))
 
     (fmakunbound 'neovm--fs-schedule))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a 4 4 100) (b 8 8 100)) ((x 5 5 100) (y 5 5 100)) (4 8 t))""#
+        ]],
+    );
 }

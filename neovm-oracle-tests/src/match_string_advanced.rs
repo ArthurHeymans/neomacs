@@ -35,7 +35,12 @@ fn oracle_prop_match_string_numbered_groups() {
       (match-end 2)
       (match-beginning 3)
       (match-end 3))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"2026-03-02\" \"2026\" \"03\" \"02\" 9 19 9 13 14 16 17 19)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +83,12 @@ fn oracle_prop_match_string_string_match_vs_buffer_search() {
           (funcall 'neovm--test-extract-via-buffer-search re text)))
     (fmakunbound 'neovm--test-extract-via-string-match)
     (fmakunbound 'neovm--test-extract-via-buffer-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"user@example.com\" \"user\" \"example\" \"com\") (\"user@example.com\" \"user\" \"example\" \"com\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +124,12 @@ fn oracle_prop_match_string_consecutive_matches() {
                  "\\([0-2][0-9]\\):\\([0-5][0-9]\\)"
                  "Wake 06:30, lunch 12:00, sleep 23:45"))
     (fmakunbound 'neovm--test-find-all-matches)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"name=alice\" \"name\" \"alice\") (\"age=30\" \"age\" \"30\") (\"city=tokyo\" \"city\" \"tokyo\") (\"role=admin\" \"role\" \"admin\")) ((\"06:30\" \"06\" \"30\") (\"12:00\" \"12\" \"00\") (\"23:45\" \"23\" \"45\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +158,10 @@ fn oracle_prop_match_string_optional_groups() {
                                 (match-string 2 "hello"))
                           results)))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"hello\" \"world\") (\"hello\" nil))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +204,12 @@ fn oracle_prop_match_string_parse_dates() {
         (funcall 'neovm--test-parse-date "12/25/2025")
         (funcall 'neovm--test-parse-date "not-a-date"))
     (fmakunbound 'neovm--test-parse-date)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((iso 2026 3 2) (us 2026 3 2) (eu 2026 3 2) (us 2025 12 25) (unknown \"not-a-date\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +257,12 @@ fn oracle_prop_match_string_parse_config_lines() {
                "[database]\nhost = \"localhost\"\nport = 5432\n# timeout in seconds\ntimeout = 30\n\n[logging]\nlevel = \"debug\"\nfile = \"/var/log/app.log\"")
     (fmakunbound 'neovm--test-parse-config-line)
     (fmakunbound 'neovm--test-parse-config)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((section \"database\") (assign \"host\" \"localhost\") (assign \"port\" \"5432\") (comment) (assign \"timeout\" \"30\") (empty) (section \"logging\") (assign \"level\" \"debug\") (assign \"file\" \"/var/log/app.log\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +301,12 @@ fn oracle_prop_match_string_url_parser() {
         (funcall 'neovm--test-parse-url "https://simple.host")
         (funcall 'neovm--test-parse-url "not-a-url"))
     (fmakunbound 'neovm--test-parse-url)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((url \"https\" \"example.com\" 8080 \"/api/v1/users\") (url \"http\" \"localhost\" 3000 \"/\") (url \"ftp\" \"files.server.org\" nil \"/pub/data\") (url \"https\" \"simple.host\" nil \"/\") (invalid \"not-a-url\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -315,5 +348,10 @@ fn oracle_prop_match_string_nested_groups() {
                     (match-string 4 s))
                   results)))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"hello-world\" \"hello-world\" \"hello\" \"world\") (\"42:hello\" \"42:hello\" \"42\" \"hello\" \"hello\"))""#
+        ]],
+    );
 }

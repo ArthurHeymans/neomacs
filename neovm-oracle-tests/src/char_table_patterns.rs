@@ -42,7 +42,12 @@ fn oracle_prop_char_table_patterns_make_subtypes() {
    (vector-or-char-table-p ct-generic)
    (vector-or-char-table-p [1])
    (vector-or-char-table-p '(1 2))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (generic syntax-table t t nil nil nil my-default 42 \"hello\" t t nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +104,12 @@ fn oracle_prop_char_table_patterns_range_operations() {
    (char-table-range ct (1- ?A))
    (char-table-range ct (1+ ?Z))
    (char-table-range ct ?9)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (default-val alpha-a alpha-z digit-0 hex-upper hex-upper uppercase uppercase mid-digit mid-digit mid-digit exclaim hex-upper hex-upper special-c default-val default-val default-val)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +156,12 @@ fn oracle_prop_char_table_patterns_parent_inheritance() {
          ch-has-pa pa-has-gp gp-has-nil
          ch-a-after ch-A-after ch-m-after
          ch-a-noparent ch-m-noparent)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (from-child from-parent from-grandparent t t nil from-grandparent from-grandparent from-child nil from-child)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -180,7 +195,10 @@ fn oracle_prop_char_table_patterns_extra_slots() {
      (progn
        (set-char-table-range ct-syn ?a '(2))
        (char-table-range ct-syn ?a)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (generic syntax-table t t letter (2))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +273,12 @@ fn oracle_prop_char_table_patterns_classifier() {
              'alt-runs (funcall 'neovm--ctp-extract-runs ct "aB1 ")))))
     (fmakunbound 'neovm--ctp-classify-string)
     (fmakunbound 'neovm--ctp-extract-runs)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (counts ((digit . 2) (lower . 8) (space . 2) (upper . 2)) runs ((upper \"ABC\") (underscore \"_\") (lower \"def\") (dash \"-\") (digit \"123\") (space \" \") (upper \"XY\")) uniform-runs ((lower \"abcdef\")) alt-runs ((lower \"a\") (upper \"B\") (digit \"1\") (space \" \")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +335,12 @@ fn oracle_prop_char_table_patterns_unicode_property_lookup() {
    (char-table-range derived ?5)
    ;; Derived: completely unknown char falls to base default
    (char-table-range derived #x1F600)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (latin latin greek cyrillic han common hex-letter latin hex-letter latin identifier-char identifier-char greek han common common)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -373,5 +401,10 @@ fn oracle_prop_char_table_patterns_transliteration() {
        'e-acute-maps-to (char-table-range translit #x00E9)
        'a-maps-to-self (char-table-range translit ?a)
        'unmapped-char (char-table-range translit #x1000)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (input \"café naïve über\" transliterated \"cafe naïve uber\" ascii-preserved t e-acute-maps-to 101 a-maps-to-self 97 unmapped-char nil)""#
+        ]],
+    );
 }

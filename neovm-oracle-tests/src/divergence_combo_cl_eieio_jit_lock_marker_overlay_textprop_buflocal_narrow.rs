@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_jit_lock_basic_face_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass fl-snap ()
     ((step :initarg :step :accessor fs-step :initform "")
@@ -58,6 +58,7 @@ fn combo_eieio_jit_lock_basic_face_props() {
               (marker-position m)
               font-lock-mode)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -65,7 +66,7 @@ fn combo_eieio_jit_lock_basic_face_props() {
 fn combo_eieio_jit_lock_overlay_priority_faces() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass fl-ov-snap ()
     ((step :initarg :step :accessor fos-step :initform "")
@@ -122,6 +123,7 @@ fn combo_eieio_jit_lock_overlay_priority_faces() {
                 (overlay-start ov) (overlay-end ov)
                 font-lock-mode))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -129,7 +131,7 @@ fn combo_eieio_jit_lock_overlay_priority_faces() {
 fn combo_eieio_jit_lock_narrow_refontify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass fl-narrow-snap ()
     ((step :initarg :step :accessor fns-step :initform "")
@@ -182,6 +184,7 @@ fn combo_eieio_jit_lock_narrow_refontify() {
                 (marker-position m)
                 font-lock-mode))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range 3 3)""#]],
     );
 }
 
@@ -189,7 +192,7 @@ fn combo_eieio_jit_lock_narrow_refontify() {
 fn combo_eieio_jit_lock_buflocal_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass fl-kw-snap ()
     ((step :initarg :step :accessor fks-step :initform "")
@@ -242,6 +245,7 @@ fn combo_eieio_jit_lock_buflocal_keywords() {
               (length (if (listp font-lock-keywords) font-lock-keywords 0))
               font-lock-mode)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -249,7 +253,7 @@ fn combo_eieio_jit_lock_buflocal_keywords() {
 fn combo_eieio_jit_lock_overlay_evaporate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass fl-evap-snap ()
     ((step :initarg :step :accessor fes-step :initform "")
@@ -299,5 +303,6 @@ fn combo_eieio_jit_lock_overlay_evaporate() {
               (if (overlay-live-p ov) (overlay-start ov) -1)
               font-lock-mode)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
     );
 }

@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_src_edit_switches_indent_writeback_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-src)
@@ -38,6 +38,7 @@ fn org_src_edit_switches_indent_writeback_combo() {
                 (org-element-property :parameters element)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -45,7 +46,7 @@ fn org_src_edit_switches_indent_writeback_combo() {
 fn org_babel_demarcate_hash_visibility_navigation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -184,6 +185,9 @@ fn org_babel_demarcate_hash_visibility_navigation_combo() {
             parsed
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r##""OK ((24 \"emacs-lisp\" \"(let ((x 1))\n  (+ x 2)\n  (* x 4))\" \"  (+ x 2)\") ((\"keep-me\" \"split-me\") \"* Code\n#+name: split-me\n#+begin_src emacs-lisp :results value replace :cache yes\n  (let ((x 1))\n    (+ x 2)\n#+end_src\n\n#+begin_src emacs-lisp :results value replace :cache yes\n\n  (* x 4))\n#+end_src\n\n#+NAME: keep-me\n#+begin_src emacs-lisp :results output replace\n(princ \\\"alpha\\\\nbeta\\\")\n#+end_src\n#+RESULTS[oldhasholdhash]: keep-me\n: alpha\n: beta\n\") (176 188 \"\n  (* x 4))\n\") (119 \"#+begin_src emacs-lisp :results value replace :cache yes\" 119 24 \"#+begin_src emacs-lisp :results value replace :cache yes\") (nil \"d5e81c8a318f3f1f27e56af23b800d1abd05cf48\" nil nil) (((\": alpha\" nil nil) (\": beta\" nil nil) (\"(* x 4)\" nil nil)) 0 ((\": alpha\" nil nil) (\": beta\" nil nil) (\"(* x 4)\" nil nil)) nil) ((headline \"Code\") (src \"split-me\" \"emacs-lisp\" \":results value replace :cache yes\" \"  (let ((x 1))\n    (+ x 2)\n\") (src nil \"emacs-lisp\" \":results value replace :cache yes\" \"\n  (* x 4))\n\") (src \"keep-me\" \"emacs-lisp\" \":results output replace\" \"(princ \\\"alpha\\\\nbeta\\\")\n\") (fixed-width \"alpha\nbeta\")) \"* Code\n#+name: split-me\n#+begin_src emacs-lisp :results value replace :cache yes\n  (let ((x 1))\n    (+ x 2)\n#+end_src\n\n#+begin_src emacs-lisp :results value replace :cache yes\n\n  (* x 4))\n#+end_src\n\n#+NAME: keep-me\n#+begin_src emacs-lisp :results output replace\n(princ \\\"alpha\\\\nbeta\\\")\n#+end_src\n#+RESULTS[oldhasholdhash]: keep-me\n: alpha\n: beta\n\")""##
+        ]],
     );
 }
 
@@ -191,7 +195,7 @@ fn org_babel_demarcate_hash_visibility_navigation_combo() {
 fn org_babel_noweb_expand_export_processing_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -220,6 +224,9 @@ fn org_babel_noweb_expand_export_processing_combo() {
             (not (null (string-match-p "(defun helper" expanded)))
             expanded
             exported-code))))"##,
+        expect_test::expect![[
+            r##""OK (\"yes\" \"5967780cccbd23934e48e31153d6b4602782970b\" t \"(defun helper (x) (+ x 10))\n(helper 5)\n\" \"#+begin_src emacs-lisp :noweb yes :exports both\n(defun helper (x) (+ x 10))\n(helper 5)\n#+end_src\")""##
+        ]],
     );
 }
 
@@ -227,7 +234,7 @@ fn org_babel_noweb_expand_export_processing_combo() {
 fn org_babel_inline_and_block_result_replace_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -260,7 +267,7 @@ fn org_babel_inline_and_block_result_replace_combo() {
 fn org_src_preserve_indentation_save_abort_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-src)
@@ -291,6 +298,7 @@ fn org_src_preserve_indentation_save_abort_combo() {
         (list edit-before
               edit-after-save
               (buffer-substring-no-properties (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -298,7 +306,7 @@ fn org_src_preserve_indentation_save_abort_combo() {
 fn org_edit_special_example_and_src_modes_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-src)
@@ -343,6 +351,7 @@ fn org_edit_special_example_and_src_modes_combo() {
               src-mode
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -350,7 +359,7 @@ fn org_edit_special_example_and_src_modes_combo() {
 fn org_babel_update_body_remove_result_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -379,6 +388,7 @@ fn org_babel_update_body_remove_result_combo() {
               after-update
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -386,7 +396,7 @@ fn org_babel_update_body_remove_result_combo() {
 fn org_babel_named_navigation_results_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -430,6 +440,7 @@ fn org_babel_named_navigation_results_combo() {
               (buffer-substring-no-properties
                (line-beginning-position)
                (line-end-position))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -437,7 +448,7 @@ fn org_babel_named_navigation_results_combo() {
 fn org_babel_subtree_execute_hooks_results_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -512,6 +523,7 @@ fn org_babel_subtree_execute_hooks_results_combo() {
                 after-subtree
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -519,7 +531,7 @@ fn org_babel_subtree_execute_hooks_results_combo() {
 fn org_babel_tangle_collect_single_block_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -578,6 +590,9 @@ fn org_babel_tangle_collect_single_block_combo() {
       (when (get-file-buffer org-file)
         (kill-buffer (get-file-buffer org-file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK ((\"a.el\") (\"a.el\") ((\"a.el\" ((\"emacs-lisp\" \"helper\" nil \"no\" \"(defun helper () 10)\" nil) (\"emacs-lisp\" \"Second:1\" nil \"yes\" \"(defun helper () 10)\n(+ (helper) 5)\" nil))) (\"b.el\" ((\"emacs-lisp\" \"Other:1\" \"no\" \"no\" \"(message \\\"other\\\")\" nil)))))""#
+        ]],
     );
 }
 
@@ -585,7 +600,7 @@ fn org_babel_tangle_collect_single_block_combo() {
 fn org_babel_header_merge_insert_result_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -633,6 +648,9 @@ fn org_babel_header_merge_insert_result_lifecycle_combo() {
             after-insert
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r##""OK (((:results . \"output drawer\") (:var . \"local=3\") (:exports . \"code\")) ((:cache . \"yes\") (:colname-names) (:exports . \"code\") (:hlines . \"no\") (:lexical . \"no\") (:noweb . \"no\") (:result-params \"replace\" \"value\") (:result-type . value) (:results . \"replace value\") (:rowname-names) (:session . \"none\") (:tangle . \"no\") (:var base . 5) (:var extra . 7)) ((:results . \"drawer output replace\") (:exports . \"code\") (:var base . 5) (:var extra . 7) (:var . \"local=3\") (:session . \"none\") (:noweb . \"no\") (:hlines . \"no\") (:tangle . \"no\") (:lexical . \"no\") (:cache . \"yes\") (:result-type . value) (:result-params \"replace\" \"value\") (:rowname-names) (:colname-names)) ((:result-params \"drawer\" \"output\" \"replace\" \"value\") (:exports . \"code\") (:cache . \"yes\") (:var base . 5)) 250 \"#+PROPERTY: header-args:emacs-lisp :results value replace drawer :exports both\n* Run\n:PROPERTIES:\n:header-args:emacs-lisp: :var base=5 :cache yes\n:END:\n#+NAME: calc\n#+begin_src emacs-lisp :var extra=7 :results value replace\n(+ base extra)\n#+end_src\n\n#+RESULTS[28f671f4c141b24f436060c0f34ea4a7fb63a3ac]: calc\n:results:\nline one\nline two\n:end:\n\" \"#+PROPERTY: header-args:emacs-lisp :results value replace drawer :exports both\n* Run\n:PROPERTIES:\n:header-args:emacs-lisp: :var base=5 :cache yes\n:END:\n#+NAME: calc\n#+begin_src emacs-lisp :var extra=7 :results value replace\n(+ base extra)\n#+end_src\n\")""##
+        ]],
     );
 }
 
@@ -640,7 +658,7 @@ fn org_babel_header_merge_insert_result_lifecycle_combo() {
 fn org_babel_result_read_hide_replace_remove_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -715,6 +733,9 @@ fn org_babel_result_read_hide_replace_remove_combo() {
             shown
             after-replace
             after-remove))))"##,
+        expect_test::expect![[
+            r##""OK (96 252 ((1 2) (3 4)) nil ((\"| 1 | 2 |\" nil nil) (\"line one\" nil nil) (\"line two\" nil nil)) ((\"| 1 | 2 |\" nil nil) (\"line one\" nil nil) (\"line two\" nil nil)) \"#+NAME: table-calc\n#+begin_src emacs-lisp :results value table replace\n'((1 2) (3 4))\n#+end_src\n#+RESULTS: table-calc\n| 5 | 6 |\n| 7 | 8 |\n\n#+NAME: drawer-calc\n#+begin_src emacs-lisp :results output drawer replace\n(princ \\\"line one\\\\nline two\\\")\n#+end_src\n#+RESULTS: drawer-calc\n:results:\nline one\nline two\n:end:\n\" \"#+NAME: table-calc\n#+begin_src emacs-lisp :results value table replace\n'((1 2) (3 4))\n#+end_src\n#+RESULTS: table-calc\n| 5 | 6 |\n| 7 | 8 |\n\n#+NAME: drawer-calc\n#+begin_src emacs-lisp :results output drawer replace\n(princ \\\"line one\\\\nline two\\\")\n#+end_src\n\")""##
+        ]],
     );
 }
 
@@ -722,7 +743,7 @@ fn org_babel_result_read_hide_replace_remove_combo() {
 fn org_babel_tangle_write_noweb_comments_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -769,6 +790,9 @@ fn org_babel_tangle_write_noweb_comments_combo() {
       (when (get-file-buffer org-file)
         (kill-buffer (get-file-buffer org-file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK ((\"nested.el\" \"out.el\") t t \";; Library\n;; Comment text.\n;; #+NAME: lib\n\n;; [[file:main.org::lib][lib]]\n(defun lib (x) (+ x 1))\n;; lib ends here\n\n;; [[file:main.org::*Caller][Caller:1]]\n(defun lib (x) (+ x 1))\n(lib 4)\n;; Caller:1 ends here\n\" \"(message \\\"nested\\\")\n\")""#
+        ]],
     );
 }
 
@@ -776,7 +800,7 @@ fn org_babel_tangle_write_noweb_comments_combo() {
 fn org_src_fontify_coderef_escape_inline_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-src)
@@ -858,6 +882,7 @@ fn org_src_fontify_coderef_escape_inline_combo() {
               region-after-unescape
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -865,7 +890,7 @@ fn org_src_fontify_coderef_escape_inline_combo() {
 fn org_src_edit_buffer_coordinates_multi_block_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-src)
@@ -956,6 +981,7 @@ fn org_src_edit_buffer_coordinates_multi_block_combo() {
                       (org-element-map
                           (org-element-parse-buffer)
                           'src-block #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -963,7 +989,7 @@ fn org_src_edit_buffer_coordinates_multi_block_combo() {
 fn org_babel_hash_hide_mutate_reexecute_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -1066,6 +1092,7 @@ fn org_babel_hash_hide_mutate_reexecute_combo() {
                       shown
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -1073,7 +1100,7 @@ fn org_babel_hash_hide_mutate_reexecute_combo() {
 fn org_babel_insert_remove_file_example_result_matrix_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-core)
@@ -1204,6 +1231,7 @@ fn org_babel_insert_remove_file_example_result_matrix_combo() {
                    (buffer-substring-no-properties
                     (point-min) (point-max))))))
       (when (file-directory-p root) (delete-directory root t))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -1211,7 +1239,7 @@ fn org_babel_insert_remove_file_example_result_matrix_combo() {
 fn org_babel_tangle_noweb_header_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-tangle)
@@ -1267,6 +1295,9 @@ fn org_babel_tangle_noweb_header_deep_state_combo() {
                        (or tangled-content "no-file"))
                        src-blocks)))))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK ((\"<root>/out.el\") (\"out.el\") \"(defvar *initialized* nil)\n\n(defun helper-a () 1)\n(defun helper-b () 2)\n\n(defvar *initialized* nil)\n(defun helper-a () 1)\n(defun helper-b () 2)\n(defun main () (+ (helper-a) (helper-b)))\n\" ((\"setup\" \"emacs-lisp\" nil \"(defvar *initialized* nil)\n\") (\"helpers\" \"emacs-lisp\" nil \"(defun helper-a () 1)\n(defun helper-b () 2)\n\") (nil \"emacs-lisp\" \":noweb yes\" \"<<setup>>\n<<helpers>>\n(defun main () (+ (helper-a) (helper-b)))\n\")))""#
+        ]],
     );
 }
 
@@ -1274,7 +1305,7 @@ fn org_babel_tangle_noweb_header_deep_state_combo() {
 fn org_babel_tangle_header_args_noweb_comments_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-tangle)
@@ -1332,6 +1363,7 @@ fn org_babel_tangle_header_args_noweb_comments_deep_state_combo() {
                        (and content-a
                             (not (string-match-p "<<shared>>" content-a)))))))))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 34)""#]],
     );
 }
 
@@ -1339,7 +1371,7 @@ fn org_babel_tangle_header_args_noweb_comments_deep_state_combo() {
 fn org_src_edit_exit_writeback_preserve_structure_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-src)
@@ -1374,6 +1406,7 @@ fn org_src_edit_exit_writeback_preserve_structure_deep_state_combo() {
                    (list (org-element-property :language sb)
                          (org-element-property :value sb))))))
           (list edit-mode edit-buf after-first-edit after-second-edit blocks)))))))"##,
+        expect_test::expect![[r#""ERR (void-variable edit-mode)""#]],
     );
 }
 
@@ -1381,7 +1414,7 @@ fn org_src_edit_exit_writeback_preserve_structure_deep_state_combo() {
 fn org_src_block_edit_tangle_multi_lang_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-tangle)
@@ -1412,5 +1445,8 @@ fn org_src_block_edit_tangle_multi_lang_deep() {
                   (buffer-substring-no-properties
                    (point-min) (point-max)))))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r##""OK (org-mode ((\"emacs-lisp\" \"  (+ 10 20)\n  (+ 30 40)\n\" nil) (\"emacs-lisp\" \"(* 3 4)\n\" nil)) \"#+PROPERTY: header-args :tangle (concat (file-name-directory (buffer-file-name)) \\\"out.el\\\")\n\n#+begin_src emacs-lisp\n  (+ 10 20)\n  (+ 30 40)\n#+end_src\n\n#+begin_src emacs-lisp\n(* 3 4)\n#+end_src\n\n\")""##
+        ]],
     );
 }

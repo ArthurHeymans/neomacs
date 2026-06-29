@@ -37,7 +37,10 @@ fn oracle_prop_provide_require_basic_feature_lifecycle() {
          (provide 'neovm--test-feat-beta)))
     (setq features (delq 'neovm--test-feat-alpha features))
     (setq features (delq 'neovm--test-feat-beta features))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t t neovm--test-feat-beta)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +64,10 @@ fn oracle_prop_provide_require_already_provided() {
          ;; require returns the feature symbol
          (eq (require 'neovm--test-feat-gamma) 'neovm--test-feat-gamma)))
     (setq features (delq 'neovm--test-feat-gamma features))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (neovm--test-feat-gamma t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +107,10 @@ fn oracle_prop_provide_require_multiple_features_ordering() {
     (setq features (delq 'neovm--test-feat-one features))
     (setq features (delq 'neovm--test-feat-two features))
     (setq features (delq 'neovm--test-feat-three features))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +141,10 @@ fn oracle_prop_provide_require_featurep_subfeature() {
          ;; Subfeature of non-existent feature
          (featurep 'neovm--test-feat-nonexistent 'neovm--test-sub-v1)))
     (setq features (delq 'neovm--test-feat-versioned features))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t nil nil)""#]],
+    );
 }
 
 #[test]
@@ -173,7 +185,12 @@ fn oracle_prop_provide_reprovide_subfeature_replacement() {
              (get 'neovm--test-feat-reprovide-sub 'subfeatures)))))
     (setq features (delq 'neovm--test-feat-reprovide-sub features))
     (put 'neovm--test-feat-reprovide-sub 'subfeatures nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t t (neovm--test-sub-a neovm--test-sub-b)) (t (neovm--test-sub-a neovm--test-sub-b)) nil t (neovm--test-sub-c))""#
+        ]],
+    );
 }
 
 #[test]
@@ -202,7 +219,7 @@ fn oracle_prop_featurep_subfeatures_use_equal_member() {
                    (copy-sequence "missing"))))
     (setq features (delq 'neovm--test-feat-equal-sub features))
     (put 'neovm--test-feat-equal-sub 'subfeatures nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t nil)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +251,10 @@ fn oracle_prop_provide_require_eval_after_load_immediate() {
          (length neovm--test-eal-log)))
     (setq features (delq 'neovm--test-feat-eal features))
     (makunbound 'neovm--test-eal-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((fired-2 fired-1) 2)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -265,7 +285,10 @@ fn oracle_prop_provide_require_with_eval_after_load() {
            neovm--test-weal-result)))
     (setq features (delq 'neovm--test-feat-weal features))
     (makunbound 'neovm--test-weal-result)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (executed (first . second))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +337,10 @@ fn oracle_prop_provide_require_dependency_chain() {
     (setq features (delq 'neovm--test-dep-b features))
     (setq features (delq 'neovm--test-dep-c features))
     (makunbound 'neovm--test-dep-load-order)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((loading-a loading-b loading-c) t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +384,12 @@ fn oracle_prop_provide_require_conditional_patterns() {
           ((featurep 'neovm--test-cond-present) 'path-b)
           (t 'path-default))))
     (setq features (delq 'neovm--test-cond-present features))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (feature-available correctly-absent nil neovm--test-cond-present both-conditions-met t path-b)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -399,7 +430,10 @@ fn oracle_prop_provide_require_eval_after_load_deferred() {
              (equal snapshot neovm--test-deferred-log)))))
     (setq features (delq 'neovm--test-deferred-feat features))
     (makunbound 'neovm--test-deferred-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil 0 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -429,5 +463,5 @@ fn oracle_prop_provide_require_features_list_manipulation() {
                ;; Require after re-provide works
                (eq (require 'neovm--test-removable) 'neovm--test-removable))))))
     (setq features (delq 'neovm--test-removable features))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil t t)""#]]);
 }

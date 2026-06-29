@@ -16,20 +16,50 @@ fn oracle_prop_float_coercion_comprehensive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Integer to float
-    assert_oracle_parity("(float 0)");
-    assert_oracle_parity("(float 1)");
-    assert_oracle_parity("(float -1)");
-    assert_oracle_parity("(float 42)");
-    assert_oracle_parity("(float most-positive-fixnum)");
-    assert_oracle_parity("(float most-negative-fixnum)");
+    crate::common::assert_oracle_parity_expect("(float 0)", expect_test::expect![[r#""OK 0.0""#]]);
+    crate::common::assert_oracle_parity_expect("(float 1)", expect_test::expect![[r#""OK 1.0""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(float -1)",
+        expect_test::expect![[r#""OK -1.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(float 42)",
+        expect_test::expect![[r#""OK 42.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(float most-positive-fixnum)",
+        expect_test::expect![[r#""OK 2.305843009213694e+18""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(float most-negative-fixnum)",
+        expect_test::expect![[r#""OK -2.305843009213694e+18""#]],
+    );
     // Float to float (idempotent)
-    assert_oracle_parity("(float 3.14)");
-    assert_oracle_parity("(float -0.0)");
-    assert_oracle_parity("(float 1.0e+INF)");
-    assert_oracle_parity("(float -1.0e+INF)");
+    crate::common::assert_oracle_parity_expect(
+        "(float 3.14)",
+        expect_test::expect![[r#""OK 3.14""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(float -0.0)",
+        expect_test::expect![[r#""OK -0.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(float 1.0e+INF)",
+        expect_test::expect![[r#""OK 1.0e+INF""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(float -1.0e+INF)",
+        expect_test::expect![[r#""OK -1.0e+INF""#]],
+    );
     // Verify type
-    assert_oracle_parity("(floatp (float 7))");
-    assert_oracle_parity("(integerp (float 7))");
+    crate::common::assert_oracle_parity_expect(
+        "(floatp (float 7))",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(integerp (float 7))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -41,25 +71,73 @@ fn oracle_prop_truncate_comprehensive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Single argument: toward zero
-    assert_oracle_parity("(truncate 2.7)");
-    assert_oracle_parity("(truncate -2.7)");
-    assert_oracle_parity("(truncate 2.3)");
-    assert_oracle_parity("(truncate -2.3)");
-    assert_oracle_parity("(truncate 0.0)");
-    assert_oracle_parity("(truncate -0.0)");
-    assert_oracle_parity("(truncate 0.5)");
-    assert_oracle_parity("(truncate -0.5)");
-    assert_oracle_parity("(truncate 1.0e10)");
+    crate::common::assert_oracle_parity_expect(
+        "(truncate 2.7)",
+        expect_test::expect![[r#""OK 2""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate -2.7)",
+        expect_test::expect![[r#""OK -2""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate 2.3)",
+        expect_test::expect![[r#""OK 2""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate -2.3)",
+        expect_test::expect![[r#""OK -2""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate 0.0)",
+        expect_test::expect![[r#""OK 0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate -0.0)",
+        expect_test::expect![[r#""OK 0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate 0.5)",
+        expect_test::expect![[r#""OK 0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate -0.5)",
+        expect_test::expect![[r#""OK 0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate 1.0e10)",
+        expect_test::expect![[r#""OK 10000000000""#]],
+    );
     // Two-argument division + truncate
-    assert_oracle_parity("(truncate 10 3)");
-    assert_oracle_parity("(truncate -10 3)");
-    assert_oracle_parity("(truncate 10 -3)");
-    assert_oracle_parity("(truncate -10 -3)");
-    assert_oracle_parity("(truncate 7.5 2.5)");
-    assert_oracle_parity("(truncate 1 3)");
+    crate::common::assert_oracle_parity_expect(
+        "(truncate 10 3)",
+        expect_test::expect![[r#""OK 3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate -10 3)",
+        expect_test::expect![[r#""OK -3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate 10 -3)",
+        expect_test::expect![[r#""OK -3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate -10 -3)",
+        expect_test::expect![[r#""OK 3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate 7.5 2.5)",
+        expect_test::expect![[r#""OK 3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate 1 3)",
+        expect_test::expect![[r#""OK 0""#]],
+    );
     // Integer input (no-op)
-    assert_oracle_parity("(truncate 5)");
-    assert_oracle_parity("(truncate -5)");
+    crate::common::assert_oracle_parity_expect("(truncate 5)", expect_test::expect![[r#""OK 5""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(truncate -5)",
+        expect_test::expect![[r#""OK -5""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -71,36 +149,90 @@ fn oracle_prop_floor_ceiling_round_comprehensive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // floor: toward negative infinity
-    assert_oracle_parity("(floor 2.7)");
-    assert_oracle_parity("(floor -2.7)");
-    assert_oracle_parity("(floor 2.5)");
-    assert_oracle_parity("(floor -2.5)");
-    assert_oracle_parity("(floor 10 3)");
-    assert_oracle_parity("(floor -10 3)");
-    assert_oracle_parity("(floor 10 -3)");
-    assert_oracle_parity("(floor -10 -3)");
-    assert_oracle_parity("(floor 7.0 2.0)");
+    crate::common::assert_oracle_parity_expect("(floor 2.7)", expect_test::expect![[r#""OK 2""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(floor -2.7)",
+        expect_test::expect![[r#""OK -3""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(floor 2.5)", expect_test::expect![[r#""OK 2""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(floor -2.5)",
+        expect_test::expect![[r#""OK -3""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(floor 10 3)", expect_test::expect![[r#""OK 3""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(floor -10 3)",
+        expect_test::expect![[r#""OK -4""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(floor 10 -3)",
+        expect_test::expect![[r#""OK -4""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(floor -10 -3)",
+        expect_test::expect![[r#""OK 3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(floor 7.0 2.0)",
+        expect_test::expect![[r#""OK 3""#]],
+    );
 
     // ceiling: toward positive infinity
-    assert_oracle_parity("(ceiling 2.3)");
-    assert_oracle_parity("(ceiling -2.3)");
-    assert_oracle_parity("(ceiling 2.5)");
-    assert_oracle_parity("(ceiling -2.5)");
-    assert_oracle_parity("(ceiling 10 3)");
-    assert_oracle_parity("(ceiling -10 3)");
-    assert_oracle_parity("(ceiling 10 -3)");
-    assert_oracle_parity("(ceiling -10 -3)");
+    crate::common::assert_oracle_parity_expect(
+        "(ceiling 2.3)",
+        expect_test::expect![[r#""OK 3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ceiling -2.3)",
+        expect_test::expect![[r#""OK -2""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ceiling 2.5)",
+        expect_test::expect![[r#""OK 3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ceiling -2.5)",
+        expect_test::expect![[r#""OK -2""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ceiling 10 3)",
+        expect_test::expect![[r#""OK 4""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ceiling -10 3)",
+        expect_test::expect![[r#""OK -3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ceiling 10 -3)",
+        expect_test::expect![[r#""OK -3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ceiling -10 -3)",
+        expect_test::expect![[r#""OK 4""#]],
+    );
 
     // round: banker's rounding (to even)
-    assert_oracle_parity("(round 2.5)");
-    assert_oracle_parity("(round 3.5)");
-    assert_oracle_parity("(round -2.5)");
-    assert_oracle_parity("(round -3.5)");
-    assert_oracle_parity("(round 0.5)");
-    assert_oracle_parity("(round 1.5)");
-    assert_oracle_parity("(round 2.49999)");
-    assert_oracle_parity("(round 10 3)");
-    assert_oracle_parity("(round -10 3)");
+    crate::common::assert_oracle_parity_expect("(round 2.5)", expect_test::expect![[r#""OK 2""#]]);
+    crate::common::assert_oracle_parity_expect("(round 3.5)", expect_test::expect![[r#""OK 4""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(round -2.5)",
+        expect_test::expect![[r#""OK -2""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(round -3.5)",
+        expect_test::expect![[r#""OK -4""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(round 0.5)", expect_test::expect![[r#""OK 0""#]]);
+    crate::common::assert_oracle_parity_expect("(round 1.5)", expect_test::expect![[r#""OK 2""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(round 2.49999)",
+        expect_test::expect![[r#""OK 2""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(round 10 3)", expect_test::expect![[r#""OK 3""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(round -10 3)",
+        expect_test::expect![[r#""OK -3""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -112,28 +244,76 @@ fn oracle_prop_ffloor_fceiling_fround_ftruncate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // ffloor
-    assert_oracle_parity("(ffloor 2.7)");
-    assert_oracle_parity("(ffloor -2.7)");
-    assert_oracle_parity("(ffloor 2.0)");
-    assert_oracle_parity("(floatp (ffloor 2.7))");
+    crate::common::assert_oracle_parity_expect(
+        "(ffloor 2.7)",
+        expect_test::expect![[r#""OK 2.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ffloor -2.7)",
+        expect_test::expect![[r#""OK -3.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ffloor 2.0)",
+        expect_test::expect![[r#""OK 2.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(floatp (ffloor 2.7))",
+        expect_test::expect![[r#""OK t""#]],
+    );
 
     // fceiling
-    assert_oracle_parity("(fceiling 2.3)");
-    assert_oracle_parity("(fceiling -2.3)");
-    assert_oracle_parity("(fceiling 2.0)");
-    assert_oracle_parity("(floatp (fceiling 2.3))");
+    crate::common::assert_oracle_parity_expect(
+        "(fceiling 2.3)",
+        expect_test::expect![[r#""OK 3.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(fceiling -2.3)",
+        expect_test::expect![[r#""OK -2.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(fceiling 2.0)",
+        expect_test::expect![[r#""OK 2.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(floatp (fceiling 2.3))",
+        expect_test::expect![[r#""OK t""#]],
+    );
 
     // fround
-    assert_oracle_parity("(fround 2.5)");
-    assert_oracle_parity("(fround 3.5)");
-    assert_oracle_parity("(fround -0.5)");
-    assert_oracle_parity("(floatp (fround 2.5))");
+    crate::common::assert_oracle_parity_expect(
+        "(fround 2.5)",
+        expect_test::expect![[r#""OK 2.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(fround 3.5)",
+        expect_test::expect![[r#""OK 4.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(fround -0.5)",
+        expect_test::expect![[r#""OK -0.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(floatp (fround 2.5))",
+        expect_test::expect![[r#""OK t""#]],
+    );
 
     // ftruncate
-    assert_oracle_parity("(ftruncate 2.7)");
-    assert_oracle_parity("(ftruncate -2.7)");
-    assert_oracle_parity("(ftruncate 0.0)");
-    assert_oracle_parity("(floatp (ftruncate 2.7))");
+    crate::common::assert_oracle_parity_expect(
+        "(ftruncate 2.7)",
+        expect_test::expect![[r#""OK 2.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ftruncate -2.7)",
+        expect_test::expect![[r#""OK -2.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ftruncate 0.0)",
+        expect_test::expect![[r#""OK 0.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(floatp (ftruncate 2.7))",
+        expect_test::expect![[r#""OK t""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -144,14 +324,38 @@ fn oracle_prop_ffloor_fceiling_fround_ftruncate() {
 fn oracle_prop_isnan_comprehensive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(isnan 0.0e+NaN)");
-    assert_oracle_parity("(isnan 0.0)");
-    assert_oracle_parity("(isnan 1.0)");
-    assert_oracle_parity("(isnan -0.0)");
-    assert_oracle_parity("(isnan 1.0e+INF)");
-    assert_oracle_parity("(isnan -1.0e+INF)");
-    assert_oracle_parity("(isnan (/ 0.0 0.0))");
-    assert_oracle_parity("(isnan (- 1.0e+INF 1.0e+INF))");
+    crate::common::assert_oracle_parity_expect(
+        "(isnan 0.0e+NaN)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(isnan 0.0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(isnan 1.0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(isnan -0.0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(isnan 1.0e+INF)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(isnan -1.0e+INF)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(isnan (/ 0.0 0.0))",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(isnan (- 1.0e+INF 1.0e+INF))",
+        expect_test::expect![[r#""OK t""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -163,27 +367,66 @@ fn oracle_prop_frexp_ldexp_comprehensive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // frexp returns (significand . exponent) where 0.5 <= |sig| < 1.0
-    assert_oracle_parity("(frexp 1.0)");
-    assert_oracle_parity("(frexp 2.0)");
-    assert_oracle_parity("(frexp 0.5)");
-    assert_oracle_parity("(frexp -4.0)");
-    assert_oracle_parity("(frexp 0.0)");
-    assert_oracle_parity("(frexp 1024.0)");
-    assert_oracle_parity("(frexp 0.125)");
+    crate::common::assert_oracle_parity_expect(
+        "(frexp 1.0)",
+        expect_test::expect![[r#""OK (0.5 . 1)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(frexp 2.0)",
+        expect_test::expect![[r#""OK (0.5 . 2)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(frexp 0.5)",
+        expect_test::expect![[r#""OK (0.5 . 0)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(frexp -4.0)",
+        expect_test::expect![[r#""OK (-0.5 . 3)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(frexp 0.0)",
+        expect_test::expect![[r#""OK (0.0 . 0)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(frexp 1024.0)",
+        expect_test::expect![[r#""OK (0.5 . 11)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(frexp 0.125)",
+        expect_test::expect![[r#""OK (0.5 . -2)""#]],
+    );
 
     // ldexp: significand * 2^exponent
-    assert_oracle_parity("(ldexp 0.5 1)");
-    assert_oracle_parity("(ldexp 0.5 2)");
-    assert_oracle_parity("(ldexp 0.75 10)");
-    assert_oracle_parity("(ldexp 1.0 0)");
-    assert_oracle_parity("(ldexp -0.5 3)");
-    assert_oracle_parity("(ldexp 0.0 100)");
+    crate::common::assert_oracle_parity_expect(
+        "(ldexp 0.5 1)",
+        expect_test::expect![[r#""OK 1.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ldexp 0.5 2)",
+        expect_test::expect![[r#""OK 2.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ldexp 0.75 10)",
+        expect_test::expect![[r#""OK 768.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ldexp 1.0 0)",
+        expect_test::expect![[r#""OK 1.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ldexp -0.5 3)",
+        expect_test::expect![[r#""OK -4.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ldexp 0.0 100)",
+        expect_test::expect![[r#""OK 0.0""#]],
+    );
 
     // Round-trip: (ldexp (car (frexp x)) (cdr (frexp x))) == x
     let form = r#"(let* ((x 42.5)
                           (fr (frexp x)))
                      (= (ldexp (car fr) (cdr fr)) x))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK t""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -194,15 +437,42 @@ fn oracle_prop_frexp_ldexp_comprehensive() {
 fn oracle_prop_copysign_comprehensive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(copysign 1.0 -1.0)");
-    assert_oracle_parity("(copysign 1.0 1.0)");
-    assert_oracle_parity("(copysign -1.0 1.0)");
-    assert_oracle_parity("(copysign -1.0 -1.0)");
-    assert_oracle_parity("(copysign 0.0 -1.0)");
-    assert_oracle_parity("(copysign 0.0 1.0)");
-    assert_oracle_parity("(copysign 3.14 -0.0)");
-    assert_oracle_parity("(copysign 1.0e+INF -1.0)");
-    assert_oracle_parity("(copysign 1.0e+INF 1.0)");
+    crate::common::assert_oracle_parity_expect(
+        "(copysign 1.0 -1.0)",
+        expect_test::expect![[r#""OK -1.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(copysign 1.0 1.0)",
+        expect_test::expect![[r#""OK 1.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(copysign -1.0 1.0)",
+        expect_test::expect![[r#""OK 1.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(copysign -1.0 -1.0)",
+        expect_test::expect![[r#""OK -1.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(copysign 0.0 -1.0)",
+        expect_test::expect![[r#""OK -0.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(copysign 0.0 1.0)",
+        expect_test::expect![[r#""OK 0.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(copysign 3.14 -0.0)",
+        expect_test::expect![[r#""OK -3.14""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(copysign 1.0e+INF -1.0)",
+        expect_test::expect![[r#""OK -1.0e+INF""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(copysign 1.0e+INF 1.0)",
+        expect_test::expect![[r#""OK 1.0e+INF""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -213,15 +483,21 @@ fn oracle_prop_copysign_comprehensive() {
 fn oracle_prop_logb_comprehensive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(logb 1.0)");
-    assert_oracle_parity("(logb 2.0)");
-    assert_oracle_parity("(logb 4.0)");
-    assert_oracle_parity("(logb 0.5)");
-    assert_oracle_parity("(logb 0.25)");
-    assert_oracle_parity("(logb 1024.0)");
-    assert_oracle_parity("(logb 3.0)");
-    assert_oracle_parity("(logb 1.0e+INF)");
-    assert_oracle_parity("(logb 10)");
+    crate::common::assert_oracle_parity_expect("(logb 1.0)", expect_test::expect![[r#""OK 0""#]]);
+    crate::common::assert_oracle_parity_expect("(logb 2.0)", expect_test::expect![[r#""OK 1""#]]);
+    crate::common::assert_oracle_parity_expect("(logb 4.0)", expect_test::expect![[r#""OK 2""#]]);
+    crate::common::assert_oracle_parity_expect("(logb 0.5)", expect_test::expect![[r#""OK -1""#]]);
+    crate::common::assert_oracle_parity_expect("(logb 0.25)", expect_test::expect![[r#""OK -2""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(logb 1024.0)",
+        expect_test::expect![[r#""OK 10""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(logb 3.0)", expect_test::expect![[r#""OK 1""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(logb 1.0e+INF)",
+        expect_test::expect![[r#""OK 1.0e+INF""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(logb 10)", expect_test::expect![[r#""OK 3""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -233,28 +509,76 @@ fn oracle_prop_float_special_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Infinity arithmetic
-    assert_oracle_parity("(+ 1.0e+INF 1.0)");
-    assert_oracle_parity("(+ 1.0e+INF 1.0e+INF)");
-    assert_oracle_parity("(- 1.0e+INF 1.0e+INF)");
-    assert_oracle_parity("(* 1.0e+INF 2.0)");
-    assert_oracle_parity("(* 1.0e+INF 0.0)");
-    assert_oracle_parity("(* 1.0e+INF -1.0)");
-    assert_oracle_parity("(/ 1.0 0.0)");
-    assert_oracle_parity("(/ -1.0 0.0)");
-    assert_oracle_parity("(/ 0.0 0.0)");
+    crate::common::assert_oracle_parity_expect(
+        "(+ 1.0e+INF 1.0)",
+        expect_test::expect![[r#""OK 1.0e+INF""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(+ 1.0e+INF 1.0e+INF)",
+        expect_test::expect![[r#""OK 1.0e+INF""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(- 1.0e+INF 1.0e+INF)",
+        expect_test::expect![[r#""OK -0.0e+NaN""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(* 1.0e+INF 2.0)",
+        expect_test::expect![[r#""OK 1.0e+INF""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(* 1.0e+INF 0.0)",
+        expect_test::expect![[r#""OK -0.0e+NaN""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(* 1.0e+INF -1.0)",
+        expect_test::expect![[r#""OK -1.0e+INF""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(/ 1.0 0.0)",
+        expect_test::expect![[r#""OK 1.0e+INF""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(/ -1.0 0.0)",
+        expect_test::expect![[r#""OK -1.0e+INF""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(/ 0.0 0.0)",
+        expect_test::expect![[r#""OK -0.0e+NaN""#]],
+    );
 
     // NaN propagation
-    assert_oracle_parity("(+ 0.0e+NaN 1.0)");
-    assert_oracle_parity("(* 0.0e+NaN 0.0)");
-    assert_oracle_parity("(- 0.0e+NaN 0.0e+NaN)");
+    crate::common::assert_oracle_parity_expect(
+        "(+ 0.0e+NaN 1.0)",
+        expect_test::expect![[r#""OK 0.0e+NaN""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(* 0.0e+NaN 0.0)",
+        expect_test::expect![[r#""OK 0.0e+NaN""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(- 0.0e+NaN 0.0e+NaN)",
+        expect_test::expect![[r#""OK 0.0e+NaN""#]],
+    );
 
     // Negative zero
-    assert_oracle_parity("(+ 0.0 -0.0)");
-    assert_oracle_parity("(- 0.0)");
-    assert_oracle_parity("(* -1.0 0.0)");
-    assert_oracle_parity("(eql 0.0 -0.0)");
-    assert_oracle_parity("(= 0.0 -0.0)");
-    assert_oracle_parity("(equal 0.0 -0.0)");
+    crate::common::assert_oracle_parity_expect(
+        "(+ 0.0 -0.0)",
+        expect_test::expect![[r#""OK 0.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(- 0.0)", expect_test::expect![[r#""OK -0.0""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(* -1.0 0.0)",
+        expect_test::expect![[r#""OK -0.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(eql 0.0 -0.0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect("(= 0.0 -0.0)", expect_test::expect![[r#""OK t""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(equal 0.0 -0.0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -266,26 +590,71 @@ fn oracle_prop_float_comparison_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // NaN comparisons: NaN is not equal to anything, not even itself
-    assert_oracle_parity("(= 0.0e+NaN 0.0e+NaN)");
-    assert_oracle_parity("(< 0.0e+NaN 0.0)");
-    assert_oracle_parity("(> 0.0e+NaN 0.0)");
-    assert_oracle_parity("(<= 0.0e+NaN 0.0)");
-    assert_oracle_parity("(>= 0.0e+NaN 0.0)");
-    assert_oracle_parity("(/= 0.0e+NaN 0.0e+NaN)");
+    crate::common::assert_oracle_parity_expect(
+        "(= 0.0e+NaN 0.0e+NaN)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(< 0.0e+NaN 0.0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(> 0.0e+NaN 0.0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(<= 0.0e+NaN 0.0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(>= 0.0e+NaN 0.0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(/= 0.0e+NaN 0.0e+NaN)",
+        expect_test::expect![[r#""OK t""#]],
+    );
 
     // Infinity comparisons
-    assert_oracle_parity("(< 1.0e+INF 1.0e+INF)");
-    assert_oracle_parity("(<= 1.0e+INF 1.0e+INF)");
-    assert_oracle_parity("(> -1.0e+INF 1.0e+INF)");
-    assert_oracle_parity("(< -1.0e+INF 1.0e+INF)");
-    assert_oracle_parity("(= 1.0e+INF 1.0e+INF)");
+    crate::common::assert_oracle_parity_expect(
+        "(< 1.0e+INF 1.0e+INF)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(<= 1.0e+INF 1.0e+INF)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(> -1.0e+INF 1.0e+INF)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(< -1.0e+INF 1.0e+INF)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(= 1.0e+INF 1.0e+INF)",
+        expect_test::expect![[r#""OK t""#]],
+    );
 
     // Mixed int/float comparisons
-    assert_oracle_parity("(= 1 1.0)");
-    assert_oracle_parity("(eql 1 1.0)");
-    assert_oracle_parity("(equal 1 1.0)");
-    assert_oracle_parity("(< 1 1.0000000000001)");
-    assert_oracle_parity("(> most-positive-fixnum (float most-positive-fixnum))");
+    crate::common::assert_oracle_parity_expect("(= 1 1.0)", expect_test::expect![[r#""OK t""#]]);
+    crate::common::assert_oracle_parity_expect(
+        "(eql 1 1.0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(equal 1 1.0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(< 1 1.0000000000001)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(> most-positive-fixnum (float most-positive-fixnum))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -297,15 +666,36 @@ fn oracle_prop_float_chained_rounding_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Combine rounding modes in expressions
-    assert_oracle_parity("(+ (floor 2.7) (ceiling 2.3))");
-    assert_oracle_parity("(- (round 3.5) (truncate -2.7))");
-    assert_oracle_parity("(* (ffloor 2.7) (fceiling 2.3))");
-    assert_oracle_parity("(/ (fround 10.0) (ftruncate 3.7))");
+    crate::common::assert_oracle_parity_expect(
+        "(+ (floor 2.7) (ceiling 2.3))",
+        expect_test::expect![[r#""OK 5""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(- (round 3.5) (truncate -2.7))",
+        expect_test::expect![[r#""OK 6""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(* (ffloor 2.7) (fceiling 2.3))",
+        expect_test::expect![[r#""OK 6.0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(/ (fround 10.0) (ftruncate 3.7))",
+        expect_test::expect![[r#""OK 3.3333333333333335""#]],
+    );
 
     // Nested rounding
-    assert_oracle_parity("(floor (ceiling 2.3))");
-    assert_oracle_parity("(round (floor -2.7))");
-    assert_oracle_parity("(truncate (fround 3.5))");
+    crate::common::assert_oracle_parity_expect(
+        "(floor (ceiling 2.3))",
+        expect_test::expect![[r#""OK 3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(round (floor -2.7))",
+        expect_test::expect![[r#""OK -3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate (fround 3.5))",
+        expect_test::expect![[r#""OK 4""#]],
+    );
 
     // Complex expression with type mixing
     let form = r#"(let* ((a 2.7)
@@ -317,7 +707,10 @@ fn oracle_prop_float_chained_rounding_arithmetic() {
                      (list f c r t2
                            (floatp (ffloor a))
                            (integerp (floor a))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 -3 0 -8 t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -340,23 +733,41 @@ fn oracle_prop_float_two_arg_division_remainder() {
                            (- a (* q-ceil b))
                            (- a (* q-round b))
                            (- a (* q-trunc b))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 4 3 3 2 -3 2 2)""#]],
+    );
 
     // Negative dividend
     let form2 = r#"(let* ((a -17) (b 5))
                       (list (floor a b) (ceiling a b)
                             (round a b) (truncate a b)))"#;
-    assert_oracle_parity(form2);
+    crate::common::assert_oracle_parity_expect(
+        form2,
+        expect_test::expect![[r#""OK (-4 -3 -3 -3)""#]],
+    );
 
     // Float arguments
     let form3 = r#"(let* ((a 17.0) (b 3.0))
                       (list (floor a b) (ceiling a b)
                             (round a b) (truncate a b)))"#;
-    assert_oracle_parity(form3);
+    crate::common::assert_oracle_parity_expect(form3, expect_test::expect![[r#""OK (5 6 6 5)""#]]);
 
     // Mixed int/float
-    assert_oracle_parity("(floor 10 3.0)");
-    assert_oracle_parity("(ceiling 10.0 3)");
-    assert_oracle_parity("(round 7 2.0)");
-    assert_oracle_parity("(truncate 7.0 2)");
+    crate::common::assert_oracle_parity_expect(
+        "(floor 10 3.0)",
+        expect_test::expect![[r#""OK 3""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(ceiling 10.0 3)",
+        expect_test::expect![[r#""OK 4""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(round 7 2.0)",
+        expect_test::expect![[r#""OK 4""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(truncate 7.0 2)",
+        expect_test::expect![[r#""OK 3""#]],
+    );
 }

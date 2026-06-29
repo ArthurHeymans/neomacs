@@ -11,10 +11,11 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_bufferp_live_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (get-buffer-create "*neovm-test-bp*")
   (bufferp (get-buffer "*neovm-test-bp*")))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &oracle, &neovm);
 }
@@ -23,7 +24,10 @@ fn oracle_bufferp_live_buffer() {
 fn oracle_bufferp_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(bufferp nil)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(bufferp nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
@@ -31,8 +35,9 @@ fn oracle_bufferp_nil() {
 fn oracle_bufferp_non_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(list (bufferp 42) (bufferp "hello") (bufferp 'sym) (bufferp (current-buffer)))"#,
+        expect_test::expect![[r#""OK (nil nil nil t)""#]],
     );
     assert_ok_eq("(nil nil nil t)", &oracle, &neovm);
 }
@@ -41,11 +46,12 @@ fn oracle_bufferp_non_buffer() {
 fn oracle_bufferp_killed_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (let ((b (get-buffer-create "*neovm-test-bp-killed*")))
     (kill-buffer b)
     (bufferp b)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &oracle, &neovm);
 }

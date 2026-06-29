@@ -35,7 +35,12 @@ fn oracle_prop_narrow_nested_save_restriction_widen() {
     ;; Fully widened
     (setq results (cons (list 'fully-wide (buffer-string)) results))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((outer-narrow \"EFGHIJKLMNO\") (inner-narrow \"GHIJ\") (after-inner-widen \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\") (after-inner-restore \"EFGHIJKLMNO\") (fully-wide \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +69,10 @@ fn oracle_prop_narrow_marker_outside_region() {
         (list m1-pos m2-pos m3-pos pmin pmax
               ;; buffer-string only shows narrowed region
               (buffer-string))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 8 14 5 11 \"456789\")""#]],
+    );
 }
 
 #[test]
@@ -76,7 +84,10 @@ fn oracle_prop_narrow_to_region_bignum_start_saturates_like_gnu() {
     let form = r#"(with-temp-buffer
   (insert "abc")
   (narrow-to-region 1000000000000000000000000000000 2))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (args-out-of-range 1000000000000000000000000000000 2)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +120,10 @@ fn oracle_prop_narrow_point_clamping() {
             (list before-narrow-point
                   after-narrow-point pmin pmax
                   clamped-low clamped-high within)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (17 10 5 10 5 10 7)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +152,10 @@ fn oracle_prop_narrow_re_search_confined() {
             (elder-found (progn (goto-char (point-min))
                                 (re-search-forward "elderberry" nil t))))
         (list (nreverse matches) apple-found elder-found)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((\"banana\" \"20\") (\"cherry\" \"30\")) nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +213,12 @@ fn oracle_prop_narrow_parse_document_sections() {
                     (cons (list name (nreverse content)) sections)))))
         (setq i (1+ i))))
     (nreverse sections)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"HEADER\" (\"title=My Document\" \"author=Alice\")) (\"BODY\" (\"Line one of body.\" \"Line two of body.\" \"Line three of body.\")) (\"FOOTER\" (\"copyright=2026\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +264,12 @@ fn oracle_prop_narrow_sequential_modify_cycles() {
       (setq snapshots (cons (list 'cycle3-narrow (buffer-string)) snapshots)))
     (setq snapshots (cons (list 'cycle3-wide (buffer-string)) snapshots))
     (nreverse snapshots)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((cycle1-narrow \"AAAA\") (cycle1-wide \"AAAA|bbbb|cccc|dddd\") (cycle2-narrow \"ZZZZ\") (cycle2-wide \"AAAA|bbbb|ZZZZ|dddd\") (cycle3-narrow \"bbbb\") (cycle3-wide \"AAAA|bbbb|ZZZZ|dddd\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -271,7 +298,12 @@ fn oracle_prop_narrow_delete_within_region() {
         (list before before-size
               after after-size
               (buffer-string))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"quick brown fo\" 14 \"quick fo\" 8 \"The quick fox jumps over the lazy dog\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +341,12 @@ fn oracle_prop_narrow_tabulate_subregions() {
           (lambda (a b)
             (string-lessp (cdr (assoc "Name" a))
                           (cdr (assoc "Name" b)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"Name\" . \"Alice\") (\"Age\" . \"30\") (\"City\" . \"Paris\")) ((\"Name\" . \"Bob\") (\"Age\" . \"25\") (\"City\" . \"London\")) ((\"Name\" . \"Carol\") (\"Age\" . \"35\") (\"City\" . \"Tokyo\")) nil nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -340,5 +377,10 @@ fn oracle_prop_narrow_with_save_excursion() {
     ;; After save-restriction, widened again
     (setq results (cons (list 'widened (buffer-string)) results))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((narrowed \"Line-2\nLine-3\n\" 8) (excursion-at-max 22) (after-excursion 8) (after-insert \">>Line-2\nLine-3\n\" 10) (widened \"Line-1\n>>Line-2\nLine-3\nLine-4\nLine-5\n\"))""#
+        ]],
+    );
 }

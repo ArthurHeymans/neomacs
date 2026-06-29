@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_kill_yank_preserves_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kyp\")))\n\
          (with-current-buffer buf\n\
@@ -23,6 +23,7 @@ fn deficiency_kill_yank_preserves_properties() {
          (get-text-property 6 'face)\n\
          (get-text-property 7 'face)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -30,7 +31,7 @@ fn deficiency_kill_yank_preserves_properties() {
 fn deficiency_kill_yank_undo_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kyu\")))\n\
          (with-current-buffer buf\n\
@@ -52,6 +53,7 @@ fn deficiency_kill_yank_undo_cycle() {
          (buffer-string)\n\
          (get-text-property 6 'zone)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -59,7 +61,7 @@ fn deficiency_kill_yank_undo_cycle() {
 fn deficiency_kill_append_multiple_yanks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kam\")))\n\
          (with-current-buffer buf\n\
@@ -70,6 +72,7 @@ fn deficiency_kill_append_multiple_yanks() {
          (yank)\n\
          (buffer-string))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -77,7 +80,7 @@ fn deficiency_kill_append_multiple_yanks() {
 fn deficiency_kill_line_yank_with_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kly\")))\n\
          (with-current-buffer buf\n\
@@ -93,6 +96,7 @@ fn deficiency_kill_line_yank_with_properties() {
          (get-text-property 1 'ln)\n\
          (get-text-property 7 'ln)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -100,7 +104,7 @@ fn deficiency_kill_line_yank_with_properties() {
 fn deficiency_kill_region_rectangle_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kry\")))\n\
          (with-current-buffer buf\n\
@@ -113,6 +117,7 @@ fn deficiency_kill_region_rectangle_yank() {
          (list (buffer-string)\n\
          (get-text-property 1 'col)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -120,7 +125,7 @@ fn deficiency_kill_region_rectangle_yank() {
 fn deficiency_kill_yank_across_buffers_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((b1 (generate-new-buffer \"ky1\"))\n\
          (b2 (generate-new-buffer \"ky2\")))\n\
@@ -136,6 +141,7 @@ fn deficiency_kill_yank_across_buffers_with_markers() {
          (get-text-property 1 'role)\n\
          (get-text-property 9 'tag)))\n\
          (kill-buffer b1) (kill-buffer b2)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -143,7 +149,7 @@ fn deficiency_kill_yank_across_buffers_with_markers() {
 fn deficiency_kill_ring_max_and_nth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"krn\")))\n\
          (with-current-buffer buf\n\
@@ -157,6 +163,7 @@ fn deficiency_kill_ring_max_and_nth() {
          (current-kill 1)\n\
          (current-kill 2)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -164,7 +171,7 @@ fn deficiency_kill_ring_max_and_nth() {
 fn deficiency_yank_pop_after_double_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ypo\")))\n\
          (with-current-buffer buf\n\
@@ -185,7 +192,7 @@ fn deficiency_yank_pop_after_double_yank() {
 fn deficiency_kill_sentence_with_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ksp\")))\n\
          (with-current-buffer buf\n\
@@ -199,6 +206,7 @@ fn deficiency_kill_sentence_with_properties() {
          (get-text-property 1 'sent)\n\
          (get-text-property 17 'sent)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 35 42)""#]],
     );
 }
 
@@ -206,7 +214,7 @@ fn deficiency_kill_sentence_with_properties() {
 fn deficiency_kill_word_multiple_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kwm\")))\n\
          (with-current-buffer buf\n\
@@ -225,5 +233,6 @@ fn deficiency_kill_word_multiple_with_undo() {
          (list s (buffer-string)\n\
          (get-text-property 5 'w))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }

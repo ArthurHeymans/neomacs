@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_advice_add_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun my-adv-fn (x) (* x 2))
   (advice-add 'my-adv-fn :around
@@ -18,6 +18,7 @@ fn divergence_advice_add_remove() {
                    (lambda (fn &rest args)
                      (apply fn (mapcar #'1+ args))))
     (list result (my-adv-fn 5))))"#,
+        expect_test::expect![[r#""OK (12 10)""#]],
     );
 }
 
@@ -25,7 +26,7 @@ fn divergence_advice_add_remove() {
 fn divergence_advice_before_after() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar my-adv-log nil)
   (defun my-adv-target (x) (+ x 10))
@@ -40,6 +41,7 @@ fn divergence_advice_before_after() {
     (advice-remove 'my-adv-target
                    (lambda (x) (push (list 'after x) my-adv-log)))
     result))"#,
+        expect_test::expect![[r#""OK ((after 5) (before 5))""#]],
     );
 }
 
@@ -47,7 +49,7 @@ fn divergence_advice_before_after() {
 fn divergence_advice_filter_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun my-filter-fn (x) x)
   (advice-add 'my-filter-fn :filter-args
@@ -56,6 +58,7 @@ fn divergence_advice_filter_args() {
     (advice-remove 'my-filter-fn
                    (lambda (args) (list (1+ (car args)))))
     result))"#,
+        expect_test::expect![[r#""OK 10""#]],
     );
 }
 
@@ -63,13 +66,14 @@ fn divergence_advice_filter_args() {
 fn divergence_advice_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun my-override-fn () 'original)
   (advice-add 'my-override-fn :override (lambda () 'overridden))
   (let ((result (my-override-fn)))
     (advice-remove 'my-override-fn (lambda () 'overridden))
     (list result (my-override-fn))))"#,
+        expect_test::expect![[r#""OK (overridden original)""#]],
     );
 }
 
@@ -77,11 +81,12 @@ fn divergence_advice_override() {
 fn divergence_nadvice_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'nadvice--advice-declarity)
   (fboundp 'advice--p)
   (fboundp 'advice--cd*r))"#,
+        expect_test::expect![[r#""OK (nil t t)""#]],
     );
 }
 
@@ -89,11 +94,12 @@ fn divergence_nadvice_functions() {
 fn divergence_function_advice_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun my-advp-test () t)
   (list (advice--p (symbol-function 'my-advp-test))
         (advice--p (symbol-function 'car))))"#,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
@@ -101,7 +107,7 @@ fn divergence_function_advice_p() {
 fn divergence_multiple_advice_ordering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar my-multi-adv-result nil)
   (defun my-multi-adv-target () (push 'original my-multi-adv-result))
@@ -109,6 +115,7 @@ fn divergence_multiple_advice_ordering() {
   (advice-add 'my-multi-adv-target :before (lambda () (push 'b my-multi-adv-result)))
   (my-multi-adv-target)
   my-multi-adv-result)"#,
+        expect_test::expect![[r#""OK (original a b)""#]],
     );
 }
 
@@ -116,11 +123,12 @@ fn divergence_multiple_advice_ordering() {
 fn divergence_advice_interactive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun my-int-adv-fn () (interactive) nil)
   (advice-add 'my-int-adv-fn :after (lambda ()))
   (list (commandp 'my-int-adv-fn)
         (interactive-form 'my-int-adv-fn)))"#,
+        expect_test::expect![[r#""OK (t (interactive nil))""#]],
     );
 }

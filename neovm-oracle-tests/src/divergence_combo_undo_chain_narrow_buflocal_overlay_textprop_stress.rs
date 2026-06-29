@@ -14,7 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_undo_chain_narrow_buflocal_overlay_textprop_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-ucnb")))
     (with-current-buffer buf
@@ -117,6 +117,7 @@ fn combo_undo_chain_narrow_buflocal_overlay_textprop_regex() {
                                    (get-text-property 41 'grp))))
                 (kill-buffer buf)
                 (list state-3 state-2 state-1 state-0)))))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -124,7 +125,7 @@ fn combo_undo_chain_narrow_buflocal_overlay_textprop_regex() {
 fn combo_undo_chain_nested_narrow_evaporate_textprop_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-ucnn")))
     (with-current-buffer buf
@@ -206,6 +207,7 @@ fn combo_undo_chain_nested_narrow_evaporate_textprop_marker() {
                                  (get-text-property 26 'sect))))
               (kill-buffer buf)
               (list state-2 state-1 state-0)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -213,7 +215,7 @@ fn combo_undo_chain_nested_narrow_evaporate_textprop_marker() {
 fn combo_undo_chain_buflocal_undo_list_narrow_overlay_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-ucbl")))
     (with-current-buffer buf
@@ -292,6 +294,7 @@ fn combo_undo_chain_buflocal_undo_list_narrow_overlay_priority() {
                                  (get-text-property 21 'grp))))
               (kill-buffer buf)
               (list state-2 state-1 state-0)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -299,7 +302,7 @@ fn combo_undo_chain_buflocal_undo_list_narrow_overlay_priority() {
 fn combo_undo_chain_replace_match_narrow_marker_overlay_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-ucrm")))
     (with-current-buffer buf
@@ -360,6 +363,7 @@ fn combo_undo_chain_replace_match_narrow_marker_overlay_textprop() {
                                  (get-text-property 34 'item))))
               (kill-buffer buf)
               (list state-2 state-1 state-0)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -367,7 +371,7 @@ fn combo_undo_chain_replace_match_narrow_marker_overlay_textprop() {
 fn combo_undo_chain_save_restriction_narrow_buflocal_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-ucsr")))
     (with-current-buffer buf
@@ -444,5 +448,6 @@ fn combo_undo_chain_save_restriction_narrow_buflocal_marker_overlay() {
                                  (get-text-property 26 'sect))))
               (kill-buffer buf)
               (list state-2 state-1 state-0)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

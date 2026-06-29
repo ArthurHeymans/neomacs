@@ -47,7 +47,12 @@ fn oracle_file_accessible_access_file_and_ownership_edges() {
     (delete-directory dir t)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil t t t nil nil t t t t (file-missing \"Reading missing\") (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -95,5 +100,10 @@ fn oracle_access_file_handler_and_argument_order_edges() {
     (makunbound 'neomacs--oracle-access-file-calls)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((error (\"Invalid handler in ‘file-name-handler-alist’\")) ((expand-file-name \"child\" \"/oracle-access-root/\")) nil (access-file) handler-result ((access-file \"/oracle-access-root/child\" \"Reading child\")) nil (wrong-type-argument (stringp 42)) nil nil (wrong-type-argument (stringp 42)) nil)""#
+        ]],
+    );
 }

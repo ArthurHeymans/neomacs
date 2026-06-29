@@ -61,7 +61,12 @@ fn oracle_prop_text_prop_comp_put_text_property_all_params() {
    (get-text-property 3 'display s)
    (get-text-property 6 'display s)
    (get-text-property 7 'display s)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (bold bold italic italic nil nil \"help text\" \"help text\" nil nil nil my-cat my-cat 42 42 nil (space :width 10) (space :width 10) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +106,12 @@ fn oracle_prop_text_prop_comp_get_text_property_edge_cases() {
        (get-text-property 0 'face s4)
        (get-text-property 2 'face s4)
        (get-text-property 4 'face s4)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (bold bold nil nil (a b c) italic (underline underline nil) (bold bold bold))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +155,12 @@ fn oracle_prop_text_prop_comp_add_text_properties_complex() {
            (get-text-property 14 'face s)
            (get-text-property 14 'category s)
            (get-text-property 14 'priority s)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t nil italic nil bold \"tip1\" highlight nil \"tip1\" my-cat 5 nil my-cat 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +212,12 @@ fn oracle_prop_text_prop_comp_remove_text_properties_advanced() {
            (get-text-property 7 'fontified s)
            (get-text-property 8 'fontified s)
            (get-text-property 15 'fontified s)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t nil t t bold bold nil nil bold bold nil nil nil nil highlight highlight nil nil nil t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +263,12 @@ fn oracle_prop_text_prop_comp_text_properties_at_full() {
          (let ((bp (text-properties-at 1)))
            (list (plist-get bp 'face)
                  (plist-get bp 'custom))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil 4 6 8 4 0 bold \"bold text\" highlight my-cat (italic 99))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +332,12 @@ fn oracle_prop_text_prop_comp_property_change_navigation() {
            (previous-property-change 3 s)  ;; 0
            (previous-property-change 0 s)  ;; nil
            ))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 5 8 12 15) (3 5 8 12 15) (3 5 8 10) (10 12 15) 3 5 8 15 nil 15 12 5 nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +396,10 @@ fn oracle_prop_text_prop_comp_next_single_property_change_detailed() {
            ;; Non-existent property should return nil immediately
            (next-single-property-change 0 'nonexistent s)
            ))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((5 10 15) (5 10 15) (2 8 18) nil 3 5 5 15 16 nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -420,7 +453,12 @@ fn oracle_prop_text_prop_comp_propertize_comprehensive() {
    (let ((s5 (propertize "test" 'display '(image :type png) 'font-lock-face '(bold italic))))
      (list (get-text-property 0 'display s5)
            (get-text-property 0 'font-lock-face s5)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (bold \"greeting\" bold italic important 0 1 3 5 bold bold nil italic italic \"greeting\" important bold (italic bold) ((image :type png) (bold italic)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -466,7 +504,12 @@ fn oracle_prop_text_prop_comp_set_text_properties_replace() {
                     (text-properties-at 0 s)
                     (text-properties-at 6 s))))
         (list before middle after)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((bold \"tip\" highlight) (bold \"tip\" highlight nil nil nil my-cat bold \"tip\") (nil nil nil nil nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -520,7 +563,10 @@ fn oracle_prop_text_prop_comp_buffer_vs_string_properties() {
                  (length buf-plist) (length sub-plist)
                  buf-face-after sub-face-after
                  npc))))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 30)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -582,5 +628,10 @@ fn oracle_prop_text_prop_comp_interval_merge_split() {
            (get-text-property 11 'face s)  ;; bold
            (get-text-property 12 'face s)  ;; nil
            ))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((12) (4 8 12) (8 12) (6 10 12) italic italic nil bold bold nil)""#
+        ]],
+    );
 }

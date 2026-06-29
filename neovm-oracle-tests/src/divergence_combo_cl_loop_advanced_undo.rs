@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_cl_loop_hash_accumulate_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((tbl (make-hash-table :test 'equal))\n\
          (vec [10 20 30 40 50]))\n\
@@ -22,6 +22,7 @@ fn deficiency_cl_loop_hash_accumulate_vector() {
          (= (gethash \"key10\" tbl) 100)\n\
          (= (gethash \"key50\" tbl) 2500)\n\
          (= (hash-table-count tbl) 5))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -29,7 +30,7 @@ fn deficiency_cl_loop_hash_accumulate_vector() {
 fn deficiency_cl_loop_with_buffers_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((bufs (cl-loop for i from 1 to 5\n\
          collect (let ((b (generate-new-buffer (format \"clb%d\" i))))\n\
@@ -44,6 +45,9 @@ fn deficiency_cl_loop_with_buffers_undo() {
          (with-current-buffer b (get-text-property 1 'idx))))))\n\
          (dolist (b bufs) (kill-buffer b))\n\
          result)))",
+        expect_test::expect![[
+            r#""OK ((\"clb1\" #(\"content1\" 0 8 (idx 1)) 1) (\"clb2\" #(\"content2\" 0 8 (idx 2)) 2) (\"clb3\" #(\"content3\" 0 8 (idx 3)) 3) (\"clb4\" #(\"content4\" 0 8 (idx 4)) 4) (\"clb5\" #(\"content5\" 0 8 (idx 5)) 5))""#
+        ]],
     );
 }
 
@@ -51,7 +55,7 @@ fn deficiency_cl_loop_with_buffers_undo() {
 fn deficiency_cl_loop_destructuring_with_closures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((data '((\"alice\" 30 95) (\"bob\" 25 87) (\"carol\" 28 92)))\n\
          (fns nil))\n\
@@ -61,6 +65,7 @@ fn deficiency_cl_loop_destructuring_with_closures() {
          (list results\n\
          (= (length results) 3)\n\
          (string= (first results) \"alice: age=30 score=95\"))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -68,7 +73,7 @@ fn deficiency_cl_loop_destructuring_with_closures() {
 fn deficiency_cl_loop_for_on_hashtable_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"clh\"))\n\
          (tbl (make-hash-table :test 'eq)))\n\
@@ -93,6 +98,7 @@ fn deficiency_cl_loop_for_on_hashtable_undo() {
          (buffer-string)\n\
          (get-text-property 1 'source)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -100,7 +106,7 @@ fn deficiency_cl_loop_for_on_hashtable_undo() {
 fn deficiency_cl_loop_sum_max_min_with_buf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"csm\")))\n\
          (with-current-buffer buf\n\
@@ -118,6 +124,7 @@ fn deficiency_cl_loop_sum_max_min_with_buf() {
          (= mx 20)\n\
          (= mn 5))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -125,7 +132,7 @@ fn deficiency_cl_loop_sum_max_min_with_buf() {
 fn deficiency_cl_loop_vector_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((matrix [[1 2 3] [4 5 6] [7 8 9]]))\n\
          (let ((sums (cl-loop for row across matrix\n\
@@ -136,6 +143,7 @@ fn deficiency_cl_loop_vector_destructuring() {
          (equal sums '(6 15 24))\n\
          (= (length flat) 9)\n\
          (= (cl-loop for x in flat sum x) 45)))))",
+        expect_test::expect![[r#""OK ((6 15 24) (1 2 3 4 5 6 7 8 9) t t t)""#]],
     );
 }
 
@@ -143,7 +151,7 @@ fn deficiency_cl_loop_vector_destructuring() {
 fn deficiency_cl_loop_with_substring_extraction_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cse\")))\n\
          (with-current-buffer buf\n\
@@ -164,6 +172,7 @@ fn deficiency_cl_loop_with_substring_extraction_undo() {
          (get-text-property 1 'field)\n\
          (get-text-property 12 'field))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-function first)""#]],
     );
 }
 
@@ -171,7 +180,7 @@ fn deficiency_cl_loop_with_substring_extraction_undo() {
 fn deficiency_cl_loop_reducing_with_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((words '(\"apple\" \"banana\" \"apple\" \"cherry\" \"banana\" \"apple\" \"date\" \"cherry\")))\n\
          (let ((counts (make-hash-table :test 'equal)))\n\
@@ -185,6 +194,7 @@ fn deficiency_cl_loop_reducing_with_hash() {
          (= (gethash \"cherry\" counts) 2)\n\
          (= (gethash \"date\" counts) 1)\n\
          (= (hash-table-count counts) 4)))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -192,7 +202,7 @@ fn deficiency_cl_loop_reducing_with_hash() {
 fn deficiency_cl_loop_generate_series_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cgs\")))\n\
          (with-current-buffer buf\n\
@@ -211,6 +221,7 @@ fn deficiency_cl_loop_generate_series_undo() {
          (get-text-property 1 'series)\n\
          (buffer-string))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -218,7 +229,7 @@ fn deficiency_cl_loop_generate_series_undo() {
 fn deficiency_cl_loop_with_string_ops_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cso\")))\n\
          (with-current-buffer buf\n\
@@ -245,5 +256,6 @@ fn deficiency_cl_loop_with_string_ops_undo() {
          (get-text-property 1 'transform)\n\
          (get-text-property 8 'transform)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }

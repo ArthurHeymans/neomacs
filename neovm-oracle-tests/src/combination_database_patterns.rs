@@ -70,7 +70,10 @@ fn oracle_prop_db_table_crud() {
                             (let ((after-delete (length table)))
                               (list after-insert age-30 bob-age
                                     after-delete)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (4 (\"Charlie\" \"Alice\") 26 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +116,10 @@ fn oracle_prop_db_index_based_lookup() {
                             alice-ids
                             bob-ids
                             (sort alice-depts #'string<))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"Alice\" (1 3) (2 5) (\"eng\" \"sales\"))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +154,12 @@ fn oracle_prop_db_join_tables() {
                                     (cons (list (cdr (assq 'name emp)) dept-name)
                                           joined)))))
                         (nreverse joined))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"Alice\" \"Engineering\") (\"Bob\" \"Sales\") (\"Charlie\" \"Engineering\") (\"Diana\" \"Marketing\") (\"Eve\" \"Sales\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +201,12 @@ fn oracle_prop_db_group_by_aggregation() {
                         ;; Sort by product name for deterministic output
                         (sort results
                               (lambda (a b) (string< (car a) (car b)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"A\" (count . 3) (sum . 450) (avg . 150)) (\"B\" (count . 2) (sum . 450) (avg . 225)) (\"C\" (count . 2) (sum . 400) (avg . 200)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -250,7 +266,10 @@ fn oracle_prop_db_transaction_log_with_undo() {
                                              (gethash "y" store)
                                              (gethash "z" store))))
                             (list before during after))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10 20) (99 nil 42) (10 20 nil))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -318,5 +337,10 @@ fn oracle_prop_db_query_builder() {
                                           (funcall q-not (funcall where-eq 'dept "eng"))
                                           (funcall where-lt 'age 30))
                                  data))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"Alice\" \"Charlie\" \"Eve\") (\"Charlie\" \"Eve\") (\"Bob\" \"Diana\" \"Frank\") (\"Bob\" \"Diana\" \"Frank\"))""#
+        ]],
+    );
 }

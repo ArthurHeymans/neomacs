@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_timestamp_change_toggle_repeater_delay_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -29,6 +29,9 @@ fn org_timestamp_change_toggle_repeater_delay_combo() {
               after-month
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (\"* TODO Task\nSCHEDULED: <2026-05-27 Wed 10:15-11:30 +1w -2d>\n\" \"* TODO Task\nSCHEDULED: <2026-06-27 Sat 10:15-11:30 +1w -2d>\n\" \"* TODO Task\nSCHEDULED: [2026-06-27 Sat 10:15-11:30 +1w -2d]\n\")""#
+        ]],
     );
 }
 
@@ -36,7 +39,7 @@ fn org_timestamp_change_toggle_repeater_delay_combo() {
 fn org_read_date_relative_default_time_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let* ((base (encode-time 0 15 8 27 5 2026))
@@ -59,6 +62,7 @@ fn org_read_date_relative_default_time_combo() {
       '("<2026-05-27 Wed>"
         "[2026-05-27 Wed 09:30]"
         "<2026-05-27 Wed 09:30-10:45>"))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -66,7 +70,7 @@ fn org_read_date_relative_default_time_combo() {
 fn org_timestamp_time_range_eval_parse_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -118,6 +122,9 @@ fn org_timestamp_time_range_eval_parse_combo() {
                     (nreverse messages)
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))))))"##,
+        expect_test::expect![[
+            r#""OK (\"2 hours 30 minutes \" \"Reverse <2026-05-28 Thu 14:00>--<2026-05-28 Thu 12:30> - 01:30\" \"| A    | <2026-05-27 Wed 10:00>--<2026-05-29 Fri 12:30> | 2d 02:30 |\" (\"09:15\" \"09:15+2:30\" \"23:50+-24:20\" nil) ((\"<2026-05-27 Wed>\" 739763 \"2026-05-27 00:00\" 1779854400.0) (\"<2026-05-27 Wed 09:15>\" 739763 \"2026-05-27 09:15\" 1779887700.0)) (org-diary-sexp-no-match \"%%(diary-date 5 27 2026)\") (\"2 hours 30 minutes \" \"Time difference inserted\" \"Time difference inserted\") \"* Ranges\nInline <2026-05-27 Wed 09:15>--<2026-05-27 Wed 11:45>\nReverse <2026-05-28 Thu 14:00>--<2026-05-28 Thu 12:30> - 01:30\n| Task | Range                                          | Diff     |\n| A    | <2026-05-27 Wed 10:00>--<2026-05-29 Fri 12:30> | 2d 02:30 |\n\")""#
+        ]],
     );
 }
 
@@ -125,7 +132,7 @@ fn org_timestamp_time_range_eval_parse_combo() {
 fn org_planning_repeater_warning_element_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -159,6 +166,7 @@ fn org_planning_repeater_warning_element_combo() {
              (format-time-string
               "%Y-%m-%d"
               (org-timestamp-to-time deadline))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -166,7 +174,7 @@ fn org_planning_repeater_warning_element_combo() {
 fn org_schedule_deadline_timestamp_range_shift_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -225,6 +233,7 @@ fn org_schedule_deadline_timestamp_range_shift_combo() {
                    "[stamp]"
                    (buffer-substring-no-properties
                     (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -232,7 +241,7 @@ fn org_schedule_deadline_timestamp_range_shift_combo() {
 fn org_todo_auto_repeat_planning_logbook_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -311,6 +320,7 @@ fn org_todo_auto_repeat_planning_logbook_combo() {
                      (list 'property
                            (org-element-property :key el)
                            (org-element-property :value el))))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -318,7 +328,7 @@ fn org_todo_auto_repeat_planning_logbook_combo() {
 fn org_planning_agenda_repeat_logbook_cookie_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-agenda)
@@ -447,6 +457,9 @@ Body <2026-05-27 Wed 11:00-12:15>
         (kill-buffer org-agenda-buffer-name))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (delete-file file))))"##,
+        expect_test::expect![[
+            r#""OK ((#(\"TODO\" 0 4 (org-todo-head \"TODO\")) \"<2026-07-01 Wed 08:30 .+2d>\" \"<2026-06-06 Sat +1w -2d>\" \"[2026-05-27 Wed 13:45]\" \"Ada\" \"+1w\") (#(\"DONE\" 0 4 (org-todo-head \"TODO\")) #(\"Checklist [2/2]\" 0 15 (org-todo-head \"TODO\")) nil) ((t nil nil t) \"3 days-agenda (W22):\nWednesday  27 May 2026\n  Plan:       11:00-12:15 TODO Repeat                                   :work::\n\") nil \"3 days-agenda (W22):\nWednesday  27 May 2026\n  Plan:       11:00-12:15 TODO Repeat                                   :work::\n\")""#
+        ]],
     );
 }
 
@@ -454,7 +467,7 @@ Body <2026-05-27 Wed 11:00-12:15>
 fn org_timestamp_parse_shift_range_element_extract_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -522,6 +535,7 @@ fn org_timestamp_parse_shift_range_element_extract_combo() {
           (list parsed
                 after-shift
                 shifted-ts))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -529,7 +543,7 @@ fn org_timestamp_parse_shift_range_element_extract_combo() {
 fn org_planning_timestamp_shift_edit_recurring_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-element)
@@ -582,5 +596,6 @@ fn org_planning_timestamp_shift_edit_recurring_deep() {
                     after-edit
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
+        expect_test::expect![[r#""ERR (user-error \"Not at a timestamp\")""#]],
     );
 }

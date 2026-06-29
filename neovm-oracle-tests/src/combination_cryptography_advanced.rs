@@ -63,7 +63,12 @@ fn oracle_prop_crypto_adv_caesar_cipher() {
      (dotimes (s 5)
        (setq results (cons (funcall caesar-encrypt "abc" (1+ s)) results)))
      (nreverse results))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Khoor Zruog\" \"Hello World\" t t \"unchanged\" t t \"Mjqqt, Btwqi! 123\" (\"bcd\" \"cde\" \"def\" \"efg\" \"fgh\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +118,12 @@ fn oracle_prop_crypto_adv_vigenere() {
        (list (not (equal c1 c2)) c1 c2))
      ;; Preserves spaces and punctuation
      (funcall encrypt "Hello, World!" "secret"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"LXFOPVEFRNHR\" \"ATTACKATDAWN\" t \"unchanged\" (t \"slbl teii\" \"tefe uiqt\") \"Zincs, Pgvnu!\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +191,12 @@ fn oracle_prop_crypto_adv_substitution_cipher() {
        (let ((alpha2 (funcall make-cipher-alphabet "python")))
          (not (equal (funcall sub-encrypt "test" alpha)
                      (funcall sub-encrypt "test" alpha2))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"zebracdfghijklmnopqstuvwxy\" (\"fajjm vmpjr\" \"hello world\" t) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +243,10 @@ fn oracle_prop_crypto_adv_xor_stream() {
       (length "abcdefgh"))
    ;; Encrypt empty string
    (funcall xor-crypt "" "key")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t (190 189) t t \"\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +293,12 @@ fn oracle_prop_crypto_adv_hash_functions() {
        ;; Actual hash values for exact parity
        djb2-hashes
        fnv1a-hashes))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t t t t t t t t t t t t) (t t t t t t t t t t t t) t t t t t (5381 177670 177671 5863208 5863240 193485963 261238937 10958189 130284792 211708005 7042358 7042359) (18652613 67905836 118238693 220530122 204187340 172484875 262089899 128182419 239953890 265318885 153301180 203634037))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +346,10 @@ fn oracle_prop_crypto_adv_hmac_construction() {
      (funcall hmac "secret" "hello world")
      (funcall hmac "another-key" "hello world")
      (funcall hmac "secret" "different message"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t 264289475 181632647 106049473)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +384,12 @@ fn oracle_prop_crypto_adv_base64() {
   (length (base64-encode-string "a"))
   (length (base64-encode-string "ab"))
   (length (base64-encode-string "abc")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\" \"Zg==\" \"Zm8=\" \"Zm9v\" \"Zm9vYg==\" \"Zm9vYmE=\" \"Zm9vYmFy\" t t \"YV1i\" t 4 4 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +448,12 @@ fn oracle_prop_crypto_adv_hex_codec() {
    ;; Decode specific hex values
    (funcall hex-decode "48656c6c6f")  ;; "Hello"
    (funcall hex-decode "00ff7f80")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\" \"41\" \"4142\" \"48656c6c6f\" \"00ff7f80\" t t t t \"Hello\" \"\\0ÿ\u{7f}\u{80}\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -461,5 +497,8 @@ fn oracle_prop_crypto_adv_stream_cipher_lcg() {
    (let ((c1 (funcall stream-cipher "aaa" 5))
          (c2 (funcall stream-cipher "bbb" 5)))
      (not (equal c1 c2)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t \"\" t)""#]],
+    );
 }

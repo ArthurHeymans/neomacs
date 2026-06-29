@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx105_message_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -18,13 +18,14 @@ fn div_cx105_message_mode_availability() {
             (boundp 'message-from-style)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx105_sendmail_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -35,13 +36,14 @@ fn div_cx105_sendmail_availability() {
             (boundp 'mail-header-separator)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx105_smtpmail_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -51,13 +53,14 @@ fn div_cx105_smtpmail_availability() {
             (boundp 'smtpmail-smtp-service)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx105_gnus_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -67,13 +70,14 @@ fn div_cx105_gnus_availability() {
             (boundp 'gnus-startup-file)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx105_auth_source_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -84,13 +88,14 @@ fn div_cx105_auth_source_availability() {
             (boundp 'auth-source-do-cache)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx105_epa_epg_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -102,13 +107,14 @@ fn div_cx105_epa_epg_availability() {
             (boundp 'epg-gpg-program)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx105_network_security_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -118,13 +124,14 @@ fn div_cx105_network_security_availability() {
             (boundp 'nsm-trustable-pem-file)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx105_gnutls_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'gnutls-available-p)
@@ -133,13 +140,14 @@ fn div_cx105_gnutls_availability() {
           (boundp 'gnutls-trustfiles))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx105_url_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -149,13 +157,14 @@ fn div_cx105_url_availability() {
             (boundp 'url-user-agent)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx105_json_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -166,13 +175,14 @@ fn div_cx105_json_availability() {
             (fboundp 'json-encode-key)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx105_json_roundtrip_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -190,13 +200,16 @@ fn div_cx105_json_roundtrip_basic() {
               (length (cdr (assq 'tags decoded))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"{\\\"name\\\":\\\"alpha\\\",\\\"value\\\":42,\\\"tags\\\":[\\\"x\\\",\\\"y\\\",\\\"z\\\"],\\\"nested\\\":{\\\"deep\\\":\\\"val\\\"}}\" 72 \"alpha\" 42 3)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx105_xml_dom_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -209,13 +222,14 @@ fn div_cx105_xml_dom_availability() {
             (fboundp 'dom-attr)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx105_xml_parse_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((xml "<root><child attr=\"value\">text</child><empty/></root>")
@@ -227,13 +241,14 @@ fn div_cx105_xml_parse_basic() {
             (dom-attr (car (dom-by-tag (car parsed) 'child)) 'attr)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (root ((child ((attr . \"value\")) \"text\")) \"value\")""#]],
     );
 }
 
 #[test]
 fn div_cx105_message_encode_decode_headers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -242,5 +257,6 @@ fn div_cx105_message_encode_decode_headers() {
             (condition-case err (rfc2047-encode-string "café 世界") (error :err))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (\"plain\" \"=?utf-8?B?Y2Fmw6kg5LiW55WM?=\")""#]],
     );
 }

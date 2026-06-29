@@ -16,7 +16,10 @@ fn oracle_eventp_accepts_integers_and_non_keyword_symbols() {
  (eventp '(:keyword ignored))
  (eventp "mouse-1")
  (eventp '(\"mouse-1\" ignored)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil t nil nil nil t)""#]],
+    );
 }
 
 #[test]
@@ -41,7 +44,12 @@ fn oracle_mouse_event_predicates_follow_basic_type() {
            (mouse-movement-p event)
            (event-basic-type event)))
    events))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((mouse-1 (mouse-1 mouse-2 mouse-3 mouse-movement) nil mouse-1) (down-mouse-1 (mouse-1 mouse-2 mouse-3 mouse-movement) nil mouse-1) (drag-mouse-2 (mouse-2 mouse-3 mouse-movement) nil mouse-2) (double-mouse-3 nil nil nil) (mouse-movement (mouse-movement) nil mouse-movement) (C-M-drag-mouse-1 (mouse-1 mouse-2 mouse-3 mouse-movement) nil mouse-1) (wheel-up nil nil wheel-up) (wheel-up nil nil wheel-up) (f1 nil nil f1) (97 nil nil 97))""#
+        ]],
+    );
 }
 
 #[test]
@@ -54,5 +62,8 @@ fn oracle_mouse_movement_p_only_checks_event_car() {
  (mouse-movement-p nil)
  (mouse-movement-p '(mouse-1))
  (mouse-movement-p '(drag-mouse-1 nil nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil nil nil nil)""#]],
+    );
 }

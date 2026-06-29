@@ -85,7 +85,12 @@ fn oracle_prop_sigproc_adv_dft() {
     (fmakunbound 'neovm--dft-forward)
     (fmakunbound 'neovm--dft-magnitude)
     (makunbound 'neovm--dft-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:dc-x0-re 40.0 :dc-x0-im 0.0 :dc-mag-0 40.0 :imp-mag (1.0 1.0 1.0 1.0) :cos-mag-0 5.551115123125783e-16 :cos-mag-1 4.0 :alt-mag (0.0 1.326935047191146e-16 4.0 5.527085992185683e-16) :alt-peak-at-2 4.0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +193,12 @@ Returns list of real parts (imaginary should be ~0 for real signals)."
     (fmakunbound 'neovm--idft-inverse)
     (fmakunbound 'neovm--idft-approx-equal)
     (makunbound 'neovm--idft-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:rt1-ok t :rt2-ok t :rt3-ok t :rt4-ok t :recovered1-first-3 (0.999999999999999 2.0000000000000018 3.000000000000006) :recovered2-first-3 (9.999999999999996 -5.000000000000003 2.9999999999999987))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +292,12 @@ fn oracle_prop_sigproc_adv_convolution_types() {
     (fmakunbound 'neovm--conv-linear)
     (fmakunbound 'neovm--conv-circular)
     (makunbound 'neovm--conv-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:lin1 (1.0 2.0 4.0 2.0 3.0) :circ1 (3.0 5.0 4.0) :lin1-length 5 :circ1-length 3 :lin-delta (0.0 0.0 10.0 20.0 30.0 40.0 50.0 0.0) :circ-self (4.0 4.0 4.0 4.0) :commutativity t :ab (2.0 10.0 22.0 20.0) :ba (2.0 10.0 22.0 20.0) :lin-h1 (1.0 2.0 4.0 2.0 3.0) :lin-h2 (0.0 1.0 2.0 3.0 0.0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +388,12 @@ Returns list of coefficients."
     (fmakunbound 'neovm--fir-lowpass-coeffs)
     (fmakunbound 'neovm--fir-apply)
     (makunbound 'neovm--fir-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:coeffs (-0.008721828105096871 6.2084235941293e-18 0.25184278653467207 0.5137580831408495 0.2518427865346722 6.2084235941293e-18 -0.008721828105096871) :coeff-count 7 :coeff-sum 1.0 :len-preserved t :filtered-first-5 (1.9736926894453999 4.7560060860525075 5.746363759662703 8.984058425648602 10.782868022332094) :filtered-length 32 :const-middle 9.999999999999998)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +473,12 @@ Uses partial windows at edges."
     (fmakunbound 'neovm--ma-valid)
     (fmakunbound 'neovm--ma-same)
     (makunbound 'neovm--ma-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:valid-3 (20.0 30.0 40.0 50.0 60.0 70.0 80.0 90.0) :valid-3-len 8 :same-3 (15.0 20.0 30.0 40.0 50.0 60.0 70.0 80.0 90.0 95.0) :same-3-len 10 :valid-5 (30.0 40.0 50.0 60.0 70.0 80.0) :same-5 (20.0 25.0 30.0 40.0 50.0 60.0 70.0 80.0 85.0 90.0) :identity-ok t :step-valid (0.0 0.0 0.0 33.333333333333336 66.66666666666667 100.0 100.0 100.0) :step-same (0.0 0.0 0.0 0.0 33.333333333333336 66.66666666666667 100.0 100.0 100.0 100.0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -562,7 +587,12 @@ fn oracle_prop_sigproc_adv_waveform_synthesis() {
     (fmakunbound 'neovm--wave-energy)
     (fmakunbound 'neovm--wave-rms)
     (makunbound 'neovm--wave-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:sine-first-8 (0.0 0.7071067811865475 1.0 0.7071067811865476 1.2246467991473532e-16 -0.7071067811865475 -1.0 -0.7071067811865477) :square-first-8 (1.0 1.0 1.0 1.0 1.0 -1.0 -1.0 -1.0) :saw-first-8 (-1.0 -0.75 -0.5 -0.25 0.0 0.25 0.5 0.75) :sine-energy 16.00000000000001 :square-energy 32.0 :saw-energy 11.0 :sine-rms 0.7071067811865478 :square-rms 1.0 :saw-rms 0.5863019699779287 :all-same-len t :sine-dc-near-zero t :square-highest-energy t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -662,5 +692,10 @@ fn oracle_prop_sigproc_adv_energy_rms_windowed() {
     (fmakunbound 'neovm--erms-windowed-rms)
     (fmakunbound 'neovm--erms-zero-crossing-rate)
     (makunbound 'neovm--erms-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:win-energy (0.0 0.0 400.0 400.0000000000002 0.0 0.0 1600.0 1600.000000000001) :win-rms (0.0 0.0 7.0710678118654755 7.071067811865477 0.0 0.0 14.142135623730951 14.142135623730955) :energy-count 8 :silence-1-energy 0.0 :silence-2-energy 0.0 :loud-vs-quiet t :zcr-sine 0.22580645161290322 :zcr-dc 0.0 :zcr-alt 1.0 :dc-no-crossings t)""#
+        ]],
+    );
 }

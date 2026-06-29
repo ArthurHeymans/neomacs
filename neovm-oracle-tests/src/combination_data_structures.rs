@@ -62,7 +62,10 @@ fn oracle_prop_ds_set_operations() {
                                (funcall set-intersection a b))
                       (funcall set-to-sorted-list
                                (funcall set-difference a b)))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7) (3 4 5) (1 2))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +106,10 @@ fn oracle_prop_ds_ring_buffer() {
                       (funcall ring-push r 'd)
                       (let ((after-4 (funcall ring-contents r)))
                         (list after-3 after-4)))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((a b c) (d b c))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +152,10 @@ fn oracle_prop_ds_priority_queue() {
                           (setq results (cons (car r) results)
                                 q (cadr r))))
                       (nreverse results))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (urgent critical high medium low)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +190,7 @@ fn oracle_prop_ds_graph_bfs() {
                                   (append queue
                                           (list neighbor)))))))
                     (nreverse order)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (a b c d e)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -229,7 +238,10 @@ fn oracle_prop_ds_stack_calculator() {
                     (funcall rpn-eval '(3 4 + 2 *))
                     ;; 5 + ((1 + 2) * 4) - 3
                     (funcall rpn-eval '(5 1 2 + 4 * + 3 -))))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (7 14 14)""#]],
+    );
     assert_ok_eq("(7 14 14)", &o, &n);
 }
 
@@ -285,7 +297,10 @@ fn oracle_prop_ds_trie() {
                       (funcall trie-prefix-p t1 "hel")
                       (funcall trie-prefix-p t1 "wor")
                       (funcall trie-prefix-p t1 "xyz"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil t t t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -339,5 +354,8 @@ fn oracle_prop_ds_lru_cache() {
                               cache-order
                               (gethash 'b cache-table)
                               (gethash 'a cache-table))))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((c b a) (a c b) (d a c) nil 1)""#]],
+    );
 }

@@ -65,7 +65,10 @@ fn oracle_prop_numpat_gcd_lcm_multi() {
     (fmakunbound 'neovm--test-lcm2)
     (fmakunbound 'neovm--test-gcd-list)
     (fmakunbound 'neovm--test-lcm-list)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 24 12 60 1 72 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +112,10 @@ fn oracle_prop_numpat_modular_exponentiation() {
           (= (% (* a b) m)
              (% (* (% a m) (% b m)) m))))
     (fmakunbound 'neovm--test-powmod)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (24 23 1 1 699853951 0 1 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +184,12 @@ fn oracle_prop_numpat_sieve_and_factorize() {
               (list factors (= product 2520))))))
     (fmakunbound 'neovm--test-sieve)
     (fmakunbound 'neovm--test-factorize)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((2 3 5 7 11 13 17 19 23 29) (2 2 3 5) (97) (2 2 2 3 3 5) nil ((2 2 2 3 3 5 7) t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +254,10 @@ fn oracle_prop_numpat_base_conversion() {
     (fmakunbound 'neovm--test-to-base)
     (fmakunbound 'neovm--test-from-base)
     (makunbound 'neovm--test-digits)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable neovm--test-digits)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -325,7 +339,12 @@ fn oracle_prop_numpat_matrix_multiply() {
     (fmakunbound 'neovm--test-mat-transpose)
     (fmakunbound 'neovm--test-dot-product)
     (fmakunbound 'neovm--test-mat-mul)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((58 64) (139 154)) ((1 2) (3 4)) ((2 1) (1 1)) ((56)) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +381,12 @@ fn oracle_prop_numpat_newton_cube_root() {
                         results))))
         (nreverse results))
     (fmakunbound 'neovm--test-cbrt-newton)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((8.0 t t) (27.0 t t) (64.0 t t) (125.0 t t) (2.0 t t) (1000.0 t t) (0.001 t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -427,7 +451,10 @@ fn oracle_prop_numpat_horner_with_derivative() {
                 (< (abs (- r 3.0)) 1e-4))))))
     (fmakunbound 'neovm--test-horner-deriv)
     (fmakunbound 'neovm--test-newton-root)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((5.0 . 6.0) (1.0 . 13.0) (sqrt2 t) (t nil t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -480,5 +507,10 @@ fn oracle_prop_numpat_integer_partitions() {
            (length (funcall 'neovm--test-list-partitions 6 6))))
     (fmakunbound 'neovm--test-partition-count)
     (fmakunbound 'neovm--test-list-partitions)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 1 2 3 5 7 11 15 22 42) ((5) (4 1) (3 2) (3 1 1) (2 2 1) (2 1 1 1) (1 1 1 1 1)) t)""#
+        ]],
+    );
 }

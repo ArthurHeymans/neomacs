@@ -11,7 +11,10 @@ use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_sleep_for_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(sleep-for 0)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(sleep-for 0)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
@@ -19,7 +22,10 @@ fn oracle_sleep_for_returns_nil() {
 fn oracle_sleep_for_with_milliseconds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(sleep-for 0 50)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(sleep-for 0 50)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
@@ -27,7 +33,10 @@ fn oracle_sleep_for_with_milliseconds() {
 fn oracle_sleep_for_wrong_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(sleep-for 'a)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(sleep-for 'a)",
+        expect_test::expect![[r#""ERR (wrong-type-argument numberp a)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -35,6 +44,9 @@ fn oracle_sleep_for_wrong_type() {
 fn oracle_sleep_for_wrong_number_of_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(sleep-for)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(sleep-for)",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments sleep-for 0)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-number-of-arguments");
 }

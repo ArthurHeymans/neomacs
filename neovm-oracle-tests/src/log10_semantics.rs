@@ -26,5 +26,10 @@ fn oracle_prop_gnu_log10_delegates_to_log_base_10() {
        (log10 1 2)
      (error (car err)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((t t 0.0) (t t 1.0) (t t 2.0) (t t 3.0) (t t -1.0) (t t -2.0) (t t 0.3010299956639812) (t t 0.3979400086720376)) wrong-type-argument wrong-number-of-arguments wrong-number-of-arguments)""#
+        ]],
+    );
 }

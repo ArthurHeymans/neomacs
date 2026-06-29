@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_text_property_any() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'face 'bold)
@@ -15,6 +15,7 @@ fn divergence_text_property_any() {
         (text-property-not-all 1 12 'face nil)
         (text-property-any 1 12 'face nil)
         (text-property-not-all 1 6 'face nil))) "#,
+        expect_test::expect![[r#""Hello WorldOK (1 1 6 1)""#]],
     );
 }
 
@@ -22,7 +23,7 @@ fn divergence_text_property_any() {
 fn divergence_next_single_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'face 'bold)
@@ -30,6 +31,7 @@ fn divergence_next_single_property_change() {
         (next-single-property-change 6 'face)
         (previous-single-property-change 12 'face)
         (previous-single-property-change 7 'face))) "#,
+        expect_test::expect![[r#""Hello WorldOK (6 nil 6 6)""#]],
     );
 }
 
@@ -37,7 +39,7 @@ fn divergence_next_single_property_change() {
 fn divergence_text_property_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "abcdef")
   (put-text-property 2 4 'test-prop 'test-val)
@@ -47,6 +49,7 @@ fn divergence_text_property_search() {
         (get-text-property 4 'test-prop)
         (get-text-property 5 'test-prop)
         (get-text-property 6 'test-prop))) "#,
+        expect_test::expect![[r#""abcdefOK (nil test-val test-val nil nil nil)""#]],
     );
 }
 
@@ -54,7 +57,7 @@ fn divergence_text_property_search() {
 fn divergence_set_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello")
   (set-text-properties 1 6 '(face bold))
@@ -62,6 +65,7 @@ fn divergence_set_text_properties() {
         (get-text-property 3 'face)
         (get-text-property 5 'face)
         (text-properties-at 1))) "#,
+        expect_test::expect![[r#""HelloOK (bold bold bold (face bold))""#]],
     );
 }
 
@@ -69,13 +73,14 @@ fn divergence_set_text_properties() {
 fn divergence_remove_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello")
   (put-text-property 1 6 'face 'bold)
   (remove-text-properties 1 6 '(face))
   (list (get-text-property 1 'face)
         (text-properties-at 1))) "#,
+        expect_test::expect![[r#""HelloOK (nil nil)""#]],
     );
 }
 
@@ -83,7 +88,7 @@ fn divergence_remove_text_properties() {
 fn divergence_add_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello")
   (add-text-properties 1 3 '(face bold))
@@ -93,6 +98,7 @@ fn divergence_add_text_properties() {
         (get-text-property 3 'face)
         (get-text-property 4 'face)
         (get-text-property 5 'face))) "#,
+        expect_test::expect![[r#""HelloOK (bold bold italic italic italic)""#]],
     );
 }
 
@@ -100,13 +106,14 @@ fn divergence_add_text_properties() {
 fn divergence_sticky_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello")
   (put-text-property 1 6 'rear-nonsticky t)
   (put-text-property 1 6 'front-sticky nil)
   (list (get-text-property 1 'rear-nonsticky)
         (get-text-property 1 'front-sticky))) "#,
+        expect_test::expect![[r#""HelloOK (t nil)""#]],
     );
 }
 
@@ -114,7 +121,7 @@ fn divergence_sticky_text_properties() {
 fn divergence_field_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'field 'greeting)
@@ -122,6 +129,7 @@ fn divergence_field_property() {
         (get-text-property 6 'field)
         (fboundp 'field-beginning)
         (fboundp 'field-end))) "#,
+        expect_test::expect![[r#""Hello WorldOK (greeting nil t t)""#]],
     );
 }
 
@@ -129,7 +137,7 @@ fn divergence_field_property() {
 fn divergence_invisible_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'invisible t)
@@ -137,6 +145,7 @@ fn divergence_invisible_property() {
         (get-text-property 6 'invisible)
         (get-text-property 7 'invisible)
         (boundp 'buffer-invisibility-spec))) "#,
+        expect_test::expect![[r#""Hello WorldOK (t nil nil t)""#]],
     );
 }
 
@@ -144,12 +153,13 @@ fn divergence_invisible_property() {
 fn divergence_intangible_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'intangible t)
   (list (get-text-property 1 'intangible)
         (get-text-property 6 'intangible)
         (get-text-property 7 'intangible))) "#,
+        expect_test::expect![[r#""Hello WorldOK (t nil nil)""#]],
     );
 }

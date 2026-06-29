@@ -146,7 +146,10 @@ fn oracle_prop_proto_tcp_state_machine() {
     (fmakunbound 'neovm--tcp-make)
     (fmakunbound 'neovm--tcp-trace)
     (fmakunbound 'neovm--tcp-transition)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +243,10 @@ fn oracle_prop_proto_http_state_machine() {
                          "short")))
     (fmakunbound 'neovm--http-make-request)
     (fmakunbound 'neovm--http-parse-request)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -322,7 +328,10 @@ fn oracle_prop_proto_token_auth_flow() {
     (fmakunbound 'neovm--auth-login)
     (fmakunbound 'neovm--auth-validate)
     (fmakunbound 'neovm--auth-revoke)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -382,7 +391,10 @@ fn oracle_prop_proto_exponential_backoff() {
                 (lambda (n) (if (= n 4) '(ok . "barely") '(err . "nope")))
                 4 200 5000 99))
     (fmakunbound 'neovm--backoff-retry)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -470,7 +482,10 @@ fn oracle_prop_proto_connection_pool() {
     (fmakunbound 'neovm--pool-create-conn)
     (fmakunbound 'neovm--pool-acquire)
     (fmakunbound 'neovm--pool-release)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -567,7 +582,10 @@ fn oracle_prop_proto_multiplexing() {
     (fmakunbound 'neovm--mux-open-stream)
     (fmakunbound 'neovm--mux-send-frame)
     (fmakunbound 'neovm--mux-get-stream-info)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -673,5 +691,8 @@ fn oracle_prop_proto_sliding_window() {
     (fmakunbound 'neovm--sw-send)
     (fmakunbound 'neovm--sw-receive)
     (fmakunbound 'neovm--sw-ack)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }

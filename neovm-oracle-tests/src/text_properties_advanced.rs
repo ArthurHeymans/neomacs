@@ -31,7 +31,12 @@ fn oracle_prop_propertize_multi_property_extraction() {
                      (get-text-property 5 'help-echo s)
                      ;; Verify full plist
                      (length (text-properties-at 0 s))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (bold \"tooltip\" highlight some-map my-cat bold \"tooltip\" 10)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -59,7 +64,10 @@ fn oracle_prop_text_property_position_boundaries() {
                      (get-text-property 11 'face s)   ;; nil
                      ;; Length verification
                      (length s)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (bold bold italic italic underline underline nil nil 12)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +97,12 @@ fn oracle_prop_put_text_property_overlapping_ranges() {
                      (get-text-property 5 'help-echo s)  ;; "tip"
                      (get-text-property 7 'help-echo s)  ;; "tip"
                      (get-text-property 8 'help-echo s)));; nil"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (bold bold italic italic bold bold nil \"tip\" \"tip\" nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +129,10 @@ fn oracle_prop_remove_text_properties_selective() {
                                    (get-text-property 0 'help-echo s)
                                    (get-text-property 0 'mouse-face s))))
                         (list after-first after-second))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((nil \"tip\" highlight) (nil nil highlight))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +154,10 @@ fn oracle_prop_text_properties_at_full_plist() {
                        (length plist)
                        ;; Empty position in unpropertized part
                        (text-properties-at 0 "plain"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 2 3 6 nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +191,10 @@ fn oracle_prop_next_property_change_with_limit() {
                          (when pos
                            (setq boundaries (cons pos boundaries))))
                        (nreverse boundaries))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 6 9 nil 2 3 3 (3 6 9))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +237,12 @@ fn oracle_prop_rich_text_overlapping_properties() {
                        (list (plist-get p 'face)
                              (plist-get p 'help-echo)
                              (plist-get p 'mouse-face)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (bold nil nil) (bold \"animal\" nil) (nil \"animal\" highlight) (nil nil highlight))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -249,5 +276,10 @@ fn oracle_prop_syntax_highlight_simulation() {
                         (let ((next (next-property-change pos code)))
                           (setq pos next)))
                       (nreverse result)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 . font-lock-keyword-face) (7 . font-lock-function-name-face) (11 . font-lock-variable-name-face) (17 . font-lock-builtin-face))""#
+        ]],
+    );
 }

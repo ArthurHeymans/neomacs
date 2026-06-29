@@ -54,7 +54,12 @@ fn oracle_prop_bp_ini_parser() {
                                          (nreverse current-pairs))
                                     sections)))
                       (nreverse sections)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"general\" (\"name\" . \"test\") (\"verbose\" . \"true\")) (\"database\" (\"host\" . \"localhost\") (\"port\" . \"5432\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +94,10 @@ fn oracle_prop_bp_log_analyzer() {
                             (gethash "WARN" counts 0)
                             (gethash "ERROR" counts 0)
                             (nreverse errors))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 1 2 (\"Connection failed\" \"Timeout\"))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +125,12 @@ fn oracle_prop_bp_org_heading_tree() {
                           (setq headings
                                 (cons (list level title) headings))))
                       (nreverse headings)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 \"Top Level\") (2 \"Sub Level A\") (2 \"Sub Level B\") (3 \"Deep Level\") (1 \"Another Top\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +161,10 @@ fn oracle_prop_bp_multi_region() {
                                    (* 2 (string-to-number
                                           (caddr r)))))))
                       (buffer-string)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"abc 246 def 912 ghi 1578\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +199,12 @@ fn oracle_prop_bp_buffer_line_diff() {
                               lines-b (cdr lines-b)
                               i (1+ i)))
                       (nreverse diffs)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((changed 2 \"line2\" \"LINE2\") (changed 4 \"line4\" \"line5\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +242,12 @@ fn oracle_prop_bp_indentation_analysis() {
                                             indent-info))))))
                         (forward-line 1))
                       (nreverse indent-info)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 . \"def foo():\") (5 . \"if True:\") (9 . \"return 1\") (4 . \"else:\") (9 . \"return 2\") (1 . \"def bar():\") (4 . \"pass\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -261,5 +287,10 @@ fn oracle_prop_bp_narrow_accumulate() {
                                         (cons content sections)))))
                             (setq starts (cdr starts)))))
                       (nreverse sections)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"section A content\n---\" \"section B content\n---\" \"section C content\")""#
+        ]],
+    );
 }

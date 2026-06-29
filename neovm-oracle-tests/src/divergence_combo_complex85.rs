@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx85_cl_mapcar_and_cl_map_multiple_seqs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (cl-mapcar #'+ '(1 2 3) '(10 20 30))
@@ -17,13 +17,16 @@ fn div_cx85_cl_mapcar_and_cl_map_multiple_seqs() {
  (cl-map 'vector #'+ '(1 2 3) '(10 20 30))
  (cl-map 'string (lambda (n) (+ n ?a -1)) '(1 2 3)))
 "##,
+        expect_test::expect![[
+            r#""OK ((11 22 33) ((1 a \"x\") (2 b \"y\") (3 c \"z\")) (1 2 3) [11 22 33] \"abc\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx85_cl_reduce_with_initial_and_from_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (cl-reduce #'+ '(1 2 3 4 5))
@@ -33,13 +36,14 @@ fn div_cx85_cl_reduce_with_initial_and_from_end() {
  (cl-reduce #'max '(3 1 4 1 5 9 2 6))
  (cl-reduce #'min '(3 1 4 1 5 9 2 6)))
 "##,
+        expect_test::expect![[r#""OK (15 115 (((1 . 2) . 3) . 4) (((4 . 3) . 2) . 1) 9 1)""#]],
     );
 }
 
 #[test]
 fn div_cx85_cl_some_every_notany_notevery() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((nums '(1 2 3 4 5)))
   (list
@@ -50,13 +54,14 @@ fn div_cx85_cl_some_every_notany_notevery() {
    (cl-notany #'cl-oddp '(2 4 6))
    (cl-notevery #'cl-evenp nums)))
 "##,
+        expect_test::expect![[r#""OK (t nil t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx85_cl_coerce_between_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (cl-coerce '(1 2 3) 'vector)
@@ -68,13 +73,14 @@ fn div_cx85_cl_coerce_between_types() {
  (cl-coerce 'foo 'list)
  (cl-coerce '(1 2 3) 'list))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument sequencep foo)""#]],
     );
 }
 
 #[test]
 fn div_cx85_cl_merge_stable_with_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (cl-merge 'list '(1 3 5) '(2 4 6) #'<)
@@ -84,13 +90,16 @@ fn div_cx85_cl_merge_stable_with_predicate() {
  (cl-merge 'list '(1 2 3) '() #'<)
  (cl-merge 'list '((1 . "a") (3 . "c")) '((2 . "b")) (lambda (a b) (< (car a) (car b)))))
 "##,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6) (2 4 6 1 3 5) [1 2 3 4 5] (1 2 3) (1 2 3) ((1 . \"a\") (2 . \"b\") (3 . \"c\")))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx85_cl_sort_stable_sort_with_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data (copy-sequence '((3 . "c") (1 . "a") (4 . "d") (1 . "e") (5 . "b")))))
   (list
@@ -99,13 +108,16 @@ fn div_cx85_cl_sort_stable_sort_with_key() {
    (cl-sort (copy-sequence '("apple" "berry" "cherry")) #'string<)
    (cl-sort (copy-sequence '(3 1 4 1 5 9 2 6)) #'<)))
 "##,
+        expect_test::expect![[
+            r#""OK (((1 . \"a\") (1 . \"e\") (3 . \"c\") (4 . \"d\") (5 . \"b\")) ((1 . \"a\") (1 . \"e\") (3 . \"c\") (4 . \"d\") (5 . \"b\")) (\"apple\" \"berry\" \"cherry\") (1 1 2 3 4 5 6 9))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx85_cl_positions_and_find_with_start_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((nums '(1 2 3 4 3 2 1)))
   (list
@@ -117,13 +129,14 @@ fn div_cx85_cl_positions_and_find_with_start_end() {
    (cl-find 99 nums)
    (cl-count 3 nums)))
 "##,
+        expect_test::expect![[r#""OK (2 4 4 nil 3 nil 2)""#]],
     );
 }
 
 #[test]
 fn div_cx85_cl_adjoin_pushnew_with_test_and_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lst '((1 . "a") (2 . "b"))))
   (list
@@ -140,13 +153,16 @@ fn div_cx85_cl_adjoin_pushnew_with_test_and_key() {
      (cl-pushnew "APPLE" v :test #'string-equal)
      v)))
 "##,
+        expect_test::expect![[
+            r#""OK (((1 . \"a\") (2 . \"b\")) ((3 . \"c\") (1 . \"a\") (2 . \"b\")) (1 2 3) (1 2 3) (0 1 2 3) (\"APPLE\" \"apple\" \"berry\"))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx85_cl_subseq_setf_on_list_vector_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v (vector 1 2 3 4 5))
       (s "hello"))
@@ -158,13 +174,14 @@ fn div_cx85_cl_subseq_setf_on_list_vector_string() {
    (setf (cl-subseq s 0 2) "XX")
    s))
 "##,
+        expect_test::expect![[r#""OK ([2 3] \"el\" [99 88] [1 99 88 4 5] \"XX\" \"XXllo\")""#]],
     );
 }
 
 #[test]
 fn div_cx85_cl_copy_list_copy_seq_copy_tree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((l '(1 (2 3) (4 5)))
        (v [1 2 3])
@@ -178,13 +195,14 @@ fn div_cx85_cl_copy_list_copy_seq_copy_tree() {
         (eq l tree-l)
         (eq v copy-v)))
 "##,
+        expect_test::expect![[r#""ERR (void-function copy-list)""#]],
     );
 }
 
 #[test]
 fn div_cx85_cl_set_difference_union_intersection_with_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a '((1 . "a") (2 . "b") (3 . "c")))
       (b '((2 . "x") (4 . "y"))))
@@ -193,13 +211,16 @@ fn div_cx85_cl_set_difference_union_intersection_with_key() {
    (sort (cl-intersection a b :key #'car) (lambda (x y) (< (car x) (car y))))
    (sort (cl-set-difference a b :key #'car) (lambda (x y) (< (car x) (car y))))))
 "##,
+        expect_test::expect![[
+            r#""OK (((1 . \"a\") (2 . \"b\") (3 . \"c\") (4 . \"y\")) ((2 . \"x\") (4 . \"y\")) ((3 . \"c\")))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx85_cl_associated_rassoc_assq_with_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((alist '((a . 1) (b . 2) ("str" . 3) (nil . 4))))
   (list
@@ -210,13 +231,14 @@ fn div_cx85_cl_associated_rassoc_assq_with_default() {
    (assoc 'missing alist)
    (cl-find-if (lambda (cell) (= (cdr cell) 3)) alist)))
 "##,
+        expect_test::expect![[r#""OK ((a . 1) (b . 2) (\"str\" . 3) (b . 2) nil (\"str\" . 3))""#]],
     );
 }
 
 #[test]
 fn div_cx85_cl_seq_ops_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((items '("alpha" "beta" "gamma" "delta" "epsilon")))
   (with-temp-buffer
@@ -242,5 +264,6 @@ fn div_cx85_cl_seq_ops_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

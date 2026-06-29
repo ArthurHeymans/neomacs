@@ -7,45 +7,59 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_regexp_quote_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(regexp-quote "hello.world")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(regexp-quote "hello.world")"#,
+        expect_test::expect![[r#""OK \"hello\\\\.world\"""#]],
+    );
     assert_ok_eq("\"hello\\\\.world\"", &o, &n);
 }
 
 #[test]
 fn oracle_regexp_quote_special_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(stringp (regexp-quote "a*b+c?d[e]f"))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(stringp (regexp-quote "a*b+c?d[e]f"))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_match_beginning_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) =
-        eval_oracle_and_neovm(r#"(progn (string-match "cd" "abcdef") (match-beginning 0))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(progn (string-match "cd" "abcdef") (match-beginning 0))"#,
+        expect_test::expect![[r#""OK 2""#]],
+    );
     assert_ok_eq("2", &o, &n);
 }
 
 #[test]
 fn oracle_match_end_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(progn (string-match "cd" "abcdef") (match-end 0))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(progn (string-match "cd" "abcdef") (match-end 0))"#,
+        expect_test::expect![[r#""OK 4""#]],
+    );
     assert_ok_eq("4", &o, &n);
 }
 
 #[test]
 fn oracle_match_data_has_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) =
-        eval_oracle_and_neovm(r#"(progn (string-match "foo" "foobar") (consp (match-data)))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(progn (string-match "foo" "foobar") (consp (match-data)))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_set_match_data_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (string-match "xyz" "abcxyzdef") (let ((saved (match-data))) (set-match-data saved) (equal saved (match-data))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &o, &n);
 }
@@ -53,8 +67,9 @@ fn oracle_set_match_data_roundtrip() {
 #[test]
 fn oracle_replace_match_simple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (switch-to-buffer (get-buffer-create "*rm2*")) (erase-buffer) (insert "hello world") (goto-char 1) (search-forward "world" nil t) (replace-match "earth" t t) (buffer-string))"#,
+        expect_test::expect![[r#""OK \"hello earth\"""#]],
     );
     assert_ok_eq("\"hello earth\"", &o, &n);
 }
@@ -62,8 +77,9 @@ fn oracle_replace_match_simple() {
 #[test]
 fn oracle_looking_at_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (switch-to-buffer (get-buffer-create "*la*")) (erase-buffer) (insert "hello") (goto-char 1) (looking-at "hel"))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &o, &n);
 }
@@ -71,8 +87,9 @@ fn oracle_looking_at_basic() {
 #[test]
 fn oracle_looking_at_no_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (switch-to-buffer (get-buffer-create "*la2*")) (erase-buffer) (insert "hello") (goto-char 1) (looking-at "xyz"))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
     assert_ok_eq("nil", &o, &n);
 }

@@ -39,7 +39,12 @@ fn oracle_prop_obarray_custom_intern_basic() {
      (symbol-name s1)
      (symbol-name s2)
      (symbol-name s3))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t t t t t t \"neovm--obpat-alpha-3917\" \"neovm--obpat-beta-3917\" \"neovm--obpat-gamma-3917\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +76,10 @@ fn oracle_prop_obarray_custom_intern_soft_absent() {
       (eq (intern-soft "car" my-ob) my-car)
       ;; The default obarray still has the original
       (eq (intern-soft "car") 'car)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t (t t nil t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +118,10 @@ fn oracle_prop_obarray_unintern_custom() {
              (eq s2 s2-new)
              ;; But has the same name
              (equal (symbol-name s2) (symbol-name s2-new)))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t t t) t (t t t) nil t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +155,12 @@ fn oracle_prop_obarray_mapatoms_custom() {
        (member "neovm--obpat-map-y" sorted)
        (member "neovm--obpat-map-z" sorted)
        (member "neovm--obpat-map-w" sorted)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 (\"neovm--obpat-map-w\" \"neovm--obpat-map-x\" \"neovm--obpat-map-y\" \"neovm--obpat-map-z\") (\"neovm--obpat-map-x\" \"neovm--obpat-map-y\" \"neovm--obpat-map-z\") (\"neovm--obpat-map-y\" \"neovm--obpat-map-z\") (\"neovm--obpat-map-z\") (\"neovm--obpat-map-w\" \"neovm--obpat-map-x\" \"neovm--obpat-map-y\" \"neovm--obpat-map-z\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +202,12 @@ fn oracle_prop_obarray_property_isolation() {
      ;; Plist comparison
      (symbol-plist s1)
      (symbol-plist s2))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil t red blue 42 nil nil circle 100 200 (color red size 42) (color blue shape circle))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -287,7 +308,12 @@ fn oracle_prop_obarray_namespace_system() {
     (fmakunbound 'neovm--obns-lookup)
     (fmakunbound 'neovm--obns-list-symbols)
     (fmakunbound 'neovm--obns-import)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (314 271 1 nil (\"e\" \"phi\" \"pi\") (\"debug\" \"version\") t 314 nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -353,7 +379,10 @@ fn oracle_prop_obarray_statistics() {
          total-len
          ;; Sorted name lengths
          (sort name-lengths #'<))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (7 4 3 \"ffffff\" \"g\" 22 (1 1 2 3 4 5 6))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -391,5 +420,8 @@ fn oracle_prop_obarray_different_sizes() {
                 (setq found-after (1+ found-after))))
             (push (list sz found found-after) results))))))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 10 7) (3 10 7) (7 10 7) (13 10 7) (31 10 7))""#]],
+    );
 }

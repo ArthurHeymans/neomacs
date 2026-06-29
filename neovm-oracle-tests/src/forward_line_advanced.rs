@@ -49,7 +49,12 @@ fn oracle_prop_forward_line_return_value_semantics() {
           (ret (forward-line 1)))
       (setq results (cons (list 'fwd-from-last-line ret (point)) results)))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((fwd-1 0 7 \"line2\") (fwd-2 0 19 \"line4\") (fwd-10-partial 8 31 t) (fwd-0 0 13 t) (fwd-from-last-line 0 31))""#
+        ]],
+    );
 }
 
 #[test]
@@ -70,7 +75,12 @@ fn oracle_prop_forward_line_accepts_bignum_n_like_gnu() {
     (goto-char (point-max))
     (push (list 'tiny (forward-line tiny) (point)) results)
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((huge 999999999999999999999999999997 6) (tiny -999999999999999999999999999998 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +132,12 @@ fn oracle_prop_forward_line_negative_backward() {
                                  (buffer-substring (point) (line-end-position)))
                           results)))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((back-1-from-end 0 27 \"fifth\") (back-2 0 14 \"third\") (back-5-from-line2 -4 1 t) (back-0 0 14 t) (back-2-from-middle 0 7 \"second\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +190,12 @@ fn oracle_prop_forward_line_buffer_boundaries() {
           (setq positions (cons (list i ret (point)) positions))))
       (setq results (cons (list 'only-newlines (nreverse positions)) results))))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((empty-fwd 1 1 empty-back -1 1) (single-char-fwd 0 2 t) (single-char-back-from-end -1 1) (single-line-with-nl 0 7 1 7) (only-newlines ((0 0 2) (1 0 3) (2 0 4) (3 0 5) (4 0 6) (5 1 6) (6 1 6))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +246,12 @@ fn oracle_prop_forward_line_with_narrowing() {
                                        (buffer-substring (point) (line-end-position)))
                                 results))))))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((narrow-content \"line-C\nline-D\nline-E\n\") (traversal ((15 \"line-C\") (22 \"line-D\") (29 \"line-E\") (36 \"\")) final-ret 1 final-point 36) (back-5-in-narrow -2 15 t) (back-1-from-middle 0 15 \"line-C\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +303,12 @@ fn oracle_prop_forward_line_empty_lines() {
                                  'total-lines total-count)
                           results)))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((all-lines ((0 nil \"header\") (1 t \"\") (2 t \"\") (3 nil \"data1\") (4 t \"\") (5 nil \"data2\") (6 t \"\") (7 t \"\") (8 t \"\") (9 nil \"footer\") (10 nil \"footer\"))) (skip-3 0 10 \"data1\") (empty-count 6 total-lines 11))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +359,12 @@ fn oracle_prop_forward_line_large_n() {
                                  (= (point) (point-min)))
                           results)))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((fwd-1000 980 161 t) (back-1000 -980 1 t) (fwd-exact-20 0 161 t) (fwd-19 0 153 \"line-19\") (fwd-500-from-10 490 161 t) (back-500-from-10 -490 1 t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -391,5 +426,10 @@ fn oracle_prop_forward_line_with_bol_eol() {
                                    (buffer-substring (point) (line-end-position)))
                             results))))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((line-info ((line 1 6 5 \"short\") (line 7 30 23 \"a much longer line here\") (line 31 32 1 \"x\") (line 33 33 0 \"\") (line 34 45 11 \"medium line\") (line 46 46 0 \"\"))) (fwd1-eol 30 \"a much longer line here\") (fwd0-from-mid 12 7 t) (extracted-line-1 \"a much longer line here\") (on-empty-line t 33) (fwd-from-empty 0 \"medium line\"))""#
+        ]],
+    );
 }

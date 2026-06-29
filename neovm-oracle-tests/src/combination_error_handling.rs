@@ -40,7 +40,12 @@ fn oracle_prop_nested_condition_case_type_dispatch() {
                    (funcall dispatch 'void-variable '(undefined-var))
                    ;; Falls through inner, caught by outer generic error
                    (funcall dispatch 'file-error '(\"not found\"))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((inner-arith (\"div by zero\")) (inner-wta (numberp \"x\")) (outer-void (undefined-var)) (outer-generic file-error (\"not found\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +83,12 @@ fn oracle_prop_custom_error_data_propagation() {
                        (setq results (cons (list 'nested-data (cdr err))
                                            results))))
                     (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((type error data (\"simple message\")) (sym wrong-type-argument expected numberp got \"hello\" extra 42) (nested-data ((context \"fn-name\") (args (1 2 3)))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +122,12 @@ fn oracle_prop_unwind_protect_ordering_nested_errors() {
                         (setq log (cons 'cleanup-3 log)))
                     (error nil))
                   (nreverse log))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (body-start cleanup-1-start cleanup-1-caught cleanup-1-end cleanup-2 cleanup-3)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +152,10 @@ fn oracle_prop_condition_case_catch_throw_interaction() {
                              (error
                               (setq log (cons 'handler log)))))))
                     (list result (nreverse log))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (thrown-value (before-throw))""#]],
+    );
 }
 
 #[test]
@@ -159,7 +177,10 @@ fn oracle_prop_error_inside_catch_caught_by_condition_case() {
                               (setq log (cons 'caught-error log))
                               'error-handled)))))
                     (list result (nreverse log))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (error-handled (outer inner caught-error))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +215,12 @@ fn oracle_prop_error_recovery_retry_with_backoff() {
                            (setq attempt-log
                                  (cons (list 'err (cadr err)) attempt-log))))))
                     (list final-result (nreverse attempt-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"success-on-4\" ((try 1) (err \"fail-1\") (try 2) (err \"fail-2\") (try 3) (err \"fail-3\") (try 4)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +254,7 @@ fn oracle_prop_dynamic_binding_error_restores() {
                                  (list before 'deep-shadow after-error
                                        neovm--test-dynvar))))))
                     (makunbound 'neovm--test-dynvar)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }
 
 #[test]
@@ -250,5 +276,8 @@ fn oracle_prop_unwind_protect_with_throw_and_error() {
                      (setq log (cons (list 'error (cdr err)) log))))
                   ;; catch returns the thrown value, cleanup still ran
                   (nreverse log))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (body cleanup)""#]],
+    );
 }

@@ -13,7 +13,10 @@ fn oracle_prop_number_sequence_integer_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r#"(number-sequence 1 10)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 2 3 4 5 6 7 8 9 10)""#]],
+    );
 }
 
 #[test]
@@ -21,7 +24,10 @@ fn oracle_prop_number_sequence_negative_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r#"(number-sequence -5 5)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (-5 -4 -3 -2 -1 0 1 2 3 4 5)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -32,9 +38,18 @@ fn oracle_prop_number_sequence_negative_range() {
 fn oracle_prop_number_sequence_custom_step() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(number-sequence 0 20 5)");
-    assert_oracle_parity("(number-sequence 1 15 3)");
-    assert_oracle_parity("(number-sequence 2 2 1)");
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 0 20 5)",
+        expect_test::expect![[r#""OK (0 5 10 15 20)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 1 15 3)",
+        expect_test::expect![[r#""OK (1 4 7 10 13)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 2 2 1)",
+        expect_test::expect![[r#""OK (2)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -45,9 +60,18 @@ fn oracle_prop_number_sequence_custom_step() {
 fn oracle_prop_number_sequence_descending() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(number-sequence 10 1 -1)");
-    assert_oracle_parity("(number-sequence 100 0 -25)");
-    assert_oracle_parity("(number-sequence 5 -10 -3)");
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 10 1 -1)",
+        expect_test::expect![[r#""OK (10 9 8 7 6 5 4 3 2 1)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 100 0 -25)",
+        expect_test::expect![[r#""OK (100 75 50 25 0)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 5 -10 -3)",
+        expect_test::expect![[r#""OK (5 2 -1 -4 -7 -10)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -58,10 +82,19 @@ fn oracle_prop_number_sequence_descending() {
 fn oracle_prop_number_sequence_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(number-sequence 0.0 1.0 0.25)");
-    assert_oracle_parity("(number-sequence 1.0 3.0 0.5)");
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 0.0 1.0 0.25)",
+        expect_test::expect![[r#""OK (0.0 0.25 0.5 0.75 1.0)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 1.0 3.0 0.5)",
+        expect_test::expect![[r#""OK (1.0 1.5 2.0 2.5 3.0)""#]],
+    );
     // Length check to sidestep float precision in element comparison
-    assert_oracle_parity("(length (number-sequence 0.0 1.0 0.1))");
+    crate::common::assert_oracle_parity_expect(
+        "(length (number-sequence 0.0 1.0 0.1))",
+        expect_test::expect![[r#""OK 11""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -72,9 +105,18 @@ fn oracle_prop_number_sequence_float() {
 fn oracle_prop_number_sequence_from_gt_to_positive_step() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(number-sequence 10 1)");
-    assert_oracle_parity("(number-sequence 10 1 2)");
-    assert_oracle_parity("(number-sequence 5 3 1)");
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 10 1)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 10 1 2)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 5 3 1)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -85,10 +127,22 @@ fn oracle_prop_number_sequence_from_gt_to_positive_step() {
 fn oracle_prop_number_sequence_single_element() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(number-sequence 7 7)");
-    assert_oracle_parity("(number-sequence 0 0)");
-    assert_oracle_parity("(number-sequence -3 -3)");
-    assert_oracle_parity("(number-sequence 42 42 100)");
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 7 7)",
+        expect_test::expect![[r#""OK (7)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 0 0)",
+        expect_test::expect![[r#""OK (0)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence -3 -3)",
+        expect_test::expect![[r#""OK (-3)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(number-sequence 42 42 100)",
+        expect_test::expect![[r#""OK (42)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +158,10 @@ fn oracle_prop_number_sequence_index_into_vector() {
     let form = r#"(let ((data [10 20 30 40 50 60 70 80 90 100])
                         (indices (number-sequence 0 9 2)))
                     (mapcar (lambda (i) (aref data i)) indices))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 30 50 70 90)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +180,12 @@ fn oracle_prop_number_sequence_multiplication_table() {
                         (lambda (c) (* r c))
                         (number-sequence 1 5)))
                      rows))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5) (2 4 6 8 10) (3 6 9 12 15) (4 8 12 16 20) (5 10 15 20 25))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +202,10 @@ fn oracle_prop_number_sequence_triangular_numbers() {
                     (lambda (n)
                       (apply #'+ (number-sequence 1 n)))
                     (number-sequence 1 10))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 3 6 10 15 21 28 36 45 55)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -169,5 +234,8 @@ fn oracle_prop_number_sequence_sieve_primes() {
                         (when (aref sieve n)
                           (setq primes (cons n primes))))
                       (nreverse primes)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47)""#]],
+    );
 }

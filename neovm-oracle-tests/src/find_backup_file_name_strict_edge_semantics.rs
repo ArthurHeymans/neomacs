@@ -72,5 +72,8 @@ fn oracle_find_backup_file_name_numbered_version_edges() {
       (ignore-errors (delete-directory root t)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable backup-extract-version-start)""#]],
+    );
 }

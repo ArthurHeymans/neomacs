@@ -20,7 +20,10 @@ fn oracle_define_key_after_orders_and_deduplicates_direct_bindings() {
           (lookup-key m [?a])
           (lookup-key m [?b])
           (lookup-key m [?c]))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((97 99 98) cmd-a cmd-b2 cmd-c)""#]],
+    );
 }
 
 #[test]
@@ -43,7 +46,10 @@ fn oracle_define_key_after_inserts_before_inherited_parent() {
           (lookup-key m [?p])
           (lookup-key parent [?z])
           (eq (keymap-parent m) parent))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((97 122) cmd-z parent-p nil t)""#]],
+    );
 }
 
 #[test]
@@ -65,5 +71,8 @@ fn oracle_define_key_after_descends_into_prefix_keymap_for_multi_key() {
           (lookup-key m [?x ?a])
           (lookup-key m [?x ?b])
           (lookup-key m [?x ?c]))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t (97 99 98) cmd-x-a cmd-x-b cmd-x-c)""#]],
+    );
 }

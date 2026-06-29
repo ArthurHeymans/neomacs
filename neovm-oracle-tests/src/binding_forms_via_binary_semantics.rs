@@ -7,41 +7,59 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_if_let_binds_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(if-let ((x 1)) x)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(if-let ((x 1)) x)"#,
+        expect_test::expect![[r#""OK 1""#]],
+    );
     assert_ok_eq("1", &o, &n);
 }
 
 #[test]
 fn oracle_if_let_star_sequential_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(if-let* ((x 1) (y (+ x 2))) y)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(if-let* ((x 1) (y (+ x 2))) y)"#,
+        expect_test::expect![[r#""OK 3""#]],
+    );
     assert_ok_eq("3", &o, &n);
 }
 
 #[test]
 fn oracle_when_let_binds_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(when-let ((x t)) x)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(when-let ((x t)) x)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_when_let_nil_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(when-let ((x nil)) 'never)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(when-let ((x nil)) 'never)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_and_let_star_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(and-let* ((x 1) (y 2) (z 3)) z)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(and-let* ((x 1) (y 2) (z 3)) z)"#,
+        expect_test::expect![[r#""OK 3""#]],
+    );
     assert_ok_eq("3", &o, &n);
 }
 
 #[test]
 fn oracle_and_let_star_short_circuit_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(and-let* ((x 1) (y nil) (z 3)) 'never)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(and-let* ((x 1) (y nil) (z 3)) 'never)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }

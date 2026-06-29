@@ -10,7 +10,10 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_prop_unwind_protect_runs_cleanup_on_success() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(let ((x 0)) (unwind-protect 1 (setq x 2)) x)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((x 0)) (unwind-protect 1 (setq x 2)) x)",
+        expect_test::expect![[r#""OK 2""#]],
+    );
     assert_ok_eq("2", &oracle, &neovm);
 }
 
@@ -19,7 +22,8 @@ fn oracle_prop_unwind_protect_runs_cleanup_on_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((x 0)) (condition-case nil (unwind-protect (/ 1 0) (setq x 7)) (error x)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 7""#]]);
     assert_ok_eq("7", &oracle, &neovm);
 }
 

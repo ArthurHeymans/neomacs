@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_ts_abbrev_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((tbl (make-abbrev-table)))
   (define-abbrev tbl "foo" "bar")
@@ -22,13 +22,14 @@ fn div_ts_abbrev_expand() {
     (expand-abbrev)
     (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK \"bar \"""#]],
     );
 }
 
 #[test]
 fn div_ts_abbrev_case_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((tbl (make-abbrev-table)))
   (define-abbrev tbl "foo" "bar")
@@ -40,13 +41,14 @@ fn div_ts_abbrev_case_handling() {
               (buffer-substring 1 (1- (point-max)))))
           '("foo" "Foo" "FOO")))
 "##,
+        expect_test::expect![[r#""OK (\"bar\" \"Bar\" \"BAR\")""#]],
     );
 }
 
 #[test]
 fn div_ts_abbrev_table_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((tbl (make-abbrev-table)))
   (define-abbrev tbl "abc" "def")
@@ -54,6 +56,7 @@ fn div_ts_abbrev_table_predicates() {
         (abbrev-symbol "abc" tbl)
         (abbrev-expansion "abc" tbl)))
 "##,
+        expect_test::expect![[r#""OK (t abc \"def\")""#]],
     );
 }
 
@@ -62,35 +65,38 @@ fn div_ts_abbrev_table_predicates() {
 #[test]
 fn div_ts_timer_create_cancel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((tt (run-with-timer 0 nil (lambda () nil))))
   (list (timerp tt)
         (prog1 (if (memq tt timer-list) t nil) (cancel-timer tt))
         (if (memq tt timer-list) t nil)))
 "##,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
 #[test]
 fn div_ts_timer_relative_time_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((rt (timer-relative-time (current-time) 5 0)))
   (list (consp rt) (<= (length rt) 4)))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_ts_idle_timer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((tt (run-with-idle-timer 0 nil (lambda () nil))))
   (prog1 (timerp tt) (cancel-timer tt)))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -101,36 +107,41 @@ fn div_ts_idle_timer() {
 #[test]
 fn div_ts_float_trig() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (sin 0.0) (cos 0.0) (tan 0.0)
       (round (* 1e6 (sin (/ pi 2))))
       (round (* 1e6 (cos pi))))
 "##,
+        expect_test::expect![[r#""OK (0.0 1.0 0.0 1000000 -1000000)""#]],
     );
 }
 
 #[test]
 fn div_ts_float_sqrt_exp_log() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (sqrt 2.0) (sqrt 16.0) (exp 1.0)
       (log (exp 1.0)) (log 100.0 10.0) (expt 2.0 0.5))
 "##,
+        expect_test::expect![[
+            r#""OK (1.4142135623730951 4.0 2.718281828459045 1.0 2.0 1.4142135623730951)""#
+        ]],
     );
 }
 
 #[test]
 fn div_ts_float_inverse_and_domain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (round (* 1e6 (asin 1.0))) (round (* 1e6 (atan 1.0)))
       (condition-case e (sqrt -1.0) (error (car e)))
       (condition-case e (log 0) (error (car e)))
       (condition-case e (asin 2.0) (error (car e))))
 "##,
+        expect_test::expect![[r#""OK (1570796 785398 -0.0e+NaN -1.0e+INF 0.0e+NaN)""#]],
     );
 }
 
@@ -139,20 +150,21 @@ fn div_ts_float_inverse_and_domain() {
 #[test]
 fn div_ts_category_table_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (category-table)))
   (list (category-table-p ct)
         (category-table-p (standard-category-table))
         (eq ct (standard-category-table))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_ts_char_category_classify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-category ?a)
       (char-category ?A)
@@ -160,31 +172,34 @@ fn div_ts_char_category_classify() {
       (char-category ?\s)
       (char-category ?\x4e2d))
 "##,
+        expect_test::expect![[r#""ERR (void-function char-category)""#]],
     );
 }
 
 #[test]
 fn div_ts_category_modify_and_member() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (copy-category-table (standard-category-table))))
   (modify-category-entry ?x ?l ct t)
   (list (char-in-category-p ?x ?l ct)
         (category-docstring ?l ct)))
 "##,
+        expect_test::expect![[r#""ERR (void-function char-in-category-p)""#]],
     );
 }
 
 #[test]
 fn div_ts_category_set_mnemonics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((ct (copy-category-table (standard-category-table)))
        (cs (make-category-set "l" ct)))
   (list (stringp (category-set-mnemonics cs))
         (category-set-mnemonics cs)))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments make-category-set 2)""#]],
     );
 }

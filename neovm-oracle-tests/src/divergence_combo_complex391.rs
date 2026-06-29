@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx391_error_hierarchy_chain_propagation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -21,13 +21,14 @@ fn div_cx391_error_hierarchy_chain_propagation() {
         (neo-cx391-a (list :caught-as-a inner))))
   (error (list :outer (car e))))
 "##,
+        expect_test::expect![[r#""OK (:caught-as-a (neo-cx391-c \"detail\"))""#]],
     )
 }
 
 #[test]
 fn div_cx391_signal_vs_error_vs_user_error_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (condition-case e (signal 'error '("plain")) (error (car e)))
@@ -35,13 +36,16 @@ fn div_cx391_signal_vs_error_vs_user_error_dispatch() {
  (condition-case e (signal 'user-error '("user")) (user-error :caught-user-error))
  (condition-case e (signal 'user-error '("user")) (error :caught-as-error)))
 "##,
+        expect_test::expect![[
+            r#""OK (error \"via error fn\" :caught-user-error :caught-as-error)""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx391_unwind_protect_cleanup_with_error_in_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (trace)
   (condition-case outer
@@ -53,13 +57,14 @@ fn div_cx391_unwind_protect_cleanup_with_error_in_cleanup() {
     (error (push (cons :outer (car outer)) trace)))
   (nreverse trace))
 "##,
+        expect_test::expect![[r#""OK (:cleanup-start (:outer . error))""#]],
     )
 }
 
 #[test]
 fn div_cx391_catch_throw_through_nested_unwind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (trace)
   (prog1
@@ -74,13 +79,14 @@ fn div_cx391_catch_throw_through_nested_unwind() {
           (push :outer-unwind trace)))
     (nreverse trace))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     )
 }
 
 #[test]
 fn div_cx391_ignore_errors_all_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (ignore-errors (+ 1 2))
       (ignore-errors (error "boom"))
@@ -89,13 +95,14 @@ fn div_cx391_ignore_errors_all_variants() {
       (ignore-errors (aref "abc" 99))
       (ignore-errors (/ 1 0)))
 "##,
+        expect_test::expect![[r#""OK (3 nil nil nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx391_signal_nil_empty_data_and_quit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (condition-case e (signal 'neo-cx391-err nil) (error e))
@@ -104,13 +111,16 @@ fn div_cx391_signal_nil_empty_data_and_quit() {
  (condition-case e (signal 'quit nil) (quit :caught-quit) (error :caught-error))
  (condition-case e (signal 'quit '("detail")) (quit (list :quit-detail e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((error \"Invalid error symbol\" neo-cx391-err) (error \"Invalid error symbol\" neo-cx391-err) (error \"Invalid error symbol\" neo-cx391-err) :caught-quit (:quit-detail (quit \"detail\")))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx391_with_demoted_errors_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (when (fboundp 'with-demoted-errors)
@@ -118,13 +128,14 @@ fn div_cx391_with_demoted_errors_conversion() {
         (error "inner induced error")))
   (error (list :outer (car e))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     )
 }
 
 #[test]
 fn div_cx391_condition_case_no_handler_match_propagates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case outer
     (condition-case inner
@@ -133,26 +144,28 @@ fn div_cx391_condition_case_no_handler_match_propagates() {
   (wrong-type-argument (list :caught-outer outer))
   (error (list :caught-other outer)))
 "##,
+        expect_test::expect![[r#""OK (:caught-outer (wrong-type-argument integerp \"x\"))""#]],
     )
 }
 
 #[test]
 fn div_cx391_debug_on_error_with_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((debug-on-error t))
   (condition-case err
       (progn (+ 1 "x") :never)
     (error (list :caught (car err) (cadr err)))))
 "##,
+        expect_test::expect![[r#""OK (:caught wrong-type-argument number-or-marker-p)""#]],
     )
 }
 
 #[test]
 fn div_cx391_error_chain_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (trace)
   (with-temp-buffer
@@ -180,5 +193,6 @@ fn div_cx391_error_chain_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

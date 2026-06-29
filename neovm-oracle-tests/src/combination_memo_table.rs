@@ -83,7 +83,12 @@ fn oracle_prop_memo_generic_wrapper_with_stats() {
                               :actual-calls-first calls-after-first
                               :actual-calls-second calls-after-second))))))))))
     (fmakunbound 'neovm--test-make-memoized)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:r1 (1 4 9 16 25) :r2 (1 4 9 16 25) :r3 (9 36 1 49 25) :s1 (:hits 0 :misses 5 :total 5 :cache-size 5 :hit-rate 0) :s2 (:hits 5 :misses 5 :total 10 :cache-size 5 :hit-rate 50) :s3 (:hits 8 :misses 7 :total 15 :cache-size 7 :hit-rate 53) :s4-after-reset (:hits 0 :misses 0 :total 0 :cache-size 0 :hit-rate 0) :s5-after-reset-call (:hits 0 :misses 1 :total 1 :cache-size 1 :hit-rate 0) :actual-calls-first 5 :actual-calls-second 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +145,12 @@ fn oracle_prop_memo_multi_arg() {
                     :strs (list c1 c2 c3 c4)
                     :str-stats (funcall stats2))))))
     (fmakunbound 'neovm--test-make-memo2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:nums (3 7 3 3 7) :num-stats (:hits 2 :misses 3 :size 3) :strs (\"foo-bar\" \"baz-qux\" \"foo-bar\" \"bar-foo\") :str-stats (:hits 1 :misses 3 :size 3))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +206,12 @@ fn oracle_prop_memo_recursive_fibonacci() {
     (fmakunbound 'neovm--test-memo-fib)
     (makunbound 'neovm--test-fib-cache)
     (makunbound 'neovm--test-fib-calls)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:fib30 832040 :fib25 75025 :fib35 9227465 :calls-for-30 59 :calls-for-25-cached 1 :calls-for-35 11 :cache-size 36 :known-fibs (0 1 1 2 3 5 8 13 21 34 55 610 6765))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +260,12 @@ fn oracle_prop_memo_catalan_numbers() {
                 :recurrence-valid recurrence-ok)))
     (fmakunbound 'neovm--test-catalan)
     (makunbound 'neovm--test-catalan-cache)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:catalans (1 1 2 5 14 42 132 429 1430 4862 16796) :cache-size 11 :recurrence-valid t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +322,12 @@ fn oracle_prop_memo_partition_function() {
     (fmakunbound 'neovm--test-partition)
     (fmakunbound 'neovm--test-partitions)
     (makunbound 'neovm--test-part-cache)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:partitions (1 1 2 3 5 7 11 15 22 30 42 176 627) :cache-size 206 :p10-restricted-to-3 14 :p10-restricted-to-1 1 :p10-restricted-to-2 6)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -378,7 +403,12 @@ fn oracle_prop_memo_bounded_lru_cache() {
                       (list :r1 r1 :r2 r2 :r3 r3 :r4 r4 :r5 r5
                             :s1 s1 :s2 s2 :s3 s3 :s4 s4)))))))))
     (fmakunbound 'neovm--test-make-bounded-memo)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:r1 2 :r2 4 :r3 6 :r4 8 :r5 4 :s1 (:hits 0 :misses 3 :evictions 0 :size 3 :keys (3 2 1)) :s2 (:hits 1 :misses 4 :evictions 1 :size 3 :keys (4 1 3)) :s3 (:hits 1 :misses 5 :evictions 2 :size 3 :keys (2 4 1)) :s4 (:hits 1 :misses 8 :evictions 5 :size 3 :keys (4 1 3)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -457,5 +487,10 @@ fn oracle_prop_memo_cache_invalidation_dependencies() {
                     :config-nil config-after
                     :independent-survives indep-after)))))
     (fmakunbound 'neovm--test-make-dep-cache)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:keys-before (\"config\" \"derived-a\" \"derived-b\" \"final-x\" \"final-y\" \"independent\") :val-before \"from-derived-a\" :invalidated (\"config\" \"derived-a\" \"derived-b\" \"final-x\" \"final-y\") :keys-after (\"independent\") :config-nil nil :independent-survives \"no-deps\")""#
+        ]],
+    );
 }

@@ -33,7 +33,12 @@ fn oracle_prop_gnu_last_butlast_nbutlast_n_edge_cases() {
      (list (nbutlast copy 5) copy))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil nil (d) (a b c d) (a b c d) (a b c d) (a b c d) (a b c) nil nil ((a b c d) (a b c d)) ((a b c d) (a b c d)) (nil (a b c d)) (nil (a b c d)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -51,7 +56,12 @@ fn oracle_prop_gnu_list_tail_helpers_improper_list_errors() {
    (condition-case err (nbutlast (copy-sequence dotted) 0) (error err))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((b . c) (b . c) (wrong-type-argument listp c) (a b . c) (wrong-type-argument listp c) (wrong-type-argument listp c))""#
+        ]],
+    );
 }
 
 #[test]
@@ -64,5 +74,8 @@ fn oracle_prop_gnu_nbutlast_destructive_identity_edges() {
     (list ret lst (eq ret lst) (cdr (cdr lst)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((a b) (a b) t nil)""#]],
+    );
 }

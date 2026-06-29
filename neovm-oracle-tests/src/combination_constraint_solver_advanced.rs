@@ -95,7 +95,10 @@ fn oracle_prop_constraint_solver_ac3_domain_reduction() {
            (list (length dom-a) (length dom-b) (length dom-c) (length dom-d)))))
     (fmakunbound 'neovm--csadv-ac3-reduce)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t (1 2 3 2))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -202,7 +205,7 @@ fn oracle_prop_constraint_solver_forward_checking_mrv() {
     (fmakunbound 'neovm--csadv-fc-solve)
     (fmakunbound 'neovm--csadv-fc-bt)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +340,10 @@ fn oracle_prop_constraint_solver_sudoku4x4_propagation() {
     (fmakunbound 'neovm--csadv-s4-solve)
     (fmakunbound 'neovm--csadv-s4-valid-p)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil nil nil nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -426,7 +432,10 @@ fn oracle_prop_constraint_solver_nqueens_propagation() {
     (fmakunbound 'neovm--csadv-nq-bt)
     (fmakunbound 'neovm--csadv-nq-valid-p)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((4 t t t) (5 t t t) (6 t t t) (7 t t t) (8 t t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -527,7 +536,10 @@ fn oracle_prop_constraint_solver_map_coloring_degree() {
     (fmakunbound 'neovm--csadv-mc-solve)
     (fmakunbound 'neovm--csadv-mc-bt)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t i5)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -607,7 +619,12 @@ fn oracle_prop_constraint_solver_cryptarithmetic_exhaustive() {
          samples))
     (fmakunbound 'neovm--csadv-crypto-solve)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t 476 ((12 35 47) (12 36 48) (12 37 49) (12 38 50) (12 46 58)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -740,5 +757,8 @@ fn oracle_prop_constraint_solver_constraint_network() {
     (fmakunbound 'neovm--csadv-cn-solve)
     (fmakunbound 'neovm--csadv-cn-bt)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 4 6 8) (3 5 7 9) (6 7 8 9 10) t t t t (t t t t t))""#]],
+    );
 }

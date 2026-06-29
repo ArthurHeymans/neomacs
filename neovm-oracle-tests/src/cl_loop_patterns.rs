@@ -37,7 +37,10 @@ fn oracle_prop_cl_loop_basic_for_in_collect_sum_count() {
     (cl-loop for x in '("apple" "banana" "" "cherry" "" "date")
              unless (string= x "")
              count t)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((1 4 9 16 25) 150 3 (2 4 6 8 10) 25 4)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +73,12 @@ fn oracle_prop_cl_loop_for_from_to_maximize_minimize() {
     (cl-loop for i from 1 to 100
              when (= (% i 3) 0)
              sum i)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((1 2 3 4 5 6 7 8 9 10) (0 3 6 9 12 15 18) (10 9 8 7 6 5 4 3 2 1) (100 75 50 25 0) 9 1 5 1683)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +120,12 @@ fn oracle_prop_cl_loop_multiple_for_with_do_finally() {
              do (when (= (% i 2) 1)
                   (push (cons x i) result))
              finally return (nreverse result))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (((a 1) (b 2) (c 3) (d 4)) ((a . 1) (b . 2) (c . 3)) ((0 alpha) (1 beta) (2 gamma) (3 delta)) 55 (10 20 30 40 50) ((a . 1) (c . 3) (e . 5)))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +160,12 @@ fn oracle_prop_cl_loop_for_on_append_nconc() {
     ;; Combine append with transformation
     (cl-loop for x in '(1 2 3 4)
              append (list x (* x 10) (* x 100)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (((1 2 3 4 5) (2 3 4 5) (3 4 5) (4 5) (5)) (a b c d) ((1 3 2) (3 5 2) (5 7 2) (7 9 2)) (1 2 3 4 5 6 7 8) (4 5 6 7 8 9) (a b c d e f) (1 10 100 2 20 200 3 30 300 4 40 400))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +197,12 @@ fn oracle_prop_cl_loop_for_across() {
     (cl-loop for ch across "Hello World 123"
              when (and (>= ch ?A) (<= ch ?Z))
              collect ch)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((10 20 30 40 50) ((0 a) (1 b) (2 c) (3 d) (4 e)) 55 (104 101 108 108 111) 6 (72 87))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +238,12 @@ fn oracle_prop_cl_loop_hash_table_iteration() {
                      when (> v 27)
                      collect k)
             #'string<))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"alice\" \"bob\" \"charlie\" \"diana\") (25 28 30 35) ((\"alice\" . 30) (\"bob\" . 25) (\"charlie\" . 35) (\"diana\" . 28)) 118 2 (\"alice\" \"charlie\" \"diana\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +300,12 @@ fn oracle_prop_cl_loop_combined_complex_patterns() {
                                           (setq best-name (car student)
                                                 best-score score)))
                                    finally return (list best-name best-score))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"Alice\" 91) (\"Bob\" 78) (\"Charlie\" 90) (\"Diana\" 73) (\"Eve\" 96)) (\"Alice\" \"Charlie\" \"Eve\") 98 ((\"Alice\" math 95) (\"Alice\" eng 92) (\"Charlie\" sci 92) (\"Charlie\" eng 90) (\"Eve\" math 98) (\"Eve\" sci 95) (\"Eve\" eng 97)) 15 ((math . \"Eve\") (sci . \"Eve\") (eng . \"Eve\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -310,5 +343,10 @@ fn oracle_prop_cl_loop_edge_cases() {
     ;; Thereis: return first match
     (cl-loop for x in '(1 3 5 6 7 8)
              thereis (and (= (% x 2) 0) x))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (nil nil (84) nil ((2 4 6) (1 3 5)) ((1 a) (2 b) (3 c)) (x x x x x) 6)""#
+        ],
+    );
 }

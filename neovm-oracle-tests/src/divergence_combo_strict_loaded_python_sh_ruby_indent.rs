@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_i6_python_mode_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (python-mode)
@@ -20,13 +20,16 @@ fn div_i6_python_mode_indent() {
   (buffer-string))
 "##,
         &["progmodes/python.el"],
+        expect_test::expect![[
+            r#""OK \"def foo():\nif x:\nreturn 1\nprint(x)\nfor i in r:\npass\n\"""#
+        ]],
     );
 }
 
 #[test]
 fn div_i6_sh_mode_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (sh-mode)
@@ -35,13 +38,16 @@ fn div_i6_sh_mode_indent() {
   (buffer-string))
 "##,
         &["progmodes/sh-script.el"],
+        expect_test::expect![[
+            r#""OK \"if [ $x ]; then\n    echo hi\n    for i in 1 2; do\n\techo $i\n    done\nfi\n\"""#
+        ]],
     );
 }
 
 #[test]
 fn div_i6_ruby_mode_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (ruby-mode)
@@ -50,13 +56,14 @@ fn div_i6_ruby_mode_indent() {
   (buffer-string))
 "##,
         &["progmodes/ruby-mode.el"],
+        expect_test::expect![[r#""OK \"def foo\n  if x\n    return 1\n  end\nend\n\"""#]],
     );
 }
 
 #[test]
 fn div_i6_python_nested_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (python-mode)
@@ -65,5 +72,8 @@ fn div_i6_python_nested_indent() {
   (buffer-string))
 "##,
         &["progmodes/python.el"],
+        expect_test::expect![[
+            r#""OK \"class C:\ndef m(self):\nif self.x:\nreturn [i\nfor i in self.y\nif i > 0]\n\"""#
+        ]],
     );
 }

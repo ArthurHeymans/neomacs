@@ -6,7 +6,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx53_subword_kill_word_chain_undo_marker_overlay_narrow_full_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -33,13 +33,14 @@ fn div_cx53_subword_kill_word_chain_undo_marker_overlay_narrow_full_mega() {
                 (text-properties-at 1)))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (errored . args-out-of-range)""#]],
     );
 }
 
 #[test]
 fn div_cx53_superword_forward_backward_kill_undo_marker_overlay_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -64,13 +65,14 @@ fn div_cx53_superword_forward_backward_kill_undo_marker_overlay_narrow_mega() {
                   (text-properties-at 1))))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_cx53_process_output_buffer_decode_encode_hash_narrow_overlay_undo_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx53-po*")))
   (with-current-buffer buf
@@ -98,13 +100,14 @@ fn div_cx53_process_output_buffer_decode_encode_hash_narrow_overlay_undo_mega() 
                        (length (overlays-in 1 20))))))
     (kill-buffer buf)))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx53_cl_defmethod_eql_dispatch_with_advice_error_recovery_call_next_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defclass neo-cx53-cls () ((val :initarg :val)))
@@ -121,13 +124,14 @@ fn div_cx53_cl_defmethod_eql_dispatch_with_advice_error_recovery_call_next_mega(
           (neo-cx53-fn (neo-cx53-cls :val 99))
           (nreverse log))))
 "##,
+        expect_test::expect![[r#""ERR (error \"boom\")""#]],
     );
 }
 
 #[test]
 fn div_cx53_json_dom_xml_chain_deeply_nested_multibyte_hash_secure_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'json) (require 'dom) (require 'xml)
@@ -148,6 +152,9 @@ fn div_cx53_json_dom_xml_chain_deeply_nested_multibyte_hash_secure_mega() {
               (secure-hash 'sha256 json-enc))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (2 (\"café\" \"世界\") (\"1\" \"2\") (\"café\" \"世界\") \"6f3305007d09ab873aace1a2920c0ff71b4459ddd7a47ab7b1aaf01a149d3dc3\")""#
+        ]],
     );
 }
 
@@ -155,7 +162,7 @@ fn div_cx53_json_dom_xml_chain_deeply_nested_multibyte_hash_secure_mega() {
 fn div_cx53_window_config_register_buffer_split_merge_marker_overlay_narrow_dedicated_hscroll_vscroll_full_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx53-wc*")))
   (with-current-buffer buf
@@ -185,6 +192,7 @@ fn div_cx53_window_config_register_buffer_split_merge_marker_overlay_narrow_dedi
         (set-window-buffer (selected-window) (get-buffer-create "*scratch*"))
         (kill-buffer buf))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -192,7 +200,7 @@ fn div_cx53_window_config_register_buffer_split_merge_marker_overlay_narrow_dedi
 fn div_cx53_undo_redo_marker_overlay_textprop_display_evaporate_narrow_env_exitcode_coding_timer_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (timer-fired)
   (run-with-timer 0 nil (lambda () (setq timer-fired :t)))
@@ -222,13 +230,14 @@ fn div_cx53_undo_redo_marker_overlay_textprop_display_evaporate_narrow_env_exitc
                 (marker-position m) (overlayp ov) (overlay-start ov)
                 (text-properties-at 1) (current-column)))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx53_read_eval_backquote_destructuring_splice_lexical_macro_multibyte_hash_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (let ((data '((("café" . 1) ("世界" . 2) ("😀" . 3))))
@@ -241,13 +250,14 @@ fn div_cx53_read_eval_backquote_destructuring_splice_lexical_macro_multibyte_has
             (plist-get result :len)
             (secure-hash 'md5 (prin1-to-string result))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx53_print_circle_gensym_struct_vector_propertized_escape_all_length_level_full_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (cl-defstruct neo-cx53-rec a b c)
@@ -268,13 +278,14 @@ fn div_cx53_print_circle_gensym_struct_vector_propertized_escape_all_length_leve
             (length (prin1-to-string (list r1 r2 r1 r2)))
             (length (prin1-to-string (vector (list 1 2) (list 3 4) (list 5 6) (list 7)))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx53_subword_forward_backward_cycle_superword_default_comparison_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -293,13 +304,14 @@ fn div_cx53_subword_forward_backward_cycle_superword_default_comparison_mega() {
             (list default-fwd sub-fwd super-fwd)))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (6 6 15)""#]],
     );
 }
 
 #[test]
 fn div_cx53_coding_priority_utf8_utf16_big5_position_category_combined_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((prio (coding-system-priority-list)))
   (list (length prio)
@@ -311,6 +323,9 @@ fn div_cx53_coding_priority_utf8_utf16_big5_position_category_combined_mega() {
         (coding-system-category 'utf-8-auto)
         (coding-system-category 'emacs-mule)))
 "##,
+        expect_test::expect![[
+            r#""OK (20 0 12 nil 10 coding-category-utf-8 coding-category-utf-8-auto coding-category-emacs-mule)""#
+        ]],
     );
 }
 
@@ -318,7 +333,7 @@ fn div_cx53_coding_priority_utf8_utf16_big5_position_category_combined_mega() {
 fn div_cx53_set_buffer_multibyte_overlay_marker_textprop_display_evaporate_undo_narrow_widen_full_chain_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -352,5 +367,6 @@ fn div_cx53_set_buffer_multibyte_overlay_marker_textprop_display_evaporate_undo_
               (text-properties-at 1) (text-properties-at 5) (text-properties-at 10)
               (current-column) (buffer-string))))))
 "##,
+        expect_test::expect![[r#""ERR (error \"Changing multibyteness in a narrowed buffer\")""#]],
     );
 }

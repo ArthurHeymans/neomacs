@@ -100,7 +100,12 @@ fn oracle_prop_advice_comp_all_six_types() {
     (fmakunbound 'neovm--acp-fa)
     (fmakunbound 'neovm--acp-fr)
     (makunbound 'neovm--acp-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((before 21 ((before 7))) (after 21 ((after 7))) (around 1021 (around-enter (around-exit 21))) (override (overridden 7)) (filter-args 24) (filter-return -21))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +153,10 @@ fn oracle_prop_advice_comp_stacking_order_four_before() {
     (fmakunbound 'neovm--acp-stack-c)
     (fmakunbound 'neovm--acp-stack-d)
     (makunbound 'neovm--acp-stack-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((D C B A) (D B A))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +230,12 @@ fn oracle_prop_advice_comp_remove_and_member_p_lifecycle() {
     (fmakunbound 'neovm--acp-rm-aft)
     (fmakunbound 'neovm--acp-rm-arn)
     (fmakunbound 'neovm--acp-rm-fr)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((nil nil nil nil) (t t t t) 10 (nil t nil t) (nil nil nil nil) 10)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +309,10 @@ fn oracle_prop_advice_comp_filter_args_return_chaining() {
     (fmakunbound 'neovm--acp-ch-fa2)
     (fmakunbound 'neovm--acp-ch-fr1)
     (fmakunbound 'neovm--acp-ch-fr2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (8 10 18 92 82)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -361,7 +377,12 @@ fn oracle_prop_advice_comp_around_modify_args_and_return() {
     (fmakunbound 'neovm--acp-mod-rev)
     (fmakunbound 'neovm--acp-mod-str)
     (fmakunbound 'neovm--acp-mod-wrap)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3) (3 2 1) \"(1 2 3)\" (wrapped 1 2 3) (wrapped 3 2 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -418,7 +439,12 @@ fn oracle_prop_advice_comp_unwind_protect_cleanup() {
     (fmakunbound 'neovm--acp-up-resource-mgr)
     (makunbound 'neovm--acp-up-cleanup-ran)
     (makunbound 'neovm--acp-up-resource)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((success t released) ((caught \"intentional failure\") t released))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -462,7 +488,10 @@ fn oracle_prop_advice_comp_advice_on_named_lambda() {
     (advice-remove 'neovm--acp-lam 'neovm--acp-lam-adv)
     (fmakunbound 'neovm--acp-lam)
     (fmakunbound 'neovm--acp-lam-adv)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (15 30 15 30 15)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -516,7 +545,12 @@ fn oracle_prop_advice_comp_input_validation() {
     (advice-remove 'neovm--acp-val-fn 'neovm--acp-val-check)
     (fmakunbound 'neovm--acp-val-fn)
     (fmakunbound 'neovm--acp-val-check)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((record \"Alice\" 30 85) (record \"bob\" 25 70) (record \"Carol\" 28 100) (record \"Dave\" 35 0) (error wrong-type-argument positive-integer))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -590,5 +624,10 @@ fn oracle_prop_advice_comp_mixed_types_composition() {
     (fmakunbound 'neovm--acp-mix-aft)
     (fmakunbound 'neovm--acp-mix-fr)
     (makunbound 'neovm--acp-mix-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (-211 ((around-in 5) (before 5) (filter-args (5)) (orig 105) (around-out 210) (after 5) (filter-return 211)))""#
+        ],
+    );
 }

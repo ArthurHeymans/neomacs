@@ -105,7 +105,12 @@ fn oracle_prop_dag_representation_and_queries() {
     (fmakunbound 'neovm--dag-successors)
     (fmakunbound 'neovm--dag-predecessors)
     (fmakunbound 'neovm--dag-edge-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"a\" \"b\" \"c\" \"d\" \"e\" \"f\" \"g\") (\"b\" \"c\") (\"d\" \"e\") nil (\"d\" \"e\" \"f\") nil (\"b\" \"c\") 9 7)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +202,12 @@ fn oracle_prop_dag_topological_ordering() {
                 (puthash "z" '("x") cyclic)
                 (funcall 'neovm--dag-topo-dfs cyclic))))))
     (fmakunbound 'neovm--dag-topo-dfs)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"a\" \"c\" \"b\" \"d\" \"e\") t t t t t (\"x\" \"y\" \"z\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +309,10 @@ fn oracle_prop_dag_longest_path() {
             ;; vs a(3)->b(5)->e(1)->f(4) = 13
             (= (car result) 15))))
     (fmakunbound 'neovm--dag-longest-path)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (15 (\"a\" \"c\" \"e\" \"f\") t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -363,7 +376,12 @@ fn oracle_prop_dag_all_paths() {
             ;; Paths from a to t
             (funcall 'neovm--dag-all-paths adj "a" "t"))))
     (fmakunbound 'neovm--dag-all-paths)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"s\" \"a\" \"c\" \"t\") (\"s\" \"a\" \"d\" \"t\") (\"s\" \"b\" \"d\" \"t\") (\"s\" \"b\" \"e\" \"t\")) 4 4 4 nil ((\"s\")) ((\"a\" \"c\" \"t\") (\"a\" \"d\" \"t\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -461,7 +479,10 @@ fn oracle_prop_dag_task_scheduling() {
               ;; package starts after all 3 deps
               (nth 1 (assoc "package" timeline))))))
     (fmakunbound 'neovm--dag-schedule)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -561,7 +582,12 @@ fn oracle_prop_dag_transitive_reduction() {
           (puthash "e" nil adj5)
           (funcall 'neovm--dag-trans-reduce adj5)))
     (fmakunbound 'neovm--dag-trans-reduce)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"a\" \"b\") (\"b\" \"c\") (\"c\")) ((\"a\" \"b\" \"c\") (\"b\" \"d\") (\"c\" \"d\") (\"d\")) ((\"a\" \"b\") (\"b\" \"c\") (\"c\" \"d\") (\"d\")) ((\"a\" \"b\") (\"b\" \"c\") (\"c\")) ((\"a\" \"b\" \"c\") (\"b\" \"d\") (\"c\" \"d\") (\"d\" \"e\") (\"e\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -646,5 +672,10 @@ fn oracle_prop_dag_depth_and_width() {
           (puthash "b1" '("b2") adj) (puthash "b2" '("b3") adj) (puthash "b3" nil adj)
           (funcall 'neovm--dag-depth-width adj)))
     (fmakunbound 'neovm--dag-depth-width)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5 1 ((\"a\") (\"b\") (\"c\") (\"d\") (\"e\"))) (2 4 ((\"root\") (\"a\" \"b\" \"c\" \"d\"))) (3 2 ((\"top\") (\"left\" \"right\") (\"bottom\"))) (3 2 ((\"a1\" \"b1\") (\"a2\" \"b2\") (\"a3\" \"b3\"))))""#
+        ]],
+    );
 }

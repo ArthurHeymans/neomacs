@@ -18,7 +18,7 @@ fn div_q5_font_weight_canonicalization_variants() {
     // 'black and 'ultra-bold to 'extra-bold (canonical names), Neomacs keeps
     // the aliases. (Same root cause as 'normal→'regular in batch 90.)
     // bold/light/semi-light/medium match.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (font-face-attributes (font-spec :weight 'bold))
       (font-face-attributes (font-spec :weight 'light))
@@ -27,13 +27,16 @@ fn div_q5_font_weight_canonicalization_variants() {
       (font-face-attributes (font-spec :weight 'semi-light))
       (font-face-attributes (font-spec :weight 'medium)))
 "##,
+        expect_test::expect![[
+            r#""OK ((:weight bold) (:weight light) (:weight black) (:weight extra-bold) (:weight semi-light) (:weight medium))""#
+        ]],
     );
 }
 
 #[test]
 fn div_q5_font_slant_and_width_canonicalization() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (font-face-attributes (font-spec :slant 'italic))
       (font-face-attributes (font-spec :slant 'oblique))
@@ -42,13 +45,16 @@ fn div_q5_font_slant_and_width_canonicalization() {
       (font-face-attributes (font-spec :width 'expanded))
       (font-face-attributes (font-spec :width 'normal)))
 "##,
+        expect_test::expect![[
+            r#""OK ((:slant italic) (:slant oblique) (:slant normal) (:width condensed) (:width expanded) (:width normal))""#
+        ]],
     );
 }
 
 #[test]
 fn div_q5_font_numeric_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (font-face-attributes (font-spec :weight 100))
       (font-face-attributes (font-spec :weight 400))
@@ -57,5 +63,6 @@ fn div_q5_font_numeric_attributes() {
       (font-face-attributes (font-spec :slant 0))
       (font-face-attributes (font-spec :slant 200)))
 "##,
+        expect_test::expect![[r#""ERR (error \"invalid font property\" (:weight . 100))""#]],
     );
 }

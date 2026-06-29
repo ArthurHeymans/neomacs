@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_insert_structure_template_region_src_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -30,6 +30,7 @@ fn org_insert_structure_template_region_src_export_combo() {
               (point)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -37,7 +38,7 @@ fn org_insert_structure_template_region_src_export_combo() {
 fn org_structure_template_menu_error_escape_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -133,6 +134,7 @@ fn org_structure_template_menu_error_escape_combo() {
                               (org-element-property :end el))))
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))))))"##,
+        expect_test::expect![[r#""ERR (error \"Invalid structure type: nil\")""#]],
     );
 }
 
@@ -140,7 +142,7 @@ fn org_structure_template_menu_error_escape_combo() {
 fn org_tempo_custom_blocks_keywords_include_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-tempo)
@@ -184,6 +186,9 @@ fn org_tempo_custom_blocks_keywords_include_combo() {
                   (buffer-substring-no-properties
                    (point-min) (point-max)))))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r##""OK ((\"<L\" \"<Q\" \"<c\" \"<el\" \"<o\" \"<s\" \"<v\") ((\"<o\" . tempo-template-org-options) (\"<c\" . tempo-template-org-caption) (\"<L\" . tempo-template-org-latex) (\"<v\" . tempo-template-org-verse) (\"<el\" . tempo-template-org-src-emacs-lisp) (\"<Q\" . tempo-template-org-QUOTE) (\"<s\" . tempo-template-org-src) (\"<I\" . tempo-template-org-include)) \"#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n#+BEGIN_QUOTE\nQuoted\n\n#+END_QUOTE\n#+caption: A caption\n#+include: \\\"snippet.org\\\" :lines \\\"1-1\\\"\")""##
+        ]],
     );
 }
 
@@ -191,7 +196,7 @@ fn org_tempo_custom_blocks_keywords_include_combo() {
 fn org_tempo_duplicate_update_include_abort_ast_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-tempo)
@@ -279,6 +284,9 @@ fn org_tempo_duplicate_update_include_abort_ast_combo() {
                       (buffer-substring-no-properties
                        (point-min) (point-max)))))))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""ERR (wrong-type-argument listp (\"<m\" . tempo-template-org-macro))""#
+        ]],
     );
 }
 
@@ -286,7 +294,7 @@ fn org_tempo_duplicate_update_include_abort_ast_combo() {
 fn org_table_convert_transpose_move_copy_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-table)
@@ -317,6 +325,7 @@ fn org_table_convert_transpose_move_copy_combo() {
               after-mutations
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -324,7 +333,7 @@ fn org_table_convert_transpose_move_copy_combo() {
 fn org_structure_edit_special_export_context_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-src)
@@ -448,6 +457,7 @@ fn org_structure_edit_special_export_context_combo() {
                             "(message \"three\")"))
                    (buffer-substring-no-properties
                     (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (user-error \"No special environment to edit here\")""#]],
     );
 }
 
@@ -455,7 +465,7 @@ fn org_structure_edit_special_export_context_combo() {
 fn org_tempo_block_expand_edit_src_exit_writeback_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-tempo)
@@ -517,5 +527,6 @@ fn org_tempo_block_expand_edit_src_exit_writeback_combo() {
                         after-quote
                         after-example
                         blocks)))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 61 41)""#]],
     );
 }

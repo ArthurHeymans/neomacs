@@ -39,7 +39,12 @@ fn oracle_prop_ring_insert_ref_remove_and_wraparound() {
               removed-oldest after-oldest r)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((c b a) c b a c) ((d c b) d b b) d (c b) b (c) (1 1 . [nil c nil]))""#
+        ]],
+    );
 }
 
 #[test]
@@ -65,7 +70,12 @@ fn oracle_prop_ring_beginning_copy_resize_and_extend() {
               (ring-elements copy))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((newest newer oldest) 3 4) (t nil nil) ((nil newest) 2 2) ((y x nil newest) 4 4) (newest newer oldest))""#
+        ]],
+    );
 }
 
 #[test]
@@ -92,7 +102,10 @@ fn oracle_prop_ring_member_next_previous_and_remove_insert_extend() {
               (list (ring-elements r) (ring-size r)))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((c b a) 0 2 nil b a) ((b c a) 3) ((d a b c) 4))""#]],
+    );
 }
 
 #[test]
@@ -121,5 +134,10 @@ fn oracle_prop_ring_errors_and_sequence_conversion() {
        (eq r2 (ring-convert-sequence-to-ring r2))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t (error \"Accessing an empty ring\") (error \"Ring empty\") (error \"Item is not in the ring: ‘x’\") ((a b b c) 6 t) t)""#
+        ]],
+    );
 }

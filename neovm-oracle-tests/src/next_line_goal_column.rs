@@ -31,7 +31,10 @@ fn oracle_prop_next_line_preserves_column_across_equal_width_lines() {
                                             (line-end-position))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((5 4 nil nil) (12 4 nil 4) (19 4 nil 4) \"123456\")""#]],
+    );
 }
 
 #[test]
@@ -56,7 +59,10 @@ fn oracle_prop_next_line_restores_temporary_goal_after_short_line() {
                                             (line-end-position))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((5 4 nil nil) (10 2 nil 4) (13 2 nil 2) \"1234567\")""#]],
+    );
 }
 
 #[test]
@@ -82,7 +88,10 @@ fn oracle_prop_previous_line_uses_existing_goal_column() {
                                             (line-end-position))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((19 5 nil nil) (13 2 nil 5) (3 2 nil 2) \"wide-line\")""#]],
+    );
 }
 
 #[test]
@@ -107,5 +116,8 @@ fn oracle_prop_next_line_honors_explicit_goal_column() {
                                               (line-end-position)))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((6 5 2 nil) (10 2 2 5) (17 2 2 2) \"123456\")""#]],
+    );
 }

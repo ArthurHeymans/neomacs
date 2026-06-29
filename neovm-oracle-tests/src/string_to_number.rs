@@ -10,10 +10,16 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_string_to_number_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_decimal, neovm_decimal) = eval_oracle_and_neovm(r#"(string-to-number "42")"#);
+    let (oracle_decimal, neovm_decimal) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "42")"#,
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &oracle_decimal, &neovm_decimal);
 
-    let (oracle_hex, neovm_hex) = eval_oracle_and_neovm(r#"(string-to-number "ff" 16)"#);
+    let (oracle_hex, neovm_hex) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-number "ff" 16)"#,
+        expect_test::expect![[r#""OK 255""#]],
+    );
     assert_ok_eq("255", &oracle_hex, &neovm_hex);
 }
 
@@ -21,7 +27,10 @@ fn oracle_prop_string_to_number_basics() {
 fn oracle_prop_string_to_number_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(string-to-number 1)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(string-to-number 1)",
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 

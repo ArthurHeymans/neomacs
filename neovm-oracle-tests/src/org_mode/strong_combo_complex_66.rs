@@ -10,7 +10,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo66_babel_file_image_header() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -27,13 +27,14 @@ fn combo66_babel_file_image_header() {
         (error (push (list :file-error (car e)) r)))
       (condition-case nil (ignore-errors (delete-file imgfile)) (error nil))
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK ((:file-error void-variable))""#]],
     );
 }
 
 #[test]
 fn combo66_agenda_redo_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-agenda)
@@ -54,13 +55,16 @@ fn combo66_agenda_redo_structure() {
           (push (list :tags-fbound (fboundp 'org-agenda-get-tags)) r))
       (error nil))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:redo-fbound t) (:todo-list-fbound t) (:todos-error t) (:tags-fbound nil))""#
+        ]],
     );
 }
 
 #[test]
 fn combo66_element_cache_massive_mutation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* 1\n* 2\n* 3\n")
@@ -85,13 +89,14 @@ fn combo66_element_cache_massive_mutation() {
     (condition-case nil (org-element-cache-reset) (error nil))
     (push (list :after-delete (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:init 3) (:after-add 13) (:after-delete 7))""#]],
     );
 }
 
 #[test]
 fn combo66_babel_session_output_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -105,13 +110,16 @@ fn combo66_babel_session_output_combo() {
       (push (org-babel-execute-src-block) r)
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""ERR (error \"ob-emacs-lisp backend does not support sessions\")""#
+        ]],
     );
 }
 
 #[test]
 fn combo66_export_footnotes_and_todo_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-ascii)
@@ -131,13 +139,16 @@ fn combo66_export_footnotes_and_todo_toggle() {
           (push (list :no-footnote (and out (not (string-match-p "A footnote" out)))) r)
           (push (list :no-todo (and out (not (string-match-p "TODO" out)))) r)))
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:has-footnote 67) (:has-todo 2) (:no-footnote t) (:no-todo t))""#
+        ]],
     );
 }
 
 #[test]
 fn combo66_element_parse_after_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** B\nBody B.\n* C\nBody C.\n")
@@ -155,13 +166,16 @@ fn combo66_element_parse_after_cycle() {
                 (= (plist-get (car (last r)) :folded-count)
                    (plist-get (car r) :unfolded-count))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:folded-count 3) (:unfolded-count 3) (:folded-equals-unfolded t))""#
+        ]],
     );
 }
 
 #[test]
 fn combo66_table_sort_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| Name | Score |\n|-------+-------|\n| Alice |    95 |\n| Bob   |    82 |\n| Carol |    99 |\n")
@@ -176,13 +190,16 @@ fn combo66_table_sort_lines() {
                (push (list :to-lisp (org-table-to-lisp)) r))
       (error (push (list :sort-error t) r)))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:after-sort #(\"| Name | Score |\n|-------+-------|\n| Alice |    95 |\n| Bob   |    82 |\n| Carol |    99 |\n\" 0 16 (face org-table) 16 17 (face org-table-row) 17 34 (face org-table) 34 35 (face org-table-row) 35 52 (face org-table) 52 53 (face org-table-row) 53 70 (face org-table) 70 71 (face org-table-row) 71 88 (face org-table) 88 89 (face org-table-row))) (:to-lisp ((#(\"Name\" 0 4 (face org-table)) #(\"Score\" 0 5 (face org-table))) hline (#(\"Alice\" 0 5 (face org-table)) #(\"95\" 0 2 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"82\" 0 2 (face org-table))) (#(\"Carol\" 0 5 (face org-table)) #(\"99\" 0 2 (face org-table))))))""#
+        ]],
     );
 }
 
 #[test]
 fn combo66_src_lang_modes_integration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-src)
   (list
@@ -197,13 +214,16 @@ fn combo66_src_lang_modes_integration() {
    ;; org-src-fontify-natively
    (list :fontify-fbound (boundp 'org-src-fontify-natively))
    ))"##,
+        expect_test::expect![[
+            r#""OK ((:lang-modes-fbound t) (:src-mode-fbound t) (:edit-fbound t) (:exit-fbound t) (:fontify-fbound t))""#
+        ]],
     );
 }
 
 #[test]
 fn combo66_indent_mode_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-indent)
@@ -219,13 +239,16 @@ fn combo66_indent_mode_interaction() {
                (push (list :headlines-after (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r))
       (error (push (list :indent-error t) r)))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:indent-fbound t) (:add-prop-fbound t) (:headlines-after 3))""#
+        ]],
     );
 }
 
 #[test]
 fn combo66_org_export_before_processing_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox)
@@ -246,5 +269,6 @@ fn combo66_org_export_before_processing_hook() {
             (push (list :prune-ok t) r))
         (error (push (list :prune-error t) r)))
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK ((:hook-bound t) (:prune-ok t))""#]],
     );
 }

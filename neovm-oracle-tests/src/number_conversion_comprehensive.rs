@@ -40,7 +40,12 @@ fn oracle_prop_numconv_string_to_number_bases() {
   (string-to-number "0" 16)
   (string-to-number "deadbeef" 16)
   (string-to-number "1a2b" 16))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (10 255 0 1 63 0 255 10 42 42 -100 0 255 255 0 3735928559 6699)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +72,12 @@ fn oracle_prop_numconv_number_to_string_comprehensive() {
   ;; Roundtrip: number->string->number
   (string-to-number (number-to-string 12345))
   (string-to-number (number-to-string -67890)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"0\" \"1\" \"-1\" \"42\" \"-999\" \"1000000\" \"0.0\" \"3.14\" \"-2.718\" \"100000.0\" \"0.0015\" 12345 -67890)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +95,12 @@ fn oracle_prop_numconv_float_to_int_conversions() {
    (mapcar #'floor vals)
    (mapcar #'ceiling vals)
    (mapcar #'round vals)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 3 3 -3 -3 -3 0 0 0 4 5 100 -100 1 -1) (3 3 3 -4 -4 -4 0 0 -1 4 5 100 -101 1 -1) (4 4 4 -3 -3 -3 0 1 0 5 6 101 -100 1 -1) (4 3 4 -4 -3 -4 0 0 0 4 6 101 -101 1 -1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +139,12 @@ fn oracle_prop_numconv_string_to_number_edge_cases() {
   (string-to-number ".5")
   (string-to-number "1e10")
   (string-to-number "1.5e-3"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (0 0 0 42 -7 42 123.456 7 100 42 0 0 0 3.14 0.5 10000000000.0 0.0015)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +179,10 @@ fn oracle_prop_numconv_literal_parsing() {
   (+ #xff 1)
   (+ #o10 #b1010)
   (* #x10 #o10))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (255 0 6699 57005 63 0 255 8 10 0 255 1 t t t 256 18 128)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +221,12 @@ fn oracle_prop_numconv_format_numeric_specifiers() {
   ;; Padding
   (format "|%10d|" 42)
   (format "|%-10d|" 42))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"42\" \"-42\" \"0\" \"00042\" \"+42\" \"ff\" \"FF\" \"000000ff\" \"0\" \"10\" \"377\" \"0\" \"3.140000e+00\" \"1.000000e-03\" \"3.140000\" \"3.14\" \"4\" \"dec=42 hex=2a oct=52\" \"|        42|\" \"|42        |\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +265,10 @@ fn oracle_prop_numconv_mixed_arithmetic_coercion() {
   ;; Explicit truncation
   (truncate 7.9)
   (integerp (truncate 7.9)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2.5 t 6.0 t 3 t 3.5 t 2.5 t t t 10.0 24.0 42.0 t 7 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -267,7 +298,10 @@ fn oracle_prop_numconv_base_invalid_digits() {
   (string-to-number "-ff" 16)
   (string-to-number "-1010" 2)
   (string-to-number "-77" 8))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 7 0 10 63 2 8 10 16 -255 -10 -63)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +331,12 @@ fn oracle_prop_numconv_roundtrip_comprehensive() {
    (mapcar (lambda (n)
              (= n (string-to-number (format "%o" n) 8)))
            '(0 1 7 8 63 64 511))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t t t t t t t t t) (t t t t t t t t t) (t t t t t t t) (t t t t t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +376,10 @@ fn oracle_prop_numconv_rounding_edge_values() {
   (ceiling 2.0001)
   (truncate -2.9999)
   (floor -2.0001))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 5 5 5 0 2 2 4 4 0 -2 -2 0 0 1 0 0 -1 0 0 2 3 -2 -3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -370,7 +412,10 @@ fn oracle_prop_numconv_type_predicates_after_conversion() {
   ;; number-to-string always returns string
   (stringp (number-to-string 42))
   (stringp (number-to-string 3.14)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -403,5 +448,10 @@ fn oracle_prop_numconv_format_comprehensive() {
   ;; Negative numbers with width
   (format "%10d" -42)
   (format "%-10d" -42))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"      3.14\" \"3.14      \" \"0000003.14\" \"A\" \"a\" \"0\" \"int=42 float=3.14 hex=ff\" \"42\" \"3.14\" \"42\" \"3.14\" \"009:05:07\" \"       -42\" \"-42       \")""#
+        ]],
+    );
 }

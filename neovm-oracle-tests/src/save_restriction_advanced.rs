@@ -34,7 +34,12 @@ fn oracle_prop_save_restr_adv_narrow_widen_cycle() {
                       (widen)
                       (setq results (cons (list (point-min) (point-max) (buffer-string)) results))
                       (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 21 \"ABCDEFGHIJKLMNOPQRST\") (3 8 \"CDEFG\") (1 21 \"ABCDEFGHIJKLMNOPQRST\") (10 15 \"JKLMN\") (1 21 \"ABCDEFGHIJKLMNOPQRST\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +69,12 @@ fn oracle_prop_save_restr_adv_preserves_state() {
                             (buffer-string)
                             (point-min)
                             (point-max))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"2345678\" \"0123456789ABCDEF\" \"456789A\" \"2345678\" 3 10)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +109,12 @@ fn oracle_prop_save_restr_adv_deeply_nested() {
                       ;; Back to full buffer
                       (setq results (cons (buffer-string) results))
                       (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"ABCDEFGHIJKLMNOPQRS\" \"EFGHIJKLMN\" \"CDEFG\" \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\" \"EFGHIJKLMN\" \"ABCDEFGHIJKLMNOPQRS\" \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +144,10 @@ fn oracle_prop_save_restr_adv_insert_delete_in_narrow() {
                                   narrow-after-delete)))))
                     ;; Full buffer after widen
                     (buffer-string))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"Hello, Beautiful ! Goodbye, World!\"""#]],
+    );
 }
 
 #[test]
@@ -153,7 +171,10 @@ fn oracle_prop_save_restr_adv_search_in_narrow() {
                         (list count (buffer-string))))
                     ;; Full buffer: only the narrowed region was modified
                     (buffer-string))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"foo bar XXX bar foo bar\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +206,12 @@ fn oracle_prop_save_restr_adv_point_bounds_tracking() {
                       (widen)
                       (setq r (cons (list 'widened (point-min) (point-max) (buffer-string)) r))
                       (nreverse r)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((full 1 21 20) (narrow1 5 15 10) (after-insert 5 18 13) (after-delete 5 15 10) (widened 1 21 \"0123789ABCDXYZEFGHIJ\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +244,10 @@ fn oracle_prop_save_restr_adv_markers_under_narrow() {
                                 m1-after m2-after
                                 narrow-str
                                 (buffer-string))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 12 5 15 \"CD***EFGHIJKLM\" \"ABCD***EFGHIJKLMNOP\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -259,7 +288,10 @@ fn oracle_prop_save_restr_adv_section_processing() {
                                       (cons (list name line-count char-count)
                                             sections)))))))
                       (nreverse sections)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"HEADER\" 2 25) (\"BODY\" 3 48) (\"FOOTER\" 1 15))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -301,5 +333,10 @@ fn oracle_prop_save_restr_adv_accumulate_from_regions() {
                             (nreverse scores)
                             total
                             (/ total count))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"Alice\" \"Bob\" \"Carol\" \"Dave\" \"Eve\") (85 92 78 95 88) 438 87)""#
+        ]],
+    );
 }

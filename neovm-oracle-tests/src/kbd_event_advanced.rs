@@ -38,7 +38,12 @@ fn oracle_prop_kbd_event_all_modifiers() {
   (kbd "C-M-H-a")
   ;; All five modifiers
   (kbd "C-M-S-s-H-a"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\u{1}\" [134217825] [33554529] [8388705] [16777313] [134217729] [33554433] [8388609] [16777217] [167772257] [142606433] [150995041] [167772161] [142606337] [150994945] [192937985])""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +76,12 @@ fn oracle_prop_kbd_event_multi_key_sequences() {
   (kbd "C-x C-x")
   ;; Sequence with plain keys between modified
   (kbd "C-x a i g"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\u{18}\u{6}\" \"\u{18}\u{13}\" \"\u{18}\u{3}\" \"\u{18}b\" \"\u{18}o\" \"\u{18}k\" \"\u{3}\u{3}\" \"\u{3}\u{b}\" \"\u{18}rs\" \"\u{18}ri\" \"\u{18}4f\" \"\u{18}52\" [24 134217848] [134217831 134217831] \"\u{18}\u{18}\" \"\u{18}aig\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +127,12 @@ fn oracle_prop_kbd_event_function_keys() {
   (kbd "M-<down>")
   (kbd "S-<left>")
   (kbd "C-M-<right>"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([f1] [f2] [f10] [f12] [C-f1] [M-f5] [S-f3] [C-M-f8] [return] [tab] [backspace] [delete] [escape] [home] [end] [C-return] [M-tab] [S-backspace] [C-home] [M-end] [up] [down] [left] [right] [C-up] [M-down] [S-left] [C-M-right])""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +174,12 @@ fn oracle_prop_kbd_event_key_description_roundtrip() {
   (equal (key-description (kbd "C-x C-f")) "C-x C-f")
   (equal (key-description (kbd "M-x")) "M-x")
   (equal (key-description (kbd "C-M-a")) "C-M-a"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"a\" \"A\" \"C-a\" \"M-x\" \"C-M-a\" \"C-x C-f\" \"C-x C-s\" \"C-c C-c\" \"C-x b\" \"<f1>\" \"C-<f5>\" \"M-<return>\" \"<tab>\" \"<backspace>\" \"<escape>\" \"<up>\" \"C-<down>\" \"C-x r s\" t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +223,12 @@ fn oracle_prop_kbd_event_convert_list_extended() {
   (event-convert-list '(control meta mouse-3))
   (event-convert-list '(down-mouse-1))
   (event-convert-list '(double-mouse-1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 134217826 134217731 68 8388709 16777318 t t f1 C-f1 M-f5 C-M-f10 return C-return tab M-tab backspace mouse-1 C-mouse-1 M-mouse-2 C-M-mouse-3 down-mouse-1 double-mouse-1)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +272,12 @@ fn oracle_prop_kbd_event_single_key_description_comprehensive() {
   ;; Verify consistency: single-key of kbd result
   (equal (single-key-description (aref (kbd "C-a") 0)) "C-a")
   (equal (single-key-description (aref (kbd "M-x") 0)) "M-x"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"a\" \"Z\" \"0\" \"!\" \"@\" \"SPC\" \"TAB\" \"DEL\" \"RET\" \"ESC\" \"C-a\" \"C-z\" \"C-@\" \"M-a\" \"M-z\" \"C-M-a\" \"C-M-z\" \"C-x\" \"M-x\" \"s-q\" \"H-h\" \"C-M-S-a\" t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +320,12 @@ fn oracle_prop_kbd_event_keymap_integration() {
     (equal (kbd "C-x C-f") (kbd "C-x C-f"))
     ;; Verify different keys produce different vectors
     (not (equal (kbd "C-x C-f") (kbd "C-x C-s")))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (my-compile my-kill my-find my-goto my-refresh my-force-refresh nil \"C-c C-c\" \"C-c C-k\" \"C-x f\" \"M-g g\" \"<f5>\" \"C-<f5>\" t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -320,5 +355,10 @@ fn oracle_prop_kbd_event_modifiers_and_basic_type() {
              (event-basic-type event)
              (single-key-description event))))
    events))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"C-a\" (control) 97 \"C-a\") (\"M-b\" (meta) 98 \"M-b\") (\"C-M-c\" (control meta) 99 \"C-M-c\") (\"S-d\" (shift) 100 \"D\") (\"s-e\" (super) 101 \"s-e\") (\"H-f\" (hyper) 102 \"H-f\") (\"C-M-S-g\" (shift control meta) 103 \"C-M-S-g\") (\"C-M-S-s-H-h\" (super hyper shift control meta) 104 \"C-H-M-S-s-h\"))""#
+        ]],
+    );
 }

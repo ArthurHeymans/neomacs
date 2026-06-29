@@ -29,7 +29,12 @@ fn oracle_copy_tree_recursively_copies_cons_cells() {
    (cdr (last copy))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a mutated-leaf) (b (mutated-leaf)) . tail) ((changed-a shared) (changed-b (shared)) . tail) nil nil nil nil nil tail)""#
+        ]],
+    );
 }
 
 #[test]
@@ -50,7 +55,10 @@ fn oracle_copy_tree_without_vector_flag_preserves_vector_and_record_identity() {
    copy))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil t t ([(mutated)] #s(tag (mutated))))""#]],
+    );
 }
 
 #[test]
@@ -77,7 +85,12 @@ fn oracle_copy_tree_with_vector_flag_recurses_into_vectors_and_records() {
    (eq (aref (cadr tree) 2) (aref (cadr copy) 2))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (([(cell) (nested)] #s(tag (cell) [(cell) (nested)])) ([(copy-vector-cell) (copy-vector-nested)] #s(tag (copy-record-cell) [(cell) (nested)])) nil nil nil nil nil nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -111,7 +124,12 @@ fn oracle_copy_tree_vector_and_record_dotted_tails_follow_flag() {
    rec-deep))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t nil nil nil nil (head . [(vec-cell)]) (head . [(changed-vec-copy)]) (head . #s(tag (rec-cell))) (head . #s(tag (changed-rec-copy))))""#
+        ]],
+    );
 }
 
 #[test]
@@ -133,5 +151,8 @@ fn oracle_copy_tree_non_cons_leaf_identity_and_nil() {
    (eq rec (copy-tree rec t))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil t t t t nil nil)""#]],
+    );
 }

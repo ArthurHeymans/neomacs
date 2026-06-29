@@ -40,7 +40,12 @@ fn oracle_variable_watchers_report_set_let_unlet_and_makunbound() {
       (makunbound 'neomacs--oracle-vw-basic))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((neomacs--oracle-vw-basic-watch) set-value let-value neomacs--oracle-vw-basic ((neomacs--oracle-vw-basic initial set-value set nil) (neomacs--oracle-vw-basic set-value let-value let nil) (neomacs--oracle-vw-basic let-value set-value unlet nil) (neomacs--oracle-vw-basic set-value nil makunbound nil)) nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -68,7 +73,10 @@ fn oracle_variable_watcher_callbacks_do_not_reenter_recursively() {
     (makunbound 'neomacs--oracle-vw-reentrant)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 1 ((set 1 0)))""#]],
+    );
 }
 
 #[test]
@@ -99,7 +107,12 @@ fn oracle_variable_watchers_follow_defvaralias_base_variable() {
     (unintern 'neomacs--oracle-vw-base nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((neomacs--oracle-vw-alias-watch) (neomacs--oracle-vw-alias-watch) via-alias via-alias via-base via-base ((neomacs--oracle-vw-base via-alias set) (neomacs--oracle-vw-base via-base set)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -153,7 +166,12 @@ fn oracle_defvaralias_watcher_runs_before_alias_install_and_doc_put() {
         (makunbound sym)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (neomacs--oracle-vw-order-base base-value \"Alias doc installed after watcher.\" ((neomacs--oracle-vw-order-alias neomacs--oracle-vw-order-base defvaralias nil alias-value nil nil)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -190,7 +208,12 @@ fn oracle_variable_watchers_report_buffer_local_where() {
       (kill-buffer buf))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (default-set local-set default-set ((default-set set nil default) (local-set set \" *neomacs-oracle-vw-buffer*\" default-set)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -234,7 +257,12 @@ fn oracle_variable_watchers_set_default_reports_set_operation() {
         (makunbound sym)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (via-base via-alias via-alias via-alias ((neomacs--oracle-vw-default-base base via-base set nil) (neomacs--oracle-vw-default-base via-base via-alias set nil) (neomacs--oracle-vw-default-base via-base via-alias set nil)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -276,5 +304,10 @@ fn oracle_variable_watchers_kill_local_variable_notifies_before_local_removal() 
       (kill-buffer buf))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((neomacs--oracle-vw-kill-local neomacs--oracle-vw-kill-local neomacs--oracle-vw-kill-local neomacs--oracle-vw-kill-local local neomacs--oracle-vw-kill-local default) ((neomacs--oracle-vw-kill-local nil makunbound \" *neomacs-oracle-vw-kill-local*\" default) (neomacs--oracle-vw-kill-local local set \" *neomacs-oracle-vw-kill-local*\" default) (neomacs--oracle-vw-kill-local nil makunbound \" *neomacs-oracle-vw-kill-local*\" local)))""#
+        ]],
+    );
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_readonly_textprop_marker_overlay_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "rtn")))
     (with-current-buffer buf
@@ -35,6 +35,7 @@ fn combo_readonly_textprop_marker_overlay_narrow() {
           (list mp os oe k1 k2 bs
                 (marker-position m)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -42,7 +43,7 @@ fn combo_readonly_textprop_marker_overlay_narrow() {
 fn combo_readonly_undo_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "rou")))
     (with-current-buffer buf
@@ -71,6 +72,7 @@ fn combo_readonly_undo_marker_overlay() {
                 (marker-position m)
                 (overlay-start ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -78,7 +80,7 @@ fn combo_readonly_undo_marker_overlay() {
 fn combo_readonly_narrow_overlay_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "rno")))
     (with-current-buffer buf
@@ -104,6 +106,7 @@ fn combo_readonly_narrow_overlay_textprop() {
           (widen)
           (list p1 mp os oe k1 k2 ro))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -111,7 +114,7 @@ fn combo_readonly_narrow_overlay_textprop() {
 fn combo_readonly_clone_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "rcu")))
     (with-current-buffer buf
@@ -141,6 +144,7 @@ fn combo_readonly_clone_marker_undo() {
                   (marker-position m)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -148,7 +152,7 @@ fn combo_readonly_clone_marker_undo() {
 fn combo_readonly_multiple_zones_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "rmz")))
     (with-current-buffer buf
@@ -179,5 +183,6 @@ fn combo_readonly_multiple_zones_undo() {
                 (buffer-string)
                 (marker-position m)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

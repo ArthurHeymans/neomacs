@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_catch_throw_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (catch 'outer
     (catch 'inner
@@ -17,6 +17,7 @@ fn divergence_catch_throw_nested() {
     (throw 'outer 1))
   (catch 'tag
     (throw 'tag (list 1 2 3)))) ",
+        expect_test::expect![[r#""OK (99 1 (1 2 3))""#]],
     );
 }
 
@@ -24,7 +25,7 @@ fn divergence_catch_throw_nested() {
 fn divergence_catch_throw_across_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (defun test-throw-fn-xxx ()
     (throw 'done 'thrown-value))
@@ -34,6 +35,7 @@ fn divergence_catch_throw_across_funcall() {
      (unwind-protect
          (test-throw-fn-xxx)
        'cleanup-ran)))) ",
+        expect_test::expect![[r#""OK (thrown-value thrown-value)""#]],
     );
 }
 
@@ -41,7 +43,7 @@ fn divergence_catch_throw_across_funcall() {
 fn divergence_dotimes_dolist_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (let ((result nil))
     (dotimes (i 5 result)
@@ -51,6 +53,7 @@ fn divergence_dotimes_dolist_real() {
       (push x result)))
   (dotimes (_ 3 'done) nil)
   (dolist (_ '(1 2 3) 'finished) nil)) ",
+        expect_test::expect![[r#""OK ((4 3 2 1 0) (d c b a) done finished)""#]],
     );
 }
 
@@ -58,7 +61,7 @@ fn divergence_dotimes_dolist_real() {
 fn divergence_loop_macro_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (cl-loop for i from 1 to 5 collect (* i i))
   (cl-loop for x in '(1 2 3 4 5 6) when (cl-oddp x) collect x)
@@ -68,6 +71,9 @@ fn divergence_loop_macro_real() {
            do (setq total (+ total x))
            finally return total)
   (cl-loop repeat 3 collect 'x)) ",
+        expect_test::expect![[
+            r#""OK ((1 4 9 16 25) (1 3 5) ((a . 1) (b . 2) (c . 3)) 15 (x x x))""#
+        ]],
     );
 }
 
@@ -75,7 +81,7 @@ fn divergence_loop_macro_real() {
 fn divergence_cl_block_return() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (cl-block done
     (cl-return-from done 42)
@@ -84,6 +90,7 @@ fn divergence_cl_block_return() {
     (cl-block inner
       (cl-return-from outer 'exited))
     'not-reached)) ",
+        expect_test::expect![[r#""OK (42 exited)""#]],
     );
 }
 
@@ -91,12 +98,13 @@ fn divergence_cl_block_return() {
 fn divergence_cl_flet_labels() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (cl-flet ((double (x) (* x 2)))
     (list (double 3) (double 7)))
   (cl-labels ((fact (n) (if (zerop n) 1 (* n (fact (1- n))))))
     (list (fact 0) (fact 1) (fact 5) (fact 10)))) ",
+        expect_test::expect![[r#""OK ((6 14) (1 1 120 3628800))""#]],
     );
 }
 
@@ -104,7 +112,7 @@ fn divergence_cl_flet_labels() {
 fn divergence_cl_case_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (cl-case 3
     (1 'one)
@@ -120,6 +128,7 @@ fn divergence_cl_case_match() {
   (cl-ecase 2
     (1 'one)
     (2 'two))) ",
+        expect_test::expect![[r#""OK (three other fruit-bc two)""#]],
     );
 }
 
@@ -127,7 +136,7 @@ fn divergence_cl_case_match() {
 fn divergence_cl_typecase() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (cl-typecase 42
     (string 'str)
@@ -144,6 +153,7 @@ fn divergence_cl_typecase() {
   (cl-typecase nil
     (null 'null)
     (list 'list))) ",
+        expect_test::expect![[r#""OK (int flt str null)""#]],
     );
 }
 
@@ -151,12 +161,13 @@ fn divergence_cl_typecase() {
 fn divergence_while_with_mutation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((i 0) (acc nil))
   (while (< i 5)
     (push i acc)
     (setq i (1+ i)))
   (list acc i)) ",
+        expect_test::expect![[r#""OK ((4 3 2 1 0) 5)""#]],
     );
 }
 
@@ -164,11 +175,12 @@ fn divergence_while_with_mutation() {
 fn divergence_cl_letf_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((x 10))
   (cl-letf (((symbol-value 'x) 99))
     (list x
           (symbol-value 'x)))
   x) ",
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
     );
 }

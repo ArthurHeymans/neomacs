@@ -30,7 +30,12 @@ fn oracle_position_symbol_basic_accessors_and_predicates() {
    (remove-pos-from-symbol "not-a-symbol")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t nil t neomacs--oracle-sympos 42 neomacs--oracle-sympos 77 other 42 neomacs--oracle-sympos \"not-a-symbol\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -53,7 +58,12 @@ fn oracle_position_symbol_type_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument ((symbolp symbol-with-pos-p) 1)) (wrong-type-argument (symbol-with-pos-p plain)) (wrong-type-argument ((symbolp symbol-with-pos-p) 1)) (wrong-type-argument (fixnum-or-symbol-with-pos-p \"bad-pos\")))""#
+        ]],
+    );
 }
 
 #[test]
@@ -70,7 +80,12 @@ fn oracle_position_symbol_accepts_negative_fixnum_positions() {
    (symbol-with-pos-pos copied)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (neomacs--oracle-negative-pos -1 neomacs--oracle-negative-pos 9)""#
+        ]],
+    );
 }
 
 #[test]
@@ -92,7 +107,10 @@ fn oracle_symbol_with_pos_enabled_controls_symbolp_and_eq() {
            (eq (bare-symbol sp-a) (bare-symbol sp-b)))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 13 58)""#]],
+    );
 }
 
 #[test]
@@ -114,5 +132,10 @@ fn oracle_read_symbols_with_positions_records_source_offsets() {
      (symbol-with-pos-pos (cdr (nth 2 form)))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""ERR (wrong-type-argument (symbolp symbol-with-pos-p) (gamma . delta))""#
+        ]],
+    );
 }

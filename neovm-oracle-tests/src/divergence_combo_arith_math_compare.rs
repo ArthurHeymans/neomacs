@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_bignum_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((big (expt 2 64)))
     (list big
@@ -21,6 +21,9 @@ fn divergence_bignum_operations() {
           (= (/ big 2) (expt 2 63))
           (% (1+ big) big)
           (= (% (1+ big) big) 1)))) "#,
+        expect_test::expect![[
+            r#""OK (18446744073709551616 t t 18446744073709551617 t 36893488147419103232 t 9223372036854775808 t 1 t)""#
+        ]],
     );
 }
 
@@ -28,7 +31,7 @@ fn divergence_bignum_operations() {
 fn divergence_float_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (= 0.0 -0.0)
         (eql 0.0 -0.0)
@@ -44,6 +47,7 @@ fn divergence_float_edge_cases() {
         (= (ceiling 3.2) 4)
         (= (round 3.5) 4)
         (= (truncate 3.9) 3))) "#,
+        expect_test::expect![[r#""OK (t nil nil t nil t t t t t t t t t)""#]],
     );
 }
 
@@ -51,7 +55,7 @@ fn divergence_float_edge_cases() {
 fn divergence_trig_log_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((pi-val 3.141592653589793))
     (list (> (abs (- (sin 0.0) 0.0)) 1e-10)
@@ -64,6 +68,7 @@ fn divergence_trig_log_functions() {
           (>= (sqrt 4.0) 1.99)
           (= (sqrt 4.0) 2.0)
           (>= (abs pi-val) 3.14)))) "#,
+        expect_test::expect![[r#""OK (nil t nil t nil t t t t t)""#]],
     );
 }
 
@@ -71,7 +76,7 @@ fn divergence_trig_log_functions() {
 fn divergence_bitwise_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (logand 15 6)
         (= (logand 15 6) 6)
@@ -85,6 +90,7 @@ fn divergence_bitwise_operations() {
         (= (ash 1 4) 16)
         (ash 16 -2)
         (= (ash 16 -2) 4))) "#,
+        expect_test::expect![[r#""OK (6 t 15 t 9 t -1 t 16 t 4 t)""#]],
     );
 }
 
@@ -92,7 +98,7 @@ fn divergence_bitwise_operations() {
 fn divergence_number_predicate_combos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (numberp 42)
         (numberp 3.14)
@@ -111,6 +117,7 @@ fn divergence_number_predicate_combos() {
         (null (plusp -1))
         (minusp -3)
         (null (minusp 3)))) "#,
+        expect_test::expect![[r#""OK (t t nil t t t t t t t t t t t t t t)""#]],
     );
 }
 
@@ -118,7 +125,7 @@ fn divergence_number_predicate_combos() {
 fn divergence_max_min_clamp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (max 1 5 3 9 2)
         (= (max 1 5 3 9 2) 9)
@@ -130,6 +137,7 @@ fn divergence_max_min_clamp() {
         (= (min -1 -5 -3) -5)
         (cl-loop for x in '(1 5 3 9 2) maximize x into m finally return m)
         (= (cl-loop for x in '(1 5 3 9 2) maximize x into m finally return m) 9))) "#,
+        expect_test::expect![[r#""OK (9 t 1 t -1 t -5 t 9 t)""#]],
     );
 }
 
@@ -137,7 +145,7 @@ fn divergence_max_min_clamp() {
 fn division_modulo_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (/ 10 3)
         (= (/ 10 3) 3)
@@ -151,6 +159,7 @@ fn division_modulo_edge_cases() {
         (= (% -10 3) -1)
         (/ -10 3)
         (= (/ -10 3) -3))) "#,
+        expect_test::expect![[r#""OK (3 t 1 t 1 t 2 t -1 t -3 t)""#]],
     );
 }
 
@@ -158,7 +167,7 @@ fn division_modulo_edge_cases() {
 fn divergence_random_abs_comparison() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (abs -5)
         (= (abs -5) 5)
@@ -172,6 +181,7 @@ fn divergence_random_abs_comparison() {
         (>= (random 100) 0)
         (= (expt 2 10) 1024)
         (= (expt 10 3) 1000))) "#,
+        expect_test::expect![[r#""OK (5 t 3.14 t 3.14 t t t t t t t)""#]],
     );
 }
 
@@ -179,7 +189,7 @@ fn divergence_random_abs_comparison() {
 fn divergence_type_conversion_numbers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (string-to-number "42")
         (= (string-to-number "42") 42)
@@ -193,6 +203,7 @@ fn divergence_type_conversion_numbers() {
         (string= (number-to-string 42) "42")
         (number-to-string 3.14)
         (string= (number-to-string 3.14) "3.14"))) "#,
+        expect_test::expect![[r#""OK (42 t 3.14 t 255 t 5 t \"42\" t \"3.14\" t)""#]],
     );
 }
 
@@ -200,7 +211,7 @@ fn divergence_type_conversion_numbers() {
 fn divergence_cl_loop_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-loop for i from 1 to 10 sum i)
         (= (cl-loop for i from 1 to 10 sum i) 55)
@@ -211,5 +222,6 @@ fn divergence_cl_loop_arithmetic() {
                '(1 4 9 16 25))
         (cl-loop for x in '(1 2 3 4 5) when (cl-evenp x) sum x)
         (= (cl-loop for x in '(1 2 3 4 5) when (cl-evenp x) sum x) 6))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

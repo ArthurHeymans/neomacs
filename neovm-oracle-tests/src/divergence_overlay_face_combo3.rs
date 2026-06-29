@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_combo_next_char_property_change_mixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello world")
@@ -25,13 +25,14 @@ fn div_combo_next_char_property_change_mixed() {
         (next-char-property-change 8)
         (next-single-char-property-change 1 'face)))
 "##,
+        expect_test::expect![[r#""OK (2 4 6 12 2)""#]],
     );
 }
 
 #[test]
 fn div_combo_previous_char_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello world")
@@ -42,13 +43,14 @@ fn div_combo_previous_char_property_change() {
         (previous-char-property-change 8)
         (previous-single-char-property-change 12 'face)))
 "##,
+        expect_test::expect![[r#""OK (9 7 9)""#]],
     );
 }
 
 #[test]
 fn div_combo_char_property_range_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -58,6 +60,7 @@ fn div_combo_char_property_range_p() {
   (multiple-value-bind (from to val) (char-property-range-p 3 'face)
     (list from to val)))
 "##,
+        expect_test::expect![[r#""ERR (void-function multiple-value-bind)""#]],
     );
 }
 
@@ -66,7 +69,7 @@ fn div_combo_char_property_range_p() {
 #[test]
 fn div_combo_add_face_text_property_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello world")
@@ -77,13 +80,14 @@ fn div_combo_add_face_text_property_merge() {
         (get-text-property 6 'face)
         (get-text-property 9 'face)))
 "##,
+        expect_test::expect![[r#""OK (bold (italic bold) italic nil)""#]],
     );
 }
 
 #[test]
 fn div_combo_add_face_text_property_append() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello")
@@ -91,6 +95,7 @@ fn div_combo_add_face_text_property_append() {
   (add-face-text-property 1 3 'italic t)
   (get-text-property 2 'face))
 "##,
+        expect_test::expect![[r#""OK (bold italic)""#]],
     );
 }
 
@@ -100,7 +105,7 @@ fn div_combo_add_face_text_property_append() {
 fn div_combo_syntax_table_property_forward_sexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Override the syntax of "(" to be word-constituent via text property.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "ab(cd)ef")
@@ -111,13 +116,14 @@ fn div_combo_syntax_table_property_forward_sexp() {
     (forward-sexp 1)
     (list p1 (point))))
 "##,
+        expect_test::expect![[r#""OK (3 3)""#]],
     );
 }
 
 #[test]
 fn div_combo_syntax_table_property_forward_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abc.def")
@@ -125,6 +131,7 @@ fn div_combo_syntax_table_property_forward_word() {
   (goto-char 1)
   (progn (forward-word) (point)))
 "##,
+        expect_test::expect![[r#""OK 4""#]],
     );
 }
 
@@ -133,7 +140,7 @@ fn div_combo_syntax_table_property_forward_word() {
 #[test]
 fn div_combo_point_entered_hook_fires() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -142,13 +149,14 @@ fn div_combo_point_entered_hook_fires() {
     (goto-char 4)
     (list (length entered) entered)))
 "##,
+        expect_test::expect![[r#""OK (0 nil)""#]],
     );
 }
 
 #[test]
 fn div_combo_point_left_hook_fires() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -158,6 +166,7 @@ fn div_combo_point_left_hook_fires() {
     (goto-char 7)
     (list (length left) left)))
 "##,
+        expect_test::expect![[r#""OK (0 nil)""#]],
     );
 }
 
@@ -166,7 +175,7 @@ fn div_combo_point_left_hook_fires() {
 #[test]
 fn div_combo_line_prefix_text_property_with_fill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((fill-column 14))
@@ -175,13 +184,16 @@ fn div_combo_line_prefix_text_property_with_fill() {
     (fill-region (point-min) (point-max))
     (buffer-string)))
 "##,
+        expect_test::expect![[
+            r#""OK #(\"alpha bravo\ncharlie delta\necho\n\" 0 11 (line-prefix \"> \") 11 12 (line-prefix \"> \") 12 25 (line-prefix \"> \") 25 26 (line-prefix \"> \") 26 31 (line-prefix \"> \"))""#
+        ]],
     );
 }
 
 #[test]
 fn div_combo_wrap_prefix_text_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((fill-column 12))
@@ -190,6 +202,9 @@ fn div_combo_wrap_prefix_text_property() {
     (fill-region (point-min) (point-max))
     (buffer-string)))
 "##,
+        expect_test::expect![[
+            r#""OK #(\"alpha bravo\ncharlie\ndelta echo\n\" 0 11 (wrap-prefix \"  \") 11 12 (wrap-prefix \"  \") 12 19 (wrap-prefix \"  \") 19 20 (wrap-prefix \"  \") 20 31 (wrap-prefix \"  \"))""#
+        ]],
     );
 }
 
@@ -198,7 +213,7 @@ fn div_combo_wrap_prefix_text_property() {
 #[test]
 fn div_combo_local_map_text_property_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
   (define-key map "a" 'my-action)
@@ -208,13 +223,14 @@ fn div_combo_local_map_text_property_lookup() {
     (list (lookup-key map "a")
           (get-text-property 1 'local-map))))
 "##,
+        expect_test::expect![[r#""OK (my-action (keymap (97 . my-action)))""#]],
     );
 }
 
 #[test]
 fn div_combo_overlay_keymap_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
   (define-key map "x" 'overlay-action)
@@ -225,6 +241,7 @@ fn div_combo_overlay_keymap_lookup() {
       (list (overlay-get ov 'keymap)
             (eq (overlay-get ov 'keymap) map)))))
 "##,
+        expect_test::expect![[r#""OK ((keymap (120 . overlay-action)) t)""#]],
     );
 }
 
@@ -234,7 +251,7 @@ fn div_combo_overlay_keymap_lookup() {
 fn div_combo_overlay_window_specific() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // An overlay bound to a specific window is invisible elsewhere.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello world")
@@ -244,6 +261,7 @@ fn div_combo_overlay_window_specific() {
   (list (length (overlays-at 3))
         (length (overlays-in 1 11))))
 "##,
+        expect_test::expect![[r#""OK (1 1)""#]],
     );
 }
 
@@ -252,7 +270,7 @@ fn div_combo_overlay_window_specific() {
 #[test]
 fn div_combo_buffer_display_table_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello\n")
@@ -261,6 +279,7 @@ fn div_combo_buffer_display_table_basic() {
     (setq buffer-display-table dt))
   (list (buffer-substring 1 6) (char-to-string ?a)))
 "##,
+        expect_test::expect![[r#""OK (\"hello\" \"a\")""#]],
     );
 }
 
@@ -269,7 +288,7 @@ fn div_combo_buffer_display_table_basic() {
 #[test]
 fn div_combo_compose_region_then_overlay_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcde")
@@ -279,6 +298,7 @@ fn div_combo_compose_region_then_overlay_face() {
   (list (find-composition 2 nil nil t)
         (get-char-property 3 'face)))
 "##,
+        expect_test::expect![[r#""OK ((2 4 [] t nil 0) bold)""#]],
     );
 }
 
@@ -287,7 +307,7 @@ fn div_combo_compose_region_then_overlay_face() {
 #[test]
 fn div_combo_text_property_search_vs_char_property_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdefgh")
@@ -299,6 +319,7 @@ fn div_combo_text_property_search_vs_char_property_search() {
         (text-property-any 1 8 'face 'bold)
         (char-property-range-p 5 'face)))
 "##,
+        expect_test::expect![[r#""ERR (void-function char-property-range-p)""#]],
     );
 }
 
@@ -307,7 +328,7 @@ fn div_combo_text_property_search_vs_char_property_search() {
 #[test]
 fn div_combo_overlay_modification_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -318,6 +339,7 @@ fn div_combo_overlay_modification_hooks() {
       (insert "X"))
     (list (length fired) fired)))
 "##,
+        expect_test::expect![[r#""OK (2 ((t 3) (nil 3)))""#]],
     );
 }
 
@@ -326,13 +348,14 @@ fn div_combo_overlay_modification_hooks() {
 #[test]
 fn div_combo_face_remap_add_relative_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (let ((cookie (face-remap-add-relative 'default :weight 'bold)))
       (list (consp cookie) (length cookie)))
   (error (list 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (t 3)""#]],
     );
 }
 
@@ -341,7 +364,7 @@ fn div_combo_face_remap_add_relative_query() {
 #[test]
 fn div_combo_invisible_overlay_vs_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello world")
@@ -351,5 +374,6 @@ fn div_combo_invisible_overlay_vs_textprop() {
   (list (buffer-substring 1 12)
         (buffer-substring-no-properties 1 12)))
 "##,
+        expect_test::expect![[r#""OK (#(\"hello world\" 1 4 (invisible t)) \"hello world\")""#]],
     );
 }

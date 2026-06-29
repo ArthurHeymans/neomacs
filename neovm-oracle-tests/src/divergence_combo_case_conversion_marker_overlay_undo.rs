@@ -15,7 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_upcase_downcase_word_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-udw")))
     (with-current-buffer buf
@@ -57,6 +57,7 @@ fn combo_upcase_downcase_word_marker_overlay_undo() {
                                 (get-text-property 21 'word))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -64,7 +65,7 @@ fn combo_upcase_downcase_word_marker_overlay_undo() {
 fn combo_upcase_downcase_region_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-udr")))
     (with-current-buffer buf
@@ -105,6 +106,7 @@ fn combo_upcase_downcase_region_marker_overlay_undo() {
                                 (get-text-property 21 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -112,7 +114,7 @@ fn combo_upcase_downcase_region_marker_overlay_undo() {
 fn combo_case_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-cnar")))
     (with-current-buffer buf
@@ -150,6 +152,7 @@ fn combo_case_narrow_marker_overlay_undo() {
                                 (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -157,7 +160,7 @@ fn combo_case_narrow_marker_overlay_undo() {
 fn combo_case_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-cbl")))
     (with-current-buffer buf
@@ -198,6 +201,7 @@ fn combo_case_buffer_local_marker_overlay_undo() {
                                 (get-text-property 17 'word))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -205,7 +209,7 @@ fn combo_case_buffer_local_marker_overlay_undo() {
 fn combo_case_string_functions_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-csf")))
     (with-current-buffer buf
@@ -240,5 +244,6 @@ fn combo_case_string_functions_marker_overlay_undo() {
                                   (get-text-property 11 'zone))))
               (kill-buffer buf)
               (list after restored)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

@@ -72,7 +72,12 @@ fn oracle_prop_string_algo_kmp() {
         (list f1 f2 f3 s1 s2 s3 s4 s5 s6 s7))
     (fmakunbound 'neovm--test-kmp-failure)
     (fmakunbound 'neovm--test-kmp-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 0 0 1 2 0) (0 1 0 1 2 0) (0 1 2 3 4) (3 9) (0 1 2 3 4) (0 2 4 6) nil nil (3) (0 15))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +153,12 @@ fn oracle_prop_string_algo_boyer_moore_like() {
         (list r1 r2 r3 r4 r5 verify))
     (fmakunbound 'neovm--test-bm-bad-char-table)
     (fmakunbound 'neovm--test-bm-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((4 8) (0 1 2 3) (0 12) nil (0 5 10) ((\"ana\" \"banana\" 1 1 t) (\"issi\" \"mississippi\" 1 1 t) (\"abc\" \"abcabcabc\" 0 0 t)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +256,12 @@ fn oracle_prop_string_algo_rabin_karp() {
     (fmakunbound 'neovm--test-rk-search)
     (makunbound 'neovm--test-rk-base)
     (makunbound 'neovm--test-rk-prime)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 9 12) (2) (0 1 2 3 4) nil (0 3 6) ((4 4 t) (1 1 t) (0 0 t) (nil nil t)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -315,7 +330,12 @@ fn oracle_prop_string_algo_rotation_check() {
     (fmakunbound 'neovm--test-rot-check-concat)
     (fmakunbound 'neovm--test-rot-check-brute)
     (fmakunbound 'neovm--test-rot-amount)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"abcde\" \"cdeab\" t 2 t) (\"abcde\" \"abcde\" t 0 t) (\"abcde\" \"eabcd\" t 4 t) (\"abc\" \"cab\" t 2 t) (\"abc\" \"bac\" nil nil t) (\"a\" \"a\" t 0 t) (\"ab\" \"ba\" t 1 t) (\"hello\" \"llohe\" t 2 t) (\"hello\" \"world\" nil nil t) (\"\" \"\" nil nil t) (\"abc\" \"abcd\" nil nil t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -406,7 +426,12 @@ fn oracle_prop_string_algo_longest_palindrome() {
     (fmakunbound 'neovm--test-pal-expand)
     (fmakunbound 'neovm--test-pal-longest)
     (fmakunbound 'neovm--test-pal-is-palindrome)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"babad\" \"bab\" 3 t) (\"cbbd\" \"bb\" 2 t) (\"racecar\" \"racecar\" 7 t) (\"a\" \"a\" 1 t) (\"ac\" \"a\" 1 t) (\"aacabdkacaa\" \"aca\" 3 t) (\"forgeeksskeegfor\" \"geeksskeeg\" 10 t) (\"abcba\" \"abcba\" 5 t) (\"abcdef\" \"a\" 1 t) (\"aaaa\" \"aaaa\" 4 t) (\"\" \"\" 0 t)) ((t t) (t t) (t t) (t t) (t t) (t t) (t t) (t t) (t t) (t t) (t t)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -510,5 +535,8 @@ fn oracle_prop_string_algo_interleaving() {
         (list r1 r2 r3 r4 r5 r6 r7 r8 constructed r9 r10))
     (fmakunbound 'neovm--test-interleave-check)
     (fmakunbound 'neovm--test-interleave-construct)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t nil nil nil \"axbycz\" t t)""#]],
+    );
 }

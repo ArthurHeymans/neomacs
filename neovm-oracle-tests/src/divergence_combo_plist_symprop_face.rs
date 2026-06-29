@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_plist_put_get_remove_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((pl nil))
     (setq pl (plist-put pl :a 1))
@@ -27,6 +27,7 @@ fn divergence_plist_put_get_remove_cycle() {
             (= (plist-get pl :d) 4)
             (length pl)
             (= (length pl) 8))))) "#,
+        expect_test::expect![[r#""OK (1 2 3 nil t t t t 99 t 4 t 8 t)""#]],
     );
 }
 
@@ -34,7 +35,7 @@ fn divergence_plist_put_get_remove_cycle() {
 fn divergence_symbol_plist_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((sym (make-symbol "test-sym-pl-xxx")))
     (put sym 'prop1 'val1)
@@ -50,6 +51,7 @@ fn divergence_symbol_plist_operations() {
           (null (get sym 'nonexistent))
           (symbol-plist sym)
           (listp (symbol-plist sym))))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 15 41)""##]],
     );
 }
 
@@ -57,7 +59,7 @@ fn divergence_symbol_plist_operations() {
 fn divergence_face_attribute_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defface test-face-attr-xxx '((t :foreground "red" :weight bold))
     "Test face.")
@@ -69,6 +71,9 @@ fn divergence_face_attribute_operations() {
         (not (facep 'nonexistent-face-xxx))
         (face-attribute 'test-face-attr-xxx :underline)
         (equal (face-attribute 'test-face-attr-xxx :underline) nil))) "#,
+        expect_test::expect![[
+            r#""OK (\"red\" t bold t [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] t unspecified nil)""#
+        ]],
     );
 }
 
@@ -76,7 +81,7 @@ fn divergence_face_attribute_operations() {
 fn divergence_plist_member_vs_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((pl '(:a 1 :b nil :c 3)))
     (list (plist-get pl :a)
@@ -89,6 +94,7 @@ fn divergence_plist_member_vs_get() {
           (plist-member pl :d)
           (null (plist-member pl :d))
           (not (null (plist-member pl :b)))))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 12 48)""##]],
     );
 }
 
@@ -96,7 +102,7 @@ fn divergence_plist_member_vs_get() {
 fn divergence_symbol_function_plist_interplay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-sfpi-xxx (x) (+ x 1))
   (put 'test-sfpi-xxx 'doc-string "test function")
@@ -111,6 +117,7 @@ fn divergence_symbol_function_plist_interplay() {
         (= (funcall 'test-sfpi-xxx 5) 6)
         (documentation 'test-sfpi-xxx)
         (string= (documentation 'test-sfpi-xxx) "test function"))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 14 68)""##]],
     );
 }
 
@@ -118,7 +125,7 @@ fn divergence_symbol_function_plist_interplay() {
 fn divergence_face_remap_alist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (facep 'default)
         (facep 'bold)
@@ -130,6 +137,7 @@ fn divergence_face_remap_alist() {
         (eq (face-attribute 'bold :weight) 'bold)
         (face-attribute 'italic :slant)
         (eq (face-attribute 'italic :slant) 'italic))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 11 56)""##]],
     );
 }
 
@@ -137,7 +145,7 @@ fn divergence_face_remap_alist() {
 fn divergence_set_plist_with_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((sym (intern "test-sph-xxx"))
         (ht (make-hash-table :test 'equal)))
@@ -159,6 +167,7 @@ fn divergence_set_plist_with_hash() {
             (= (hash-table-count stored-ht) 3)
             (gethash 'c (get sym 'hash))
             (= (gethash 'c (get sym 'hash)) 3))))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 21 52)""##]],
     );
 }
 
@@ -166,7 +175,7 @@ fn divergence_set_plist_with_hash() {
 fn divergence_plist_to_alist_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((pl '(:name "Alice" :age 30 :roles (admin editor))))
     (let ((al (cl-loop for (k v) on pl by 'cddr collect (cons k v))))
@@ -178,6 +187,7 @@ fn divergence_plist_to_alist_conversion() {
             (= (cdr (assoc :age al)) 30)
             (assoc :roles al)
             (equal (cdr (assoc :roles al)) '(admin editor)))))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 11 65)""##]],
     );
 }
 
@@ -185,7 +195,7 @@ fn divergence_plist_to_alist_conversion() {
 fn divergence_face_all_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defface test-comp-xxx '((t :foreground "blue" :background "yellow" :underline t))
     "Composite face.")
@@ -197,6 +207,7 @@ fn divergence_face_all_attributes() {
           (equal (nth 2 attrs) t)
           (facep 'test-comp-xxx)
           (= (length attrs) 3)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 11 35)""##]],
     );
 }
 
@@ -204,7 +215,7 @@ fn divergence_face_all_attributes() {
 fn divergence_symbol_name_intern_plist_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((names '("test-chain-a-xxx" "test-chain-b-xxx" "test-chain-c-xxx"))
         (result nil))
@@ -223,5 +234,6 @@ fn divergence_symbol_name_intern_plist_chain() {
             (equal (car (car final)) "test-chain-a-xxx")
             (= (nth 1 (cadr final)) 1)
             (= (nth 1 (caddr final)) 2))))) "#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }

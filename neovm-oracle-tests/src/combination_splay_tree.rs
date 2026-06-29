@@ -176,7 +176,10 @@ fn oracle_prop_splay_tree_insert_and_splay() {
           (fmakunbound 'neovm--st-rotate-right) (fmakunbound 'neovm--st-rotate-left)
           (fmakunbound 'neovm--st-splay) (fmakunbound 'neovm--st-insert)
           (fmakunbound 'neovm--st-inorder))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 (0 1 2 3 4 5 6 7 8 9) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +299,10 @@ fn oracle_prop_splay_tree_search_moves_to_root() {
           (fmakunbound 'neovm--st-rotate-right) (fmakunbound 'neovm--st-rotate-left)
           (fmakunbound 'neovm--st-splay) (fmakunbound 'neovm--st-insert)
           (fmakunbound 'neovm--st-search))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 3 t 18 nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -419,7 +425,12 @@ fn oracle_prop_splay_tree_delete() {
                   (fmakunbound 'neovm--st-splay) (fmakunbound 'neovm--st-insert)
                   (fmakunbound 'neovm--st-inorder) (fmakunbound 'neovm--st-max)
                   (fmakunbound 'neovm--st-delete))))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 1 2 3 4 5 6 7 8 9) (1 2 3 4 5 6 7 8 9) (1 2 3 4 6 7 8 9) (1 2 3 4 6 7 8) (1 2 3 4 6 7 8))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -532,7 +543,10 @@ fn oracle_prop_splay_tree_inorder_after_mixed_ops() {
                 (fmakunbound 'neovm--st-splay) (fmakunbound 'neovm--st-insert)
                 (fmakunbound 'neovm--st-inorder) (fmakunbound 'neovm--st-max)
                 (fmakunbound 'neovm--st-delete))))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 102 56)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -636,7 +650,10 @@ fn oracle_prop_splay_tree_sequential_access() {
             (fmakunbound 'neovm--st-rotate-right) (fmakunbound 'neovm--st-rotate-left)
             (fmakunbound 'neovm--st-splay) (fmakunbound 'neovm--st-insert)
             (fmakunbound 'neovm--st-inorder) (fmakunbound 'neovm--st-height)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3 4 5) t 6 5)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -738,7 +755,10 @@ fn oracle_prop_splay_tree_duplicates_and_size() {
               (fmakunbound 'neovm--st-rotate-right) (fmakunbound 'neovm--st-rotate-left)
               (fmakunbound 'neovm--st-splay) (fmakunbound 'neovm--st-insert)
               (fmakunbound 'neovm--st-inorder) (fmakunbound 'neovm--st-size))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (7 7 t 10 (0 1 2 3 4 5 6 7 8 9))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -853,5 +873,10 @@ fn oracle_prop_splay_tree_small_trees() {
         (fmakunbound 'neovm--st-rotate-right) (fmakunbound 'neovm--st-rotate-left)
         (fmakunbound 'neovm--st-splay) (fmakunbound 'neovm--st-insert)
         (fmakunbound 'neovm--st-inorder)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((empty-splay nil) (single 42 (42)) (single-splay-same 42) (single-splay-miss 42) (two-asc 2 (1 2)) (two-splay-small 1 (1 2)) (two-desc 1 (1 2)) (two-splay-large 2 (1 2)))""#
+        ]],
+    );
 }

@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_j1_process_filter_set_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((called 0)
       (f (lambda (_p _s) (setq called (1+ called))))
@@ -24,6 +24,7 @@ fn div_j1_process_filter_set_get() {
         (functionp (process-filter proc))
         called))
 "##,
+        expect_test::expect![[r#""ERR (void-variable f)""#]],
     );
 }
 
@@ -33,7 +34,7 @@ fn div_j1_process_sentinel_set_get() {
     // process-sentinel accessor only (set-process-sentinel + process-sentinel
     // eq/functionp); the async sentinel FIRING timing is not asserted here to
     // avoid flakiness.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((sent (lambda (&rest _) nil))
       (proc (make-process :name "probe-ps"
@@ -44,26 +45,28 @@ fn div_j1_process_sentinel_set_get() {
   (list (eq (process-sentinel proc) sent)
         (functionp (process-sentinel proc))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_j1_process_coding_system() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "probe-pc"
                           :command (list shell-file-name shell-command-switch "true"))))
   (set-process-coding-system proc 'utf-8-unix 'utf-8-unix)
   (list (process-coding-system proc)))
 "##,
+        expect_test::expect![[r#""OK ((utf-8-unix . utf-8-unix))""#]],
     );
 }
 
 #[test]
 fn div_j1_make_pipe_process_send() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (generate-new-buffer " *probe-pipe*"))
        (pipe (make-pipe-process :name "probe-pipe" :buffer buf)))
@@ -73,26 +76,28 @@ fn div_j1_make_pipe_process_send() {
         (with-current-buffer buf (buffer-string))
         (eq (process-buffer pipe) buf)))
 "##,
+        expect_test::expect![[r#""OK (open (open listen connect stop) \"\" t)""#]],
     );
 }
 
 #[test]
 fn div_j1_process_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "probe-pm"
                           :command (list shell-file-name shell-command-switch "true"))))
   (list (process-multibyte-p proc)
         (progn (set-process-multibyte proc t) (process-multibyte-p proc))))
 "##,
+        expect_test::expect![[r#""ERR (void-function process-multibyte-p)""#]],
     );
 }
 
 #[test]
 fn div_j1_process_status_and_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "probe-prc"
                           :command (list shell-file-name shell-command-switch "sleep 0.2"))))
@@ -102,6 +107,7 @@ fn div_j1_process_status_and_type() {
         (process-running-child-p proc)
         (process-status proc)))
 "##,
+        expect_test::expect![[r#""ERR (error \"Process probe-prc is not active\")""#]],
     );
 }
 
@@ -114,7 +120,7 @@ fn div_j1_accept_process_output_return() {
     // accept-process-output on a process that produced NO output returns nil
     // in GNU Emacs (no output read) but t in Neomacs. (Timing-sensitive, but
     // reproducible for a no-output "sleep" command.)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "probe-apo"
                           :command (list shell-file-name shell-command-switch "sleep 0.2"))))
@@ -122,5 +128,6 @@ fn div_j1_accept_process_output_return() {
   (list (accept-process-output proc 1)
         (process-status proc)))
 "##,
+        expect_test::expect![[r#""OK (nil exit)""#]],
     );
 }

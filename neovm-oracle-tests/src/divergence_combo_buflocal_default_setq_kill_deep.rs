@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_make_variable_buffer_local_across_3_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar bv-test-var nil)\n\
          (make-variable-buffer-local 'bv-test-var)\n\
@@ -30,6 +30,7 @@ fn deficiency_make_variable_buffer_local_across_3_buffers() {
          (buffer-local-value 'bv-test-var b2)\n\
          (buffer-local-value 'bv-test-var b3))))\n\
          (kill-buffer b1) (kill-buffer b2) (kill-buffer b3)))",
+        expect_test::expect![[r#""ERR (void-variable b1)""#]],
     );
 }
 
@@ -37,7 +38,7 @@ fn deficiency_make_variable_buffer_local_across_3_buffers() {
 fn deficiency_setq_default_propagates_to_buffers_without_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar sdp-test-var 10)\n\
          (make-variable-buffer-local 'sdp-test-var)\n\
@@ -53,6 +54,7 @@ fn deficiency_setq_default_propagates_to_buffers_without_local() {
          sdp-test-var)\n\
          (default-value 'sdp-test-var)))\n\
          (kill-buffer b1) (kill-buffer b2)))",
+        expect_test::expect![[r#""ERR (void-variable b1)""#]],
     );
 }
 
@@ -60,7 +62,7 @@ fn deficiency_setq_default_propagates_to_buffers_without_local() {
 fn deficiency_buffer_local_value_in_closure_captures_correctly() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar blc-var 0)\n\
          (make-variable-buffer-local 'blc-var)\n\
@@ -78,6 +80,7 @@ fn deficiency_buffer_local_value_in_closure_captures_correctly() {
          (with-current-buffer b1 blc-var)\n\
          (with-current-buffer b2 blc-var))))\n\
          (kill-buffer b1) (kill-buffer b2)))",
+        expect_test::expect![[r#""ERR (void-variable b1)""#]],
     );
 }
 
@@ -85,7 +88,7 @@ fn deficiency_buffer_local_value_in_closure_captures_correctly() {
 fn deficiency_make_local_variable_vs_setq_default_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar mlv-var 'init)\n\
          (let ((b1 (generate-new-buffer \"mlv\"))\n\
@@ -102,6 +105,7 @@ fn deficiency_make_local_variable_vs_setq_default_interaction() {
          mlv-var)\n\
          (buffer-local-value 'mlv-var b2))\n\
          (kill-buffer b1) (kill-buffer b2)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -109,7 +113,7 @@ fn deficiency_make_local_variable_vs_setq_default_interaction() {
 fn deficiency_buffer_local_binding_with_let_shadowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar bll-var 'outer)\n\
          (make-variable-buffer-local 'bll-var)\n\
@@ -122,6 +126,7 @@ fn deficiency_buffer_local_binding_with_let_shadowing() {
          (list (buffer-local-value 'bll-var b1)\n\
          (default-value 'bll-var)))\n\
          (kill-buffer b1)))",
+        expect_test::expect![[r#""ERR (void-variable b1)""#]],
     );
 }
 
@@ -129,7 +134,7 @@ fn deficiency_buffer_local_binding_with_let_shadowing() {
 fn deficiency_kill_local_variable_restores_default_in_multiple_rounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar klv-var 'original)\n\
          (make-variable-buffer-local 'klv-var)\n\
@@ -149,6 +154,7 @@ fn deficiency_kill_local_variable_restores_default_in_multiple_rounds() {
          (push (cons 'after-default-change klv-var) results))\n\
          (nreverse results))\n\
          (kill-buffer b1)))",
+        expect_test::expect![[r#""ERR (void-variable b1)""#]],
     );
 }
 
@@ -156,7 +162,7 @@ fn deficiency_kill_local_variable_restores_default_in_multiple_rounds() {
 fn deficiency_buffer_local_with_with_temp_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar bwt-var 'global)\n\
          (make-variable-buffer-local 'bwt-var)\n\
@@ -170,6 +176,7 @@ fn deficiency_buffer_local_with_with_temp_buffer() {
          bwt-var\n\
          (buffer-local-value 'bwt-var outer-buf)\n\
          (default-value 'bwt-var))))))",
+        expect_test::expect![[r#""OK (default temp-local outer-local default)""#]],
     );
 }
 
@@ -177,7 +184,7 @@ fn deficiency_buffer_local_with_with_temp_buffer() {
 fn deficiency_default_value_and_set_after_buffer_kill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar dak-var 0)\n\
          (make-variable-buffer-local 'dak-var)\n\
@@ -189,6 +196,7 @@ fn deficiency_default_value_and_set_after_buffer_kill() {
          (list before\n\
          (default-value 'dak-var)\n\
          dak-var))))",
+        expect_test::expect![[r#""OK (99 42 42)""#]],
     );
 }
 
@@ -196,7 +204,7 @@ fn deficiency_default_value_and_set_after_buffer_kill() {
 fn deficiency_buffer_local_inherited_on_clone_indirect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar bli-var 'base)\n\
          (make-variable-buffer-local 'bli-var)\n\
@@ -214,6 +222,7 @@ fn deficiency_buffer_local_inherited_on_clone_indirect() {
          (buffer-local-value 'bli-var ind))))\n\
          (kill-buffer ind)\n\
          (kill-buffer base))))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -221,7 +230,7 @@ fn deficiency_buffer_local_inherited_on_clone_indirect() {
 fn deficiency_multibyte_buffer_local_string_variable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar mbs-var \"default\")\n\
          (make-variable-buffer-local 'mbs-var)\n\
@@ -236,5 +245,6 @@ fn deficiency_multibyte_buffer_local_string_variable() {
          (substring (buffer-local-value 'mbs-var b1) 0 1)\n\
          (default-value 'mbs-var))\n\
          (kill-buffer b1) (kill-buffer b2)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }

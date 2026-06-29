@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_schedule_deadline_priority_property_mutation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (with-temp-buffer
@@ -23,6 +23,9 @@ fn org_schedule_deadline_priority_property_mutation_combo() {
             (org-entry-get nil "Effort")
             (org-get-priority (thing-at-point 'line t))
             (buffer-substring-no-properties (point-min) (point-max))))))"#,
+        expect_test::expect![[
+            r#""OK (\"<2026-05-27 Wed 09:30>\" \"<2026-05-28 Thu>\" \"1:15\" 2000 \"* TODO [#A] Task\nDEADLINE: <2026-05-28 Thu> SCHEDULED: <2026-05-27 Wed 09:30>\n:PROPERTIES:\n:Effort:   1:15\n:END:\n\")""#
+        ]],
     );
 }
 
@@ -30,7 +33,7 @@ fn org_schedule_deadline_priority_property_mutation_combo() {
 fn org_clock_in_out_drawer_logbook_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-clock)
@@ -44,6 +47,9 @@ fn org_clock_in_out_drawer_logbook_combo() {
       (org-clock-out nil t (encode-time 0 30 10 27 5 2026))
       (list org-clock-total-time
             (buffer-substring-no-properties (point-min) (point-max))))))"#,
+        expect_test::expect![[
+            r#""OK (0 \"* TODO Task\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n:END:\n\")""#
+        ]],
     );
 }
 
@@ -51,7 +57,7 @@ fn org_clock_in_out_drawer_logbook_combo() {
 fn org_promote_demote_subtree_startup_odd_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -67,6 +73,9 @@ fn org_promote_demote_subtree_startup_odd_combo() {
       (org-demote-subtree)
       (list after-promote
             (buffer-substring-no-properties (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r##""OK (\"#+STARTUP: odd\n* A\n* B\n** C\n\" \"#+STARTUP: odd\n* A\n** B\n*** C\n\")""##
+        ]],
     );
 }
 
@@ -74,7 +83,7 @@ fn org_promote_demote_subtree_startup_odd_combo() {
 fn org_list_indent_outdent_repair_lisp_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-list)
@@ -92,6 +101,9 @@ fn org_list_indent_outdent_repair_lisp_combo() {
       (list after-indent
             (buffer-substring-no-properties (point-min) (point-max))
             (org-list-to-lisp)))))"#,
+        expect_test::expect![[
+            r#""OK (\"- one\n  - two\n  - child\n- three\n\" \"- one\n- two\n  - child\n- three\n\" (unordered (\"one\") (\"two\" (unordered (\"child\"))) (\"three\")))""#
+        ]],
     );
 }
 
@@ -99,7 +111,7 @@ fn org_list_indent_outdent_repair_lisp_combo() {
 fn org_texinfo_export_markup_list_table_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-texinfo)
   (with-temp-buffer
@@ -120,6 +132,9 @@ fn org_texinfo_export_markup_list_table_combo() {
             (not (null (string-match-p "@itemize" texi)))
             (not (null (string-match-p "@multitable" texi)))
             texi))))"##,
+        expect_test::expect![[
+            r#""OK (t t t t t t t \"@node Intro\n@chapter Intro\n\nText with @strong{bold}@comma{} @samp{code}@comma{} and @uref{https://example.org, link}.\n@itemize\n@item\nitem one\n@item\nitem two\n@end itemize\n@multitable {a} {a}\n@item A\n@tab B\n@item 1\n@tab 2\n@end multitable\n\")""#
+        ]],
     );
 }
 
@@ -127,7 +142,7 @@ fn org_texinfo_export_markup_list_table_combo() {
 fn org_beamer_export_frame_list_alert_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-beamer)
   (with-temp-buffer
@@ -152,6 +167,9 @@ fn org_beamer_export_frame_list_alert_combo() {
             (not (null (string-match-p "\\\\begin{itemize}" latex)))
             (not (null (string-match-p "\\\\alert{bold}" latex)))
             normalized))))"##,
+        expect_test::expect![[
+            r#""OK (t t t t t \"\\\\section{Section}\n\\\\label{sec:org-id}\n\\\\begin{frame}[label={sec:org-id}]{Frame}\n\\\\begin{itemize}\n\\\\item item one\n\\\\item item two\n\\\\end{itemize}\nA paragraph with \\\\alert{bold}.\n\\\\end{frame}\n\")""#
+        ]],
     );
 }
 
@@ -159,7 +177,7 @@ fn org_beamer_export_frame_list_alert_combo() {
 fn org_icalendar_export_todo_schedule_deadline_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-icalendar)
   (with-temp-buffer
@@ -185,6 +203,9 @@ fn org_icalendar_export_todo_schedule_deadline_combo() {
             (not (null (string-match-p "DTSTART;VALUE=DATE:20260528" ical)))
              (not (null (string-match-p "STATUS:NEEDS-ACTION" ical)))
              normalized))))"##,
+        expect_test::expect![[
+            r#""OK (t t t t t t \"BEGIN:VEVENT\nDTSTAMP:<STAMP>\nUID:TS1-<uid>\nDTSTART;VALUE=DATE:20260528\nDTEND;VALUE=DATE:20260529\nSUMMARY:Event\nDESCRIPTION:DEADLINE: <2026-05-28 Thu>\nCATEGORIES:???\nEND:VEVENT\nBEGIN:VTODO\nUID:TODO-<uid>\nDTSTAMP:<STAMP>\nDTSTART:20260527T090000\nSUMMARY:Event\nDESCRIPTION:DEADLINE: <2026-05-28 Thu>\nCATEGORIES:???\nSEQUENCE:1\nPRIORITY:5\nSTATUS:NEEDS-ACTION\nEND:VTODO\n\")""#
+        ]],
     );
 }
 
@@ -192,7 +213,7 @@ fn org_icalendar_export_todo_schedule_deadline_combo() {
 fn org_export_region_emphasis_link_footnote_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ox-html)
@@ -230,5 +251,6 @@ fn org_export_region_emphasis_link_footnote_deep_state_combo() {
              "sec:org[[:alnum:]-]+" "sec:org-id"
              (replace-regexp-in-string "org[[:alnum:]-]\\{8,\\}" "orgHASH"
                                        html)))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 50)""#]],
     );
 }

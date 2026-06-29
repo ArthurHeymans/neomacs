@@ -86,7 +86,12 @@ fn oracle_prop_cache_lru_fixed_capacity() {
                           (car r2)   ;; nil (miss)
                           (car r3)   ;; value of "d" = 4
                           (funcall lru-stats c))))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"c\" \"b\" \"a\") (\"a\" \"c\" \"b\") (\"d\" \"a\" \"c\") 1 nil 4 (:hits 2 :misses 1 :size 3 :capacity 3))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +180,12 @@ fn oracle_prop_cache_lfu() {
                     (car r)   ;; nil: "c" was evicted
                     ;; "a" is still there
                     (car (funcall lfu-get c "a"))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"b\" 2) (\"a\" 3) (\"c\" 1)) (\"d\" \"b\" \"a\") nil 10)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -261,7 +271,12 @@ fn oracle_prop_cache_ttl() {
                         (car r3)    ;; "val-medium" at t=7
                         keys-t15    ;; only "long" remains
                         ))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"long\" \"medium\" \"short\") \"val-short\" nil \"val-medium\" (\"long\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -379,7 +394,10 @@ fn oracle_prop_cache_write_through_vs_write_back() {
                    wb-store-x-after   ;; 100
                    wb-dirty-after     ;; nil
                    ))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 30 1 (\"w\" \"x\") 100 nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -489,7 +507,12 @@ fn oracle_prop_cache_multi_level() {
                 (mapcar #'car (funcall level-entries l2))
                 (funcall level-stats l1)
                 (funcall level-stats l2)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"a\" store-hit) (\"b\" store-hit) (\"c\" store-hit) (\"a\" L2-hit) (\"d\" store-hit) (\"b\" L2-hit) (\"e\" store-hit)) (\"e\" \"b\") (\"d\" \"a\" \"b\" \"c\") (:hits 0 :misses 7) (:hits 2 :misses 5))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -595,5 +618,10 @@ fn oracle_prop_cache_statistics() {
          :hit-rate (funcall sc-hit-rate c)
          :top-3 (funcall sc-top-keys c 3)
          :total-accesses (+ (nth 2 c) (nth 3 c)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:hits 9 :misses 2 :evictions 1 :hit-rate 8181 :top-3 ((\"x\" . 4) (\"w\" . 2) (\"z\" . 2)) :total-accesses 11)""#
+        ]],
+    );
 }

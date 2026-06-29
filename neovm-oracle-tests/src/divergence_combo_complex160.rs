@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx160_package_desc_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -25,13 +25,14 @@ fn div_cx160_package_desc_creation() {
               (package-desc-requirements desc))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx160_package_version_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (version-to-list "1.2.3")
       (version-to-list "1.2.3.4")
@@ -40,26 +41,28 @@ fn div_cx160_package_version_format() {
       (version-list-= '(1 2 3) '(1 2 3))
       (version-list-> '(1 2 4) '(1 2 3)))
 "##,
+        expect_test::expect![[r#""ERR (void-function version-list->)""#]],
     );
 }
 
 #[test]
 fn div_cx160_package_version_join() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (package-version-join '(1 2 3))
       (package-version-join '(1 2 3 4))
       (package-version-join '(1))
       (condition-case e (package-version-join '()) (error (car e))))
 "##,
+        expect_test::expect![[r#""OK (\"1.2.3\" \"1.2.3.4\" \"1\" \"\")""#]],
     );
 }
 
 #[test]
 fn div_cx160_eval_and_compile_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (eval-and-compile
@@ -67,26 +70,28 @@ fn div_cx160_eval_and_compile_basic() {
   (list (boundp 'neo-cx160-evalc)
         neo-cx160-evalc))
 "##,
+        expect_test::expect![[r#""OK (t :both)""#]],
     );
 }
 
 #[test]
 fn div_cx160_eval_when_compile_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defvar neo-cx160-when-compile (eval-when-compile (+ 1 2 3)))
   (list (integerp neo-cx160-when-compile)
         neo-cx160-when-compile))
 "##,
+        expect_test::expect![[r#""OK (t 6)""#]],
     );
 }
 
 #[test]
 fn div_cx160_load_history_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (require 'cl-lib)
 (let* ((cl-path (locate-library "cl-lib"))
@@ -96,38 +101,41 @@ fn div_cx160_load_history_round_trip() {
         (consp (cdr entry))
         (> (length entry) 0)))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx160_elpa_archive_path_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'package-user-dir)
       (boundp 'package-directory-list)
       (stringp package-user-dir)
       (consp package-directory-list))
 "##,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx160_package_archive_priorities_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'package-archive-priorities)
       (consp package-archive-priorities)
       (boundp 'package-menu-hide-low-priority))
 "##,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx160_package_init_helper_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'package-initialize)
       (fboundp 'package-activate-all)
@@ -135,13 +143,14 @@ fn div_cx160_package_init_helper_query() {
       (boundp 'package-alist)
       (boundp 'package--builtins))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx160_load_suffixes_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (consp load-suffixes)
           (member ".elc" load-suffixes)
@@ -149,13 +158,14 @@ fn div_cx160_load_suffixes_query() {
           (consp load-file-rep-suffixes)
           (boundp 'load-path))
 "##,
+        expect_test::expect![[r#""OK (t (\".elc\" \".el\") (\".el\") t t)""#]],
     );
 }
 
 #[test]
 fn div_cx160_with_temp_buffer_window_eval_macro_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (with-temp-buffer
@@ -180,13 +190,14 @@ fn div_cx160_with_temp_buffer_window_eval_macro_undo() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }
 
 #[test]
 fn div_cx160_package_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -213,5 +224,6 @@ fn div_cx160_package_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

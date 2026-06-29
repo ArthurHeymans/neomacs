@@ -181,7 +181,10 @@ fn oracle_prop_avl_tree_insert_and_rotations() {
     (fmakunbound 'neovm--avl-insert)
     (fmakunbound 'neovm--avl-inorder)
     (fmakunbound 'neovm--avl-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7) 3 4 0 t t t t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +300,10 @@ fn oracle_prop_avl_tree_reverse_sequential() {
     (fmakunbound 'neovm--avl-insert)
     (fmakunbound 'neovm--avl-inorder)
     (fmakunbound 'neovm--avl-all-balanced)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7 8 9 10) 4 7 t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -428,7 +434,12 @@ fn oracle_prop_avl_tree_lr_rl_rotations() {
     (fmakunbound 'neovm--avl-insert)
     (fmakunbound 'neovm--avl-inorder)
     (fmakunbound 'neovm--avl-all-balanced)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 20 30) 20 2 t (10 20 30) 20 2 t (10 20 25 30 35 50 60 70 80) 4 t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -614,7 +625,12 @@ fn oracle_prop_avl_tree_delete() {
     (fmakunbound 'neovm--avl-all-balanced)
     (fmakunbound 'neovm--avl-min)
     (fmakunbound 'neovm--avl-delete)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9 10 11 12 13 14 15) t (2 3 4 5 6 7 8 9 10 11 12 13 14 15) t (3 4 5 6 7 8 9 10 11 12 13 14 15) t (3 4 5 6 7 9 10 11 12 13 14 15) t (3 5 6 7 9 10 11 13 15) t nil nil t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -749,7 +765,12 @@ fn oracle_prop_avl_tree_pseudorandom_insert() {
     (fmakunbound 'neovm--avl-inorder)
     (fmakunbound 'neovm--avl-all-balanced)
     (fmakunbound 'neovm--avl-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t 5 20 (3 14 17 22 24 29 30 32 33 41 44 51 62 64 72 79 89 90 92 96))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -922,7 +943,12 @@ fn oracle_prop_avl_tree_insert_delete_interleaved() {
     (fmakunbound 'neovm--avl-inorder)
     (fmakunbound 'neovm--avl-search)
     (fmakunbound 'neovm--avl-all-balanced)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9 10) t (1 3 5 7 9) t (1 3 5 7 9 20 21 22 23 24 25) t (20 21 23 24 25) t t nil t nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1083,5 +1109,8 @@ fn oracle_prop_avl_tree_delete_all() {
     (fmakunbound 'neovm--avl-inorder)
     (fmakunbound 'neovm--avl-all-balanced)
     (fmakunbound 'neovm--avl-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7 8 9 10) 10 t t t t)""#]],
+    );
 }

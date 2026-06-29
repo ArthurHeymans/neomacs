@@ -90,7 +90,10 @@ fn oracle_prop_combination_parser_combinator_advanced_monadic() {
     (fmakunbound 'neovm--pca-bind)
     (fmakunbound 'neovm--pca-char)
     (fmakunbound 'neovm--pca-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((42 . 0) (hello . 0) nil (\"A\" . 1) (\"ab\" . 2) nil t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -206,7 +209,12 @@ fn oracle_prop_combination_parser_combinator_advanced_many1_try() {
     (fmakunbound 'neovm--pcb-try)
     (fmakunbound 'neovm--pcb-label)
     (fmakunbound 'neovm--pcb-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"1\" \"2\" \"3\") . 3) nil (nil . 0) (\"ab\" . 2) (\"abc\" . 3) ((\"h\" \"e\" \"l\" \"l\" \"o\" \"4\" \"2\" \"w\" \"o\" \"r\" \"l\" \"d\") . 12) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -352,7 +360,12 @@ fn oracle_prop_combination_parser_combinator_advanced_sep_end_by() {
     (fmakunbound 'neovm--pcc-sepby1)
     (fmakunbound 'neovm--pcc-endby)
     (fmakunbound 'neovm--pcc-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"hello\" \"world\" \"foo\") . 15) ((\"alone\") . 5) (nil . 0) nil ((\"hello\" \"world\" \"foo\") . 16) ((\"hello\" \"world\") . 12) (nil . 0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -500,7 +513,12 @@ fn oracle_prop_combination_parser_combinator_advanced_chainl1() {
     (fmakunbound 'neovm--pcd-mulop)
     (fmakunbound 'neovm--pcd-powop)
     (fmakunbound 'neovm--pcd-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((6 . 9) (5 . 10) (24 . 9) (512 . 9) (42 . 2) (5 . 11) (13 . 14))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -603,7 +621,10 @@ fn oracle_prop_combination_parser_combinator_advanced_full_arith() {
     (fmakunbound 'neovm--pce-term)
     (fmakunbound 'neovm--pce-eval)
     (makunbound 'neovm--pce-expr)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (7 9 5 70 5 5 15 25 0 25)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -773,7 +794,12 @@ fn oracle_prop_combination_parser_combinator_advanced_json_parser() {
     (fmakunbound 'neovm--pcf-object)
     (fmakunbound 'neovm--pcf-parse)
     (makunbound 'neovm--pcf-value)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (42 -7 \"hello world\" t :json-false :json-null [1 2 3] [] [\"a\" 1 t :json-null] [[1 2] [3 4]] ((\"name\" . \"Alice\") (\"age\" . 30)) nil ((\"items\" . [1 2 3]) (\"ok\" . t)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -852,5 +878,10 @@ fn oracle_prop_combination_parser_combinator_advanced_error_tracking() {
     (fmakunbound 'neovm--pcg-or)
     (fmakunbound 'neovm--pcg-seq)
     (fmakunbound 'neovm--pcg-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"ab\" 2 2) (error 1 \"expected 'c'\") (\"a\" 1 1) (error 1 \"expected 'c'\") (\"ac\" 2 2))""#
+        ]],
+    );
 }

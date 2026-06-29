@@ -62,7 +62,10 @@ fn oracle_prop_decision_tree_entropy() {
     (fmakunbound 'neovm--dt-log2)
     (fmakunbound 'neovm--dt-entropy)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0.0 1.0 0.8113 1.585 0.0 0.0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +163,10 @@ fn oracle_prop_decision_tree_info_gain() {
     (fmakunbound 'neovm--dt-info-gain)
     (fmakunbound 'neovm--dt-best-split)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0.2467 0.0292 (0 . 0.2467))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +320,12 @@ fn oracle_prop_decision_tree_id3_build() {
     (fmakunbound 'neovm--dt-build)
     (fmakunbound 'neovm--dt-classify)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:node ((no no) (no no) (yes yes) (yes yes) (yes yes) (yes no) (yes yes) (no no) (yes yes) (yes yes) (yes yes) (yes yes) (yes yes) (yes no)) yes yes nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -394,7 +405,10 @@ fn oracle_prop_decision_tree_numeric_threshold() {
     (fmakunbound 'neovm--dt-entropy)
     (fmakunbound 'neovm--dt-best-threshold)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((20.0 0.971) (30.0 1.0))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -465,7 +479,10 @@ fn oracle_prop_decision_tree_serialization() {
     (fmakunbound 'neovm--dt-count-nodes)
     (fmakunbound 'neovm--dt-depth)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable attr)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -576,7 +593,12 @@ fn oracle_prop_decision_tree_pruning() {
     (fmakunbound 'neovm--dt-majority-label)
     (fmakunbound 'neovm--dt-prune)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1.0 1.0 (:node 0 ((a (:node 1 ((x (:leaf yes)) (y (:leaf no))))) (b (:leaf yes)) (c (:leaf yes)))) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -684,5 +706,8 @@ fn oracle_prop_decision_tree_cross_validation() {
     (fmakunbound 'neovm--dt-cv-split)
     (fmakunbound 'neovm--dt-cv-run)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0.75 0.5 0.5) (0.75 0.75 1.0) (0.67 0.67 0.33 0.33))""#]],
+    );
 }

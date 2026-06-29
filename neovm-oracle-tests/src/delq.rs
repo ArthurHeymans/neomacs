@@ -12,19 +12,34 @@ use super::common::{
 fn oracle_prop_delq_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(delq 3 '(1 3 5 3 7))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(delq 3 '(1 3 5 3 7))",
+        expect_test::expect![[r#""OK (1 5 7)""#]],
+    );
     assert_ok_eq("(1 5 7)", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(delq 'x '(x x x))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(delq 'x '(x x x))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(delq 99 '(10 20 30))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(delq 99 '(10 20 30))",
+        expect_test::expect![[r#""OK (10 20 30)""#]],
+    );
     assert_ok_eq("(10 20 30)", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(delq 5 nil)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(delq 5 nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(delq 'a '(b c a d a e))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(delq 'a '(b c a d a e))",
+        expect_test::expect![[r#""OK (b c d e)""#]],
+    );
     assert_ok_eq("(b c d e)", &o, &n);
 }
 
@@ -32,7 +47,10 @@ fn oracle_prop_delq_basics() {
 fn oracle_prop_delq_wrong_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(delq 1 42)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(delq 1 42)",
+        expect_test::expect![[r#""ERR (wrong-type-argument listp 42)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -51,7 +69,10 @@ fn oracle_delq_mutates_before_improper_tail_error() {
     (error (list (car err) x))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (wrong-type-argument (a . tail))""#]],
+    );
 }
 
 #[test]
@@ -71,7 +92,12 @@ fn oracle_delq_reports_current_improper_tail_after_leading_matches_like_gnu() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument (listp 2)) (wrong-type-argument (listp (1 . 2))))""#
+        ]],
+    );
 }
 
 proptest! {

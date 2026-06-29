@@ -94,7 +94,12 @@ fn oracle_prop_sm_dfa_tokenizer() {
         (funcall 'neovm--test-tokenize "\"hello\" != \"world\"")
         (funcall 'neovm--test-tokenize ""))
     (fmakunbound 'neovm--test-tokenize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((ident \"x\") (op \"=\") (int \"42\")) ((ident \"foo_bar\") (op \"+\") (float \"3.14\")) ((ident \"if\") (op \"(\") (ident \"x\") (op \">=\") (int \"10\") (op \")\") (ident \"y\") (op \"=\") (ident \"x\") (op \"*\") (int \"2\") (op \";\")) ((string \"hello\") (op \"!=\") (string \"world\")) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +152,10 @@ fn oracle_prop_sm_balanced_parens() {
         (funcall 'neovm--test-balanced "")
         (funcall 'neovm--test-balanced "{[(])}"))
     (fmakunbound 'neovm--test-balanced)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil nil nil t t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -217,7 +225,12 @@ fn oracle_prop_sm_protocol_parser() {
         (funcall 'neovm--test-parse-request "GET /path")
         (funcall 'neovm--test-parse-request "bad request"))
     (fmakunbound 'neovm--test-parse-request)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok \"GET\" \"/index.html\" \"HTTP/1.1\") (ok \"POST\" \"/api/data\" \"HTTP/2.0\") (ok \"DELETE\" \"/items/42\" \"HTTP/1.0\") (ok \"GET\" \"/\" \"HTTP/1.1\") (ok \"GET\" \"/path\" nil) (error \"bad method char at 0\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +303,12 @@ fn oracle_prop_sm_mealy_transliteration() {
         (funcall 'neovm--test-mealy "chest")
         (funcall 'neovm--test-mealy "sc"))
     (fmakunbound 'neovm--test-mealy)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"XurX\" \"Yout\" \"Ze Zing\" \"catX Zis Yell\" \"cats\" \"\" \"Xest\" \"sc\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -402,7 +420,10 @@ fn oracle_prop_sm_pda_expression_parser() {
     (fmakunbound 'neovm--test-eval-expr)
     (makunbound 'neovm--test-parse-pos)
     (makunbound 'neovm--test-parse-input)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 5 10 14 20 15 10 70)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -471,7 +492,10 @@ fn oracle_prop_sm_glob_pattern_matcher() {
         (funcall 'neovm--test-glob-match "a*b*c" "abc")
         (funcall 'neovm--test-glob-match "a*b*c" "ac"))
     (fmakunbound 'neovm--test-glob-match)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t t nil t t t t t nil t t t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -548,7 +572,12 @@ fn oracle_prop_sm_csv_parser() {
         (funcall 'neovm--test-parse-csv "single")
         (funcall 'neovm--test-parse-csv ""))
     (fmakunbound 'neovm--test-parse-csv)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"a\" \"b\" \"c\") (\"hello\" \"world\") (\"quoted\" \"plain\") (\"has,comma\" \"ok\") (\"has\\\"quote\" \"end\") (\"\" \"\" \"\" \"\") (\"single\") (\"\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -595,5 +624,8 @@ fn oracle_prop_sm_traffic_light_controller() {
                               (sort result (lambda (a b)
                                              (string-lessp (symbol-name (car a))
                                                            (symbol-name (car b))))))))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (yellow 0 5 ((yellow . 1)))""#]],
+    );
 }

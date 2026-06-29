@@ -28,5 +28,10 @@ fn oracle_substitute_key_definition_direct_nested_oldmap_and_menu_items() {
    (condition-case e
        (substitute-key-definition 'old-cmd 'new-cmd 42)
      (error (list (car e) (cadr e) (caddr e))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (new-cmd other-cmd new-cmd (menu-item \"Old\" new-cmd :enable t) oldmap-new (wrong-type-argument keymapp 42))""#
+        ]],
+    );
 }

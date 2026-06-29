@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_r1_list_navigation_forward_backward_up_down() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "(a (b (c d)) e)")
@@ -23,6 +23,9 @@ fn div_r1_list_navigation_forward_backward_up_down() {
         (up-list 2)
         (list d1 f1 d2 (point))))))
 "##,
+        expect_test::expect![[
+            r#""ERR (scan-error \"Containing expression ends prematurely\" 15 16)""#
+        ]],
     );
 }
 
@@ -35,7 +38,7 @@ fn div_r1_backward_list_and_up_list_errors() {
     // up-list -1 on unbalanced parens signals wrong-type-argument in Neomacs
     // instead of scan-error. The condition-case (scan-error ...) doesn't catch
     // it, so the error propagates. In GNU, scan-error is caught cleanly.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "xxx (a b) yyy (c d) zzz")
@@ -46,5 +49,6 @@ fn div_r1_backward_list_and_up_list_errors() {
     (list b1 (point)
           (condition-case err (up-list 99) (scan-error (car err))))))
 "##,
+        expect_test::expect![[r#""OK (15 15 scan-error)""#]],
     );
 }

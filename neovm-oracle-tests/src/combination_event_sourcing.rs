@@ -72,7 +72,12 @@ fn oracle_prop_combination_event_sourcing_store() {
                                 (funcall get-events-for "order-1"))))
     (makunbound 'neovm--test-es-store)
     (makunbound 'neovm--test-es-seq)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:total-events 7 :order-1-events 4 :order-2-events 3 :confirmed-events 2 :events-since-4 (5 6 7) :order-1-types (order-created item-added order-confirmed item-shipped))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +141,12 @@ fn oracle_prop_combination_event_sourcing_aggregate_reconstruction() {
                       :transactions (plist-get state :transactions)
                       :name (plist-get state :name)
                       :history (plist-get state :history))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:final-balance 403 :transactions 5 :name \"Alice\" :history ((deposit 500) (withdrawal 100) (deposit 250) (withdrawal 75) (interest 28) (withdrawal 200)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +197,12 @@ fn oracle_prop_combination_event_sourcing_projection() {
                 (sort users (lambda (a b)
                               (string< (plist-get a :user)
                                        (plist-get b :user))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:user \"alice\" :email \"a@x.com\" :total-spend 73 :order-count 3) (:user \"bob\" :email \"b@x.com\" :total-spend 17 :order-count 2) (:user \"carol\" :email \"c@x.com\" :total-spend 150 :order-count 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +262,12 @@ fn oracle_prop_combination_event_sourcing_snapshot_replay() {
                             :snapshot-replay (sort (copy-sequence partial-replay) sort-fn)
                             :match (equal (sort (copy-sequence full-replay) sort-fn)
                                           (sort (copy-sequence partial-replay) sort-fn)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:full-replay ((\"a\" . 14) (\"b\" . 3) (\"c\" . 3)) :snapshot-replay ((\"a\" . 14) (\"b\" . 3) (\"c\" . 3)) :match t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -311,7 +331,12 @@ fn oracle_prop_combination_event_sourcing_versioning() {
                                             (lambda (a b)
                                               (string< (plist-get a :customer)
                                                        (plist-get b :customer)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:migrated-count 7 :all-v2 t :balances ((:customer \"alice\" :balance 308) (:customer \"bob\" :balance -4) (:customer \"carol\" :balance 81) (:customer \"dave\" :balance 120)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -405,7 +430,12 @@ fn oracle_prop_combination_event_sourcing_saga() {
          (funcall run-saga '(:item "widget" :in-stock t :funds 100
                              :price 50 :valid-address nil :address nil))))
     (makunbound 'neovm--test-saga-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:saga-ok :results ((:ok (:reserved \"widget\")) (:ok (:charged 50)) (:ok (:shipped-to \"123 Main\"))) :log ((:step reserve-inventory :status attempt :detail (:item \"widget\" :in-stock t :funds 100 :price 50 :valid-address t :address \"123 Main\")) (:step reserve-inventory :status ok :detail nil) (:step charge-payment :status attempt :detail (:item \"widget\" :in-stock t :funds 100 :price 50 :valid-address t :address \"123 Main\")) (:step charge-payment :status ok :detail nil) (:step ship-order :status attempt :detail (:item \"widget\" :in-stock t :funds 100 :price 50 :valid-address t :address \"123 Main\")) (:step ship-order :status ok :detail nil))) (:saga-failed :at reserve-inventory :reason \"out of stock\" :log ((:step reserve-inventory :status attempt :detail (:item \"unicorn\" :in-stock nil :funds 100 :price 50 :valid-address t :address \"123 Main\")) (:step reserve-inventory :status fail :detail \"out of stock\"))) (:saga-failed :at charge-payment :reason \"insufficient funds\" :compensations (release-inventory) :log ((:step reserve-inventory :status attempt :detail (:item \"widget\" :in-stock t :funds 10 :price 50 :valid-address t :address \"123 Main\")) (:step reserve-inventory :status ok :detail nil) (:step charge-payment :status attempt :detail (:item \"widget\" :in-stock t :funds 10 :price 50 :valid-address t :address \"123 Main\")) (:step charge-payment :status fail :detail \"insufficient funds\") (:step release-inventory :status compensate :detail (:item \"widget\" :in-stock t :funds 10 :price 50 :valid-address t :address \"123 Main\")))) (:saga-failed :at ship-order :reason \"invalid address\" :compensations (refund-payment release-inventory) :log ((:step reserve-inventory :status attempt :detail (:item \"widget\" :in-stock t :funds 100 :price 50 :valid-address nil :address nil)) (:step reserve-inventory :status ok :detail nil) (:step charge-payment :status attempt :detail (:item \"widget\" :in-stock t :funds 100 :price 50 :valid-address nil :address nil)) (:step charge-payment :status ok :detail nil) (:step ship-order :status attempt :detail (:item \"widget\" :in-stock t :funds 100 :price 50 :valid-address nil :address nil)) (:step ship-order :status fail :detail \"invalid address\") (:step refund-payment :status compensate :detail (:item \"widget\" :in-stock t :funds 100 :price 50 :valid-address nil :address nil)) (:step release-inventory :status compensate :detail (:item \"widget\" :in-stock t :funds 100 :price 50 :valid-address nil :address nil)))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -503,5 +533,10 @@ fn oracle_prop_combination_event_sourcing_command_validation() {
                      ;; Unknown command
                      (funcall validate-command acct
                               '(:type transfer :data (:to "ACC-2")))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:accepted (:event-type money-deposited :amount 200 :new-balance 700)) (:accepted (:event-type money-withdrawn :amount 300 :new-balance 200)) (:rejected \"insufficient funds: have 500, need 999\") (:rejected \"amount must be positive\") (:rejected \"amount must be a number\") (:rejected \"account is frozen\") (:accepted (:event-type account-frozen)) (:rejected \"already frozen\") (:rejected \"unknown command: transfer\"))""#
+        ]],
+    );
 }

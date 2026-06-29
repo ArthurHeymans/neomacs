@@ -47,7 +47,7 @@ fn surface_d1_insert_and_inherit_middle() {
 
     // insert-and-inherit into a uniformly-propertied region: the new text
     // should inherit face='bold via default rear-stickiness.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -56,6 +56,7 @@ fn surface_d1_insert_and_inherit_middle() {
   (insert-and-inherit "XXX")
   (get-text-property 6 'face))
 "#,
+        expect_test::expect![[r#""OK bold""#]],
     );
 }
 
@@ -64,7 +65,7 @@ fn surface_d1_insert_and_inherit_front_sticky_explicit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Explicit front-sticky: text inserted at the right boundary inherits.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "aaaa")
@@ -74,6 +75,7 @@ fn surface_d1_insert_and_inherit_front_sticky_explicit() {
   (insert-and-inherit "bbbb")
   (get-text-property 5 'face))
 "#,
+        expect_test::expect![[r#""OK bold""#]],
     );
 }
 
@@ -83,7 +85,7 @@ fn surface_d1_insert_and_inherit_rear_nonsticky_blocks() {
 
     // rear-nonsticky=t: text inserted at the right boundary should NOT
     // inherit the property.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "aaaa")
@@ -93,6 +95,7 @@ fn surface_d1_insert_and_inherit_rear_nonsticky_blocks() {
   (insert-and-inherit "bbbb")
   (get-text-property 5 'face))
 "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -103,7 +106,7 @@ fn surface_d1_insert_and_inherit_before_front_sticky() {
     // Insert at position 1 of a front-sticky interval: the inserted text
     // should inherit because front-sticky means "text at my front gets
     // my properties."
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "aaaa")
@@ -113,6 +116,7 @@ fn surface_d1_insert_and_inherit_before_front_sticky() {
   (insert-and-inherit "bbbb")
   (get-text-property 1 'face))
 "#,
+        expect_test::expect![[r#""OK bold""#]],
     );
 }
 
@@ -122,7 +126,7 @@ fn surface_d1_plain_insert_does_not_inherit() {
 
     // Verify plain insert does NOT inherit — both GNU and NeoMacs agree.
     // The audit incorrectly expected GNU's plain `insert` to inherit.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -131,6 +135,7 @@ fn surface_d1_plain_insert_does_not_inherit() {
   (insert "XXX")
   (get-text-property 6 'face))
 "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -147,7 +152,7 @@ fn surface_d2_multibyte_put_get_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Greek letters (2 bytes each).  Property boundaries on char positions.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "αβγδεζηθ")
@@ -158,6 +163,7 @@ fn surface_d2_multibyte_put_get_roundtrip() {
         (get-text-property 5 'test)
         (get-text-property 8 'test)))
 "#,
+        expect_test::expect![[r#""OK (front front back back)""#]],
     );
 }
 
@@ -166,7 +172,7 @@ fn surface_d2_multibyte_boundary_precision() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Property on chars 1-3 of multibyte text.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "αβγδε")
@@ -176,6 +182,7 @@ fn surface_d2_multibyte_boundary_precision() {
         (get-text-property 3 'marker)
         (get-text-property 4 'marker)))
 "#,
+        expect_test::expect![[r#""OK (a a nil nil)""#]],
     );
 }
 
@@ -184,7 +191,7 @@ fn surface_d2_multibyte_next_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Boundary between two property regions in multibyte text.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "αβγδεζηθ")
@@ -192,6 +199,7 @@ fn surface_d2_multibyte_next_property_change() {
   (put-text-property 5 9 'zone 'right)
   (next-single-property-change 1 'zone))
 "#,
+        expect_test::expect![[r#""OK 5""#]],
     );
 }
 
@@ -209,7 +217,7 @@ fn surface_d3_undo_list_populated_after_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // buffer-undo-list should be non-nil after put-text-property.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "hello world")
@@ -217,6 +225,7 @@ fn surface_d3_undo_list_populated_after_put() {
   (put-text-property 1 12 'face 'bold)
   (not (null buffer-undo-list)))
 "#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -225,7 +234,7 @@ fn surface_d3_undo_restores_previous_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Set face=bold, change to italic, undo → should get bold back.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "hello world")
@@ -235,6 +244,7 @@ fn surface_d3_undo_restores_previous_property() {
   (undo)
   (get-text-property 1 'face))
 "#,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     );
 }
 
@@ -253,7 +263,7 @@ fn surface_d4_after_change_fired_on_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // after-change-functions should fire when put-text-property mutates.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "hello world")
@@ -265,6 +275,7 @@ fn surface_d4_after_change_fired_on_put() {
     (put-text-property 1 12 'face 'bold)
     (nreverse calls)))
 "#,
+        expect_test::expect![[r#""OK ((1 12 11))""#]],
     );
 }
 
@@ -273,7 +284,7 @@ fn surface_d4_after_change_fired_on_add() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Same for add-text-properties.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "hello world")
@@ -285,6 +296,7 @@ fn surface_d4_after_change_fired_on_add() {
     (add-text-properties 1 6 '(face bold test t))
     (nreverse calls)))
 "#,
+        expect_test::expect![[r#""OK ((1 6 5))""#]],
     );
 }
 
@@ -293,7 +305,7 @@ fn surface_d4_after_change_fired_on_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Same for remove-text-properties.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "hello world")
@@ -306,6 +318,7 @@ fn surface_d4_after_change_fired_on_remove() {
     (remove-text-properties 1 12 '(face))
     (nreverse calls)))
 "#,
+        expect_test::expect![[r#""OK ((1 12 11))""#]],
     );
 }
 
@@ -315,7 +328,7 @@ fn surface_d4_before_change_fired_on_set() {
 
     // GNU calls prepare_to_modify_buffer_1 before property mutations,
     // which runs before-change-functions.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "hello world")
@@ -327,6 +340,7 @@ fn surface_d4_before_change_fired_on_set() {
     (set-text-properties 1 6 '(face bold))
     (nreverse calls)))
 "#,
+        expect_test::expect![[r#""OK ((1 6))""#]],
     );
 }
 
@@ -344,7 +358,7 @@ fn surface_d5_overlay_start_end_track_insertion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Insert text before an overlay: positions should advance.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "ABCDEFGHIJ")
@@ -354,6 +368,7 @@ fn surface_d5_overlay_start_end_track_insertion() {
     (insert "xxx")
     (list (overlay-start ov) (overlay-end ov))))
 "#,
+        expect_test::expect![[r#""OK (8 12)""#]],
     );
 }
 
@@ -363,7 +378,7 @@ fn surface_d5_overlay_property_after_insertion_before() {
 
     // After inserting 3 chars at position 1, overlay at 5-9 should be at
     // 8-12.  get-char-property at 8 should find it.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "ABCDEFGHIJ")
@@ -373,6 +388,7 @@ fn surface_d5_overlay_property_after_insertion_before() {
     (insert "XXX")
     (get-char-property 8 'face)))
 "#,
+        expect_test::expect![[r#""OK bold""#]],
     );
 }
 
@@ -381,7 +397,7 @@ fn surface_d5_overlay_start_end_track_deletion_before() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Delete text before an overlay: positions should retreat.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "ABCDEFGHIJ")
@@ -390,6 +406,7 @@ fn surface_d5_overlay_start_end_track_deletion_before() {
     (delete-region 1 3)
     (list (overlay-start ov) (overlay-end ov))))
 "#,
+        expect_test::expect![[r#""OK (3 7)""#]],
     );
 }
 
@@ -408,7 +425,7 @@ fn surface_d6_next_property_change_adjacent_equal_props() {
 
     // Two adjacent regions with identical face=bold.  Both return nil
     // (no property change) — GNU via merge, NeoMacs via skip.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -416,6 +433,7 @@ fn surface_d6_next_property_change_adjacent_equal_props() {
   (put-text-property 6 11 'face 'bold)
   (next-property-change 1))
 "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -424,7 +442,7 @@ fn surface_d6_next_property_change_three_way() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Three regions, same property.  Both return nil.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "abcdefghijklmno")
@@ -433,6 +451,7 @@ fn surface_d6_next_property_change_three_way() {
   (put-text-property 11 16 'test 'x)
   (next-property-change 1))
 "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -441,7 +460,7 @@ fn surface_d6_merge_after_overlapping_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Make adjacent intervals equal by setting same property over full range.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -450,6 +469,7 @@ fn surface_d6_merge_after_overlapping_put() {
   (put-text-property 1 11 'face 'bold)
   (next-property-change 1))
 "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -466,7 +486,7 @@ fn surface_d7_overlay_evaporate_on_delete_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Delete entire content of evaporate overlay → overlay removed.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "hello world")
@@ -475,6 +495,7 @@ fn surface_d7_overlay_evaporate_on_delete_content() {
     (delete-region 7 12)
     (if (overlay-start ov) 'alive 'evaporated)))
 "#,
+        expect_test::expect![[r#""OK evaporated""#]],
     );
 }
 
@@ -483,7 +504,7 @@ fn surface_d7_overlay_evaporate_on_partial_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Delete part of overlay content → overlay survives.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "prefix MIDDLE suffix")
@@ -492,6 +513,7 @@ fn surface_d7_overlay_evaporate_on_partial_delete() {
     (delete-region 8 14)
     (if (overlay-start ov) 'alive 'evaporated)))
 "#,
+        expect_test::expect![[r#""OK evaporated""#]],
     );
 }
 
@@ -504,7 +526,7 @@ fn surface_d8_read_only_blocks_sticky_insertion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Inserting at the front of a read-only, front-sticky interval.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "hello")
@@ -517,6 +539,7 @@ fn surface_d8_read_only_blocks_sticky_insertion() {
         'inserted)
     (buffer-read-only 'blocked)))
 "#,
+        expect_test::expect![[r#""ERR (text-read-only)""#]],
     );
 }
 
@@ -529,7 +552,7 @@ fn surface_d9_insert_propertied_string_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Insert a propertied substring into a buffer with existing properties.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "aaaa")
@@ -539,6 +562,7 @@ fn surface_d9_insert_propertied_string_merge() {
     (insert str)
     (get-text-property 3 'face)))
 "#,
+        expect_test::expect![[r#""OK italic""#]],
     );
 }
 
@@ -550,13 +574,14 @@ fn surface_d9_insert_propertied_string_merge() {
 fn surface_d10_display_property_string_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "hello world")
   (put-text-property 1 6 'display "XXXXX")
   (get-text-property 1 'display))
 "#,
+        expect_test::expect![[r#""OK \"XXXXX\"""#]],
     );
 }
 
@@ -564,13 +589,14 @@ fn surface_d10_display_property_string_value() {
 fn surface_d10_display_property_space_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "hello")
   (put-text-property 1 2 'display '(space :width 10))
   (get-text-property 1 'display))
 "#,
+        expect_test::expect![[r#""OK (space :width 10)""#]],
     );
 }
 
@@ -582,12 +608,13 @@ fn surface_d10_display_property_space_spec() {
 fn surface_d11_find_composition_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "hello")
   (find-composition 1))
 "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -599,7 +626,7 @@ fn surface_d11_find_composition_returns_nil() {
 fn surface_d12_line_wrap_prefix_storage() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "hello world")
@@ -609,6 +636,7 @@ fn surface_d12_line_wrap_prefix_storage() {
         (get-text-property 1 'wrap-prefix)
         (get-text-property 6 'line-prefix)))
 "#,
+        expect_test::expect![[r#""OK (\">> \" \"   \" nil)""#]],
     );
 }
 
@@ -620,7 +648,7 @@ fn surface_d12_line_wrap_prefix_storage() {
 fn surface_d13_next_char_property_change_after_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -633,6 +661,7 @@ fn surface_d13_next_char_property_change_after_insert() {
           (next-char-property-change 5)
           (next-char-property-change 10))))
 "#,
+        expect_test::expect![[r#""OK (3 8 13)""#]],
     );
 }
 
@@ -644,7 +673,7 @@ fn surface_d13_next_char_property_change_after_insert() {
 fn surface_d14_invisible_property_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "visible hidden visible")
@@ -653,6 +682,7 @@ fn surface_d14_invisible_property_basic() {
   (list (get-text-property 8 'invisible)
         (get-text-property 15 'invisible)))
 "#,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
@@ -660,7 +690,7 @@ fn surface_d14_invisible_property_basic() {
 fn surface_d14_invisible_p_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -670,5 +700,6 @@ fn surface_d14_invisible_p_function() {
         (invisible-p 4)
         (invisible-p 7)))
 "#,
+        expect_test::expect![[r#""OK (nil t nil)""#]],
     );
 }

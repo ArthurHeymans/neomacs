@@ -17,7 +17,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_next_single_property_change_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-nspc")))
     (with-current-buffer buf
@@ -56,6 +56,7 @@ fn combo_next_single_property_change_marker_overlay_undo() {
                                   (get-text-property 16 'grp))))
               (kill-buffer buf)
               (list after restored)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -63,7 +64,7 @@ fn combo_next_single_property_change_marker_overlay_undo() {
 fn combo_previous_single_property_change_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-pspc")))
     (with-current-buffer buf
@@ -102,6 +103,7 @@ fn combo_previous_single_property_change_marker_overlay_undo() {
                                   (get-text-property 16 'grp))))
               (kill-buffer buf)
               (list after restored)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -109,7 +111,7 @@ fn combo_previous_single_property_change_marker_overlay_undo() {
 fn combo_narrow_property_change_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-npc")))
     (with-current-buffer buf
@@ -155,6 +157,7 @@ fn combo_narrow_property_change_marker_overlay_undo() {
                                   (get-text-property 21 'sect))))
               (kill-buffer buf)
               (list after restored)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -162,7 +165,7 @@ fn combo_narrow_property_change_marker_overlay_undo() {
 fn combo_property_search_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-psrch")))
     (with-current-buffer buf
@@ -211,6 +214,7 @@ fn combo_property_search_narrow_marker_overlay_undo() {
                                   (get-text-property 21 'zone))))
               (kill-buffer buf)
               (list after restored)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -218,7 +222,7 @@ fn combo_property_search_narrow_marker_overlay_undo() {
 fn combo_property_search_backward_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-psb")))
     (with-current-buffer buf
@@ -263,5 +267,6 @@ fn combo_property_search_backward_marker_overlay_undo() {
                                   (get-text-property 16 'grp))))
               (kill-buffer buf)
               (list after restored)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

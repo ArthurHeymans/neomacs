@@ -36,7 +36,10 @@ fn oracle_prop_coding_string_advanced_encode_various_codings() {
   (let ((s "\u00E9"))
     (list (string-bytes (encode-coding-string s 'utf-8))
           (string-bytes (encode-coding-string s 'latin-1)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 5 t t 2 3 1 (2 1))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +78,10 @@ fn oracle_prop_coding_string_advanced_decode_roundtrip() {
     (= (length orig) (length dec)))
   ;; Decode unibyte string
   (multibyte-string-p (decode-coding-string "abc" 'utf-8)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +110,10 @@ fn oracle_prop_coding_string_advanced_empty_string() {
   (string-bytes (encode-coding-string "" 'utf-8))
   (string= (encode-coding-string "" 'utf-8) "")
   (string= (decode-coding-string "" 'utf-8) ""))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" 0 0 t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +148,10 @@ fn oracle_prop_coding_string_advanced_multibyte() {
   (let ((s "\u03B1\u03B2\u03B3\u03B4"))
     (list (length s)
           (string-bytes (encode-coding-string s 'utf-8)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 2 3 4 (4 10 t) (3 9) (4 8))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +184,10 @@ fn oracle_prop_coding_string_advanced_no_conversion() {
          (enc (encode-coding-string s 'no-conversion))
          (dec (decode-coding-string enc 'no-conversion)))
     (string= s dec)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"abc\" \"abc\" t (5 5) t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +227,12 @@ fn oracle_prop_coding_string_advanced_multi_encoding_comparison() {
           (let ((s "A\u00E9\u4E2D"))
             (funcall 'neovm--csa-compare-encodings s codings))))
     (fmakunbound 'neovm--csa-compare-encodings)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((utf-8 5 t) (utf-8-unix 5 t) (no-conversion 5 t) (raw-text 5 t)) ((utf-8 2 t) (utf-8-unix 2 t) (no-conversion 2 nil) (raw-text 2 nil)) ((utf-8 6 t) (utf-8-unix 6 t) (no-conversion 6 nil) (raw-text 6 nil)) ((utf-8 0 t) (utf-8-unix 0 t) (no-conversion 0 t) (raw-text 0 t)) ((utf-8 6 t) (utf-8-unix 6 t) (no-conversion 6 nil) (raw-text 6 nil)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -265,7 +285,12 @@ fn oracle_prop_coding_string_advanced_byte_pattern_analysis() {
         ;; Empty
         (funcall 'neovm--csa-byte-stats ""))
     (fmakunbound 'neovm--csa-byte-stats)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5 5 0 0 0 0 0 t) (6 0 6 3 0 0 3 t) (6 0 6 0 2 0 4 t) (8 0 8 0 0 2 6 t) (10 1 9 1 1 1 6 t) (0 0 0 0 0 0 0 t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -301,5 +326,8 @@ fn oracle_prop_coding_string_advanced_nocopy_flag() {
               (string= (encode-coding-string s 'utf-8 nil)
                        (encode-coding-string s 'utf-8 t)))
             test-strings)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t 5) (t 5) (t 5) t (t t t t t))""#]],
+    );
 }

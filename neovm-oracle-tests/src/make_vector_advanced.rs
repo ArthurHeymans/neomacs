@@ -42,7 +42,12 @@ fn oracle_prop_make_vector_various_init() {
                       ;; Mutating through one ref affects the other
                       (progn (setcar (aref v-cons 0) 99)
                              (car (aref v-cons 2)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 3 4 2 2 3 2 2 0 nil t 42 3.14 \"hello\" (99 . 2) :test foo t t t 99)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +74,12 @@ fn oracle_prop_vector_function_multi_args() {
                     (aref (vector 'x 'y 'z) 1)
                     ;; Conversion to list
                     (append (vector 10 20 30) nil))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([] [1] [1 2 3] [a b c d e] [\"hello\" nil t 42 3.14 :key (1 2)] [[1 2] [3 4]] 0 10 y (10 20 30))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +110,12 @@ fn oracle_prop_vconcat_sequence_merge() {
                     ;; Result types
                     (vectorp (vconcat [1] '(2)))
                     (length (vconcat [1 2] '(3 4 5) "ab")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([1 2 3 4 5 6] [97 98 99 100 101] [a b c d e f] [] [] [1 2 3] [65 66] [10 20 30] [1 2 51 4 5 54] t 7)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +165,10 @@ fn oracle_prop_vector_growth_simulation() {
                       (funcall dyn-get 9)
                       ;; Capacity should be 16 (2->4->8->16)
                       (length buf))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 16 (0 1 4 9 16 25 36 49 64 81) 0 25 81 16)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +233,7 @@ fn oracle_prop_vector_bitmap_operations() {
                                (funcall test-bit 60)
                                (funcall test-bit 90))))
                         (list results-before results-after))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -318,7 +336,10 @@ fn oracle_prop_vector_binary_heap() {
                       (dotimes (_ 8)
                         (setq sorted (cons (funcall heap-pop) sorted)))
                       (nreverse sorted))))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (1 3 5 8 12 15 22 47)""#]],
+    );
     assert_ok_eq("(1 3 5 8 12 15 22 47)", &o, &n);
 }
 
@@ -392,5 +413,8 @@ fn oracle_prop_vector_union_find() {
                           (dotimes (i n)
                             (puthash (funcall find i) t groups))
                           (hash-table-count groups))))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable find)""#]],
+    );
 }

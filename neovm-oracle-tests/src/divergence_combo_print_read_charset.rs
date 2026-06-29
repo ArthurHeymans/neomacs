@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_print_read_roundtrip_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((data '(hello world :keyword test-sym-xxx 42 "string" t nil)))
     (let ((printed (prin1-to-string data)))
@@ -22,6 +22,9 @@ fn divergence_print_read_roundtrip_symbols() {
             (string= (prin1-to-string 42) "42")
             (prin1-to-string "str")
             (string= (prin1-to-string "str") "\"str\""))))) "#,
+        expect_test::expect![[
+            r#""OK (t t t \"hello\" t \":keyword\" t \"42\" t \"\\\"str\\\"\" t)""#
+        ]],
     );
 }
 
@@ -29,7 +32,7 @@ fn divergence_print_read_roundtrip_symbols() {
 fn divergence_print_read_nested_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((data '((a . 1) (b . (2 3)) (c (d e) f) [g h i])))
     (let ((printed (prin1-to-string data)))
@@ -42,6 +45,7 @@ fn divergence_print_read_nested_structures() {
             (equal (nth 1 data) '(b 2 3))
             (equal (nth 2 data) '(c (d e) f))
             (equal (nth 3 data) '[g h i]))))) "#,
+        expect_test::expect![[r#""OK (t t t t t t t t t)""#]],
     );
 }
 
@@ -49,7 +53,7 @@ fn divergence_print_read_nested_structures() {
 fn divergence_circular_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
           (let ((x (list 'a 'b)))\n\
             (setcar (cdr x) x)\n\
@@ -57,6 +61,7 @@ fn divergence_circular_print() {
               (list (stringp printed)\n\
                     (> (length printed) 5)\n\
                     (> (length printed) 8))))) ",
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
@@ -64,7 +69,7 @@ fn divergence_circular_print() {
 fn divergence_charset_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (charsetp 'ascii)
         (eq (charsetp 'ascii) t)
@@ -81,6 +86,7 @@ fn divergence_charset_functions() {
         (eq (char-charset ?A) 'ascii)
         (char-charset ?\x3B1)
         (memq (char-charset ?\x3B1) '(unicode greek))))) "#,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 16 56)""#]],
     );
 }
 
@@ -88,7 +94,7 @@ fn divergence_charset_functions() {
 fn divergence_char_table_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ct (make-char-table 'syntax-table nil)))
     (set-char-table-range ct ?\( '(4))
@@ -105,6 +111,7 @@ fn divergence_char_table_operations() {
           (equal (char-table-range ct ?\[) '(2))
           (char-table-range ct ?a)
           (null (char-table-range ct ?a))))) "#,
+        expect_test::expect![[r#""ERR (void-function char-table-type)""#]],
     );
 }
 
@@ -112,7 +119,7 @@ fn divergence_char_table_operations() {
 fn divergence_print_with_text_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((str (copy-sequence "Hello World")))
     (put-text-property 0 5 'face 'bold str)
@@ -127,6 +134,9 @@ fn divergence_print_with_text_props() {
           (= (length str) 11)
           (substring-no-properties str 0 5)
           (string= (substring-no-properties str 0 5) "Hello")))) "#,
+        expect_test::expect![[
+            r##""OK (\"#(\\\"Hello World\\\" 0 5 (face bold) 6 11 (face italic))\" nil bold t italic t 11 t \"Hello\" t)""##
+        ]],
     );
 }
 
@@ -134,7 +144,7 @@ fn divergence_print_with_text_props() {
 fn divergence_read_special_forms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (equal (read "()") '())
         (equal (read "nil") '())
@@ -146,6 +156,7 @@ fn divergence_read_special_forms() {
         (= (read "42") 42)
         (string= (read "\"hello\"") "hello")
         (equal (read "(a (b (c)))") '(a (b (c)))))) "#,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments equal 3)""#]],
     );
 }
 
@@ -153,7 +164,7 @@ fn divergence_read_special_forms() {
 fn divergence_format_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((obj '(a b c)))
     (list (format "%s" obj)
@@ -169,6 +180,9 @@ fn divergence_format_with_objects() {
           (format "hello %s world" 'test-fwo-xxx)
           (string= (format "hello %s world" 'test-fwo-xxx)
                    "hello test-fwo-xxx world")))) "#,
+        expect_test::expect![[
+            r#""OK (\"(a b c)\" t \"(a b c)\" t \"42\" t \"3.14\" t \"A\" t \"hello test-fwo-xxx world\" t)""#
+        ]],
     );
 }
 
@@ -176,7 +190,7 @@ fn divergence_format_with_objects() {
 fn divergence_char_table_parent_and_extra() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((parent (make-char-table 'category-table nil))
         (child (make-char-table 'category-table nil)))
@@ -195,6 +209,9 @@ fn divergence_char_table_parent_and_extra() {
           (eq (char-table-parent child) parent)
           (char-table-extra-slot child 0)
           (null (char-table-extra-slot child 0))))) "#,
+        expect_test::expect![[
+            r#""OK (t alpha t digit t override override t #^[nil nil category-table #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil digit nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil alpha nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] #^^[1 0 #^^[2 0 #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil digit nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil alpha nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] t nil t)""#
+        ]],
     );
 }
 
@@ -202,7 +219,7 @@ fn divergence_char_table_parent_and_extra() {
 fn divergence_print_read_hash_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
     (puthash 'key1 'val1 ht)
@@ -219,5 +236,6 @@ fn divergence_print_read_hash_table() {
             (= (hash-table-count ht) 2)
             (hash-table-test ht)
             (eq (hash-table-test ht) 'equal))))) "#,
+        expect_test::expect![[r#""OK (t t t val1 t val2 t 2 t equal t)""#]],
     );
 }

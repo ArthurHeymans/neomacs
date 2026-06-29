@@ -40,7 +40,10 @@ fn oracle_prop_string_prefix_p_basic() {
   ;; Return type is boolean-like (t or nil)
   (if (string-prefix-p "a" "abc") 'yes 'no)
   (if (string-prefix-p "z" "abc") 'yes 'no))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil nil t nil nil t t nil t t t t yes no)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +77,10 @@ fn oracle_prop_string_suffix_p_basic() {
   ;; Path suffix
   (string-suffix-p "/bin" "/usr/local/bin")
   (string-suffix-p "/lib" "/usr/local/bin"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil nil t nil nil t t t nil t nil t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +123,10 @@ fn oracle_prop_string_prefix_suffix_case_sensitivity() {
   ;; Mixed case with multi-byte (ASCII)
   (string-prefix-p "ABC" "abcdef" t)
   (string-suffix-p "DEF" "abcdef" t))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil nil t t t t nil nil nil nil t t t t nil t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +161,10 @@ fn oracle_prop_string_prefix_suffix_empty_string() {
   (string-suffix-p "" "test" t)
   (string-prefix-p "" "" t)
   (string-suffix-p "" "" t))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t nil nil nil nil t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +198,10 @@ fn oracle_prop_string_prefix_suffix_self_identity() {
           (string-suffix-p "cba" s)
           (string-prefix-p "a" s)
           (string-suffix-p "a" s))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t t t t t (t t t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +277,12 @@ fn oracle_prop_string_prefix_suffix_common_in_list() {
                (mapcar (lambda (s) (string-suffix-p sfx s)) strs))))
     (fmakunbound 'neovm--common-prefix)
     (fmakunbound 'neovm--common-suffix)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"prefix_\" \"he\" \"\" \"same\" \"only\" \"\" \".el\" \"ing\" \"\" \"test\" (\"auto\" (t t t)) (\"_result\" (t t t)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -350,7 +370,12 @@ fn oracle_prop_string_prefix_suffix_categorization() {
     (fmakunbound 'neovm--categorize-url)
     (fmakunbound 'neovm--filter-by-prefix)
     (fmakunbound 'neovm--filter-by-suffix)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((elisp rust python javascript markdown elisp rust python text archive) (secure insecure ftp local email unknown) (\"init.el\" \"config.el\") (\"main.rs\" \"lib.rs\") (\"HTTPS://A\" \"http://b\" \"HTTP://D\") ((archive . 1) (elisp . 2) (javascript . 1) (markdown . 1) (python . 2) (rust . 2) (text . 1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -400,5 +425,10 @@ fn oracle_prop_string_prefix_suffix_with_split_join() {
                       (and (string-prefix-p pat s)
                            (string-suffix-p pat s)))))
             test-cases)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t t t t) \"important-data\" \"filename\" (\"apple\" \"application\" \"apply\") ((\"aba\" \"a\" t) (\"abcabc\" \"abc\" t) (\"xx\" \"x\" t) (\"hello\" \"h\" nil)))""#
+        ]],
+    );
 }

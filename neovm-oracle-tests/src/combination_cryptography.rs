@@ -48,7 +48,12 @@ fn oracle_prop_crypto_xor_cipher() {
                                                   results))))
                                   (nreverse results)))
                               messages)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((t t t) (t t t) (t t t) (t t t)) ((t t t) (t t t) (t t t) (t t t)) ((t t t) (t t t) (t t t) (t t t)) ((t t t) (t t t) (t t t) (t t t)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +91,12 @@ fn oracle_prop_crypto_djb2_hash() {
                           (not (= (nth 8 hashes) (nth 9 hashes)))
                           ;; Return actual hash values for parity
                           hashes))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t t t t t t t t t t t t) t t t (261238937 10958189 261238937 193491849 193487034 193487042 5863208 5863240 193485963 193488139 5381 177670))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +165,12 @@ fn oracle_prop_crypto_block_cipher_spn() {
                                               ;; Roundtrip check
                                               (= pt (funcall decrypt-block ct)))))
                                     plaintexts))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 156 0 t) (1 147 1 t) (42 26 42 t) (127 210 127 t) (200 46 200 t) (255 50 255 t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +228,12 @@ fn oracle_prop_crypto_hmac_like() {
                           (>= h1 0) (>= h3 0) (>= h4 0) (>= h5 0) (>= h6 0)
                           ;; Return values for exact parity check
                           h1 h3 h4 h5 h6))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t t t t 18807593 219494810 67981342 16755256 41341645)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +278,12 @@ fn oracle_prop_crypto_lcg_rng() {
                                 (mapcar (lambda (x) (and (>= x 1) (< x 100))) ranged)
                                 ;; Ranged values
                                 ranged)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((8982043 9006008 10821009 7730422 2126071 4557668 7143885 8678018 6366611 8518096 5565897 1223886) (t t t t t t t t t t t t) (t t t t t t t t) (71 78 13 8 47 6 46 75))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -326,5 +351,8 @@ fn oracle_prop_crypto_bloom_filter() {
                           (funcall bloom-maybe-contains "fig")
                           (funcall bloom-maybe-contains "grape")
                           (funcall bloom-maybe-contains "zzzzz")))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable hash-fn)""#]],
+    );
 }

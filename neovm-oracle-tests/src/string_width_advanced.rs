@@ -26,7 +26,10 @@ fn oracle_prop_string_width_ascii() {
   (string-width "   ")
   ;; All printable ASCII
   (string-width "!@#$%^&*()_+-=[]{}|;':\",./<>?"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 1 5 13 26 1 3 29)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +52,10 @@ fn oracle_prop_string_width_cjk() {
   (string-width "\u3053\u3093\u306b\u3061\u306f")
   ;; Korean Hangul (double-width)
   (string-width "\uc548\ub155\ud558\uc138\uc694"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 4 4 6 14 10 10)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +81,10 @@ fn oracle_prop_string_width_mixed() {
           (string-width (concat s1 s2))
           (= (string-width (concat s1 s2))
              (+ (string-width s1) (string-width s2))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (9 7 9 6 (3 4 7 t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +112,10 @@ fn oracle_prop_char_width_various() {
   ;; Some Latin-1 supplement characters
   (char-width ?\u00e9)
   (char-width ?\u00f1))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 1 1 1 1 2 2 8 0 1 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +141,10 @@ fn oracle_prop_string_width_tabs() {
   (let ((tab-w (string-width "\t"))
         (space-w (string-width " ")))
     (list tab-w space-w)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (8 13 16 10 13 (8 1))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +172,10 @@ fn oracle_prop_string_width_control_chars() {
   (string-width "\r")
   ;; Mixed control + normal
   (string-width (concat "abc" (string 0) "def")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 2 2 2 2 0 2 8)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +203,10 @@ fn oracle_prop_string_width_combining() {
   (let ((s "A\u4e2d\u6587B"))
     (list (length s)
           (string-width s))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 1 1 2 2 1 (4 6))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +261,12 @@ fn oracle_prop_string_width_truncate_to_display_width() {
                (w (string-width result)))
           (list result w (<= w 10))))
     (fmakunbound 'neovm--test-truncate-display)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello\" \"hello...\" \"世界你..\" \"Hi世界..\" \"abcde\" \"..\" (\"Hello ...\" 9 t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -295,5 +321,10 @@ fn oracle_prop_string_width_column_alignment() {
                      (string-width (cadr rows)))))))
     (fmakunbound 'neovm--test-pad-to-width)
     (fmakunbound 'neovm--test-format-row)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Name       | City     | Age   \" \"Alice      | Boston   | 30    \" \"张三       | 东京     | 25    \" \"Bob张      | LA       | 42    \" (30 30 t))""#
+        ]],
+    );
 }

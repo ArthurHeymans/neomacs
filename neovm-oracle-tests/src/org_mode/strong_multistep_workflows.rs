@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn wf_create_document_from_scratch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   ;; Build document step by step
@@ -29,6 +29,9 @@ fn wf_create_document_from_scratch() {
                               (org-element-property :todo-keyword h)
                               (org-element-property :tags h))))))
     (list (plist-get info :title) headlines)))"##,
+        expect_test::expect![[
+            r#""OK ((#(\"Project Plan\" 0 12 (:parent (#(\"Project Plan\" 0 12 (:parent #4)))))) ((\"Phase 1\" \"TODO\" nil) (\"Design\" \"TODO\" nil) (\"Implementation\" \"TODO\" nil) (\"Phase 2\" \"DONE\" nil)))""#
+        ]],
     );
 }
 
@@ -39,7 +42,7 @@ fn wf_create_document_from_scratch() {
 #[test]
 fn wf_modify_existing_document() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO Original\nBody text\n** TODO Sub")
@@ -60,6 +63,9 @@ fn wf_modify_existing_document() {
                                    (org-element-property :todo-keyword h)
                                    (org-element-property :tags h))))))
       (list h1 h2))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Original\" \"TODO\") (\"Sub\" \"TODO\")) ((\"Modified\" \"DONE\" (\"done\")) (\"Sub\" \"TODO\" nil)))""#
+        ]],
     );
 }
 
@@ -70,7 +76,7 @@ fn wf_modify_existing_document() {
 #[test]
 fn wf_table_manipulation_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| A | 1 |\n| B | 2 |\n| C | 3 |")
@@ -89,6 +95,7 @@ fn wf_table_manipulation_sequence() {
         (org-table-transpose)
         (let ((d4 (org-table-to-lisp)))
           (list d1 d2 d3 d4))))))"##,
+        expect_test::expect![[r#""ERR (user-error \"Not at a table\")""#]],
     );
 }
 
@@ -99,7 +106,7 @@ fn wf_table_manipulation_sequence() {
 #[test]
 fn wf_checkbox_hierarchy_management() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Task [%]\n- [ ] parent\n  - [ ] child1\n  - [ ] child2\n  - [ ] child3")
@@ -124,6 +131,7 @@ fn wf_checkbox_hierarchy_management() {
       (goto-char (point-min))
       (let ((h2 (buffer-substring-no-properties (line-beginning-position) (line-end-position))))
         (list h0 h1 h2)))))"##,
+        expect_test::expect![[r#""OK (\"* Task [0%]\" \"* Task [0%]\" \"* Task [100%]\")""#]],
     );
 }
 
@@ -134,7 +142,7 @@ fn wf_checkbox_hierarchy_management() {
 #[test]
 fn wf_sparse_tree_filtering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO A :work:\n* DONE B :personal:\n* TODO C :work:\n** TODO D :work:\n** DONE E\n* WAITING F")
@@ -163,6 +171,7 @@ fn wf_sparse_tree_filtering() {
         (forward-line))
       (list (nreverse vis1) (nreverse hid1)
             (nreverse vis2) (nreverse hid2)))))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (0 . 0) 1)""#]],
     );
 }
 
@@ -173,7 +182,7 @@ fn wf_sparse_tree_filtering() {
 #[test]
 fn wf_property_management() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Task\n:PROPERTIES:\n:A: 1\n:END:")
@@ -190,6 +199,9 @@ fn wf_property_management() {
       (org-entry-delete nil "B")
       (let ((p3 (org-entry-properties nil 'standard)))
         (list p1 p2 p3)))))"##,
+        expect_test::expect![[
+            r#""OK (((\"CATEGORY\" . \"???\") (\"A\" . \"1\")) ((\"CATEGORY\" . \"???\") (\"C\" . \"3\") (\"B\" . \"2\") (\"A\" . \"1\")) ((\"CATEGORY\" . \"???\") (\"C\" . \"3\") (\"A\" . \"10\")))""#
+        ]],
     );
 }
 
@@ -200,7 +212,7 @@ fn wf_property_management() {
 #[test]
 fn wf_heading_manipulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n* B\n* C\n* D")
@@ -220,6 +232,9 @@ fn wf_heading_manipulation() {
       (let ((o3 (org-element-map (org-element-parse-buffer) 'headline
                   (lambda (h) (org-element-property :raw-value h)))))
         (list o1 o2 o3)))))"##,
+        expect_test::expect![[
+            r#""OK ((\"A\" \"B\" \"C\" \"D\") (\"A\" \"C\" \"B\" \"D\") (\"A\" \"C\" \"D\" \"B\"))""#
+        ]],
     );
 }
 
@@ -230,7 +245,7 @@ fn wf_heading_manipulation() {
 #[test]
 fn wf_visibility_cycling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** H2a\n*** H3\nBody\n** H2b\n* H1b")
@@ -255,6 +270,7 @@ fn wf_visibility_cycling() {
                 (progn (forward-line) (get-char-property (point) 'invisible)))
           states)
     (nreverse states)))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (0 . 0) 1)""#]],
     );
 }
 
@@ -265,7 +281,7 @@ fn wf_visibility_cycling() {
 #[test]
 fn wf_link_management() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Heading\nBody")
@@ -295,7 +311,7 @@ fn wf_link_management() {
 #[test]
 fn wf_footnote_management() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text")
@@ -314,6 +330,7 @@ fn wf_footnote_management() {
          (defs (org-element-map tree 'footnote-definition
                  (lambda (d) (org-element-property :label d)))))
     (list refs defs)))"##,
+        expect_test::expect![[r#""ERR (void-function footnote-add-footnote)""#]],
     );
 }
 
@@ -324,7 +341,7 @@ fn wf_footnote_management() {
 #[test]
 fn wf_macro_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+MACRO: greet Hello $1 and $2!\n{{{greet(Alice, Bob)}}}\n{{{greet(World, 42)}}}")
@@ -332,6 +349,7 @@ fn wf_macro_expansion() {
     (org-macro-replace-all org-macro-templates)
     (let ((expanded (buffer-string)))
       (list raw expanded))))"##,
+        expect_test::expect![[r#""ERR (error \"Undefined Org macro: greet; aborting\")""#]],
     );
 }
 
@@ -342,13 +360,16 @@ fn wf_macro_expansion() {
 #[test]
 fn wf_dynamic_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN: clocktable :maxlevel 2\n#+END:")
   (goto-char (point-min))
   (org-dblock-update)
   (buffer-string))"##,
+        expect_test::expect![[
+            r##""OK #(\"#+BEGIN: clocktable :maxlevel 2\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\" 73 74 (face org-table) 74 75 (face org-table rear-nonsticky t display (space :relative-width 1)) 75 83 (face org-table) 83 87 (face org-table) 87 88 (face org-table display (space :relative-width 1.001)) 88 89 (face org-table) 89 90 (face org-table rear-nonsticky t display (space :relative-width 1)) 90 94 (face org-table) 94 96 (face org-table) 96 97 (face org-table display (space :relative-width 1.001)) 97 98 (face org-table) 98 99 (face org-table-row) 99 100 (face org-table) 100 124 (face org-table) 124 125 (face org-table-row) 125 126 (face org-table) 126 127 (face org-table rear-nonsticky t display (space :relative-width 1)) 127 139 (org-emphasis t font-lock-multiline t face (bold org-table)) 139 140 (face org-table display (space :relative-width 1.001)) 140 141 (face org-table) 141 142 (face org-table rear-nonsticky t display (space :relative-width 1)) 142 148 (org-emphasis t font-lock-multiline t face (bold org-table)) 148 149 (face org-table display (space :relative-width 1.001)) 149 150 (face org-table) 150 151 (face org-table-row))""##
+        ]],
     );
 }
 
@@ -359,7 +380,7 @@ fn wf_dynamic_block() {
 #[test]
 fn wf_outline_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Project\n** Task 1\n*** Subtask 1.1\n**** Subsub 1.1.1\n** Task 2\n*** Subtask 2.1")
@@ -374,6 +395,9 @@ fn wf_outline_navigation() {
           (level2 (org-current-level))
           (title2 (org-get-heading t t t t)))
       (list path1 level1 title1 path2 level2 title2))))"##,
+        expect_test::expect![[
+            r#""OK ((\"Project\" \"Task 1\" \"Subtask 1.1\") 4 \"Subsub 1.1.1\" (\"Project\" \"Task 2\") 3 \"Subtask 2.1\")""#
+        ]],
     );
 }
 
@@ -384,7 +408,7 @@ fn wf_outline_navigation() {
 #[test]
 fn wf_element_hierarchy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** H2a\n*** H3a\n*** H3b\n** H2b\n*** H3c\n**** H4a\n**** H4b\n* H1b\n** H2c")
@@ -395,6 +419,9 @@ fn wf_element_hierarchy() {
                               (org-element-property :raw-value h)
                               (length (org-element-contents h)))))))
     structure))"##,
+        expect_test::expect![[
+            r#""OK ((1 \"H1\" 2) (2 \"H2a\" 2) (3 \"H3a\" 0) (3 \"H3b\" 0) (2 \"H2b\" 1) (3 \"H3c\" 2) (4 \"H4a\" 0) (4 \"H4b\" 0) (1 \"H1b\" 1) (2 \"H2c\" 0))""#
+        ]],
     );
 }
 
@@ -405,7 +432,7 @@ fn wf_element_hierarchy() {
 #[test]
 fn wf_export_environment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+TITLE: Full Test\n#+AUTHOR: Author\n#+EMAIL: test@example.com\n#+DATE: 2026-01-15\n#+OPTIONS: toc:2 num:t")
@@ -416,6 +443,9 @@ fn wf_export_environment() {
           (plist-get info :date)
           (plist-get info :with-toc)
           (plist-get info :with-numbers))))"##,
+        expect_test::expect![[
+            r#""OK ((#(\"Full Test\" 0 9 (:parent (#(\"Full Test\" 0 9 (:parent #4)))))) (#(\"Author\" 0 6 (:parent (#(\"Author\" 0 6 (:parent #4)))))) \"test@example.com\" (#(\"2026-01-15\" 0 10 (:parent (#(\"2026-01-15\" 0 10 (:parent #4)))))) 2 nil)""#
+        ]],
     );
 }
 
@@ -426,7 +456,7 @@ fn wf_export_environment() {
 #[test]
 fn wf_timestamp_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* M\n<2026-01-15 10:00-11:30>\n<2026-01-16>--<2026-01-20>\n<2026-01-25 Wed +1w -3d>")
@@ -444,6 +474,9 @@ fn wf_timestamp_operations() {
                                (org-element-property :repeater-value ts)
                                (org-element-property :repeater-unit ts))))))
     timestamps))"##,
+        expect_test::expect![[
+            r#""OK ((active-range 2026 15 10 0 2026 15 nil nil nil) (active-range 2026 16 nil nil 2026 20 nil nil nil) (active 2026 25 nil nil 2026 25 cumulate 1 week))""#
+        ]],
     );
 }
 
@@ -454,7 +487,7 @@ fn wf_timestamp_operations() {
 #[test]
 fn wf_drawer_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n:PROPERTIES:\n:A: 1\n:END:\n:LOGBOOK:\n- Note\n:END:\n:MYDRAWER:\n- Data\n:END:\nBody")
@@ -465,6 +498,7 @@ fn wf_drawer_operations() {
                             (org-element-property :begin d)
                             (org-element-property :end d))))))
     drawers))"##,
+        expect_test::expect![[r#""OK ((\"LOGBOOK\" 30 53) (\"MYDRAWER\" 53 77))""#]],
     );
 }
 
@@ -475,7 +509,7 @@ fn wf_drawer_operations() {
 #[test]
 fn wf_block_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_SRC emacs-lisp -n :results value :exports both\n(+ 1 2)\n#+END_SRC\n\n#+BEGIN_EXAMPLE -n\nExample\n#+END_EXAMPLE")
@@ -487,6 +521,9 @@ fn wf_block_operations() {
                            (org-element-property :switches b)
                            (org-element-property :parameters b))))))
     blocks))"##,
+        expect_test::expect![[
+            r#""OK ((src-block \"emacs-lisp\" \"-n\" \":results value :exports both\") (example-block nil \"-n\" nil))""#
+        ]],
     );
 }
 
@@ -497,7 +534,7 @@ fn wf_block_operations() {
 #[test]
 fn wf_inline_task() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-inlinetask)
@@ -510,6 +547,7 @@ fn wf_inline_task() {
                             (org-element-property :todo-keyword h)
                             (org-element-property :level h)))))))
     tasks))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -520,7 +558,7 @@ fn wf_inline_task() {
 #[test]
 fn wf_entity_radio() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "\\alpha \\beta \\gamma\n<<<target>>>\nSee target here")
@@ -531,6 +569,9 @@ fn wf_entity_radio() {
            (targets (org-element-map tree 'radio-target
                       (lambda (rt) (org-element-property :value rt)))))
       (list before after targets))))"##,
+        expect_test::expect![[
+            r#""OK (\"\\\\alpha \\\\beta \\\\gamma\n<<<target>>>\nSee target here\" \"\\\\alpha \\\\beta \\\\gamma\n<<<target>>>\nSee target here\" (\"target\"))""#
+        ]],
     );
 }
 
@@ -541,12 +582,15 @@ fn wf_entity_radio() {
 #[test]
 fn wf_refile_targets() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* P1\n** T1\n*** S1\n* P2\n** T2\n*** S2")
   (let ((targets (org-refile-get-targets nil)))
     (mapcar (lambda (t) (list (car t) (cdr t))) targets)))"##,
+        expect_test::expect![[
+            r#""OK ((\"P1\" (nil \"^\\\\(\\\\*+\\\\)\\\\(?: +\\\\(DONE\\\\|TODO\\\\)\\\\)?\\\\(?: +\\\\(\\\\[#\\\\(?:[A-Z]\\\\|[0-9]\\\\|[1-5][0-9]\\\\|6[0-4]\\\\)\\\\]\\\\)\\\\)?\\\\(?: +\\\\(?:COMMENT +\\\\)?\\\\(?:\\\\[[0-9%/]+\\\\] *\\\\)*\\\\(P1\\\\)\\\\(?: *\\\\[[0-9%/]+\\\\]\\\\)*\\\\)\\\\(?:[ \t]+\\\\(:\\\\([[:alnum:]_@#%:]+\\\\):\\\\)\\\\)?[ \t]*$\" 1)) (\"P2\" (nil \"^\\\\(\\\\*+\\\\)\\\\(?: +\\\\(DONE\\\\|TODO\\\\)\\\\)?\\\\(?: +\\\\(\\\\[#\\\\(?:[A-Z]\\\\|[0-9]\\\\|[1-5][0-9]\\\\|6[0-4]\\\\)\\\\]\\\\)\\\\)?\\\\(?: +\\\\(?:COMMENT +\\\\)?\\\\(?:\\\\[[0-9%/]+\\\\] *\\\\)*\\\\(P2\\\\)\\\\(?: *\\\\[[0-9%/]+\\\\]\\\\)*\\\\)\\\\(?:[ \t]+\\\\(:\\\\([[:alnum:]_@#%:]+\\\\):\\\\)\\\\)?[ \t]*$\" 19)))""#
+        ]],
     );
 }
 
@@ -557,7 +601,7 @@ fn wf_refile_targets() {
 #[test]
 fn wf_agenda_entries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO A\n* DONE B\n* TODO C\n* WAITING D\n* TODO E :work:")
@@ -567,6 +611,7 @@ fn wf_agenda_entries() {
             (org-get-todo-state)
             (org-get-tags nil t)))
     nil 'file))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -577,12 +622,13 @@ fn wf_agenda_entries() {
 #[test]
 fn wf_colview_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+COLUMNS: %25ITEM %TODO %3PRIORITY %TAGS %EFFORT\n* TODO [#A] Task :work:\n:PROPERTIES:\n:EFFORT: 2h\n:END:\n* DONE [#B] Task2 :home:\n:PROPERTIES:\n:EFFORT: 30m\n:END:")
   (goto-char (point-min))
   (org-columns-get-format))"##,
+        expect_test::expect![[r#""OK \"%25ITEM %TODO %3PRIORITY %TAGS %EFFORT\"""#]],
     );
 }
 
@@ -593,11 +639,12 @@ fn wf_colview_format() {
 #[test]
 fn wf_pcomplete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "\\agr")
   (length (all-completions "\\ag" (pcomplete-entries))))"##,
+        expect_test::expect![[r#""OK 0""#]],
     );
 }
 
@@ -608,11 +655,12 @@ fn wf_pcomplete() {
 #[test]
 fn wf_clock_sum() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:00] =>  1:00\nCLOCK: [2026-01-11 14:00]--[2026-01-11 15:30] =>  1:30\n:END:\n* B\n:LOGBOOK:\nCLOCK: [2026-01-12 09:00]--[2026-01-12 10:00] =>  1:00\n:END:")
   (org-clock-sum))"##,
+        expect_test::expect![[r#""OK 210""#]],
     );
 }
 
@@ -623,7 +671,7 @@ fn wf_clock_sum() {
 #[test]
 fn wf_element_map_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** H2a\n*** H3\n** H2b")
@@ -635,6 +683,7 @@ fn wf_element_map_options() {
          (recursive (org-element-map (org-element-contents h1) 'headline
                       (lambda (h) (org-element-property :raw-value h)))))
     (list direct recursive)))"##,
+        expect_test::expect![[r#""OK ((\"H2a\" \"H3\" \"H2b\") (\"H2a\" \"H3\" \"H2b\"))""#]],
     );
 }
 
@@ -645,7 +694,7 @@ fn wf_element_map_options() {
 #[test]
 fn wf_multi_buffer_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((r '()))
   (with-temp-buffer
     (org-mode)
@@ -658,6 +707,7 @@ fn wf_multi_buffer_parse() {
     (push (org-element-map (org-element-parse-buffer) 'headline
             (lambda (h) (org-element-property :raw-value h))) r))
   (nreverse r))"##,
+        expect_test::expect![[r#""OK ((\"A\" \"A1\") (\"B\" \"B1\" \"B2\"))""#]],
     );
 }
 
@@ -668,7 +718,7 @@ fn wf_multi_buffer_parse() {
 #[test]
 fn wf_deferred_element_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO [#A] Orig :tag:\n:PROPERTIES:\n:VAR: val\n:END:\nBody")
@@ -691,6 +741,9 @@ fn wf_deferred_element_chain() {
                      :var (org-entry-get nil "VAR")
                      :title (org-element-property :raw-value el2))))
       (list p1 p2))))"##,
+        expect_test::expect![[
+            r#""OK ((:todo \"TODO\" :pri 65 :tags (\"tag\") :var \"val\" :title \"Orig\") (:todo \"DONE\" :pri 66 :tags (\"newtag\") :var \"newval\" :title \"Changed\"))""#
+        ]],
     );
 }
 
@@ -701,7 +754,7 @@ fn wf_deferred_element_chain() {
 #[test]
 fn wf_narrow_widen() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\nBody 1\n** H2\nSub\n* H2b\nBody 2")
@@ -710,6 +763,7 @@ fn wf_narrow_widen() {
   (let ((narrowed (buffer-string)))
     (widen)
     (list narrowed)))"##,
+        expect_test::expect![[r#""OK (\"* H1\nBody 1\n** H2\nSub\")""#]],
     );
 }
 
@@ -720,7 +774,7 @@ fn wf_narrow_widen() {
 #[test]
 fn wf_end_of_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** H2a\n*** H3\nBody\n** H2b\n* H1b")
@@ -731,6 +785,7 @@ fn wf_end_of_subtree() {
     (beginning-of-line)
     (let ((p2 (progn (org-end-of-subtree) (point))))
       (list p1 p2))))"##,
+        expect_test::expect![[r#""OK (31 24)""#]],
     );
 }
 
@@ -741,7 +796,7 @@ fn wf_end_of_subtree() {
 #[test]
 fn wf_mark_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\nBody\n** H2\nSub\n* H1b")
@@ -750,6 +805,7 @@ fn wf_mark_subtree() {
   (let ((m (mark))
         (p (point)))
     (list (< p m) p m)))"##,
+        expect_test::expect![[r#""OK (t 1 21)""#]],
     );
 }
 
@@ -760,7 +816,7 @@ fn wf_mark_subtree() {
 #[test]
 fn wf_clone_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Task\n** Sub1\n** Sub2")
@@ -769,6 +825,7 @@ fn wf_clone_subtree() {
   (org-element-map (org-element-parse-buffer) 'headline
     (lambda (h) (list (org-element-property :level h)
                       (org-element-property :raw-value h)))))"##,
+        expect_test::expect![[r#""ERR (void-function org-clone-subtree)""#]],
     );
 }
 
@@ -779,12 +836,13 @@ fn wf_clone_subtree() {
 #[test]
 fn wf_sort_entries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Zebra\n* Apple\n* Mango\n* Banana")
   (org-sort-entries nil ?a)
   (org-element-map (org-element-parse-buffer) 'headline
     (lambda (h) (org-element-property :raw-value h))))"##,
+        expect_test::expect![[r#""ERR (user-error \"Nothing to sort\")""#]],
     );
 }

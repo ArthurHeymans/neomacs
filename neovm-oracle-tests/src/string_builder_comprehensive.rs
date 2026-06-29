@@ -41,7 +41,12 @@ fn oracle_prop_string_builder_concat_many_args() {
   (length (concat "abcdefghij" "klmnopqrst" "uvwxyz"))
   ;; Unicode strings
   (concat "\u00e9" "l\u00e8ve"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\" \"hello\" \"foobar\" \"abcdefgh\" \"xyz\" \"\" \"ABC\" \"hello world\" \"abcdef\" 26 \"élève\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +83,12 @@ fn oracle_prop_string_builder_make_string_patterns() {
   (let* ((s "hi")
          (pad (- 10 (length s))))
     (concat s (make-string pad ?\s))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\" \"A\" \"*****\" \"          \" \"\\0\\0\\0\" \"0000\" 20 t \"...hello...\" \"hi        \")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +120,12 @@ fn oracle_prop_string_builder_string_from_chars() {
   (= (string-to-char "hello") ?h)
   ;; Empty string from no chars yields ""
   (string))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"A\" \"hello\" \"123\" \"()[]\" \"world\" \"ABC\" \"abcde\" t t \"\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +165,12 @@ fn oracle_prop_string_builder_format_directives() {
         (line1 (format "  %-12s %6d" "Apples" 42))
         (line2 (format "  %-12s %6d" "Oranges" 107)))
     (mapconcat #'identity (list header line1 line2) "\n")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"42\" \"hello\" \"\\\"hello\\\"\" \"3.14\" \"ff\" \"10\" \"A\" \"100%\" \"Name: Alice, Age: 30, Score: 95.5\" \"[        42]\" \"[42        ]\" \"00042\" \"=== Report ===\n  Apples           42\n  Oranges         107\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +203,12 @@ fn oracle_prop_string_builder_mapconcat_joining() {
              '(1 2 3 4) " ")
   ;; Join chars from a vector
   (mapconcat (lambda (c) (string c)) [?H ?i ?!] " "))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"a, b, c\" \"xyz\" \"line1\nline2\nline3\" \"1-2-3-4-5\" \"foo::bar::baz\" \"\" \"only\" \"a | b | c\" \"(1=#) (2=##) (3=###) (4=####)\" \"H i !\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -220,7 +245,12 @@ fn oracle_prop_string_builder_substring_extraction() {
       (concat upper " " rest))
     ;; substring-no-properties equivalent (no text props to strip here)
     (substring-no-properties "plain text" 0 5)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello, World!\" \"World!\" \"Hello\" \"World\" \"World!\" \"World\" \"\" \"H\" \"!\" \"HELLO World!\" \"plain\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -241,7 +271,12 @@ fn oracle_prop_string_builder_substring_bignum_index_errors_like_gnu() {
         (condition-case err
             (substring [a b c] big)
           (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument integerp) (wrong-type-argument integerp) (wrong-type-argument integerp))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +313,12 @@ fn oracle_prop_string_builder_string_join() {
      (lambda (row) (string-join (mapcar #'number-to-string row) "\t"))
      '((1 2 3) (4 5 6) (7 8 9))
      "\n")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"foo, bar, baz\" \"alone\" \"\" \"abc\" \"alpha\nbeta\ngamma\" \".x..y.\" \"col1\tcol2\tcol3\" \"1,2,3,4,5\" \"usr/local/bin\" \"1\t2\t3\n4\t5\t6\n7\t8\t9\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -324,7 +364,12 @@ fn oracle_prop_string_builder_loop_building() {
             (if (<= n 0) ""
               (concat s (funcall repeat-str s (1- n))))))
     (funcall repeat-str "ab" 4)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"item-0, item-1, item-2, item-3, item-4, item-5\" \"1 + 4 + 9 + 16 + 25\" \"[THE] [QUICK] [BROWN] [FOX]\" \"1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz\" \"abababab\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +411,12 @@ fn oracle_prop_string_builder_with_output_to_string() {
         (when (> i 0) (princ ", "))
         (princ (* i i))
         (setq i (1+ i))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello\" \"42\" \"Name: Alice, Age: 30\" \"\\\"quoted\\\"\" \"my-symbol\" \"(1 2 3)\" \"data: (a b c) end\" \"(1 \\\"two\\\" three)\" \"0, 1, 4, 9, 16\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -427,7 +477,12 @@ fn oracle_prop_string_builder_char_by_char() {
          ""
        (string c)))
    (append "Hello World" nil) ""))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello\" \"khoor\" \"Uryyb Jbeyq\" \"fedcba\" \"a1b2c3\" t \"Hll Wrld\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -475,5 +530,10 @@ fn oracle_prop_string_builder_combined_patterns() {
                 (concat bits)))))
     (mapconcat (lambda (n) (format "%3d = %s" n (funcall to-binary n)))
                '(0 1 5 10 42 255) ", ")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\" 65: A\n 66: B\n 67: C\n 68: D\n 69: E\n 70: F\n 71: G\n 72: H\" \"Hello, World! Welcome to Elisp.\" \"aaabbbccc\" \"  apple      x3  $4.50\n  banana     x12  $9.00\n  cherry     x1  $4.00\" \"  0 = 0,   1 = 1,   5 = 101,  10 = 1010,  42 = 101010, 255 = 11111111\")""#
+        ]],
+    );
 }

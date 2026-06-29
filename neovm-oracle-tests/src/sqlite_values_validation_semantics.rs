@@ -28,5 +28,10 @@ fn oracle_sqlite_values_validation_signals_sqlite_error_like_gnu() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (void-function sqlite-open) (void-function sqlite-open) (void-function sqlite-open))""#
+        ]],
+    );
 }

@@ -18,7 +18,10 @@ fn oracle_prop_rassoc_basic() {
                     (list (rassoc 1 alist)
                           (rassoc 2 alist)
                           (rassoc 4 alist)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((a . 1) (b . 2) nil)""#],
+    );
 }
 
 #[test]
@@ -33,7 +36,10 @@ fn oracle_prop_rassoc_string_keys() {
                     (list (rassoc "dev" alist)
                           (rassoc "qa" alist)
                           (rassoc "hr" alist)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"Alice\" . \"dev\") (\"Bob\" . \"qa\") nil)""#]],
+    );
 }
 
 #[test]
@@ -49,7 +55,10 @@ fn oracle_prop_rassq_vs_rassoc() {
                           (let ((al2 '((1 . "hello") (2 . "world"))))
                             (list (rassq "hello" al2)
                                   (rassoc "hello" al2)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((a . x) (b . y) nil (nil (1 . \"hello\")))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +78,10 @@ fn oracle_prop_assoc_testfn() {
                      ;; Default (equal) comparison
                      (assoc "HELLO" alist)
                      (assoc "hello" alist)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"HELLO\" . 1) (\"FOO\" . 3) (\"HELLO\" . 1) nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +97,10 @@ fn oracle_prop_alist_get_default() {
                           (alist-get 'age alist)
                           (alist-get 'missing alist)
                           (alist-get 'missing alist 'default-val)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"Alice\" 30 nil default-val)""#]],
+    );
 }
 
 #[test]
@@ -98,7 +113,10 @@ fn oracle_prop_alist_get_remove() {
                           (alist-get 'b alist nil t)
                           (alist-get 'd alist)
                           (alist-get 'd alist 'default)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (nil nil nil default)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +139,7 @@ fn oracle_prop_copy_alist_independence() {
                             ;; share structure (shallow copy)
                             (eq (cdr (assq 'b orig))
                                 (cdr (assq 'b copy))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (1 99 t)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +193,10 @@ fn oracle_prop_alist_record_system() {
                                 (funcall record-get r3 'role)
                                 (funcall record-get r3 'team)
                                 (funcall record-get r3 'missing 'N/A))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"Alice\" 31 \"lead\" \"core\" N/A)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +231,10 @@ fn oracle_prop_alist_indexed_db() {
                               (sort qa #'string-lessp)
                               (length eng)
                               (length qa)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"Alice\" \"Carol\" \"Eve\") (\"Bob\" \"Dave\") 3 2)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -244,5 +268,8 @@ fn oracle_prop_alist_set_operations() {
                           (list (nreverse inter)
                                 (nreverse diff)
                                 (nreverse sym-diff))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (((y . 2) (z . 3)) ((x . 1)) ((x . 1) (w . 40)))""#],
+    );
 }

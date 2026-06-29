@@ -15,7 +15,7 @@ macro_rules! read_eof {
         #[test]
         fn $name() {
             return_if_neovm_enable_oracle_proptest_not_set!();
-            assert_oracle_parity($form);
+            crate::common::assert_oracle_parity($form);
         }
     };
 }

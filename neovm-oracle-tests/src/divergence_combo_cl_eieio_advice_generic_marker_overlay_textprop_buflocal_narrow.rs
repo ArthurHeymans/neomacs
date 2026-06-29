@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_advice_before_after_generic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass event-handler ()
     ((name :initarg :name :accessor handler-name :initform "")
@@ -68,6 +68,7 @@ fn combo_eieio_advice_before_after_generic() {
                 (buffer-string)
                 handler)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
     );
 }
 
@@ -75,7 +76,7 @@ fn combo_eieio_advice_before_after_generic() {
 fn combo_eieio_advice_around_generic_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass processor ()
     ((label :initarg :label :accessor proc-label :initform "")
@@ -130,6 +131,7 @@ fn combo_eieio_advice_around_generic_buffer() {
                 (buffer-string)
                 my-proc)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
     );
 }
 
@@ -137,7 +139,7 @@ fn combo_eieio_advice_around_generic_buffer() {
 fn combo_eieio_advice_filter_generic_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass validator ()
     ((rules :initarg :rules :accessor val-rules :initform nil)
@@ -193,6 +195,7 @@ fn combo_eieio_advice_filter_generic_narrow() {
                 (buffer-string)
                 my-validator)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
     );
 }
 
@@ -200,7 +203,7 @@ fn combo_eieio_advice_filter_generic_narrow() {
 fn combo_eieio_advice_override_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass logger ()
     ((entries :initarg :entries :accessor log-entries :initform nil)
@@ -254,6 +257,7 @@ fn combo_eieio_advice_override_undo_chain() {
                 (buffer-string)
                 my-logger)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
     );
 }
 
@@ -261,7 +265,7 @@ fn combo_eieio_advice_override_undo_chain() {
 fn combo_eieio_advice_multi_generic_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cache-entry ()
     ((key :initarg :key :accessor cache-key :initform "")
@@ -323,5 +327,6 @@ fn combo_eieio_advice_multi_generic_overlay_undo() {
                 (buffer-string)
                 my-entry)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
     );
 }

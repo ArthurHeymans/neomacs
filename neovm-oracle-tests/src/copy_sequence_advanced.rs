@@ -35,7 +35,10 @@ fn oracle_prop_copy_sequence_advanced_list_independence() {
                     (eq orig copy)
                     ;; The cdrs should NOT be eq (top-level spine is copied)
                     (eq (cdr orig) (cdr copy))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t (1 2 3 4 5) (99 88 3) 5 3 nil nil)""#]],
+    );
 }
 
 #[test]
@@ -58,7 +61,12 @@ fn oracle_copy_sequence_improper_list_tail_error_payload() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument (listp c)) (wrong-type-argument (listp c)) (wrong-type-argument (sequencep 42)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +95,10 @@ fn oracle_prop_copy_sequence_advanced_vector_independence() {
                     (eq orig copy)
                     (length orig)
                     (length copy)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 50 999 111 t t nil 5 5)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +130,12 @@ fn oracle_prop_copy_sequence_advanced_string_mutation() {
                     (let* ((s "x") (sc (copy-sequence s)))
                       (aset sc 0 ?y)
                       (list s sc))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello world\" \"Hello World\" t t nil nil (t t) (\"x\" \"y\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +172,10 @@ fn oracle_prop_copy_sequence_advanced_shallow_semantics() {
                         ;; Original's inner2 is also mutated (shared!)
                         (aref (cadr orig) 0)
                         (aref (cadr copy) 0)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t (MUTATED b) (MUTATED b) 999 999)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +214,10 @@ fn oracle_prop_copy_sequence_advanced_alist_isolation() {
                         ;; Verify the rest of copy is untouched
                         (cdr (assq 'b copy))
                         (cdr (assq 'c copy))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t 4 3 100 100 2 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +248,12 @@ fn oracle_prop_copy_sequence_advanced_sort_copy() {
                     (let* ((words (list "banana" "apple" "cherry" "date"))
                            (sorted-words (sort (copy-sequence words) #'string<)))
                       (list words sorted-words))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5 3 8 1 9 2 7 4 6 10) (1 2 3 4 5 6 7 8 9 10) (10 9 8 7 6 5 4 3 2 1) t t t t ((\"banana\" \"apple\" \"cherry\" \"date\") (\"apple\" \"banana\" \"cherry\" \"date\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -288,7 +315,12 @@ fn oracle_prop_copy_sequence_advanced_pipeline() {
                       (aset bv-copy 3 t)
                       (list (aref bv 0) (aref bv 3)
                             (aref bv-copy 0) (aref bv-copy 3)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((42 17 93 8 55 31 76 64 22 49) (8 17 22 31 42 49 55 64 76 93) (8 22 42 64 76) (93 76 64 55 49) 457 45.7 42 17 0 0 (nil nil t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -337,5 +369,10 @@ fn oracle_prop_copy_sequence_advanced_edge_cases() {
                    ;; Copy empty vector
                    (let* ((v (vector)) (vc (copy-sequence v)))
                      (list (equal v vc) (eq v vc) (length vc))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil ((42) (99)) (nil nil t) ((10 2 3) (20 2 3) (30 2 3)) (t nil 100 0 99) (t t 0))""#
+        ]],
+    );
 }

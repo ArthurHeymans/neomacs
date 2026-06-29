@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_agenda_mutate_todo_schedule_deadline_tags_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-agenda)
@@ -50,6 +50,7 @@ DEADLINE: <2026-05-28 Thu>
         (kill-buffer org-agenda-buffer-name))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (void-variable root)""#]],
     );
 }
 
@@ -57,7 +58,7 @@ DEADLINE: <2026-05-28 Thu>
 fn org_clock_three_project_report_edit_add_remove_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -118,6 +119,7 @@ fn org_clock_three_project_report_edit_add_remove_deep() {
                            (point-min) (point-max))))))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 60 34)""#]],
     );
 }
 
@@ -125,7 +127,7 @@ fn org_clock_three_project_report_edit_add_remove_deep() {
 fn org_clock_report_dynamic_block_update_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -152,6 +154,9 @@ fn org_clock_report_dynamic_block_update_combo() {
         (list first
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (\"* Project\n#+BEGIN: clocktable :scope file :maxlevel 3 :block \\\"2026-05-27\\\" :link nil\n#+CAPTION: Clock summary at [FIXED-TIME], for Wednesday, May 27, 2026.\n| Headline     | Time   |      |\n|--------------+--------+------|\n| *Total time* | *2:00* |      |\n|--------------+--------+------|\n| Project      | 2:00   |      |\n| \\\\_  Alpha    |        | 1:15 |\n| \\\\_  Beta     |        | 0:45 |\n#+END:\n\n** TODO Alpha\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:15] =>  1:15\n** TODO Beta\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n\" \"* Project\n#+BEGIN: clocktable :scope file :maxlevel 3 :block \\\"2026-05-27\\\" :link nil\n#+BEGIN: clocktable :scope file :maxlevel 3 :block \\\"2026-05-27\\\" :link nil\n#+CAPTION: Clock summary at [FIXED-TIME], for Wednesday, May 27, 2026.\n| Headline     | Time   |      |\n|--------------+--------+------|\n| *Total time* | *3:30* |      |\n|--------------+--------+------|\n| Project      | 3:30   |      |\n| \\\\_  Alpha    |        | 1:15 |\n| \\\\_  Beta     |        | 0:45 |\n#+END:\n\n#+CAPTION: Clock summary at [FIXED-TIME], for Wednesday, May 27, 2026.\n| Headline     | Time   |      |\n|--------------+--------+------|\n| *Total time* | *2:00* |      |\n|--------------+--------+------|\n| Project      | 2:00   |      |\n| \\\\_  Alpha    |        | 1:15 |\n| \\\\_  Beta     |        | 0:45 |\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:30] =>  1:30\n\n** TODO Alpha\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:15] =>  1:15\n** TODO Beta\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n\")""#
+        ]],
     );
 }
 
@@ -159,7 +164,7 @@ fn org_clock_report_dynamic_block_update_combo() {
 fn org_clock_sum_filtered_properties_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -192,6 +197,9 @@ fn org_clock_sum_filtered_properties_combo() {
       (beginning-of-line)
       (list (nreverse out)
             (org-clock-sum-current-item "2026-05-27")))))"##,
+        expect_test::expect![[
+            r#""OK (((#(\"Project\" 0 7 (:org-clock-force-headline-inclusion t :probe-clock-minutes 75)) 75 t) (#(\"Alpha\" 0 5 (:probe-clock-minutes 75)) 75 nil) (\"Beta\" nil nil)) 75)""#
+        ]],
     );
 }
 
@@ -199,7 +207,7 @@ fn org_clock_sum_filtered_properties_combo() {
 fn org_clocktable_match_properties_inherit_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -236,6 +244,9 @@ fn org_clocktable_match_properties_inherit_combo() {
       (list (list (nth 0 data) (nth 1 data) rows)
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r##""OK ((\"clock.org\" 80 ((1 \"[[*Project][Project]]\" (\"work\") nil 80 ((\"Client\" . \"Acme\"))) (2 \"[[*Alpha][Alpha]]\" (\"work\" \"billable\") \"<2026-05-27 Wed>\" 80 ((\"Owner\" . \"Ada\") (\"Client\" . \"Acme\"))))) \"#+CATEGORY: ClockProbe\n* Project :work:\n:PROPERTIES:\n:Client: Acme\n:END:\n** TODO Alpha :billable:\nSCHEDULED: <2026-05-27 Wed>\n:PROPERTIES:\n:Owner: Ada\n:END:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:20] =>  1:20\n** TODO Beta :internal:\nDEADLINE: <2026-05-27 Wed>\n:PROPERTIES:\n:Owner: Bea\n:END:\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:00] =>  1:00\n** DONE Gamma :billable:\nCLOCK: [2026-05-28 Thu 09:00]--[2026-05-28 Thu 09:30] =>  0:30\n\")""##
+        ]],
     );
 }
 
@@ -243,7 +254,7 @@ fn org_clocktable_match_properties_inherit_combo() {
 fn org_clock_cancel_history_goto_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -288,6 +299,9 @@ fn org_clock_cancel_history_goto_combo() {
                         org-clock-history)
                 (buffer-substring-no-properties
                  (point-min) (point-max))))))))"##,
+        expect_test::expect![[
+            r#""OK ((t \"Beta\" 3 t) (nil nil 3) \"Beta\" (\"Beta\" \"Alpha\" \"Captured task alpha\") \"* TODO Alpha\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:30] =>  0:30\n:END:\n* TODO Beta\n\")""#
+        ]],
     );
 }
 
@@ -295,7 +309,7 @@ fn org_clock_cancel_history_goto_combo() {
 fn org_clock_resolve_open_clock_ranges_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -324,6 +338,7 @@ fn org_clock_resolve_open_clock_ranges_combo() {
               (org-clock-sum-current-item "2026-05-27")
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -331,7 +346,7 @@ fn org_clock_resolve_open_clock_ranges_combo() {
 fn org_clocktable_shift_special_range_regenerate_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -399,6 +414,7 @@ fn org_clocktable_shift_special_range_regenerate_combo() {
               (nreverse states)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -406,7 +422,7 @@ fn org_clocktable_shift_special_range_regenerate_combo() {
 fn org_clock_shift_display_overlay_cleanup_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -466,6 +482,7 @@ fn org_clock_shift_display_overlay_cleanup_combo() {
             (list after-shift
                   after-display
                   (funcall snapshot 'after-cleanup)))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
     );
 }
 
@@ -473,7 +490,7 @@ fn org_clock_shift_display_overlay_cleanup_combo() {
 fn org_clock_interrupt_resume_state_history_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -608,6 +625,9 @@ fn org_clock_interrupt_resume_state_history_combo() {
                   org-clock-out-time
                   org-clock-leftover-time
                   org-clock-has-been-used))))))"##,
+        expect_test::expect![[
+            r#""ERR (wrong-type-argument timerp [t nil nil nil nil nil nil nil nil nil])""#
+        ]],
     );
 }
 
@@ -615,7 +635,7 @@ fn org_clock_interrupt_resume_state_history_combo() {
 fn org_clocktable_agenda_custom_formatter_regenerate_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -738,6 +758,7 @@ fn org_clocktable_agenda_custom_formatter_regenerate_combo() {
       (dolist (file (list file-a file-b))
         (when (get-file-buffer file) (kill-buffer (get-file-buffer file))))
       (when (file-directory-p root) (delete-directory root t)))))"##,
+        expect_test::expect![[r#""ERR (void-variable file-a)""#]],
     );
 }
 
@@ -745,7 +766,7 @@ fn org_clocktable_agenda_custom_formatter_regenerate_combo() {
 fn org_clock_get_table_data_multi_file_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -806,6 +827,7 @@ fn org_clock_get_table_data_multi_file_deep_state_combo() {
       (dolist (f (list file-a file-b))
         (when (get-file-buffer f) (kill-buffer (get-file-buffer f))))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp nil)""#]],
     );
 }
 
@@ -813,7 +835,7 @@ fn org_clock_get_table_data_multi_file_deep_state_combo() {
 fn org_clock_log_agenda_timestamp_filter_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-agenda)
@@ -868,6 +890,7 @@ fn org_clock_log_agenda_timestamp_filter_deep_state_combo() {
       (when (get-buffer org-agenda-buffer-name)
         (kill-buffer org-agenda-buffer-name))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (void-variable agenda-text)""#]],
     );
 }
 
@@ -875,7 +898,7 @@ fn org_clock_log_agenda_timestamp_filter_deep_state_combo() {
 fn org_clock_report_custom_columns_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -920,6 +943,9 @@ fn org_clock_report_custom_columns_deep_state_combo() {
                       rows
                       clocktable))))))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r##""OK (240 ((1 \"Project\" 240) (2 \"Task A\" 150) (2 \"Task B\" 90)) \"#+BEGIN: clocktable :maxlevel 2\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\n\")""##
+        ]],
     );
 }
 
@@ -927,7 +953,7 @@ fn org_clock_report_custom_columns_deep_state_combo() {
 fn org_clock_agenda_filter_tag_effort_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-agenda)
@@ -985,6 +1011,7 @@ fn org_clock_agenda_filter_tag_effort_deep_state_combo() {
       (when (get-buffer org-agenda-buffer-name)
         (kill-buffer org-agenda-buffer-name))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 34)""#]],
     );
 }
 
@@ -992,7 +1019,7 @@ fn org_clock_agenda_filter_tag_effort_deep_state_combo() {
 fn org_clock_agenda_multi_file_scope_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -1039,6 +1066,7 @@ fn org_clock_agenda_multi_file_scope_deep_state_combo() {
       (dolist (f (list file-a file-b))
         (when (get-file-buffer f) (kill-buffer (get-file-buffer f))))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 34)""#]],
     );
 }
 
@@ -1046,7 +1074,7 @@ fn org_clock_agenda_multi_file_scope_deep_state_combo() {
 fn org_clock_logbook_edit_report_table_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -1095,6 +1123,9 @@ fn org_clock_logbook_edit_report_table_deep() {
                        (point-min) (point-max)))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK (240 ((1 \"Project\" 240) (2 \"Task A\" 150) (2 \"Task B\" 90)) 300 ((1 \"Project\" 300) (2 \"Task A\" 150) (2 \"Task B\" 150)) \"* Project\n** Task A\n:LOGBOOK:\nCLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 10:30] =>  1:30\nCLOCK: [2026-05-28 Wed 11:00]--[2026-05-28 Wed 12:00] =>  1:00\n:END:\n** Task B\nCLOCK: [2026-05-28 Wed 16:00]--[2026-05-28 Wed 17:00] =>  1:00\n\n:LOGBOOK:\nCLOCK: [2026-05-28 Wed 14:00]--[2026-05-28 Wed 15:30] =>  1:30\n:END:\n\")""#
+        ]],
     );
 }
 
@@ -1102,7 +1133,7 @@ fn org_clock_logbook_edit_report_table_deep() {
 fn org_clock_multi_task_report_edit_recompute_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -1159,5 +1190,6 @@ fn org_clock_multi_task_report_edit_recompute_deep() {
                            (point-min) (point-max))))))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 34)""#]],
     );
 }

@@ -31,7 +31,12 @@ fn oracle_prop_with_temp_buffer_insert_extract_multiline() {
         (list full size
               (buffer-substring line2-start line2-end)
               line2-start line2-end)))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"first line\nsecond line\nthird line\" 33 \"second line\" 12 23)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +68,12 @@ fn oracle_prop_with_temp_buffer_multiple_operations() {
         (goto-char (point-max))
         (insert " <<<")
         (list after-delete after-upcase after-prefix (buffer-string))))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello! This is a test.\" \"HELLO! This is a test.\" \">>> HELLO! This is a test.\" \">>> HELLO! This is a test. <<<\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +99,12 @@ fn oracle_prop_with_temp_buffer_nested_independent() {
       (let ((outer-after (buffer-string)))
         (list outer-before inner-result outer-after
               (string= outer-before outer-after))))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"outer-content\" (\"inner-content\" \"INNER-CONTENT\") \"outer-content\" t)""#
+        ]],
+    );
 }
 
 #[test]
@@ -113,7 +128,10 @@ fn oracle_prop_with_temp_buffer_triple_nested() {
                  (list l2-str l3-result (buffer-string)))))))
       ;; After L2 exits, L1 buffer still intact
       (list l1-str l2-result (buffer-string)))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"L1\" (\"L2\" \"L3\" \"L2\") \"L1\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +163,12 @@ fn oracle_prop_with_temp_buffer_complex_return() {
             (length parsed)
             (assoc "key2" parsed)
             (cdr (assoc "key3" parsed))))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"key1\" . \"value1\") (\"key2\" . \"value2\") (\"key3\" . \"value3\")) 3 (\"key2\" . \"value2\") \"value3\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +198,10 @@ fn oracle_prop_with_temp_buffer_state_isolation() {
         (string= (buffer-string) main-content)
         main-point
         sub-result))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t 5 (29 \"completely different stuff!!\" 28))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +231,12 @@ fn oracle_prop_with_temp_buffer_error_handling() {
   (with-temp-buffer
     (insert "post-error recovery")
     (buffer-string)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"safe content\" (caught \"deliberate error: before error\") \"post-error recovery\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -224,7 +255,10 @@ fn oracle_prop_with_temp_buffer_error_preserves_outer() {
     ;; Outer buffer must be unchanged
     (list (string= (buffer-string) outer-str)
           (buffer-string))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t \"outer intact\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +290,12 @@ fn oracle_prop_with_temp_buffer_narrowing() {
           (widen)
           (list narrowed-str narrowed-min narrowed-max narrowed-size
                 upcased (buffer-string)))))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"important-data\" 6 20 24 \"IMPORTANT-DATA\" \"AAAA:IMPORTANT-DATA:BBBB\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +324,12 @@ fn oracle_prop_with_temp_buffer_text_properties() {
     (let ((no-props (buffer-substring-no-properties (point-min) (point-max))))
       (list full no-props props-at-8 props-at-13
             (string= full no-props)))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (#(\"plain bold italic\" 6 10 (face bold) 11 17 (face italic)) \"plain bold italic\" bold italic t)""#
+        ]],
+    );
 }
 
 #[test]
@@ -307,7 +351,12 @@ fn oracle_prop_with_temp_buffer_propertize_insert() {
     (get-text-property 7 'font-lock-face)
     ;; Space between words has no custom-prop
     (get-text-property 6 'custom-prop)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (#(\"hello world\" 0 5 (font-lock-face font-lock-keyword-face custom-prop 42) 6 11 (font-lock-face font-lock-string-face custom-prop 99)) 42 font-lock-keyword-face 99 font-lock-string-face nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -327,5 +376,8 @@ fn oracle_prop_with_temp_buffer_search_replace_loop() {
       (replace-match "dog" t t)
       (setq count (1+ count)))
     (list (buffer-string) count)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"the dog sat on the mat by the dog\" 2)""#]],
+    );
 }

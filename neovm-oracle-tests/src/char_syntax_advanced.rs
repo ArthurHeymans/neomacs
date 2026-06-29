@@ -41,7 +41,12 @@ fn oracle_prop_char_syntax_adv_basic_categories() {
                      (char-syntax ?\[) (char-syntax ?\])
                      ;; String delimiter
                      (char-syntax ?\")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (119 119 119 119 119 119 32 32 32 46 46 46 46 95 95 95 95 40 41 40 41 34)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +86,10 @@ fn oracle_prop_char_syntax_adv_after_modification() {
                                   ;; Verify changes happened
                                   (not (= orig-at mod-at))
                                   (= restored-at (char-to-string ?.))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \".\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +123,12 @@ fn oracle_prop_char_syntax_adv_class_to_char_all() {
                             (= (cdr (assq 6 mapping)) ?\")   ;; string -> "
                             (= (cdr (assq 7 mapping)) ?\\))) ;; escape -> \
                     )"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (((0 . 32) (1 . 46) (2 . 119) (3 . 95) (4 . 40) (5 . 41) (6 . 39) (7 . 34) (8 . 36) (9 . 92) (10 . 47) (11 . 60) (12 . 62) (13 . 64) (14 . 33) (15 . 124)) t nil nil nil t t nil nil)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +169,10 @@ fn oracle_prop_char_syntax_adv_matching_paren_extended() {
                        ;; Guillemets
                        (matching-paren 171)
                        (matching-paren 187))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (41 40 93 91 125 123 62 60 nil nil nil 49 49)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +211,12 @@ fn oracle_prop_char_syntax_adv_string_to_syntax() {
                     ;; Verify they are cons cells
                     (consp (string-to-syntax "w"))
                     (integerp (car (string-to-syntax "w"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((0) (2) (3) (1) (7) (9) (6) (11) (12) (14) (15) (4 . 41) (5 . 40) (4 . 62) (5 . 60) (65537) (131073) (262145) (524289) t t)""#
+        ],
+    );
 }
 
 #[test]
@@ -215,7 +236,12 @@ fn oracle_string_to_syntax_invalid_descriptor_errors_like_gnu() {
      (string-to-syntax "?")
    (error (list (car err) (cdr err)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((error (\"Invalid syntax description letter: \\0\")) (error (\"Invalid syntax description letter: ?\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +304,12 @@ fn oracle_prop_char_syntax_adv_tokenizer() {
                          (neovm--test-char-syntax-tokenize "  a + b  ")
                          (neovm--test-char-syntax-tokenize "hello"))
                       (fmakunbound 'neovm--test-char-syntax-tokenize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((word \"x\") (ws \" \") (punct \"=\") (ws \" \") (word \"foo\") (open \"(\") (word \"42\") (close \")\") (ws \" \") (punct \"+\") (ws \" \") (word \"bar\") (sym \"_\") (word \"baz\")) ((ws \"  \") (word \"a\") (ws \" \") (punct \"+\") (ws \" \") (word \"b\") (ws \"  \")) ((word \"hello\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -324,5 +355,8 @@ fn oracle_prop_char_syntax_adv_buffer_local_switching() {
                                           (not (= lisp-semi c-semi))
                                           (not (= lisp-under c-under))))))))
                       results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (95 60 95 46 46 119 t t t)""#],
+    );
 }

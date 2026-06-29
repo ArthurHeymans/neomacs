@@ -137,7 +137,10 @@ fn oracle_prop_huffman_adv_canonical_codes() {
     (fmakunbound 'neovm--hca-code-lengths)
     (fmakunbound 'neovm--hca-canonical)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp \"0\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +241,7 @@ fn oracle_prop_huffman_adv_tree_serialization() {
     (fmakunbound 'neovm--hts-deserialize)
     (fmakunbound 'neovm--hts-gen-codes)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -321,7 +324,12 @@ fn oracle_prop_huffman_adv_roundtrip_extended() {
     (fmakunbound 'neovm--hrt-pq-insert)
     (fmakunbound 'neovm--hrt-roundtrip)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t 13 26 5) (t 7 7 2) (t 10 10 2) (t 30 126 21) (t 4 4 2) (t 1 1 2) (t 7 14 4))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -395,7 +403,10 @@ fn oracle_prop_huffman_adv_optimal_code_length() {
     (fmakunbound 'neovm--hol-pq-insert)
     (fmakunbound 'neovm--hol-analyze)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -468,7 +479,10 @@ fn oracle_prop_huffman_adv_compression_ratio_analysis() {
     (fmakunbound 'neovm--hcr-pq-insert)
     (fmakunbound 'neovm--hcr-ratio)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -540,7 +554,12 @@ fn oracle_prop_huffman_adv_frequency_update() {
     (fmakunbound 'neovm--hfu-pq-insert)
     (fmakunbound 'neovm--hfu-build-codes)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t ((97 . 1) (98 . 2) (99 . 2)) ((97 . 2) (98 . 2) (99 . 1)) ((97 . 1) (98 . 2) (99 . 2)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -615,7 +634,10 @@ fn oracle_prop_huffman_adv_full_binary_tree_property() {
     (fmakunbound 'neovm--hfb-pq-insert)
     (fmakunbound 'neovm--hfb-verify)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((5 4 t t t) (2 1 t t t) (5 4 t t t) (2 1 t t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -691,7 +713,10 @@ fn oracle_prop_huffman_adv_bitwise_decode() {
     (fmakunbound 'neovm--hbd-pq-insert)
     (fmakunbound 'neovm--hbd-test)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t 4 23 23) (t 1 3 3) (t 3 20 20))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -750,7 +775,10 @@ fn oracle_prop_huffman_adv_merge_order_trace() {
     (fmakunbound 'neovm--hmo-pq-insert)
     (fmakunbound 'neovm--hmo-trace-build)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((1 1 1 2) ((2 3 5)) t 5) ((2 2 2) ((2 4 6)) t 6))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -823,5 +851,8 @@ fn oracle_prop_huffman_adv_single_char_edge() {
     (fmakunbound 'neovm--hsc-pq-insert)
     (fmakunbound 'neovm--hsc-test)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t 1 2) (t 5 2) (t 2 2))""#]],
+    );
 }

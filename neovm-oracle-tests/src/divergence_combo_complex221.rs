@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx221_align_region_columns_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -17,13 +17,14 @@ fn div_cx221_align_region_columns_basic() {
       (buffer-string))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"a\t= 1\nbb\t= 22\nccc\t= 333\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx221_comment_region_uncomment_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"
 (with-temp-buffer
   (insert "line one\nline two\nline three\n")
@@ -39,7 +40,7 @@ fn div_cx221_comment_region_uncomment_round_trip() {
 #[test]
 fn div_cx221_comment_or_uncomment_region_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"
 (with-temp-buffer
   (insert "line one\nline two\n")
@@ -55,33 +56,35 @@ fn div_cx221_comment_or_uncomment_region_toggle() {
 #[test]
 fn div_cx221_sort_lines_numeric_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "10\n2\n1\n20\n3\n")
   (sort-numeric-fields 1 (point-min) (point-max))
   (buffer-string))
 "##,
+        expect_test::expect![[r#""OK \"1\n2\n3\n10\n20\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx221_sort_lines_alpha() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "banana\napple\ncherry\ndate\nelderberry\n")
   (sort-lines nil (point-min) (point-max))
   (buffer-string))
 "##,
+        expect_test::expect![[r#""OK \"apple\nbanana\ncherry\ndate\nelderberry\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx221_sort_fields_by_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -90,13 +93,14 @@ fn div_cx221_sort_fields_by_column() {
       (buffer-string))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"b 1 y\nc 2 z\na 3 x\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx221_sort_columns_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -105,13 +109,14 @@ fn div_cx221_sort_columns_basic() {
       (buffer-string))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"bravo charlie delta\nzebra alpha mike\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx221_delete_duplicate_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -120,13 +125,14 @@ fn div_cx221_delete_duplicate_lines() {
       (buffer-string))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"alpha\nbeta\ngamma\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx221_comment_box_wrap_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -141,7 +147,7 @@ fn div_cx221_comment_box_wrap_text() {
 #[test]
 fn div_cx221_align_sort_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -165,5 +171,6 @@ fn div_cx221_align_sort_with_marker_overlay_undo_narrow_mega() {
                 (text-properties-at 1)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }

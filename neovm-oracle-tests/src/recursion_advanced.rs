@@ -34,7 +34,12 @@ fn oracle_prop_recursion_advanced_mutual_collatz() {
            (funcall 'neovm--radv-step-even 12 nil))
         (fmakunbound 'neovm--radv-step-even)
         (fmakunbound 'neovm--radv-step-odd)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1) ((halve 6) (triple+1 3) (halve 10) (triple+1 5) (halve 16) (halve 8) (halve 4) (halve 2) 1) ((triple+1 7) (halve 22) (triple+1 11) (halve 34) (triple+1 17) (halve 52) (halve 26) (triple+1 13) (halve 40) (halve 20) (halve 10) (triple+1 5) (halve 16) (halve 8) (halve 4) (halve 2) 1) ((halve 12) (halve 6) (triple+1 3) (halve 10) (triple+1 5) (halve 16) (halve 8) (halve 4) (halve 2) 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +87,10 @@ fn oracle_prop_recursion_advanced_tree_operations() {
         (fmakunbound 'neovm--radv-tree-count)
         (fmakunbound 'neovm--radv-tree-fold)
         (fmakunbound 'neovm--radv-tree-map)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (8 36 8 (2 (3 (4 5)) (6 (7 8 9))))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +164,10 @@ fn oracle_prop_recursion_advanced_recursive_descent_parser() {
         (fmakunbound 'neovm--radv-parse-term)
         (fmakunbound 'neovm--radv-parse-factor)
         (makunbound 'neovm--radv-tokens)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (13 15 5 6 15)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +210,10 @@ fn oracle_prop_recursion_advanced_accumulator_passing() {
         (fmakunbound 'neovm--radv-rev-acc)
         (fmakunbound 'neovm--radv-flat-acc)
         (fmakunbound 'neovm--radv-map-acc)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((5 4 3 2 1) (1 2 3 4 5) (1 4 9 16 25))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +267,10 @@ fn oracle_prop_recursion_advanced_continuation_passing() {
         (fmakunbound 'neovm--radv-cps-fact)
         (fmakunbound 'neovm--radv-cps-fib)
         (fmakunbound 'neovm--radv-cps-map)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (120 3628800 21 (1 4 9 16 25))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -301,7 +318,10 @@ fn oracle_prop_recursion_advanced_pattern_matcher() {
                     '((any (any any)) any)
                     '((1 (2 3)) 4)))
         (fmakunbound 'neovm--radv-pmatch)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t nil nil t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +359,12 @@ fn oracle_prop_recursion_advanced_alist_tree_flattener() {
                         (doc . ((readme . "Hello"))))))
             (funcall 'neovm--radv-flatten-dir tree ""))
         (fmakunbound 'neovm--radv-flatten-dir)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"src/main\" . \"int main() {}\") (\"src/util/helper\" . \"void help() {}\") (\"src/lib/io\" . \"FILE* open()\") (\"src/lib/math\" . \"double sqrt()\") (\"doc/readme\" . \"Hello\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -383,5 +408,10 @@ fn oracle_prop_recursion_advanced_towers_of_hanoi() {
              (length neovm--radv-hanoi-moves)))
         (fmakunbound 'neovm--radv-hanoi)
         (makunbound 'neovm--radv-hanoi-moves)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 A C)) ((1 A B) (2 A C) (1 B C)) ((1 A C) (2 A B) (1 C B) (3 A C) (1 B A) (2 B C) (1 A C)) 15)""#
+        ]],
+    );
 }

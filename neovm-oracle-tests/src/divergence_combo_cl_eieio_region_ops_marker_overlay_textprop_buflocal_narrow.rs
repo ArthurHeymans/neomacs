@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_region_kill_yank_overlay_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ry-snap ()
     ((step :initarg :step :accessor rys-step :initform "")
@@ -73,6 +73,7 @@ fn combo_eieio_region_kill_yank_overlay_marker() {
               (overlay-start ov) (overlay-end ov)
               my-ry-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -80,7 +81,7 @@ fn combo_eieio_region_kill_yank_overlay_marker() {
 fn combo_eieio_region_kill_yank_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ry-narrow-snap ()
     ((step :initarg :step :accessor ryns-step :initform "")
@@ -151,6 +152,7 @@ fn combo_eieio_region_kill_yank_narrow() {
               (overlay-start ov) (overlay-end ov)
               my-ryn-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -158,7 +160,7 @@ fn combo_eieio_region_kill_yank_narrow() {
 fn combo_eieio_region_copy_region_yank_pop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ry-pop-snap ()
     ((step :initarg :step :accessor ryps-step :initform "")
@@ -235,6 +237,7 @@ fn combo_eieio_region_copy_region_yank_pop() {
                     my-pop-log))))
       (setq kill-ring saved-kill-ring))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -242,7 +245,7 @@ fn combo_eieio_region_copy_region_yank_pop() {
 fn combo_eieio_region_delete_dup_region_overlay_evaporate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ry-del-snap ()
     ((step :initarg :step :accessor ryds-step :initform "")
@@ -311,6 +314,7 @@ fn combo_eieio_region_delete_dup_region_overlay_evaporate() {
               (overlay-live-p ov1) (overlay-live-p ov2)
               my-del-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
     );
 }
 
@@ -318,7 +322,7 @@ fn combo_eieio_region_delete_dup_region_overlay_evaporate() {
 fn combo_eieio_region_kill_yank_with_props_preserved() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ry-props-snap ()
     ((step :initarg :step :accessor ryps2-step :initform "")
@@ -386,5 +390,6 @@ fn combo_eieio_region_kill_yank_with_props_preserved() {
               (overlay-start ov) (overlay-end ov)
               my-ryp-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

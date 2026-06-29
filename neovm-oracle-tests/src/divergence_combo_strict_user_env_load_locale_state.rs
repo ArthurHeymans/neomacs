@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_g0_user_identity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (stringp (user-login-name))
       (stringp (user-real-login-name))
@@ -20,13 +20,14 @@ fn div_g0_user_identity() {
       (integerp (user-uid))
       (integerp (user-gid)))
 "##,
+        expect_test::expect![[r#""ERR (void-function user-mail-address)""#]],
     );
 }
 
 #[test]
 fn div_g0_file_paths_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list default-directory
       temporary-file-directory
@@ -34,6 +35,9 @@ fn div_g0_file_paths_state() {
       (stringp exec-directory)
       (stringp invocation-directory))
 "##,
+        expect_test::expect![[
+            r#""OK (\"~/Projects/github.com/eval-exec/neomacs-main/\" \"/tmp/nix-shell.XcUf3d/\" t t t)""#
+        ]],
     );
 }
 
@@ -45,49 +49,55 @@ fn div_g0_doc_directory() {
     // Neomacs:   OK nil
     // doc-directory is a string in GNU Emacs but nil in Neomacs (Neomacs does
     // not set the documentation directory).
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (stringp doc-directory)
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
 #[test]
 fn div_g0_load_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (> (length load-path) 5)
       load-suffixes
       load-file-name
       (stringp source-directory))
 "##,
+        expect_test::expect![[
+            r#""OK (t (\".so\" \".elc\" \".el\") \"/tmp/nix-shell.XcUf3d/neovm-inline-oracle-sf3ylzib/program-14800-100.el\" t)""#
+        ]],
     );
 }
 
 #[test]
 fn div_g0_locale_and_coding_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (locale-info 'codeset)
       coding-system-for-read
       coding-system-for-write
       locale-coding-system)
 "##,
+        expect_test::expect![[r#""OK (\"UTF-8\" utf-8-unix utf-8-unix utf-8-unix)""#]],
     );
 }
 
 #[test]
 fn div_g0_emacs_state_safe() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (integerp (emacs-pid))
       system-type
       (vectorp (memory-use-counts))
       (length (memory-use-counts)))
 "##,
+        expect_test::expect![[r#""OK (t gnu/linux nil 7)""#]],
     );
 }
 
@@ -99,10 +109,11 @@ fn div_g0_system_configuration_triple() {
     // Neomacs:   OK "x86_64-unknown-linux-gnu"
     // system-configuration reports the build triple; Neomacs uses the
     // Rust-style "unknown-linux-gnu" triplet vs GNU's "pc-linux-gnu".
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 system-configuration
 "##,
+        expect_test::expect![[r#""OK \"x86_64-pc-linux-gnu\"""#]],
     );
 }
 
@@ -112,12 +123,13 @@ fn div_g0_environment_exported_p() {
     // getenv presence checks only (NOT process-environment ordering/content,
     // which trivially differs between the two processes and would dump the
     // whole env).
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (stringp (getenv "SHELL"))
       (stringp (getenv "USER"))
       (stringp (getenv "TERM"))
       (eq (getenv "NEO_PROBE_UNSET_XYZ") nil))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }

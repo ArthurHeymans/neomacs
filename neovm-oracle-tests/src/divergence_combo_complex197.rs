@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx197_overlay_create_move_delete_lifecycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDEF")
@@ -22,13 +22,14 @@ fn div_cx197_overlay_create_move_delete_lifecycle() {
           (overlayp ov)
           (overlays-in 1 16))))
 "##,
+        expect_test::expect![[r#""OK (t 3 7 #<overlay in no buffer> 5 10 nil t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx197_overlay_evaporate_on_delete_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -42,13 +43,14 @@ fn div_cx197_overlay_evaporate_on_delete_region() {
             (overlayp ov)
             (length (overlays-in 1 6))))))
 "##,
+        expect_test::expect![[r#""OK (t 1 t 0)""#]],
     );
 }
 
 #[test]
 fn div_cx197_overlay_priority_and_face_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -65,13 +67,14 @@ fn div_cx197_overlay_priority_and_face_merge() {
           (length (overlays-at 3))
           (length (overlays-at 8)))))
 "##,
+        expect_test::expect![[r#""OK (bold italic italic italic 2 0)""#]],
     );
 }
 
 #[test]
 fn div_cx197_overlay_before_after_string_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "middle")
@@ -82,13 +85,16 @@ fn div_cx197_overlay_before_after_string_properties() {
           (overlay-get ov 'before-string)
           (overlay-get ov 'after-string))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"middl\" #(\"[BEFORE]\" 0 8 (face bold)) #(\"[AFTER]\" 0 7 (face italic)))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx197_overlay_window_local_filtering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -99,13 +105,14 @@ fn div_cx197_overlay_window_local_filtering() {
           (get-char-property 5 'face)
           (overlay-get ov 'window))))
 "##,
+        expect_test::expect![[r#""OK (region nil #<window 1 on *scratch*>)""#]],
     );
 }
 
 #[test]
 fn div_cx197_overlay_modification_hooks_fire() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (with-temp-buffer
@@ -118,13 +125,14 @@ fn div_cx197_overlay_modification_hooks_fire() {
       (insert "XY")))
   (nreverse calls))
 "##,
+        expect_test::expect![[r#""OK ((:before 4 6 nil) (:after 4 4 2))""#]],
     );
 }
 
 #[test]
 fn div_cx197_overlay_insert_in_front_and_behind_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (with-temp-buffer
@@ -140,13 +148,14 @@ fn div_cx197_overlay_insert_in_front_and_behind_hooks() {
       (insert "Y")))
   (nreverse calls))
 "##,
+        expect_test::expect![[r#""OK (:front :front :behind :behind)""#]],
     );
 }
 
 #[test]
 fn div_cx197_overlay_invisible_buffer_substring_visibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "beforehiddenafter")
@@ -158,13 +167,14 @@ fn div_cx197_overlay_invisible_buffer_substring_visibility() {
       (remove-from-invisibility-spec 'neo-cx197-h)
       (list visible full (length visible) (length full)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 19)""#]],
     );
 }
 
 #[test]
 fn div_cx197_overlay_category_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -176,13 +186,14 @@ fn div_cx197_overlay_category_properties() {
           (get 'neo-cx197-cat 'face)
           (get 'neo-cx197-cat 'priority))))
 "##,
+        expect_test::expect![[r#""OK (neo-cx197-cat bold 99)""#]],
     );
 }
 
 #[test]
 fn div_cx197_overlay_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -215,5 +226,6 @@ fn div_cx197_overlay_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov2) (overlay-end ov2)
             (text-properties-at 1)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

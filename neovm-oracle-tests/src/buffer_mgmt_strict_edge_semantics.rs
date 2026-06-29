@@ -8,8 +8,9 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_rename_buffer_changes_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (let ((b (get-buffer-create "*rn-old*"))) (rename-buffer "*rn-new*") (buffer-name b)))"#,
+        expect_test::expect![[r#""OK \"*rn-old*\"""#]],
     );
     assert_ok_eq("\"*rn-old*\"", &o, &n);
 }
@@ -17,8 +18,9 @@ fn oracle_rename_buffer_changes_name() {
 #[test]
 fn oracle_kill_buffer_removes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (let ((b (get-buffer-create "*kb*"))) (kill-buffer b) (buffer-live-p b)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
     assert_ok_eq("nil", &o, &n);
 }
@@ -26,8 +28,9 @@ fn oracle_kill_buffer_removes() {
 #[test]
 fn oracle_buffer_string_returns_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (switch-to-buffer (get-buffer-create "*bsc*")) (erase-buffer) (insert "hello world") (buffer-string))"#,
+        expect_test::expect![[r#""OK \"hello world\"""#]],
     );
     assert_ok_eq("\"hello world\"", &o, &n);
 }
@@ -35,8 +38,9 @@ fn oracle_buffer_string_returns_content() {
 #[test]
 fn oracle_buffer_substring_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (switch-to-buffer (get-buffer-create "*bsr*")) (erase-buffer) (insert "0123456789") (buffer-substring 3 6))"#,
+        expect_test::expect![[r#""OK \"234\"""#]],
     );
     assert_ok_eq("\"234\"", &o, &n);
 }

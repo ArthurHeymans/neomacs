@@ -43,7 +43,12 @@ fn oracle_prop_vector_creation_comprehensive() {
   (length (make-vector 100 0))
   (length (vector 'a 'b 'c 'd 'e))
   (length (vconcat [1 2] '(3 4 5))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([0 0 0 0 0] [nil nil nil] [t t t t] [symbol symbol symbol] [\"string-init\" \"string-init\"] [(a b c) (a b c) (a b c)] [[nested] [nested]] [] (t t) [1 \"two\" three nil t (4 5) [6 7]] [] [42] [1 2 3 4 65 66 5] [1 2] [1 2 3 1 2 3] [104 101 108 108 111] [] [] 100 5 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +101,12 @@ fn oracle_prop_vector_aref_aset_boundaries() {
   (condition-case err
       (aset [1 2 3] 3 'x)
     (args-out-of-range (list 'caught (car err)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 30 50) (first second third [first second third]) [42 \"hello\" sym (a b) [inner] 3.14] [99 2 99 4 99] ([9] (0 1 2 3 4 5 6 7 8 9)) (caught args-out-of-range) (caught args-out-of-range) (caught args-out-of-range))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +155,12 @@ fn oracle_prop_nested_vectors_deep_access() {
               (dotimes (k (length inner))
                 (setq result (cons (aref inner k) result)))))))
       (nreverse result))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (deep ([1 0 0 0] [0 1 0 0] [0 0 1 0] [0 0 0 1]) (CHANGED CHANGED t) (1 2 3 4 6 10) (1 2 3 4 5 6 7 8))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +210,12 @@ fn oracle_prop_fillarray_vector_comprehensive() {
     (list (eq (aref v 0) (aref v 1))
           (eq (aref v 1) (aref v 2))
           (eq (aref v 0) shared-list))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([0 0 0 0 0] t ([sym sym sym] [\"str\" \"str\" \"str\"] [(list val) (list val) (list val)] [42 42 42]) [nil nil nil nil nil] (0 []) (91 46 46 46 93) (t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +262,12 @@ fn oracle_prop_copy_sequence_vector_independence() {
     (list (equal orig copy)
           (aref copy 0) (aref copy 1) (aref copy 2)
           (aref copy 3) (aref copy 4) (aref copy 5))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t nil [1 2 3 4 5]) ([10 20 30] [10 999 30] nil) ([-1 20 30] [10 20 30]) (0 t t) (999 999 t) (t 1 \"two\" three nil t 3.14))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +306,10 @@ fn oracle_prop_vector_equal_comparison() {
   ;; Deep nesting equality
   (equal [[[1]]] [[[1]]])
   (equal [[[1]]] [[[2]]]))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil nil nil t nil t nil (t t t nil) t t nil t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +388,12 @@ fn oracle_prop_vector_data_structures() {
     (fmakunbound 'neovm--test-make-table)
     (fmakunbound 'neovm--test-table-find)
     (fmakunbound 'neovm--test-table-filter)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Alice\" 25 \"NYC\" [\"Bob\" 26 \"LA\"] 26 4 \"Carol\" (2 \"Alice\" \"Carol\") (\"Bob\" \"Dave\" \"Alice\" \"Carol\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -397,5 +430,10 @@ fn oracle_prop_vector_sort_comprehensive() {
     (list (= (seq-reduce #'+ orig 0)
              (seq-reduce #'+ sorted 0))
           (= (length orig) (length sorted)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([1 2 3 4 5 6 7 8 9 10] [10 9 8 7 6 5 4 3 2 1] [\"apple\" \"banana\" \"cherry\" \"date\"] (\"cat\" \"dog\" \"bee\" \"elephant\" \"hippopotamus\") [] [42] [1 2 3 4 5] [1 2 3 4 5] [1 1 2 3 3 4 5 5 5 6 9] (t t))""#
+        ]],
+    );
 }

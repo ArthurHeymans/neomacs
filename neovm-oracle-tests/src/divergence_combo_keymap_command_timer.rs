@@ -16,7 +16,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_key_binding_lookup_through_parent_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((gp (make-sparse-keymap))
         (p  (make-sparse-keymap))
@@ -36,6 +36,9 @@ fn combo_key_binding_lookup_through_parent_chain() {
           (lookup-key p "a")
           (lookup-key p "b")
           (lookup-key gp "a"))))"#,
+        expect_test::expect![[
+            r#""OK (p-override gp-only p-only c-only nil p-override gp-only gp-cmd)""#
+        ]],
     );
 }
 
@@ -43,7 +46,7 @@ fn combo_key_binding_lookup_through_parent_chain() {
 fn combo_key_binding_with_char_and_vector_input() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((map (make-sparse-keymap)))
     (define-key map "x" 'x-cmd)
@@ -54,6 +57,7 @@ fn combo_key_binding_with_char_and_vector_input() {
           (lookup-key map [return])
           (lookup-key map (vconcat [?x]))
           (lookup-key map (vconcat [?y])))))"#,
+        expect_test::expect![[r#""OK (x-cmd y-cmd ret-cmd x-cmd y-cmd)""#]],
     );
 }
 
@@ -65,7 +69,7 @@ fn combo_key_binding_with_char_and_vector_input() {
 fn combo_key_binding_with_remap_and_command_execute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((map (make-sparse-keymap))
         (observed nil))
@@ -77,6 +81,7 @@ fn combo_key_binding_with_remap_and_command_execute() {
                          (command-remapping 'ignore)))
     (use-global-map (make-sparse-keymap))
     observed))"#,
+        expect_test::expect![[r#""OK (nil nil forward-char)""#]],
     );
 }
 
@@ -84,7 +89,7 @@ fn combo_key_binding_with_remap_and_command_execute() {
 fn combo_multiple_remap_layers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((map1 (make-sparse-keymap))
         (map2 (make-sparse-keymap)))
@@ -100,6 +105,7 @@ fn combo_multiple_remap_layers() {
               (eq r1 'backward-char)
               (eq r2 'goto-char)
               (eq r3 'backward-char))))))"#,
+        expect_test::expect![[r#""OK (backward-char goto-char nil t t nil)""#]],
     );
 }
 
@@ -111,7 +117,7 @@ fn combo_multiple_remap_layers() {
 fn combo_key_description_multibyte_and_special_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (key-description [?\C-a])
         (key-description [?\M-x])
@@ -126,6 +132,9 @@ fn combo_key_description_multibyte_and_special_keys() {
         (key-description [32])
         (key-description [32 104])
         (key-description [])))"#,
+        expect_test::expect![[
+            r#""OK (\"C-a\" \"M-x\" \"C-M-x\" \"C-x C-f\" \"<return>\" \"<tab>\" \"<escape>\" \"<backspace>\" \"<delete>\" \"C-x C-c\" \"SPC\" \"SPC h\" \"\")""#
+        ]],
     );
 }
 
@@ -133,7 +142,7 @@ fn combo_key_description_multibyte_and_special_keys() {
 fn combo_single_key_description_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (single-key-description ?a)
         (single-key-description ?A)
@@ -145,6 +154,9 @@ fn combo_single_key_description_edge_cases() {
         (single-key-description 'tab)
         (single-key-description 'escape)
         (single-key-description [?\C-x ?\C-f])))"#,
+        expect_test::expect![[
+            r#""ERR (error \"KEY must be an integer, cons, symbol, or string\")""#
+        ]],
     );
 }
 
@@ -156,7 +168,7 @@ fn combo_single_key_description_edge_cases() {
 fn combo_keymap_parent_cycle_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((a (make-sparse-keymap))
         (b (make-sparse-keymap)))
@@ -171,6 +183,7 @@ fn combo_keymap_parent_cycle_detection() {
       (list result
             (lookup-key a "x")
             (keymap-parent a)))))"#,
+        expect_test::expect![[r#""OK ((a-cmd b-cmd t nil) a-cmd nil)""#]],
     );
 }
 
@@ -178,7 +191,7 @@ fn combo_keymap_parent_cycle_detection() {
 fn combo_keymap_prompt_and_metadata() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((map (make-sparse-keymap)))
     (define-key map [menu-bar test] (cons "Test Menu" (make-sparse-keymap)))
@@ -187,6 +200,7 @@ fn combo_keymap_prompt_and_metadata() {
           (keymapp map)
           (keymapp (lookup-key map [menu-bar test]))
           (lookup-key map "x"))))"#,
+        expect_test::expect![[r#""OK (nil t t x-cmd)""#]],
     );
 }
 
@@ -198,12 +212,13 @@ fn combo_keymap_prompt_and_metadata() {
 fn combo_accessible_keymaps_from_global_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((maps (accessible-keymaps (current-global-map))))
     (list (> (length maps) 0)
           (cl-every (lambda (m) (keymapp (cdr m))) maps)
           (cl-some (lambda (m) (equal (car m) [])) maps))))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -211,7 +226,7 @@ fn combo_accessible_keymaps_from_global_map() {
 fn combo_map_keymap_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((map (make-sparse-keymap))
         (bindings nil))
@@ -223,6 +238,7 @@ fn combo_map_keymap_iteration() {
                 map)
     (sort (nreverse bindings)
           (lambda (a b) (< (car a) (car b))))))"#,
+        expect_test::expect![[r#""OK ((97 cmd-a) (98 cmd-b) (99 cmd-c))""#]],
     );
 }
 
@@ -234,7 +250,7 @@ fn combo_map_keymap_iteration() {
 fn combo_advice_around_command_sees_this_command() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((before-snap nil)
         (after-snap nil)
@@ -248,6 +264,7 @@ fn combo_advice_around_command_sees_this_command() {
     (command-execute 'ignore)
     (advice-remove 'ignore 'ignore--test-snap)
     (list before-snap after-snap)))"#,
+        expect_test::expect![[r#""OK ((nil nil nil) (nil nil nil))""#]],
     );
 }
 
@@ -255,7 +272,7 @@ fn combo_advice_around_command_sees_this_command() {
 fn combo_advice_before_mutates_prefix_arg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((captured nil))
     (defun snap-my-prefix ()
@@ -267,6 +284,7 @@ fn combo_advice_before_mutates_prefix_arg() {
     (command-execute 'snap-my-prefix)
     (advice-remove 'snap-my-prefix 'snap-my-prefix--test-prefix)
     captured))"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument commandp snap-my-prefix)""#]],
     );
 }
 
@@ -278,7 +296,7 @@ fn combo_advice_before_mutates_prefix_arg() {
 fn combo_timer_modifies_global_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((before nil) (after nil) (timer nil))
     (setq before (lookup-key (current-global-map) "z"))
@@ -290,6 +308,7 @@ fn combo_timer_modifies_global_keymap() {
     (setq after (lookup-key (current-global-map) "z"))
     (global-set-key "z" nil)
     (list before after (eq after 'timer-cmd))))"#,
+        expect_test::expect![[r#""OK (self-insert-command timer-cmd t)""#]],
     );
 }
 
@@ -301,7 +320,7 @@ fn combo_timer_modifies_global_keymap() {
 fn combo_buffer_local_post_command_hook_with_timer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-buflocal-hook"))
         (timer nil)
@@ -328,6 +347,7 @@ fn combo_buffer_local_post_command_hook_with_timer() {
       (remove-hook 'post-command-hook nil t)
       (kill-buffer buf)
       (list (nreverse hook-trace) (nreverse timer-trace)))))"#,
+        expect_test::expect![[r#""OK (nil ((timer-callback #<killed buffer> test-cmd)))""#]],
     );
 }
 
@@ -335,7 +355,7 @@ fn combo_buffer_local_post_command_hook_with_timer() {
 fn combo_buffer_local_variables_seen_by_timer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-buflocal-var"))
         (timer nil)
@@ -352,6 +372,7 @@ fn combo_buffer_local_variables_seen_by_timer() {
     (cancel-timer timer)
     (kill-buffer buf)
     snap))"#,
+        expect_test::expect![[r#""OK (buffer-local-value t \" combo-buflocal-var\")""#]],
     );
 }
 
@@ -363,13 +384,14 @@ fn combo_buffer_local_variables_seen_by_timer() {
 fn combo_keyboard_macro_variables_initial_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (boundp 'executing-kbd-macro)
         (symbol-value 'executing-kbd-macro)
         (boundp 'executing-macro)
         (symbol-value 'executing-macro)
         (null executing-kbd-macro)))"#,
+        expect_test::expect![[r#""ERR (void-variable executing-macro)""#]],
     );
 }
 
@@ -377,11 +399,12 @@ fn combo_keyboard_macro_variables_initial_state() {
 fn combo_defining_kbd_macro_variable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (boundp 'defining-kbd-macro)
         (symbol-value 'defining-kbd-macro)
         (not defining-kbd-macro)))"#,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }
 
@@ -393,11 +416,12 @@ fn combo_defining_kbd_macro_variable() {
 fn combo_last_command_event_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (integerp last-command-event)
         (or (null last-command-event) (integerp last-command-event))
         (integer-or-marker-p last-command-event)))"#,
+        expect_test::expect![[r#""OK (nil t nil)""#]],
     );
 }
 
@@ -405,13 +429,14 @@ fn combo_last_command_event_type() {
 fn combo_last_nonmenu_event_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (integer-or-marker-p last-nonmenu-event)
         (or (null last-nonmenu-event)
             (integerp last-nonmenu-event)
             (consp last-nonmenu-event)
             (eventp last-nonmenu-event))))"#,
+        expect_test::expect![[r#""OK (nil t)""#]],
     );
 }
 
@@ -423,7 +448,7 @@ fn combo_last_nonmenu_event_type() {
 fn combo_define_key_vector_vs_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((map (make-sparse-keymap)))
     (define-key map [?\C-x ?\C-f] 'find-file)
@@ -434,6 +459,7 @@ fn combo_define_key_vector_vs_string() {
           (lookup-key map "\C-x\C-s")
           (eq (lookup-key map [?\C-x ?\C-f]) 'find-file)
           (eq (lookup-key map "\C-x\C-f") 'find-file))))"#,
+        expect_test::expect![[r#""OK (find-file save-buffer find-file save-buffer t t)""#]],
     );
 }
 
@@ -441,7 +467,7 @@ fn combo_define_key_vector_vs_string() {
 fn combo_key_translation_map_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((result nil))
     (condition-case err
@@ -451,6 +477,7 @@ fn combo_key_translation_map_lookup() {
           (define-key key-translation-map [f13] nil))
       (error (setq result (list 'error err))))
     result))"#,
+        expect_test::expect![[r#""OK [24]""#]],
     );
 }
 
@@ -462,7 +489,7 @@ fn combo_key_translation_map_lookup() {
 fn combo_current_active_maps_with_minor_modes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((map1 (make-sparse-keymap))
         (map2 (make-sparse-keymap))
@@ -478,6 +505,7 @@ fn combo_current_active_maps_with_minor_modes() {
     (list (>= (length maps-before) 1)
           (>= (length maps-after) 1)
           (>= (length maps-after) (length maps-before)))))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -489,7 +517,7 @@ fn combo_current_active_maps_with_minor_modes() {
 fn combo_make_dense_keymap_vs_sparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((dense (make-keymap))
         (sparse (make-sparse-keymap)))
@@ -503,6 +531,7 @@ fn combo_make_dense_keymap_vs_sparse() {
           (eq (lookup-key sparse "a") 'sparse-cmd)
           (vectorp (car-safe dense))
           (consp (car-safe sparse)))))"#,
+        expect_test::expect![[r#""OK (t t dense-cmd sparse-cmd t t nil nil)""#]],
     );
 }
 
@@ -510,7 +539,7 @@ fn combo_make_dense_keymap_vs_sparse() {
 fn combo_keymap_fallback_to_default_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((dense (make-keymap)))
     (define-key dense "a" 'explicit-cmd)
@@ -520,6 +549,7 @@ fn combo_keymap_fallback_to_default_binding() {
           (lookup-key dense "c")
           (eq (lookup-key dense "a") 'explicit-cmd)
           (eq (lookup-key dense "b") 'default-b-cmd))))"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument arrayp keymap)""#]],
     );
 }
 
@@ -531,7 +561,7 @@ fn combo_keymap_fallback_to_default_binding() {
 fn combo_global_map_identity_and_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((saved (current-global-map))
         (new (make-sparse-keymap)))
@@ -542,5 +572,6 @@ fn combo_global_map_identity_and_access() {
                         (lookup-key saved "\C-x"))))
       (use-global-map saved)
       result)))"#,
+        expect_test::expect![[r#""OK (test-cmd t Control-X-prefix)""#]],
     );
 }

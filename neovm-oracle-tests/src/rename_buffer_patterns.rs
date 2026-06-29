@@ -24,7 +24,12 @@ fn oracle_prop_rename_buffer_basic() {
             (string= new-name "*neovm-oracle-rename-basic*")
             ;; buffer-substring should be preserved
             (buffer-string)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\" *temp*\" \"*neovm-oracle-rename-basic*\" t \"content\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -41,7 +46,10 @@ fn oracle_prop_rename_buffer_return_value() {
           (stringp result)
           (string= result (buffer-name))
           (string= result "*neovm-oracle-rename-ret*"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"*neovm-oracle-rename-ret*\" t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +75,10 @@ fn oracle_prop_rename_buffer_duplicate_error() {
             (error (list 'got-error (car err))))))
     (when (buffer-live-p b1) (kill-buffer b1))
     (when (buffer-live-p b2) (kill-buffer b2))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (got-error error)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +108,10 @@ fn oracle_prop_rename_buffer_unique_flag() {
                   (string= result (buffer-name))))))
     (when (buffer-live-p b1) (kill-buffer b1))
     (when (buffer-live-p b2) (kill-buffer b2))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"*neovm-oracle-uniq-target*<2>\" t t 0 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +128,10 @@ fn oracle_prop_rename_buffer_unique_no_conflict() {
     (list result
           (string= result "*neovm-oracle-unique-noconflict*")
           (string= result (buffer-name)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"*neovm-oracle-unique-noconflict*\" t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +161,12 @@ fn oracle_prop_rename_buffer_successive_renames() {
             (null s2-exists)
             (bufferp s3-exists)
             (buffer-string)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"*neovm-oracle-rename-s1*\" \"*neovm-oracle-rename-s2*\" \"*neovm-oracle-rename-s3*\") t t t \"data\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +204,12 @@ fn oracle_prop_rename_buffer_batch_unique_suffixes() {
                 (length names))))
     (dolist (b buffers)
       (when (buffer-live-p b) (kill-buffer b)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"*neovm-oracle-batch-target*\" \"*neovm-oracle-batch-target*<2>\" \"*neovm-oracle-batch-target*<3>\" \"*neovm-oracle-batch-target*<4>\" \"*neovm-oracle-batch-target*<5>\") t t 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +226,10 @@ fn oracle_prop_rename_buffer_empty_string_error() {
         (rename-buffer "")
         'no-error)
     (error (list 'got-error (car err)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (got-error error)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -221,5 +251,8 @@ fn oracle_prop_rename_buffer_preserves_state() {
           (string= content-before (buffer-string))
           (= size-before (buffer-size))
           (buffer-name))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t \"*neovm-oracle-rename-state*\")""#]],
+    );
 }

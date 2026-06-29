@@ -148,7 +148,12 @@ fn oracle_prop_proto_fsm_handshake() {
     (fmakunbound 'neovm--pf-run)
     (makunbound 'neovm--pf-transitions)
     (makunbound 'neovm--pf-trace)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((final-state closed bytes-sent 1536 packets 2 error nil trace ((1 closed connect syn-sent) (2 syn-sent syn-ack established) (3 established data established) (4 established data established) (5 established close fin-wait) (6 fin-wait fin-ack closed))) (final-state closed bytes-sent 0 packets 0 error \"connection refused\" trace ((1 closed connect syn-sent) (2 syn-sent rst closed))) (final-state closed bytes-sent 0 packets 0 error \"connection timeout\" trace ((1 closed connect syn-sent) (2 syn-sent timeout closed))) (final-state closed bytes-sent 0 packets 0 error \"connection timeout\" trace ((1 closed connect syn-sent) (2 syn-sent syn-ack invalid) (3 syn-sent timeout closed))) (final-state closed bytes-sent 100 packets 1 error \"hard reset\" trace ((1 closed connect syn-sent) (2 syn-sent syn-ack established) (3 established data established) (4 established reset closed))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +299,12 @@ fn oracle_prop_proto_fsm_http_request() {
                   (end-headers)
                   (send-response))))
     (fmakunbound 'neovm--pf-http-process)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((state responding method \"GET\" path \"/\" response-code 200 response-body \"Welcome\" body-length 0 header-count 2 log ((transition idle reading-headers) (header \"Host\" \"example.com\") (header \"Accept\" \"text/html\") (transition reading-headers processing) (transition processing responding 200))) (state responding method \"POST\" path \"/data\" response-code 201 response-body \"Received: hello world\" body-length 11 header-count 2 log ((transition idle reading-headers) (header \"Content-Length\" \"11\") (header \"Content-Type\" \"text/plain\") (transition reading-headers reading-body) (body-chunk 11) (transition reading-body processing) (transition processing responding 201))) (state responding method \"GET\" path \"/health\" response-code 200 response-body \"OK\" body-length 0 header-count 0 log ((transition idle reading-headers) (transition reading-headers processing) (transition processing responding 200))) (state responding method \"GET\" path \"/nonexistent\" response-code 404 response-body \"Not Found\" body-length 0 header-count 0 log ((transition idle reading-headers) (transition reading-headers processing) (transition processing responding 404))) (state responding method \"DELETE\" path \"/items/42\" response-code 204 response-body \"\" body-length 0 header-count 0 log ((transition idle reading-headers) (transition reading-headers processing) (transition processing responding 204))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -402,7 +412,12 @@ fn oracle_prop_proto_fsm_timeout_retry() {
                   disconnect)
                 3))
     (fmakunbound 'neovm--pf-retry-protocol)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((state idle retries 0 total-wait 0 data-sent (\"hello\") log ((1 connect idle connecting) (2 connected 0) (3 send \"hello\") (4 ack) (5 disconnect))) (state idle retries 2 total-wait 3 data-sent (\"data\") log ((1 connect idle connecting) (2 timeout retry 1 backoff 1) (3 timeout retry 2 backoff 2) (4 connected 2) (5 send \"data\") (6 ack) (7 disconnect))) (state failed retries 3 total-wait 7 data-sent nil log ((1 connect idle connecting) (2 timeout retry 1 backoff 1) (3 timeout retry 2 backoff 2) (4 timeout retry 3 backoff 4) (5 timeout max-retries-exceeded))) (state idle retries 1 total-wait 0 data-sent (\"msg1\") log ((1 connect idle connecting) (2 connected 0) (3 send \"msg1\") (4 send-timeout retry 1) (5 ack) (6 disconnect))) (state idle retries 0 total-wait 0 data-sent (\"first\" \"second\" \"third\") log ((1 connect idle connecting) (2 connected 0) (3 send \"first\") (4 ack) (5 send \"second\") (6 ack) (7 send \"third\") (8 ack) (9 disconnect))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -544,7 +559,12 @@ fn oracle_prop_proto_fsm_error_recovery() {
                   finish
                   release)))
     (fmakunbound 'neovm--pf-recovery-fsm)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((state done resources nil errors nil log ((1 begin) (2 acquired db-conn) (3 acquired file-handle) (4 start-processing 2) (5 processed item1) (6 processed item2) (7 finishing) (8 released file-handle) (9 released db-conn) (9 done))) (state done resources nil errors ((5 \"bad data encountered\")) log ((1 begin) (2 acquired resource-a) (3 start-processing 1) (4 processed item1) (5 error \"bad data encountered\") (6 recovery-release resource-a) (6 recovered) (7 begin) (8 acquired resource-b) (9 start-processing 1) (10 processed item3) (11 finishing) (12 released resource-b) (12 done))) (state init resources nil errors ((3 \"duplicate resource\")) log ((1 begin) (2 acquired mutex) (3 error \"duplicate resource\") (4 recovery-release mutex) (4 recovered))) (state init resources nil errors ((2 \"no resources acquired\")) log ((1 begin) (2 error \"no resources acquired\") (3 recovered))) (state done resources nil errors ((4 \"bad data encountered\")) log ((1 begin) (2 acquired lock) (3 start-processing 1) (4 error \"bad data encountered\") (5 recovery-release lock) (5 recovered) (6 begin) (7 acquired lock) (8 start-processing 1) (9 processed good-data) (10 finishing) (11 released lock) (11 done))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -634,7 +654,12 @@ fn oracle_prop_proto_fsm_trace_analysis() {
        ;; Empty trace
        (funcall 'neovm--pf-analyze-trace nil))
     (fmakunbound 'neovm--pf-analyze-trace)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((total-transitions 8 error-count 0 error-rate 0 state-times ((closing . 2) (connecting . 2) (established . 4) (sending . 3)) transition-counts ((closing idle 1) (connecting established 1) (established closing 1) (established sending 2) (idle connecting 1) (sending established 2))) (total-transitions 8 error-count 2 error-rate 25 state-times ((connecting . 4) (established . 1) (idle . 1) (recovery . 2) (sending . 1)) transition-counts ((connecting established 1) (connecting recovery 1) (established sending 1) (idle connecting 2) (recovery idle 2) (sending recovery 1))) (total-transitions 0 error-count 0 error-rate 0 state-times nil transition-counts nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -764,7 +789,12 @@ fn oracle_prop_proto_fsm_client_server() {
                 '((client request "data")
                   (server respond "error"))))
     (fmakunbound 'neovm--pf-run-protocol)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((client-state idle server-state listening session-id \"sess-001\" request-count 2 last-response \"200 OK\" log ((1 server listening) (2 server accepted \"sess-001\") (3 client idle -> connecting) (4 client connecting -> connected \"sess-001\") (5 client request \"GET /index\") (6 server processing \"GET /index\") (7 server responded \"200 OK\") (8 client response \"200 OK\") (9 client request \"GET /about\") (10 server processing \"GET /about\") (11 server responded \"200 OK\") (12 client response \"200 OK\") (13 client disconnected) (14 server client-disconnected))) (client-state idle server-state listening session-id \"s1\" request-count 0 last-response nil log ((1 server listening) (2 server accepted \"s1\") (3 client idle -> connecting) (4 client connecting -> connected \"s1\") (5 client disconnected) (6 server client-disconnected))) (client-state idle server-state idle session-id nil request-count 0 last-response nil log ((1 client invalid idle request) (2 server invalid idle respond))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -846,7 +876,12 @@ fn oracle_prop_proto_fsm_sequence_validator() {
          (funcall 'neovm--pf-validate-sequence rules
                   '((idle connect) (connecting fail)))))
     (fmakunbound 'neovm--pf-validate-sequence)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((valid t final-state idle errors nil visited (closing connected connecting idle sending)) (valid t final-state idle errors nil visited (closing connected connecting idle sending)) (valid nil final-state closing errors ((4 no-transition closing send)) visited (closing connected connecting idle)) (valid t final-state idle errors nil visited (closing connected connecting idle)) (valid t final-state idle errors nil visited (connecting idle)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -951,5 +986,10 @@ fn oracle_prop_proto_fsm_message_codec() {
     (fmakunbound 'neovm--pf-encode)
     (fmakunbound 'neovm--pf-decode)
     (fmakunbound 'neovm--pf-process-messages)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"HELLO:id=sess-42;version=1.0\" (HELLO (id . \"sess-42\") (version . \"1.0\"))) (\"CMD:action=get;target=/data\" (CMD (action . \"get\") (target . \"/data\"))) (state ready results ((hello \"s1\") (cmd \"list\" \"/users\") (cmd \"get\" \"/users/1\") (bye \"s1\"))) (state ready results ((unknown CMD ready))) (PING))""#
+        ]],
+    );
 }

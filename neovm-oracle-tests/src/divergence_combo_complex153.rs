@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx153_isearch_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'isearch-forward)
       (fboundp 'isearch-backward)
@@ -15,25 +15,27 @@ fn div_cx153_isearch_availability() {
       (boundp 'search-upper-case)
       (boundp 'search-whitespace-regexp))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx153_isearch_lax_whitespace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'isearch-lax-whitespace)
       (boundp 'isearch-regexp-lax-whitespace)
       (boundp 'search-default-mode))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx153_occur_basic_buffer_collection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -45,13 +47,14 @@ fn div_cx153_occur_basic_buffer_collection() {
           (when occur-buf (kill-buffer occur-buf)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"alpha line\nbeta line\ngamma line\nalpha again\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx153_query_replace_count_interactions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "alpha alpha alpha alpha alpha")
@@ -62,13 +65,14 @@ fn div_cx153_query_replace_count_interactions() {
       (replace-match "ALPHA" nil nil))
   (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK \"ALPHA ALPHA ALPHA ALPHA ALPHA\"""#]],
     );
 }
 
 #[test]
 fn div_cx153_perform_replace_with_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "var foo = bar; var baz = qux;")
@@ -77,13 +81,14 @@ fn div_cx153_perform_replace_with_regex() {
     (replace-match "let "))
   (buffer-string))
 "##,
+        expect_test::expect![[r#""OK \"let foo = bar; let baz = qux;\"""#]],
     );
 }
 
 #[test]
 fn div_cx153_multi_isearch_buffers_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -93,13 +98,14 @@ fn div_cx153_multi_isearch_buffers_availability() {
             (boundp 'lazy-highlight-cleanup)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx153_occur_edit_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -109,25 +115,27 @@ fn div_cx153_occur_edit_mode_availability() {
             (boundp 'occur-mode-hook)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored file-missing)""#]],
     );
 }
 
 #[test]
 fn div_cx153_replace_string_preserves_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'replace-replace-char)
       (boundp 'replace-lax-whitespace)
       (boundp 'replace-char-spacing))
 "##,
+        expect_test::expect![[r#""OK (nil t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx153_word_search_forward_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "the theme park is there")
@@ -138,13 +146,14 @@ fn div_cx153_word_search_forward_basic() {
             (buffer-substring-no-properties 1 5)
             (buffer-substring-no-properties 11 15)))))
 "##,
+        expect_test::expect![[r#""ERR (search-failed \"\\\\<the\\\\>\")""#]],
     );
 }
 
 #[test]
 fn div_cx153_search_ring_save_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((search-ring '("alpha" "beta" "gamma"))
       (regexp-search-ring '("\\balpha\\b" "\\bbeta\\b")))
@@ -154,13 +163,16 @@ fn div_cx153_search_ring_save_restore() {
         (car regexp-search-ring)
         (boundp 'search-ring-yank-pointer)))
 "##,
+        expect_test::expect![[
+            r#""OK ((\"alpha\" \"beta\" \"gamma\") (\"\\\\balpha\\\\b\" \"\\\\bbeta\\\\b\") \"alpha\" \"\\\\balpha\\\\b\" t)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx153_isearch_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -186,5 +198,6 @@ fn div_cx153_isearch_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

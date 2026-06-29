@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_tags_multivalue_property_delete_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (with-temp-buffer
@@ -21,6 +21,9 @@ fn org_tags_multivalue_property_delete_combo() {
     (list (org-get-tags)
           (org-entry-properties nil 'standard)
           (buffer-substring-no-properties (point-min) (point-max)))))"#,
+        expect_test::expect![[
+            r#""OK ((\"new\") ((\"CATEGORY\" . \"???\") (\"MULTI\" . \"x y z\") (\"A\" . \"updated\")) \"* TODO Task                                                             :new:\n:PROPERTIES:\n:A:        updated\n:Multi:    x y z\n:END:\n\")""#
+        ]],
     );
 }
 
@@ -28,7 +31,7 @@ fn org_tags_multivalue_property_delete_combo() {
 fn org_archive_tag_toggle_parse_roundtrip_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-archive)
@@ -48,6 +51,9 @@ fn org_archive_tag_toggle_parse_roundtrip_combo() {
               (lambda (headline)
                 (list (org-element-property :raw-value headline)
                       (org-element-property :tags headline))))))))"#,
+        expect_test::expect![[
+            r#""OK (\"* TODO Active\n** DONE Child                                                       :ARCHIVE:\nBody\n** TODO Keep\n\" \"* TODO Active\n** DONE Child\nBody\n** TODO Keep\n\" ((\"Active\" nil) (\"Child\" nil) (\"Keep\" nil)))""#
+        ]],
     );
 }
 
@@ -55,7 +61,7 @@ fn org_archive_tag_toggle_parse_roundtrip_combo() {
 fn org_done_log_drawer_timestamp_normalized_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (with-temp-buffer
@@ -71,6 +77,7 @@ fn org_done_log_drawer_timestamp_normalized_combo() {
              "CLOSED: \\[.*\\]"
              "CLOSED: [stamp]"
              (buffer-substring-no-properties (point-min) (point-max)))))))"#,
+        expect_test::expect![[r#""OK (54 \"* DONE Task\nCLOSED: [stamp]\n:LOGBOOK:\n:END:\n\")""#]],
     );
 }
 
@@ -78,7 +85,7 @@ fn org_done_log_drawer_timestamp_normalized_combo() {
 fn org_property_inheritance_allowed_cycle_delete_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -118,6 +125,7 @@ fn org_property_inheritance_allowed_cycle_delete_combo() {
               (org-entry-member-in-multivalued-property nil "Multi" "y")
               (nreverse changes)
               (buffer-substring-no-properties (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -125,7 +133,7 @@ fn org_property_inheritance_allowed_cycle_delete_combo() {
 fn org_property_values_global_delete_roundtrip_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -150,6 +158,9 @@ fn org_property_values_global_delete_roundtrip_combo() {
             (org-property-values "Effort")
             (org-entry-properties nil 'standard)
             (buffer-substring-no-properties (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r##""OK ((\"Ada\" \"Bea\") (\"0:15\" \"0:30\" \"1:00\") (\"Ada\" \"Cy\") nil ((\"CATEGORY\" . \"???\") (\"OWNER\" . \"Cy\")) \"#+PROPERTY: Owner_ALL Ada Bea Cy\n* A\n:PROPERTIES:\n:Owner: Ada\n:END:\n** A1\n:PROPERTIES:\n:Owner:    Cy\n:END:\n* B\n:PROPERTIES:\n:Owner: Ada\n:END:\n\")""##
+        ]],
     );
 }
 
@@ -157,7 +168,7 @@ fn org_property_values_global_delete_roundtrip_combo() {
 fn org_property_set_delete_allowed_values_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -187,6 +198,7 @@ fn org_property_set_delete_allowed_values_combo() {
               org-last-set-property-value
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -194,7 +206,7 @@ fn org_property_set_delete_allowed_values_combo() {
 fn org_todo_done_note_log_drawer_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -225,6 +237,7 @@ fn org_todo_done_note_log_drawer_combo() {
              "[stamp]"
              (buffer-substring-no-properties
               (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -232,7 +245,7 @@ fn org_todo_done_note_log_drawer_combo() {
 fn org_log_repeat_reschedule_redeadline_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -255,6 +268,7 @@ fn org_log_repeat_reschedule_redeadline_combo() {
              "[stamp]"
              (buffer-substring-no-properties
               (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -262,7 +276,7 @@ fn org_log_repeat_reschedule_redeadline_combo() {
 fn org_property_clock_drawer_fold_element_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -379,6 +393,7 @@ fn org_property_clock_drawer_fold_element_lifecycle_combo() {
                         org-clock-history)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -386,7 +401,7 @@ fn org_property_clock_drawer_fold_element_lifecycle_combo() {
 fn org_property_space_multivalue_cleanup_parse_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -436,6 +451,7 @@ fn org_property_space_multivalue_cleanup_parse_combo() {
                             (org-element-property :value node))))
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -443,7 +459,7 @@ fn org_property_space_multivalue_cleanup_parse_combo() {
 fn org_startup_log_options_todo_property_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -505,6 +521,7 @@ fn org_startup_log_options_todo_property_combo() {
                  "[stamp]"
                  (buffer-substring-no-properties
                   (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -512,7 +529,7 @@ fn org_startup_log_options_todo_property_combo() {
 fn org_property_inherit_literal_special_views_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -570,6 +587,7 @@ fn org_property_inherit_literal_special_views_combo() {
               (org-entry-get nil "NilLike" 'inherit 'literal-nil)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -577,7 +595,7 @@ fn org_property_inherit_literal_special_views_combo() {
 fn org_property_separators_postprocess_global_cleanup_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -662,6 +680,7 @@ fn org_property_separators_postprocess_global_cleanup_combo() {
               (nreverse changes)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -669,7 +688,7 @@ fn org_property_separators_postprocess_global_cleanup_combo() {
 fn org_todo_tag_property_clock_state_mutation_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -729,6 +748,9 @@ fn org_todo_tag_property_clock_state_mutation_deep_combo() {
                               (buffer-substring-no-properties
                                (point-min) (point-max)))))
                      (list p1 p2 p3 p4 p5 p6 buf)))))))))))"##,
+        expect_test::expect![[
+            r#""OK ((\"Project\" (\"work\") \"5:00\" \"Ada\" \"TODO\" (\"TODO\" \"WAIT\") nil) (\"Task A\" (\"urgent\") \"1:30\" \"Ada\" \"TODO\" (\"TODO\" \"WAIT\") nil) (t) (#(\"Task A\" 0 6 (org-todo-head \"TODO\")) (\"urgent\") \"1:30\" \"Ada\" \"DONE\" nil (\"DONE\" \"CANCELED\")) (\"Sub A1\" nil \"1:30\" \"Ada\" \"TODO\" (\"TODO\" \"WAIT\") nil) (\"Task B\" (\"blocked\" \"waiting\") \"0:45\" \"Ada\" \"WAIT\" (\"WAIT\") nil) \"* TODO Project :work:\n:PROPERTIES:\n:Owner: Ada\n:Effort: 5:00\n:END:\n** DONE Task A                                                       :urgent:\nCLOSED: [stamp]\n:PROPERTIES:\n:Effort: 1:30\n:ORDERED: t\n:END:\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\nSCHEDULED: <2026-05-27 Wed>\n*** TODO Sub A1\n:PROPERTIES:\n:Priority: High\n:END:\n*** TODO Sub A2\n** WAIT Task B                                              :blocked:waiting:\n:PROPERTIES:\n:Effort: 0:45\n:END:\n* DONE Finished :work:\nCLOSED: [stamp]\n\")""#
+        ]],
     );
 }
 
@@ -736,7 +758,7 @@ fn org_todo_tag_property_clock_state_mutation_deep_combo() {
 fn org_property_inherit_set_delete_globally_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -795,6 +817,9 @@ fn org_property_inherit_set_delete_globally_deep_state_combo() {
                             all-a
                             owner-after-delete
                             full-buf))))))))))))"##,
+        expect_test::expect![[
+            r#""OK ((\"Ada\" \"Ada\" \"main\" \"main\" \"5:00\" \"5:00\") (nil \"Ada\" \"main\" \"main\" \"2:00\" \"2:00\") (nil \"Ada\" \"main\" \"main\" nil \"2:00\") (nil \"Ada\" \"main\" \"main\" nil \"5:00\") (\"Bob\" \"Bob\" \"???\" \"???\" nil nil) ((\"CATEGORY\" . \"main\") (\"STATUS\" . \"active\") (\"EFFORT\" . \"2:00\")) nil \"* Root\n:PROPERTIES:\n:CATEGORY: main\n:Effort: 5:00\n:END:\n** Child A\n:PROPERTIES:\n:Effort: 2:00\n:Status:   active\n:END:\n*** Grandchild\n** Child B\n* Other\n\")""#
+        ]],
     );
 }
 
@@ -802,7 +827,7 @@ fn org_property_inherit_set_delete_globally_deep_state_combo() {
 fn org_property_set_delete_multivalue_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -845,6 +870,9 @@ fn org_property_set_delete_multivalue_deep_state_combo() {
                             (point-min) (point-max))))
                   (list root child-a grandchild all-a
                         owner-after buf))))))))))"##,
+        expect_test::expect![[
+            r#""OK ((\"Ada\" \"Ada\" \"main\" \"main\" nil nil) (nil \"Ada\" \"main\" \"main\" \"2:00\" \"2:00\") (nil \"Ada\" \"main\" \"main\" nil \"2:00\") ((\"CATEGORY\" . \"main\") (\"STATUS\" . \"active\") (\"EFFORT\" . \"2:00\")) nil \"* Root\n:PROPERTIES:\n:CATEGORY: main\n:END:\n** Child A\n:PROPERTIES:\n:Effort: 2:00\n:Status:   active\n:END:\n*** Grandchild\n** Child B\n\")""#
+        ]],
     );
 }
 
@@ -852,7 +880,7 @@ fn org_property_set_delete_multivalue_deep_state_combo() {
 fn org_property_inherit_clock_edit_delete_global_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -905,6 +933,7 @@ fn org_property_inherit_clock_edit_delete_global_deep() {
              (list alpha beta alpha-after beta-after
                    (buffer-substring-no-properties
                     (point-min) (point-max))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 52)""#]],
     );
 }
 
@@ -912,7 +941,7 @@ fn org_property_inherit_clock_edit_delete_global_deep() {
 fn org_property_block_tags_inherit_set_delete_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -954,6 +983,7 @@ fn org_property_block_tags_inherit_set_delete_deep() {
                  leaf-a1-after leaf-b1-after
                  (buffer-substring-no-properties
                   (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 49)""#]],
     );
 }
 
@@ -961,7 +991,7 @@ fn org_property_block_tags_inherit_set_delete_deep() {
 fn org_property_inherit_effort_category_set_multi_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -1013,5 +1043,6 @@ fn org_property_inherit_effort_category_set_multi_deep() {
                 sub-a1-after sub-b1-after step-c-after
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 48)""#]],
     );
 }

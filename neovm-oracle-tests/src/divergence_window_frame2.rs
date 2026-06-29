@@ -12,37 +12,40 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_wf2_make_frame_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err (let ((f (make-frame))) (list (frame-live-p f) (length (frame-list)))) (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_make_frame_with_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err (frame-parameter (make-frame '((name . "test"))) 'name) (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_make_frame_then_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err (let ((f (make-frame))) (delete-frame f) (length (frame-list))) (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_select_frame_after_make() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (let* ((orig (selected-frame))
@@ -52,98 +55,107 @@ fn div_wf2_select_frame_after_make() {
       (list (frame-live-p f) (frame-live-p sel)))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_frame_root_window_of_new() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err (windowp (frame-root-window (make-frame))) (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_frame_selected_window_of_new() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err (windowp (frame-selected-window (make-frame))) (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_frame_first_window_of_new() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err (windowp (frame-first-window (make-frame))) (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_multiple_make_frame() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err (let ((f1 (make-frame)) (f2 (make-frame))) (length (frame-list))) (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_make_frame_visible_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err (frame-visible-p (make-frame)) (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_make_frame_width_height_param() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err (list (frame-parameter (make-frame '((width . 40))) 'width)
                           (frame-parameter (make-frame '((height . 12))) 'height))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_make_frame_fullscreen_param() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err (frame-parameter (make-frame '((fullscreen . fullboth))) 'fullscreen) (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_next_frame_after_make() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (let ((f (make-frame)))
       (list (frame-live-p f) (memq f (frame-list))))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_modify_frame_parameters_after_make() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (let ((f (make-frame)))
@@ -151,13 +163,14 @@ fn div_wf2_modify_frame_parameters_after_make() {
       (frame-parameter f 'name))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_redesignate_display_after_make() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (let ((f (make-frame)))
@@ -165,6 +178,7 @@ fn div_wf2_redesignate_display_after_make() {
             (frame-parameter f 'name)))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
@@ -173,33 +187,35 @@ fn div_wf2_redesignate_display_after_make() {
 #[test]
 fn div_wf2_split_window_count_growth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((n0 (count-windows)))
   (split-window)
   (split-window nil nil 'right)
   (list n0 (count-windows) (- (count-windows) n0)))
 "##,
+        expect_test::expect![[r#""OK (3 5 2)""#]],
     );
 }
 
 #[test]
 fn div_wf2_window_buffer_eq_after_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *wf2-eq*")))
   (set-window-buffer (selected-window) buf)
   (prog1 (eq (window-buffer (selected-window)) buf)
     (kill-buffer buf)))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
 #[test]
 fn div_wf2_window_edges_after_split() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (let ((w (split-window nil nil 'right)))
@@ -207,13 +223,14 @@ fn div_wf2_window_edges_after_split() {
             (window-edges w)))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK ((0 1 10 7) (10 1 20 7))""#]],
     );
 }
 
 #[test]
 fn div_wf2_window_combined_p_after_splits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (let ((wv (split-window nil nil 'below))
@@ -223,17 +240,19 @@ fn div_wf2_window_combined_p_after_splits() {
             (window-combined-p wh 'horizontal)))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_wf2_display_type_param_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (frame-parameter nil 'display-type)
       (frame-parameter nil 'background-mode)
       (frame-parameter nil 'window-system))
 "##,
+        expect_test::expect![[r#""OK (mono dark nil)""#]],
     );
 }

@@ -52,7 +52,10 @@ fn oracle_prop_intern_soft_adv_basic_lifecycle() {
               ;; symbol-name roundtrips
               (equal (symbol-name sym-a) (nth 0 names))
               (equal (symbol-name sym-d) (nth 3 names)))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +99,10 @@ fn oracle_prop_intern_soft_adv_after_makunbound() {
             still-interned
             fboundp-after-fn still-interned-2
             can-rebind))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 11 t t nil t t nil t 99)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +148,12 @@ fn oracle_prop_intern_soft_adv_symbol_properties() {
         (progn
           (put (nth 1 found-syms) 'extra 'added-later)
           (get (nth 1 syms) 'extra))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (integer (0 100) \"An integer variable\" string 256 boolean t t (integer (0 100) \"An integer variable\") added-later)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +236,12 @@ fn oracle_prop_intern_soft_adv_symbol_registry() {
     (fmakunbound 'neovm--isa-reg-lookup)
     (fmakunbound 'neovm--isa-reg-all-names)
     (fmakunbound 'neovm--isa-reg-filter)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"neovm--isa-reg-item-widget-a-5589\" (category ui priority 1 enabled t)) nil (\"service-x\" \"service-y\" \"widget-a\" \"widget-b\") (\"widget-a\" \"widget-b\") (\"service-x\" \"service-y\") (\"service-x\" \"service-y\" \"widget-a\") (\"service-x\" \"service-y\" \"widget-a\" \"widget-b\") 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +312,12 @@ fn oracle_prop_intern_soft_adv_dispatch_table() {
     (fmakunbound 'neovm--isa-disp-register)
     (fmakunbound 'neovm--isa-disp-call)
     (fmakunbound 'neovm--isa-disp-has-op)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (7 30 -42 \"(1, 2)\" (a b c) (error unknown-op \"unknown-op\") t nil (closure (t) (a b) (+ a b 100)) 107 236)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -392,7 +413,12 @@ fn oracle_prop_intern_soft_adv_namespace_simulation() {
     (fmakunbound 'neovm--isa-ns-resolve)
     (fmakunbound 'neovm--isa-ns-exports)
     (fmakunbound 'neovm--isa-ns-import)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3.14159 2.71828 \"3.14159\" \"hello\" (nil \"neovm-isa-math-4492/pi\" \"neovm-isa-str-4492/pi\") (\"e\" \"pi\" \"zero\") (\"greeting\" \"pi\") t t 3.14159 2.71828 nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -463,7 +489,10 @@ fn oracle_prop_intern_soft_adv_dynamic_names_edge_cases() {
                           (mapcar #'list ssyms))
                   results))))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t t t) (5 t t) (t t t t t t t) (t t t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -526,5 +555,10 @@ fn oracle_prop_intern_soft_adv_event_system() {
     (fmakunbound 'neovm--isa-evt-register)
     (fmakunbound 'neovm--isa-evt-emit)
     (fmakunbound 'neovm--isa-evt-handler-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((click-handler-2 84) (click-handler-1 42)) ((key 65)) nil 2 1 0 neovm--isa-evt-click-9130 3 ((click-handler-3 107) (click-handler-2 14) (click-handler-1 7)))""#
+        ]],
+    );
 }

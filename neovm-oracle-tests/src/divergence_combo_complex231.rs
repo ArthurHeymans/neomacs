@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx231_revert_buffer_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'revert-buffer)
       (fboundp 'revert-buffer-quick)
@@ -15,13 +15,14 @@ fn div_cx231_revert_buffer_availability() {
       (boundp 'revert-without-query)
       (boundp 'buffer-stale-function))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx231_auto_revert_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -32,13 +33,14 @@ fn div_cx231_auto_revert_mode_availability() {
             (boundp 'auto-revert-stop-on-user-input)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx231_find_file_with_wildcards() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx231-wild" t)))
   (dolist (name '("a.txt" "b.txt" "c.txt"))
@@ -51,13 +53,16 @@ fn div_cx231_find_file_with_wildcards() {
           (delete-directory dir t)))
     (error (list :errored (car e)))))
 "##,
+        expect_test::expect![[
+            r#""OK (t t (\"/tmp/nix-shell.XcUf3d/neo-cx231-wildlcVp7o/a.txt\" \"/tmp/nix-shell.XcUf3d/neo-cx231-wildlcVp7o/b.txt\" \"/tmp/nix-shell.XcUf3d/neo-cx231-wildlcVp7o/c.txt\"))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx231_backup_policies_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'make-backup-files)
       (boundp 'backup-by-copying)
@@ -66,25 +71,27 @@ fn div_cx231_backup_policies_query() {
       (boundp 'kept-old-versions)
       (boundp 'backup-directory-alist))
 "##,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx231_recover_file_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'recover-file)
       (fboundp 'recover-session)
       (boundp 'auto-save-list-file-prefix))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx231_auto_save_configuration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'auto-save-default)
       (boundp 'auto-save-interval)
@@ -92,52 +99,56 @@ fn div_cx231_auto_save_configuration() {
       (boundp 'auto-save-visited-file-name)
       (boundp 'auto-save-list-file-name))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx231_lock_file_configuration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'create-lockfiles)
       (boundp 'lock-file-name-transforms)
       (fboundp 'lock-buffer)
       (fboundp 'unlock-buffer))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx231_buffer_stale_function_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'buffer-stale-function)
       (boundp 'revert-buffer-function)
       (boundp 'before-revert-hook)
       (boundp 'after-revert-hook))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx231_find_file_literally_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'find-file-literally)
       (fboundp 'find-file-no-select)
       (boundp 'find-file-literally)
       (boundp 'large-file-warning-threshold))
 "##,
+        expect_test::expect![[r#""OK (t nil t t)""#]],
     );
 }
 
 #[test]
 fn div_cx231_revert_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((auto-save-default nil)
       (make-backup-files nil))
@@ -167,5 +178,6 @@ fn div_cx231_revert_with_marker_overlay_undo_narrow_mega() {
             (list state)))))
   )
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

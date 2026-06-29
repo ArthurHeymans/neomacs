@@ -50,7 +50,12 @@ fn oracle_prop_let_bind_nested_let_letstar() {
              (s (apply #'+ v)))              ; 90
         (let ((v (mapcar (lambda (x) (/ (* x 100) s)) v)))  ; percentages
           (list v s))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 11 111 123 1221 110) (30 10 (-5 0 5)) (33 6 39 78) ((4 10 17 27 40) 90))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +128,10 @@ fn oracle_prop_let_bind_let_over_lambda() {
                         contents (nreverse all) empty-pop)))))))
     (fmakunbound 'neovm--lb-make-stack)
     (fmakunbound 'neovm--lb-send)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 30 30 20 4 4 (60 50 40 10) (60 50 40 10) empty)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +196,12 @@ fn oracle_prop_let_bind_dynamic_interaction() {
     (fmakunbound 'neovm--lb-with-context)
     (makunbound 'neovm--lb-dyn-x)
     (makunbound 'neovm--lb-dyn-y)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((100 200) (999 200) (100 200) (30 20) ((42 200) (84 200)) (500 550) (100 200))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +283,12 @@ fn oracle_prop_let_bind_destructuring() {
                     (apply #'+ diagonal)
                     (apply #'+ anti-diag))))))
     (fmakunbound 'neovm--lb-destructure)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((hello world) (100 20 3) (\"Alice\" 30 274 91) (1 2 (3 4 5 6 7) 25) ((a 1) (b 2) (c 3) (d 4)) (10 50 30 40) ((1 5 9) (3 5 7) 15 15))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +347,12 @@ fn oracle_prop_let_bind_loop_scope() {
                     (append left right))
                 (if tree (list tree) nil)))))
     (funcall flatten '((1 (2 3)) (4 nil 5) ((6 7) 8)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 1 2 3 4) (a b c d e) (345 8 43 8 93) ((1 2 3 4) (2 4 6 8) (3 6 9 12) (4 8 12 16)) (1 2 3 4 5 6 7 8))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -409,7 +432,12 @@ fn oracle_prop_let_bind_letrec_mutual() {
           (funcall get)
           (funcall inc) (funcall inc)
           (funcall get))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((t nil t nil t nil t nil t nil t) (nil t nil t nil t nil t nil t nil)) ((1 1 3 4 6 9 12 17 23) (1 2 2 4 5 7 10 13 18)) (5 7 9 15 15) (1 2 3 2 2 3 4 4))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -484,5 +512,10 @@ fn oracle_prop_let_bind_environment_chain() {
     (fmakunbound 'neovm--lb-env-define)
     (fmakunbound 'neovm--lb-env-lookup)
     (fmakunbound 'neovm--lb-env-set)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok 100) (ok 20) (ok 30) (ok 40) (error missing) t (ok 999) (ok 10) t (ok 777))""#
+        ]],
+    );
 }

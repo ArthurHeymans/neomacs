@@ -18,7 +18,10 @@ fn oracle_prop_backquote_comprehensive_triple_nested() {
     // leaving inner backquotes with their own comma patterns intact
     let form = r#"(let ((a 1) (b 2))
                     `(outer ,a `(middle ,a ,,b `(inner ,a ,,a ,,,b))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (outer 1 `(middle ,a ,2 `(inner ,a ,,a ,,2)))""#],
+    );
 }
 
 #[test]
@@ -31,7 +34,10 @@ fn oracle_prop_backquote_comprehensive_nested_eval_chain() {
                       (list template
                             (eval template)
                             (eval (eval template)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-function \\,)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -57,7 +63,12 @@ fn oracle_prop_backquote_comprehensive_splice_nested_positions() {
                      `(before ,@'(only) after)
                      ;; Splice with dotted pair context
                      `(,@xs . final)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((1 2 3 middle a b) ((head 1 2 3) (a b tail)) (1 2 3 a b end) (before only after) (1 2 3 . final))""#
+        ],
+    );
 }
 
 #[test]
@@ -78,7 +89,12 @@ fn oracle_prop_backquote_comprehensive_splice_computed_lists() {
                                 (nreverse r)))
                     ;; Splice reverse
                     `(reversed ,@(reverse '(a b c d))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((squares 1 4 9 16 25) (range 5 6 7 8 9 10) (evens 2 4 6 8) (reversed d c b a))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +112,10 @@ fn oracle_prop_backquote_comprehensive_let_construction() {
                     (let ((form `(let ,(mapcar #'list vars vals)
                                   (list ,@(mapcar (lambda (v) `(* ,v 2)) vars)))))
                       (list form (eval form))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""ERR (wrong-number-of-arguments mapcar 3)""#],
+    );
 }
 
 #[test]
@@ -107,7 +126,7 @@ fn oracle_prop_backquote_comprehensive_nested_let_star() {
     let form = r#"(let ((chain '((x 1) (y (+ x 2)) (z (* y 3)))))
                     (let ((form `(let* ,chain (list x y z))))
                       (eval form)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (1 3 9)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +156,12 @@ fn oracle_prop_backquote_comprehensive_macro_with_gensym() {
        (neovm--test-bqc-with-timing "nested"
          (neovm--test-bqc-with-timing "inner" 42)))
     (fmakunbound 'neovm--test-bqc-with-timing)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"add\" 6 1) (\"mul\" 20 1) (\"nested\" (\"inner\" 42 1) 1))""#
+        ]],
+    );
 }
 
 #[test]
@@ -162,7 +186,10 @@ fn oracle_prop_backquote_comprehensive_macro_generating_cond() {
        ;; Verify macroexpansion shape
        (car (macroexpand '(neovm--test-bqc-dispatch x (a 1) (b 2)))))
     (fmakunbound 'neovm--test-bqc-dispatch)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (1 2 3 (unknown delta) cond)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +209,12 @@ fn oracle_prop_backquote_comprehensive_nested_data_structures() {
                                 (,(nth 1 fields) . ,(nth 1 rec))
                                 (,(nth 2 fields) . ,(nth 2 rec))))
                             records))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((name . \"Alice\") (age . 30) (score . 95)) ((name . \"Bob\") (age . 25) (score . 88)) ((name . \"Carol\") (age . 35) (score . 92)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -195,7 +227,10 @@ fn oracle_prop_backquote_comprehensive_vector_in_backquote() {
                      `[,x ,y ,(+ x y)]
                      `(list [,x] [,y] [,(* x y)])
                      `[head ,@(list 1 2 3) tail]))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ([10 20 30] (list [10] [20] [200]) [head 1 2 3 tail])""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +253,12 @@ fn oracle_prop_backquote_comprehensive_computed_symbols() {
                                      suffixes))))
                       ;; Eval each form
                       (mapcar #'eval forms)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((neovm-bqc-test-x 1) (neovm-bqc-test-y 2) (neovm-bqc-test-z 3))""#
+        ],
+    );
 }
 
 #[test]
@@ -241,7 +281,7 @@ fn oracle_prop_backquote_comprehensive_defun_family() {
     (fmakunbound 'neovm--bqc-add)
     (fmakunbound 'neovm--bqc-sub)
     (fmakunbound 'neovm--bqc-mul)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (7 7 42 12)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -267,7 +307,12 @@ fn oracle_prop_backquote_comprehensive_quote_interactions() {
                      ;; Backquote producing backquote (meta-level)
                      (let ((inner `(list 1 2 ,(+ 1 2))))
                        `(eval ',inner))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ('3 (funcall #'car '(1 2 3)) 1 (a '3 '12) (eval '(list 1 2 3)))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -302,5 +347,10 @@ fn oracle_prop_backquote_comprehensive_conditional_splicing() {
                            (when include-debug
                              (setq forms (cons '(debug-check) forms)))
                            (nreverse forms)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((config :logging t :extra verbose trace :end) (call-fn required-arg :log-level 3) (progn (log \"starting\") (do-work)))""#
+        ]],
+    );
 }

@@ -18,7 +18,7 @@ fn oracle_prop_setq_multiple_assignments() {
     let form = r#"(let ((a nil) (b nil) (c nil) (d nil))
                     (setq a 1 b 2 c 3 d 4)
                     (list a b c d))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 2 3 4)""#]]);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn oracle_prop_setq_sequential_dependency() {
                           y (+ x 5)
                           z (* y 2))
                     (list x y z))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (10 15 30)""#]]);
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn oracle_prop_setq_return_value() {
                     (list (setq a 42)
                           (setq a 1 b 2)
                           a b))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (42 2 1 2)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -59,7 +59,10 @@ fn oracle_prop_setq_with_funcall() {
                           y (apply #'+ x)
                           z (format "sum=%d" y))
                     (list x y z))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 3 4) 9 \"sum=9\")""#]],
+    );
 }
 
 #[test]
@@ -73,7 +76,10 @@ fn oracle_prop_setq_accumulation_pattern() {
                       (setq sum (+ sum x)
                             result (cons (cons x sum) result)))
                     (nreverse result))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 . 1) (2 . 3) (3 . 6) (4 . 10) (5 . 15))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +96,7 @@ fn oracle_prop_setq_in_buffer_context() {
                       (setq fill-column 100)
                       (let ((val-in-buf fill-column))
                         (list val-in-buf))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (100)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +137,12 @@ fn oracle_prop_setq_state_machine() {
                          ;; Skip unknown
                          (t (setq pos (1+ pos))))))
                     (nreverse tokens))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((num . 3) (op . \"+\") (num . 14) (op . \"*\") (num . 2) (op . \"-\") (num . 5))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +159,7 @@ fn oracle_prop_setq_parallel_swap_chain() {
                     (let ((tmp a))
                       (setq a d d c c b b tmp))
                     (list a b c d))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (4 1 2 3)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +180,12 @@ fn oracle_prop_setq_let_shadowing() {
                       ;; x should be back to 1 (outer scope)
                       (setq log (cons (list 'outer-after x) log))
                       (nreverse log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((outer 1) (inner-before 10) (inner-after 20) (outer-after 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -199,5 +215,8 @@ fn oracle_prop_setq_builder_chain() {
                           (cdr (assq 'max-retries config))
                           (cdr (assq 'timeout config))
                           (cdr (assq 'total-wait config))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 t 3 30 90)""#]],
+    );
 }

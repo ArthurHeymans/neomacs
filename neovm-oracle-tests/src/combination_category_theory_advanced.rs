@@ -88,7 +88,10 @@ fn oracle_prop_cat_theory_adv_endofunctor_laws() {
     ;; Composition law
     (equal (funcall pair-fmap (funcall compose square negate) '(3 . 4))
            (funcall pair-fmap square (funcall pair-fmap negate '(3 . 4))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +166,10 @@ fn oracle_prop_cat_theory_adv_natural_transformations() {
     ;; Vertical composition: two nat-trans composed
     (let ((input '(42 99)))
       (funcall maybe-to-list (funcall safe-head input)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t t) t (t t) t t t (42))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +281,10 @@ fn oracle_prop_cat_theory_adv_monad_bind_return_join() {
     ;; join . fmap(return) = id (for list)
     (let ((m '(1 2 3)))
       (equal (funcall list-join (funcall list-fmap list-return m)) m))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +367,12 @@ fn oracle_prop_cat_theory_adv_kleisli_composition() {
         (equal (funcall left "100") (funcall right "100"))
         (equal (funcall left "2") (funcall right "2"))
         (equal (funcall left "1") (funcall right "1"))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t (t t t t) ((just . \"50\") (just . \"21\") nil nil nil nil) (t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +461,12 @@ fn oracle_prop_cat_theory_adv_applicative_functor() {
                                v)
                       w)
              (funcall list-ap u (funcall list-ap v w))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""ERR (wrong-number-of-arguments (closure (t) (f g) #'(lambda (x) (funcall f (funcall g x)))) 1)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -546,7 +565,12 @@ fn oracle_prop_cat_theory_adv_either_monad() {
         ;; Composition law
         (equal (funcall either-fmap (funcall compose double inc) (funcall either-return 5))
                (funcall either-fmap double (funcall either-fmap inc (funcall either-return 5))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((right . 5) (left . \"division by zero: 10/0\") (left . \"division by zero: 100/0\") (right . 20) (left . \"not even: 5\") t t t t (t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -621,5 +645,10 @@ fn oracle_prop_cat_theory_adv_monad_transformers() {
                (if (= (% x 3) 0)
                    (list (cons 'just (* x x)))
                  (list nil))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((just . 10)) (nil) ((just . 4) (just . 40)) (nil (just . 2) nil) t t t t (nil nil (just . 9) nil nil (just . 36)))""#
+        ]],
+    );
 }

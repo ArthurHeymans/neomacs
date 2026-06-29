@@ -28,7 +28,10 @@ fn oracle_prop_defmacro_when_unless() {
                         (neovm--test-my-unless t 4 5 6))
                     (fmakunbound 'neovm--test-my-when)
                     (fmakunbound 'neovm--test-my-unless)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 nil 6 nil)""#]],
+    );
 }
 
 #[test]
@@ -44,7 +47,8 @@ fn oracle_prop_defmacro_with_let() {
                       (neovm--test-with-val x (+ 1 2)
                         (* x x))
                     (fmakunbound 'neovm--test-with-val)))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 9""#]]);
     assert_ok_eq("9", &o, &n);
 }
 
@@ -64,7 +68,10 @@ fn oracle_prop_macroexpand_basic() {
                         (macroexpand '(neovm--test-double 5))
                         (eval (macroexpand '(neovm--test-double 5))))
                     (fmakunbound 'neovm--test-double)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((+ 5 5) 10)""#]],
+    );
 }
 
 #[test]
@@ -83,7 +90,8 @@ fn oracle_prop_macroexpand_nested() {
                         counter)
                     (fmakunbound 'neovm--test-inc)
                     (fmakunbound 'neovm--test-inc-twice)))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 2""#]]);
     assert_ok_eq("2", &o, &n);
 }
 
@@ -107,7 +115,7 @@ fn oracle_prop_defmacro_while_collect() {
                   (unwind-protect
                       (neovm--test-collect-while i 1 (<= i 10) (* i 2))
                     (fmakunbound 'neovm--test-collect-while)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 2 4 8)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +147,7 @@ fn oracle_prop_defmacro_cond_like() {
                         (neovm--test-match 'x
                           (a 1) (b 2) (otherwise 99)))
                     (fmakunbound 'neovm--test-match)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (2 99)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +168,7 @@ fn oracle_prop_defmacro_swap() {
                         (neovm--test-swap x y)
                         (list x y))
                     (fmakunbound 'neovm--test-swap)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (20 10)""#]]);
 }
 
 #[test]
@@ -185,5 +193,5 @@ fn oracle_prop_defmacro_push_pop() {
                           (list a b stack)))
                     (fmakunbound 'neovm--test-push!)
                     (fmakunbound 'neovm--test-pop!)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (3 2 (1))""#]]);
 }

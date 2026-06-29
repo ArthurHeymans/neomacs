@@ -109,7 +109,10 @@ fn oracle_prop_ast_construction_and_pretty_print() {
       (fmakunbound 'test-ast--let-expr)
       (fmakunbound 'test-ast--node-type)
       (fmakunbound 'test-ast--pretty))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp binop)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +229,12 @@ fn oracle_prop_ast_constant_folding() {
       (fmakunbound 'test-cf--apply-binop)
       (fmakunbound 'test-cf--apply-unary)
       (fmakunbound 'test-cf--fold))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((literal 8) (literal 26) (literal -7) (binop + (literal x) (literal 3)) (literal 21) (binop / (literal 10) (literal 0)) (binop * (literal 5) (literal x)) (literal 20))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -330,7 +338,10 @@ fn oracle_prop_ast_dead_code_elimination() {
       (fmakunbound 'test-dce--let-expr)
       (fmakunbound 'test-dce--node-type)
       (fmakunbound 'test-dce--eliminate))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp if-expr)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +458,12 @@ fn oracle_prop_ast_common_subexpression_elimination() {
       (fmakunbound 'test-cse--count-subexprs)
       (fmakunbound 'test-cse--replace)
       (fmakunbound 'test-cse--run))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"L:42\" \"B:+:L:a:L:b\" \"B:*:B:+:L:a:L:b:B:+:L:a:L:b\" ((binop * (var _cse0) (binop + (literal a) (literal b))) 1) ((binop + (literal 1) (literal 2)) 0) ((binop + (var _cse0) (binop + (binop + (literal a) (literal b)) (binop + (literal a) (literal b)))) 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -608,7 +624,12 @@ fn oracle_prop_ast_to_stack_machine() {
       (fmakunbound 'test-sm--node-type)
       (fmakunbound 'test-sm--compile)
       (fmakunbound 'test-sm--execute))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((((push 3) (push 5) (add)) 8) (26) (((push 7) (neg)) -7) (0) (99) (8))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -758,5 +779,10 @@ fn oracle_prop_ast_full_optimization_pipeline() {
       (fmakunbound 'test-pipe--compile)
       (fmakunbound 'test-pipe--exec)
       (fmakunbound 'test-pipe--run))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((literal 10) (literal 10) ((push 10)) 10) ((if-expr (literal 6) (literal 20) nil) nil ((push 0)) 0) ((literal 42) (literal 42) ((push 42)) 42) ((literal 14) (literal 14) ((push 14)) 14))""#
+        ]],
+    );
 }

@@ -47,7 +47,10 @@ fn oracle_prop_syntax_table_ops_comment_flags() {
                   comment-result
                   after-comment
                   end-word)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 t 26 \"more_code\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +94,10 @@ fn oracle_prop_syntax_table_ops_nested_comments() {
         (skip-syntax-forward "w")
         (setq results (cons (buffer-substring s (point)) results)))
       (nreverse results))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"alpha\" \"beta\" \"gamma\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +153,12 @@ fn oracle_prop_syntax_table_ops_string_to_syntax_flags() {
         (wd (string-to-syntax "w"))
         (sym (string-to-syntax "_")))
     (list (car ws) (car wd) (car sym))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0) (2) (3) (1) (4) (5) (7) (9) (10) (8) (6) (11) (12) (14) (15) (4 . 41) (5 . 40) (4 . 125) (65537) (131073) (262145) (524289) (2097163) (2097164) (1048590) (8388619) (8388620) (589825) (393217) (8585217) (11272193) (7 . 47) (15 . 101) (0 2 3))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +229,10 @@ fn oracle_prop_syntax_table_ops_multi_level_inheritance() {
      ;; % inherited from grandparent through parent to child
      (progn (set-syntax-table child)
             (char-syntax ?%)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t (119 95 46) (95 119 119) 60 46 119 46)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +277,12 @@ fn oracle_prop_syntax_table_ops_syntax_after_mixed() {
         (when (<= pos (point-max))
           (setq results (cons (cons pos (syntax-after pos)) results))))
       (nreverse results))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2) (6 2) (12 0) (13 4 . 41) (14 2) (18 5 . 40) (20 7) (24 7) (26 15) (30 15) (32 6) (38 4 . 62) (42 5 . 60))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -311,7 +330,12 @@ fn oracle_prop_syntax_table_ops_forward_comment_directions() {
             (fc4 (forward-comment 1)))
         (setq results (cons (list :no-comment (= (point) pos-before) fc4) results)))
       (nreverse results))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:fwd1 6 nil \"beta\") (:bwd 41 nil) (:one-comment t \"beta\") (:no-comment t nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +382,12 @@ fn oracle_prop_syntax_table_ops_class_char_roundtrip() {
         (setq all-class-chars (cons (syntax-class-to-char i) all-class-chars)))
       (setq results (cons (list :all-class-chars (nreverse all-class-chars)) results)))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 32 32 t) (1 46 46 t) (2 119 119 t) (3 95 95 t) (4 40 40 t) (5 41 41 t) (6 39 39 t) (7 34 34 t) (8 36 36 t) (9 92 92 t) (10 47 47 t) (11 60 60 t) (12 62 62 t) (13 64 119 nil) (14 33 33 t) (:all-class-chars (32 46 119 95 40 41 39 34 36 92 47 60 62 64 33 124)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -422,5 +451,10 @@ fn oracle_prop_syntax_table_ops_sexp_navigation() {
                                 (matching-paren ?\]))
                           results))
       (nreverse results))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:after-top-sexp 46) (:before-top-sexp 1) (:after-defun 7 \"defun\") (:after-name 19) (:after-vector 25) (:comment-skipped t 36) (:parens 41 40 93 91))""#
+        ]],
+    );
 }

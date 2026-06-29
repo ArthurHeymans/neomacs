@@ -38,5 +38,10 @@ fn oracle_file_name_quote_unquote_and_quoted_p_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"\" nil nil \"/:\" \"/:\" \"\" \"\") (\"/\" nil nil \"/:/\" \"/:/\" \"/\" \"/\") (\"/:\" t t \"/:\" \"/:\" \"/\" \"/\") (\"/:/\" t t \"/:/\" \"/:/\" \"/\" \"/\") (\"/:/tmp/a\" t t \"/:/tmp/a\" \"/:/tmp/a\" \"/tmp/a\" \"/tmp/a\") (\"/tmp/a\" nil nil \"/:/tmp/a\" \"/:/tmp/a\" \"/tmp/a\" \"/tmp/a\") (\"relative\" nil nil \"/:relative\" \"/:relative\" \"relative\" \"relative\") (\"/::literal\" t t \"/::literal\" \"/::literal\" \":literal\" \":literal\") (\"/:/already/quoted\" t t \"/:/already/quoted\" \"/:/already/quoted\" \"/already/quoted\" \"/already/quoted\")) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((1 . 2) 3)))""#
+        ]],
+    );
 }

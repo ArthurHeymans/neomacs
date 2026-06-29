@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx74_save_excursion_with_text_changes_does_not_restore_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx74-se*")))
   (with-current-buffer buf
@@ -22,13 +22,14 @@ fn div_cx74_save_excursion_with_text_changes_does_not_restore_buffer() {
                (with-current-buffer buf (point)))
     (kill-buffer buf)))
 "##,
+        expect_test::expect![[r#""OK (\"0123AAA456789\" 14)""#]],
     );
 }
 
 #[test]
 fn div_cx74_save_restriction_with_text_changes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDEF")
@@ -42,13 +43,14 @@ fn div_cx74_save_restriction_with_text_changes() {
         (setq before inside)))
     (list before (point-min) (point-max) (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK ((1 18 \"X0123456789ABCDEF\") 6 11 \"45678\")""#]],
     );
 }
 
 #[test]
 fn div_cx74_exchange_point_and_mark_in_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -63,13 +65,14 @@ fn div_cx74_exchange_point_and_mark_in_region() {
             (= p-before m-after)
             (= m-before p-after)))))
 "##,
+        expect_test::expect![[r#""OK (7 3 3 7 t t)""#]],
     );
 }
 
 #[test]
 fn div_cx74_save_excursion_after_kill_buffer_does_not_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((other (get-buffer-create " *neo-cx74-other*")))
   (with-current-buffer other (insert "x"))
@@ -81,13 +84,14 @@ fn div_cx74_save_excursion_after_kill_buffer_does_not_restore() {
     (list (eq (current-buffer) origin-buffer)
           (buffer-live-p other))))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx74_transpose_chars_words_lines_at_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (with-temp-buffer
@@ -106,13 +110,14 @@ fn div_cx74_transpose_chars_words_lines_at_boundaries() {
    (transpose-lines 1)
    (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK (\"acbdef\" \"world hello\" \"line1\nline2\n\nline3\n\")""#]],
     );
 }
 
 #[test]
 fn div_cx74_narrow_widen_marker_position_relative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDEF0123456789")
@@ -124,13 +129,14 @@ fn div_cx74_narrow_widen_marker_position_relative() {
         (widen)
         (list inside after-del (point-min) (point-max) (marker-position m))))))
 "##,
+        expect_test::expect![[r#""OK ((5 20 15) (5 18 13) 1 25 13)""#]],
     );
 }
 
 #[test]
 fn div_cx74_set_marker_with_different_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx74-a*"))
       (buf-b (get-buffer-create " *neo-cx74-b*")))
@@ -148,13 +154,14 @@ fn div_cx74_set_marker_with_different_buffer() {
               pos-in-b (eq buf-of-m-2 buf-b)
               (marker-buffer m)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx74_save_excursion_persists_point_across_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -167,13 +174,14 @@ fn div_cx74_save_excursion_persists_point_across_undo() {
       (undo))
     (list p-before (point) (buffer-string))))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     );
 }
 
 #[test]
 fn div_cx74_region_active_p_and_use_region_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -187,13 +195,14 @@ fn div_cx74_region_active_p_and_use_region_p() {
     (list mark-active-state use-region-state reg-beg reg-end
           (region-active-p) (use-region-p))))
 "##,
+        expect_test::expect![[r#""OK (nil nil 2 7 nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx74_buffer_narrowing_with_text_props_undo_marker_overlay_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx74-mega*")))
   (with-current-buffer buf
@@ -226,13 +235,14 @@ fn div_cx74_buffer_narrowing_with_text_props_undo_marker_overlay_mega() {
                          (buffer-string))
               (kill-buffer buf)))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx74_field_property_constraints_at_motion_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "field-one | field-two | field-three")
@@ -250,5 +260,6 @@ fn div_cx74_field_property_constraints_at_motion_end() {
             in-field-b forward-end-b
             (field-string 15)))))
 "##,
+        expect_test::expect![[r#""OK (9 1 t t 21 #(\"field-tw\" 0 8 (field b)))""#]],
     );
 }

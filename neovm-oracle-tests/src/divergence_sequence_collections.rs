@@ -10,12 +10,13 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_nconc_mutation_sharing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((a (list 1 2 3))
         (b (list 4 5 6)))
   (let ((c (nconc a b)))
     (setcar b 99)
     (list c a b)))"#,
+        expect_test::expect![[r#""OK ((1 2 3 99 5 6) (1 2 3 99 5 6) (99 5 6))""#]],
     );
 }
 
@@ -23,10 +24,11 @@ fn divergence_nconc_mutation_sharing() {
 fn divergence_nreverse_mutation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((xs (list 1 2 3 4 5)))
   (let ((rev (nreverse xs)))
     (list rev xs)))"#,
+        expect_test::expect![[r#""OK ((5 4 3 2 1) (1))""#]],
     );
 }
 
@@ -34,10 +36,11 @@ fn divergence_nreverse_mutation() {
 fn divergence_sort_stability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((data '((3 . "a") (1 . "b") (3 . "c") (2 . "d") (1 . "e"))))
   (mapcar #'cdr (sort (copy-sequence data)
                       (lambda (a b) (< (car a) (car b))))))"#,
+        expect_test::expect![[r#""OK (\"b\" \"e\" \"d\" \"a\" \"c\")""#]],
     );
 }
 
@@ -45,9 +48,10 @@ fn divergence_sort_stability() {
 fn divergence_delq_first_element() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((xs (list 1 2 3 1 4)))
   (list (delq 1 xs) xs))"#,
+        expect_test::expect![[r#""OK ((2 3 4) (1 2 3 4))""#]],
     );
 }
 
@@ -55,7 +59,7 @@ fn divergence_delq_first_element() {
 fn divergence_plist_put_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((pl '(a 1 b 2 c 3)))
   (let ((pl2 (plist-put pl 'b 99)))
     (list (plist-get pl 'b)
@@ -63,6 +67,7 @@ fn divergence_plist_put_get() {
           (plist-get pl 'd)
           (plist-member pl 'b)
           pl2)))"#,
+        expect_test::expect![[r#""OK (99 99 nil (b 99 c 3) (a 1 b 99 c 3))""#]],
     );
 }
 
@@ -70,12 +75,13 @@ fn divergence_plist_put_get() {
 fn divergence_assoc_assq_string_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((alist '(("a" . 1) ("b" . 2) (c . 3))))
   (list (assoc "a" alist)
         (assoc "b" alist)
         (assq 'c alist)
         (assoc-default "a" alist)))"#,
+        expect_test::expect![[r#""OK ((\"a\" . 1) (\"b\" . 2) (c . 3) 1)""#]],
     );
 }
 
@@ -83,11 +89,12 @@ fn divergence_assoc_assq_string_keys() {
 fn divergence_copy_tree_depth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((tree '(a (b (c (d))) e)))
   (let ((copy (copy-tree tree)))
     (setcar (cadr (cadr copy)) 'X)
     (list tree copy)))"#,
+        expect_test::expect![[r#""OK ((a (b (c (d))) e) (a (b (X (d))) e))""#]],
     );
 }
 
@@ -95,7 +102,7 @@ fn divergence_copy_tree_depth() {
 fn divergence_hash_table_test_eq_vs_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((h-eq (make-hash-table :test 'eq))
         (h-equal (make-hash-table :test 'equal)))
   (puthash "hello" 1 h-eq)
@@ -106,6 +113,7 @@ fn divergence_hash_table_test_eq_vs_equal() {
         (gethash "hello" h-equal)
         (hash-table-count h-eq)
         (hash-table-count h-equal)))"#,
+        expect_test::expect![[r#""OK (nil 20 2 1)""#]],
     );
 }
 
@@ -113,7 +121,7 @@ fn divergence_hash_table_test_eq_vs_equal() {
 fn divergence_hash_table_remprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((h (make-hash-table :test 'equal)))
   (puthash "a" 1 h)
   (puthash "b" 2 h)
@@ -122,6 +130,7 @@ fn divergence_hash_table_remprop() {
         (gethash "b" h)
         (hash-table-count h)
         (let (keys) (maphash (lambda (k v) (push k keys)) h) keys)))"#,
+        expect_test::expect![[r#""OK (nil 2 1 (\"b\"))""#]],
     );
 }
 
@@ -129,7 +138,7 @@ fn divergence_hash_table_remprop() {
 fn divergence_symbol_plist_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((sym (make-symbol "test-sym")))
   (put sym 'prop1 'val1)
   (put sym 'prop2 'val2)
@@ -138,6 +147,7 @@ fn divergence_symbol_plist_operations() {
         (get sym 'missing)
         (get sym 'missing 'default)
         (symbol-plist sym)))"#,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments get 3)""#]],
     );
 }
 
@@ -145,7 +155,7 @@ fn divergence_symbol_plist_operations() {
 fn divergence_intern_vs_make_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((s1 (intern "test-intern-symbol"))
         (s2 (make-symbol "test-intern-symbol")))
   (list (eq s1 s2)
@@ -153,6 +163,9 @@ fn divergence_intern_vs_make_symbol() {
         (intern-soft "test-intern-symbol")
         (symbol-name s1)
         (symbol-name s2)))"#,
+        expect_test::expect![[
+            r#""OK (nil t test-intern-symbol \"test-intern-symbol\" \"test-intern-symbol\")""#
+        ]],
     );
 }
 
@@ -160,12 +173,13 @@ fn divergence_intern_vs_make_symbol() {
 fn divergence_sequence_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (seq-map #'1+ [1 2 3])
   (seq-map #'1+ "abc")
   (seq-filter #'cl-evenp '(1 2 3 4 5 6))
   (seq-reduce #'+ '(1 2 3 4 5) 0))"#,
+        expect_test::expect![[r#""OK ((2 3 4) (98 99 100) (2 4 6) 15)""#]],
     );
 }
 
@@ -173,13 +187,14 @@ fn divergence_sequence_map() {
 fn divergence_vector_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((v (make-vector 5 0)))
   (aset v 0 'a)
   (aset v 2 'b)
   (aset v 4 'c)
   (list (aref v 0) (aref v 1) (aref v 2)
         (length v) (vconcat v [d e])))"#,
+        expect_test::expect![[r#""OK (a 0 b 5 [a 0 b 0 c d e])""#]],
     );
 }
 
@@ -187,7 +202,7 @@ fn divergence_vector_operations() {
 fn divergence_char_table_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((ct (make-char-table 'syntax-table nil)))
   (set-char-table-range ct ?a 'word)
   (set-char-table-range ct '(?0 . ?9) 'digit)
@@ -195,6 +210,7 @@ fn divergence_char_table_operations() {
         (char-table-range ct ?5)
         (char-table-range ct ?z)
         (char-table-p ct)))"#,
+        expect_test::expect![[r#""OK (word digit nil t)""#]],
     );
 }
 
@@ -202,7 +218,7 @@ fn divergence_char_table_operations() {
 fn divergence_number_type_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (integerp 42)
   (integerp (expt 2 65))
@@ -213,5 +229,6 @@ fn divergence_number_type_predicates() {
   (natnump 5)
   (natnump -1)
   (zerop 0))"#,
+        expect_test::expect![[r#""OK (t t t t t nil t nil t)""#]],
     );
 }

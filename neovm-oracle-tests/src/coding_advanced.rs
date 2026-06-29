@@ -29,7 +29,10 @@ fn oracle_prop_coding_advanced_system_p_various() {
   (coding-system-p nil)
   (coding-system-p 42)
   (coding-system-p "utf-8"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t t nil t nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -48,18 +51,26 @@ fn oracle_prop_coding_advanced_check_coding_system() {
   (check-coding-system 'raw-text)
   (check-coding-system 'no-conversion)
   (check-coding-system nil))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (utf-8 utf-8-unix latin-1 raw-text no-conversion nil)""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_coding_advanced_check_coding_system_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_bad, neovm_bad) =
-        eval_oracle_and_neovm("(check-coding-system 'nonexistent-coding-xyz)");
+    let (oracle_bad, neovm_bad) = crate::common::eval_oracle_and_neovm_expect(
+        "(check-coding-system 'nonexistent-coding-xyz)",
+        expect_test::expect![[r#""ERR (coding-system-error nonexistent-coding-xyz)""#]],
+    );
     assert_err_kind(&oracle_bad, &neovm_bad, "coding-system-error");
 
-    let (oracle_type, neovm_type) = eval_oracle_and_neovm("(check-coding-system 42)");
+    let (oracle_type, neovm_type) = crate::common::eval_oracle_and_neovm_expect(
+        "(check-coding-system 42)",
+        expect_test::expect![[r#""ERR (wrong-type-argument symbolp 42)""#]],
+    );
     assert_err_kind(&oracle_type, &neovm_type, "wrong-type-argument");
 }
 
@@ -84,7 +95,10 @@ fn oracle_prop_coding_advanced_base_and_eol() {
   (coding-system-eol-type 'utf-8-mac)
   ;; Base coding system returns a vector of eol variants
   (vectorp (coding-system-eol-type 'utf-8)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (utf-8 utf-8 utf-8 utf-8 iso-latin-1 0 1 2 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +124,7 @@ fn oracle_prop_coding_advanced_aliases() {
    ;; latin-1 aliases
    (let ((l1-aliases (coding-system-aliases 'latin-1)))
      (if (memq 'latin-1 l1-aliases) t nil))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +145,10 @@ fn oracle_prop_coding_advanced_plist_put() {
     ;; Clean up the custom property
     (coding-system-put 'utf-8 :neovm-test-prop nil)
     (list name has-mnemonic readback)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (utf-8 t test-value)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +177,7 @@ fn oracle_prop_coding_advanced_priority_list() {
      has-utf8)
    ;; Length should be positive
    (> (length plist) 0)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,5 +216,8 @@ fn oracle_prop_coding_advanced_encode_decode_roundtrip() {
     (string= orig decoded))
   ;; Encoding produces same length for pure ASCII in utf-8
   (= (length (encode-coding-string "abc" 'utf-8)) 3))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
+    );
 }

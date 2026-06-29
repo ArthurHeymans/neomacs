@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx166_byte_compile_warnings_var_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'byte-compile-warnings)
       (consp byte-compile-warnings)
@@ -15,26 +15,28 @@ fn div_cx166_byte_compile_warnings_var_query() {
       (memq 'unresolved byte-compile-warnings)
       (memq 'obsolete byte-compile-warnings))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
 #[test]
 fn div_cx166_byte_compile_log_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'byte-compile-log)
       (fboundp 'byte-compile-log-warning)
       (fboundp 'byte-compile-warn)
       (boundp 'byte-compile-current-functions))
 "##,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx166_byte_compile_simple_lambda_no_warnings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lex (let ((lexical-binding t)) (lambda (x) (* x x))))
        (bc (let ((byte-compile-warnings nil)
@@ -44,13 +46,14 @@ fn div_cx166_byte_compile_simple_lambda_no_warnings() {
         (compiled-function-p bc)
         (funcall bc 5)))
 "##,
+        expect_test::expect![[r#""OK (t t 25)""#]],
     );
 }
 
 #[test]
 fn div_cx166_byte_compile_with_no_warnings_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lex (lambda (x) (+ x 1))))
   (with-no-warnings
@@ -58,13 +61,14 @@ fn div_cx166_byte_compile_with_no_warnings_macro() {
       (list (byte-code-function-p bc)
             (funcall bc 41)))))
 "##,
+        expect_test::expect![[r#""OK (t 42)""#]],
     );
 }
 
 #[test]
 fn div_cx166_with_suppressed_warnings_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'with-suppressed-warnings)
@@ -72,13 +76,14 @@ fn div_cx166_with_suppressed_warnings_query() {
           (boundp 'byte-compile--suppressed-warnings))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx166_byte_compile_dest_file_extension_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((el (expand-file-name "neo-cx166-test.el" temporary-file-directory))
@@ -88,13 +93,14 @@ fn div_cx166_byte_compile_dest_file_extension_check() {
             (string-prefix-p (file-name-sans-extension el) elc)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx166_byte_compile_function_make_byte_code() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lex (lambda (x) (* x 2)))
        (bc (byte-compile lex)))
@@ -105,38 +111,41 @@ fn div_cx166_byte_compile_function_make_byte_code() {
         (aref bc 3)
         (compiled-function-p bc)))
 "##,
+        expect_test::expect![[r#""OK (t 257 \"\\211\\300_\\207\" [2] 3 t)""#]],
     );
 }
 
 #[test]
 fn div_cx166_byte_compile_error_on_warn_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'byte-compile-error-on-warn)
       (booleanp byte-compile-error-on-warn)
       (boundp 'byte-compile-generate-call-tree))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx166_byte_compile_dynamic_flag_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'byte-compile-dynamic)
       (boundp 'byte-compile-dynamic-bound-vars)
       (boundp 'byte-compile-verbose)
       (boundp 'byte-optimize))
 "##,
+        expect_test::expect![[r#""OK (t nil t t)""#]],
     );
 }
 
 #[test]
 fn div_cx166_native_comp_async_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'native-compile-async)
@@ -145,13 +154,14 @@ fn div_cx166_native_comp_async_availability() {
           (boundp 'native-comp-driver-options))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx166_byte_compile_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lex (let ((lexical-binding t)) (lambda (x) (* x x))))
        (bc (with-no-warnings (byte-compile lex))))
@@ -177,5 +187,6 @@ fn div_cx166_byte_compile_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

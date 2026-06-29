@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_dired_mode_vars_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'dired-listing-switches)
   (stringp dired-listing-switches)
@@ -15,6 +15,7 @@ fn divergence_dired_mode_vars_deep() {
   (boundp 'dired-recursive-copies)
   (fboundp 'dired-get-marked-files)
   (fboundp 'dired-mark-files-regexp))"#,
+        expect_test::expect![[r#""OK (t t nil nil nil nil)""#]],
     );
 }
 
@@ -22,12 +23,13 @@ fn divergence_dired_mode_vars_deep() {
 fn divergence_tramp_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'tramp-dissect-file-name)
   (fboundp 'tramp-make-tramp-file-name)
   (featurep 'tramp)
   (fboundp 'tramp-connectible-p))"#,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     );
 }
 
@@ -35,11 +37,12 @@ fn divergence_tramp_functions() {
 fn divergence_remote_file_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'file-remote-p)
   (fboundp 'file-local-copy)
   (fboundp 'make-temp-file))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -47,11 +50,12 @@ fn divergence_remote_file_functions() {
 fn divergence_archive_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'archive-zip-extract)
   (fboundp 'archive-extract)
   (featurep 'arc-mode))"#,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
@@ -59,12 +63,13 @@ fn divergence_archive_functions() {
 fn divergence_tilde_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (expand-file-name "~/")
   (string= (expand-file-name "~/") (concat (getenv "HOME") "/"))
   (expand-file-name "~root/")
   (file-name-absolute-p "~/test"))"#,
+        expect_test::expect![[r#""OK (\"/home/exec/\" t \"/root/\" t)""#]],
     );
 }
 
@@ -72,7 +77,7 @@ fn divergence_tilde_expansion() {
 fn divergence_file_symlink() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((target (make-temp-file "neovm-sym-target-"))
         link)
   (unwind-protect
@@ -85,6 +90,7 @@ fn divergence_file_symlink() {
               (file-equal-p target link)))
     (when (file-exists-p target) (delete-file target))
     (when (file-exists-p link) (delete-file link))))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -92,13 +98,14 @@ fn divergence_file_symlink() {
 fn divergence_file_truename() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((f (make-temp-file "neovm-truename-")))
   (unwind-protect
       (list (stringp (file-truename f))
             (file-exists-p f)
             (file-writable-p f))
     (delete-file f)))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -106,7 +113,7 @@ fn divergence_file_truename() {
 fn divergence_directory_files_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((dir (make-temp-file "neovm-dirattr-" t)))
   (unwind-protect
       (let* ((attrs (file-attributes dir))
@@ -115,6 +122,7 @@ fn divergence_directory_files_attributes() {
               (eq (car attrs) t)
               (listp entries)))
     (delete-directory dir t)))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -122,7 +130,7 @@ fn divergence_directory_files_attributes() {
 fn divergence_write_region_append() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((tmp (make-temp-file "neovm-append-")))
   (unwind-protect
       (progn
@@ -133,6 +141,7 @@ fn divergence_write_region_append() {
                 (buffer-string))
               (file-attribute-size (file-attributes tmp))))
     (delete-file tmp)))"#,
+        expect_test::expect![[r#""OK (\"line1line2\" 10)""#]],
     );
 }
 
@@ -140,10 +149,11 @@ fn divergence_write_region_append() {
 fn divergence_file_locked() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'lock-buffer)
   (fboundp 'unlock-buffer)
   (fboundp 'file-locked-p))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }

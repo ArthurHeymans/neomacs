@@ -36,7 +36,12 @@ fn oracle_prop_obarray_comprehensive_custom_sizes() {
         (setq results (cons (list size found-a found-e absent eq-check)
                             results)))))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 t t t t) (3 t t t t) (7 t t t t) (17 t t t t) (61 t t t t) (127 t t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +78,10 @@ fn oracle_prop_obarray_comprehensive_unintern_custom() {
                   (symbolp s2-new)
                   ;; New symbol has same name
                   (equal (symbol-name s2-new) "neovm--ocp-un-b-4452"))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t t t) (t t t) (t t t) t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +108,12 @@ fn oracle_prop_obarray_comprehensive_mapatoms_custom() {
     (list (sort (copy-sequence names) #'string<)
           (sort collected #'string<)
           (= (length collected) (length names)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"neovm--ocp-ma-w-7719\" \"neovm--ocp-ma-x-7719\" \"neovm--ocp-ma-y-7719\" \"neovm--ocp-ma-z-7719\") (\"neovm--ocp-ma-w-7719\" \"neovm--ocp-ma-x-7719\" \"neovm--ocp-ma-y-7719\" \"neovm--ocp-ma-z-7719\") t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +140,12 @@ fn oracle_prop_obarray_comprehensive_mapatoms_set_values() {
                                     results)))
               ob)
     (sort results (lambda (a b) (string< (car a) (car b))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"neovm--ocp-msv-alpha-3301\" . 25) (\"neovm--ocp-msv-beta-3301\" . 24) (\"neovm--ocp-msv-gamma-3301\" . 25))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +177,10 @@ fn oracle_prop_obarray_comprehensive_isolation_between_obarrays() {
                    (list (symbol-value s1) (symbol-value s2)))
             ;; symbol-name is the same for both
             (equal (symbol-name s1) (symbol-name s2))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t (100 200) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +200,7 @@ fn oracle_prop_obarray_comprehensive_unintern_return_value() {
     ;; Unintern again after already removed
     (let ((ret-again (unintern "neovm--ocp-urv-present-2207" ob)))
       (list ret-present ret-absent ret-again))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil nil)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +243,12 @@ fn oracle_prop_obarray_comprehensive_large_scale_intern() {
             (symbol-name (intern-soft (concat prefix "25") ob))
             (symbol-name (intern-soft (concat prefix "49") ob))
             (null (intern-soft (concat prefix "50") ob))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t 50 \"neovm--ocp-lsi-0\" \"neovm--ocp-lsi-25\" \"neovm--ocp-lsi-49\" t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +288,10 @@ fn oracle_prop_obarray_comprehensive_collision_behavior() {
                 (null (intern-soft "neovm--ocp-coll-aa-5593" ob))
                 (not (null (intern-soft "neovm--ocp-coll-cc-5593" ob)))
                 (not (null (intern-soft "neovm--ocp-coll-dd-5593" ob)))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t (t t t t) t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -298,7 +327,10 @@ fn oracle_prop_obarray_comprehensive_emacs30_obarray_api() {
                 size-after-remove removed-beta still-alpha still-gamma))))
   ;; Fallback if obarray-make not available
   '(not-available))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (4 t t t 4 t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -327,7 +359,10 @@ fn oracle_prop_obarray_comprehensive_mapatoms_default_obarray() {
                ((eq sym 'nil)  (setq found-nil t)))))
   (list found-car found-cdr found-cons found-list found-nil
         (> total 100)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +401,12 @@ fn oracle_prop_obarray_comprehensive_symbol_properties_custom() {
      ;; Symbol plists
      (length (symbol-plist s1))
      (length (symbol-plist s2)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (red blue 100 200 nil bonus 42 99 \"from-ob1\" \"from-ob2\" 4 6)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -387,5 +427,5 @@ fn oracle_prop_obarray_comprehensive_empty_string_name() {
      (eq (intern "" ob) s)
      ;; intern-soft finds it
      (eq (intern-soft "" ob) s))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t)""#]]);
 }

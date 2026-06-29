@@ -17,7 +17,10 @@ fn oracle_prop_fillarray_vector_basic() {
                     (fillarray v 42)
                     (list (aref v 0) (aref v 1) (aref v 2)
                           (aref v 3) (aref v 4) (aref v 5)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 42 42 42 42 42)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -31,7 +34,7 @@ fn oracle_prop_fillarray_string_with_char() {
     let form = r#"(let ((s (copy-sequence "abcdef")))
                     (fillarray s ?z)
                     s)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK \"zzzzzz\"""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -57,7 +60,7 @@ fn oracle_prop_fillarray_bool_vector() {
                                              (setq ok nil)))
                                          ok)))
                         (list all-true all-false))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +78,12 @@ fn oracle_prop_fillarray_overwrite_existing() {
                       (dotimes (i (length v))
                         (setq result (cons (aref v i) result)))
                       (nreverse result)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (replaced replaced replaced replaced replaced replaced replaced replaced)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -92,7 +100,7 @@ fn oracle_prop_fillarray_returns_same_object() {
                       (list (eq v result)
                             (aref v 0)
                             (aref result 3))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t 99 99)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +130,10 @@ fn oracle_prop_fillarray_selective_then_reset() {
                               (append snapshot nil)
                               (aref snapshot 3)
                               (aref snapshot 5)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t (2 2 1 2 1 3 1 1 1 3) 2 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +159,10 @@ fn oracle_prop_fillarray_clear_sparse_table() {
                       (let ((after-3 (aref table 3))
                             (after-5 (aref table 5)))
                         (list before-3 before-5 after-3 after-5))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((3 . \"three\")) ((5 . \"five\")) nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -162,5 +176,8 @@ fn oracle_prop_fillarray_string_multibyte() {
     let form = r#"(let ((s (make-string 5 ?a)))
                     (fillarray s ?x)
                     (list s (length s) (aref s 0) (aref s 4)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"xxxxx\" 5 120 120)""#]],
+    );
 }

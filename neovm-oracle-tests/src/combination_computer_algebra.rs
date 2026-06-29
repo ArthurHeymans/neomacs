@@ -121,7 +121,12 @@ fn oracle_prop_cas_polynomial_arithmetic() {
     (fmakunbound 'neovm--cas-sub)
     (fmakunbound 'neovm--cas-mul)
     (fmakunbound 'neovm--cas-divmod)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([5 7 3] [1 0 -1] [1 2 1] ([1 1] . [0]) ([1 1 1] . [0]) ([0 1 2] . [5]) 2 0 -1 [0])""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -241,7 +246,10 @@ fn oracle_prop_cas_polynomial_gcd() {
     (fmakunbound 'neovm--cas-igcd)
     (fmakunbound 'neovm--cas-primitive)
     (fmakunbound 'neovm--cas-gcd)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ([-1 1] [1 1] [1] [1 2 3] [1 2 3] 6 5 t t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +350,12 @@ fn oracle_prop_cas_symbolic_differentiation() {
     (fmakunbound 'neovm--cas-diff)
     (fmakunbound 'neovm--cas-simp)
     (fmakunbound 'neovm--cas-simp-fix)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((* 3 (expt x 2)) 2 (+ (* 2 x) 1) (+ x x) 0 0 (* 4 (* 3 (expt x 2))) (- (* 3 (* 2 x)) 2))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -422,7 +435,12 @@ fn oracle_prop_cas_symbolic_integration() {
     (fmakunbound 'neovm--cas-integrate-poly)
     (fmakunbound 'neovm--cas-definite-integral)
     (fmakunbound 'neovm--cas-eval-poly)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((2 1 1) (3 2 2) (4 3 3)) ((5 1 1)) ((1 3 3)) 9 25 5 29 17 1 2)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -535,7 +553,12 @@ fn oracle_prop_cas_rational_expressions() {
     (fmakunbound 'neovm--cas-rat-div)
     (fmakunbound 'neovm--cas-to-cf)
     (fmakunbound 'neovm--cas-from-cf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 . 2) (3 . 2) (-3 . 2) (5 . 6) (1 . 2) (1 . 2) (5 . 6) (1 . 1) (3 7 16) (355 . 113) (0 . 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -627,7 +650,10 @@ fn oracle_prop_cas_matrix_determinant_bareiss() {
     (fmakunbound 'neovm--cas-mat-set)
     (fmakunbound 'neovm--cas-mat-copy)
     (fmakunbound 'neovm--cas-det-bareiss)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 -2 1 0 -1 72 30 48)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -731,5 +757,10 @@ fn oracle_prop_cas_characteristic_polynomial() {
     (fmakunbound 'neovm--cas-mat-trace)
     (fmakunbound 'neovm--cas-mat-pow)
     (fmakunbound 'neovm--cas-char-poly)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 [[19 22] [43 50]] [3 -4 1] [1 -2 1] [1 0 1] [-5 1] [-6 11 -6 1] [[1 0] [0 1]] [[1 3] [0 1]])""#
+        ]],
+    );
 }

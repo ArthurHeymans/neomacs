@@ -39,7 +39,12 @@ fn oracle_prop_mapcar_mapc_comp_mapcar_function_types() {
           '(1 2 3 4))
   ;; mapcar with identity function
   (mapcar #'identity '(a b c d)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 8 27 64 125) (11 21 31 41) (a b c) (\"foo\" \"bar\" \"baz\") (5 2 3 5) (nil t nil t t nil) (integer string symbol float symbol symbol) (5 10 15 20) (a b c d))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -76,7 +81,10 @@ fn oracle_prop_mapcar_mapc_comp_mapc_return_and_side_effects() {
     count)
   ;; mapc return value for empty list
   (mapc #'identity nil))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 15 (2 4 6) (nil nil nil) 0 nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +111,12 @@ fn oracle_prop_mapcar_mapc_comp_mapcan() {
   ;; mapcan to interleave elements with separator
   (let ((result (mapcan (lambda (x) (list x 'sep)) '(a b c))))
     (nbutlast result)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 10 2 20 3 30) (4 5 6) (1 2 2 3 3 3) nil nil ((1 . 1) (2 . 4) (3 . 9) (4 . 16) (5 . 25)) (a sep b sep c))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +147,12 @@ fn oracle_prop_mapcar_mapc_comp_mapconcat_separators() {
   ;; mapconcat to build CSV row
   (mapconcat (lambda (x) (format "%S" x))
              '("name" 42 3.14) ","))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"1, 2, 3, 4, 5\" \"helloworld\" \"line1\nline2\nline3\" \"[a] -> [b] -> [c]\" \"42\" \"\" \"foo | bar | baz\" \"alpha-beta-gamma\" \"\\\"name\\\",42,3.14\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +184,12 @@ fn oracle_prop_mapcar_mapc_comp_cl_mapcar_multi_list() {
     (cl-mapcar #'+ '(1 2 3) nil)
     ;; cl-mapcar with single list (like regular mapcar)
     (cl-mapcar #'1+ '(10 20 30))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((11 22 33) (11 22) ((a 1 x) (b 2 y) (c 3 z)) ((a 1 x) (b 2 y)) (\"Alice: 95\" \"Bob: 87\" \"Carol: 92\") ((a . 1) (b . 2) (c . 3)) nil (11 21 31))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +221,10 @@ fn oracle_prop_mapcar_mapc_comp_cl_mapc_multi_list() {
       (cl-mapc (lambda (a b) (setq count (1+ count)))
                '(1 2 3 4 5) '(a b))
       count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10 40 90) ((x 1 p) (y 2 q) (z 3 r)) t 2)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +250,12 @@ fn oracle_prop_mapcar_mapc_comp_cl_mapcan() {
     (cl-mapcan (lambda (x) (list x)) nil)
     ;; cl-mapcan where all results are nil
     (cl-mapcan (lambda (x) nil) '(1 2 3))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 10 100 2 20 200 3 30 300) (2 4 6 8) ((x . 1) (y . 2) (z . 3)) nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -252,7 +283,10 @@ fn oracle_prop_mapcar_mapc_comp_empty_list_mapping() {
   (let ((counter 0))
     (mapcar (lambda (x) (setq counter (1+ counter))) nil)
     counter))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil nil \"\" t t t 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +325,12 @@ fn oracle_prop_mapcar_mapc_comp_index_tracking() {
                 (setq idx (1+ idx))
                 result))
             '(10 20 30 40))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 . a) (1 . b) (2 . c) (3 . d) (4 . e)) ((0 a) (1 b) (2 c) (3 d) (4 e)) (\"HELLO\" \"world\" \"FOO\" \"bar\") ((0 10 10) (1 20 30) (2 30 60) (3 40 100)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -326,7 +365,12 @@ fn oracle_prop_mapcar_mapc_comp_nested_maps() {
             (mapcar (lambda (x) (* x multiplier))
                     '(1 2 3)))
           '(1 10 100)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((2 3 4) (5 6 7) (8 9 10)) ((10 20 30) (20 40 60) (30 60 90)) (((2 3) (4 5)) ((6 7) (8 9))) (2 4 6 8 10 12) ((1 2 3) (10 20 30) (100 200 300)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -370,5 +414,10 @@ fn oracle_prop_mapcar_mapc_comp_error_handling() {
                (setq errors (cons (list x (cadr err)) errors)))))
           '(10 5 0 25 0 50))
     (list (nreverse successes) (nreverse errors))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 20 division-by-zero 50 division-by-zero 100) (a not-a-list c not-a-list nil) (42 not-a-number 0 3.14 not-a-number) ((10 20 4 2) ((0 nil) (0 nil))))""#
+        ]],
+    );
 }

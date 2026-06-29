@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_marker_insertion_type_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefgh")
   (let ((m-front (set-marker (make-marker) 4))
@@ -20,6 +20,7 @@ fn divergence_marker_insertion_type_boundary() {
           (marker-position m-back)
           (marker-insertion-type m-front)
           (marker-insertion-type m-back))))"#,
+        expect_test::expect![[r#""OK (6 4 t nil)""#]],
     );
 }
 
@@ -27,13 +28,14 @@ fn divergence_marker_insertion_type_boundary() {
 fn divergence_marker_at_point_min() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abc")
   (let ((m (set-marker (make-marker) 1)))
     (goto-char 1)
     (insert "X")
     (list (marker-position m) (buffer-string))))"#,
+        expect_test::expect![[r#""OK (1 \"Xabc\")""#]],
     );
 }
 
@@ -41,13 +43,14 @@ fn divergence_marker_at_point_min() {
 fn divergence_marker_at_point_max() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abc")
   (let ((m (set-marker (make-marker) 4)))
     (goto-char 4)
     (insert "X")
     (list (marker-position m) (buffer-string))))"#,
+        expect_test::expect![[r#""OK (4 \"abcX\")""#]],
     );
 }
 
@@ -55,7 +58,7 @@ fn divergence_marker_at_point_max() {
 fn divergence_copy_marker_preserves_insertion_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abc")
   (let* ((m (set-marker (make-marker) 2))
@@ -64,6 +67,7 @@ fn divergence_copy_marker_preserves_insertion_type() {
     (list (marker-position c)
           (marker-insertion-type c)
           (eq (marker-buffer m) (marker-buffer c)))))"#,
+        expect_test::expect![[r#""OK (2 nil t)""#]],
     );
 }
 
@@ -71,7 +75,7 @@ fn divergence_copy_marker_preserves_insertion_type() {
 fn divergence_undo_after_multiple_edits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (goto-char 3)
@@ -81,6 +85,7 @@ fn divergence_undo_after_multiple_edits() {
   (undo)
   (undo)
   (buffer-string))"#,
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
     );
 }
 
@@ -88,7 +93,7 @@ fn divergence_undo_after_multiple_edits() {
 fn divergence_undo_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (kill-region 3 7)
@@ -96,6 +101,7 @@ fn divergence_undo_yank() {
   (yank)
   (undo)
   (buffer-string))"#,
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
     );
 }
 
@@ -103,7 +109,7 @@ fn divergence_undo_yank() {
 fn divergence_undo_after_replace_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "foo bar foo baz foo")
   (goto-char 1)
@@ -111,6 +117,7 @@ fn divergence_undo_after_replace_match() {
     (replace-match "quux"))
   (undo)
   (buffer-string))"#,
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
     );
 }
 
@@ -118,7 +125,7 @@ fn divergence_undo_after_replace_match() {
 fn divergence_marker_after_kill_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (let ((m (set-marker (make-marker) 5)))
@@ -126,6 +133,7 @@ fn divergence_marker_after_kill_yank() {
     (goto-char 3)
     (yank)
     (list (marker-position m) (buffer-string))))"#,
+        expect_test::expect![[r#""OK (3 \"abcdefghij\")""#]],
     );
 }
 
@@ -133,13 +141,14 @@ fn divergence_marker_after_kill_yank() {
 fn divergence_buffer_undo_list_disabled() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (buffer-enable-undo)
   (insert "abc")
   (setq buffer-undo-list t)
   (insert "def")
   (list buffer-undo-list (buffer-string)))"#,
+        expect_test::expect![[r#""OK (t \"abcdef\")""#]],
     );
 }
 
@@ -147,7 +156,7 @@ fn divergence_buffer_undo_list_disabled() {
 fn divergence_undo_boundary_amalgamation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdef")
   (undo-boundary)
@@ -158,5 +167,6 @@ fn divergence_undo_boundary_amalgamation() {
   (insert "Y")
   (undo)
   (buffer-string))"#,
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
     );
 }

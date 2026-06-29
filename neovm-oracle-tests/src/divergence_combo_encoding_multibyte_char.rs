@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_coding_system_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (coding-system-p 'utf-8)
         (eq (coding-system-p 'utf-8) t)
@@ -20,6 +20,7 @@ fn divergence_coding_system_operations() {
         (eq (coding-system-base 'utf-8) 'utf-8)
         (coding-system-base 'utf-8-dos)
         (eq (coding-system-base 'utf-8-dos) 'utf-8)))) "#,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 54)""#]],
     );
 }
 
@@ -27,7 +28,7 @@ fn divergence_coding_system_operations() {
 fn divergence_multibyte_char_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (char-to-string ?A)
         (string= (char-to-string ?A) "A")
@@ -51,6 +52,7 @@ fn divergence_multibyte_char_operations() {
         (= (upcase ?a) ?A)
         (downcase ?A)
         (= (downcase ?A) ?a)))) "#,
+        expect_test::expect![[r#""ERR (void-function char-lowercase-p)""#]],
     );
 }
 
@@ -58,7 +60,7 @@ fn divergence_multibyte_char_operations() {
 fn divergence_string_multibyte_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((str "hello"))
     (list (multibyte-string-p str)
@@ -73,6 +75,7 @@ fn divergence_string_multibyte_operations() {
           (= (length (string-to-multibyte str)) 5)
           (string-as-unibyte (string-to-multibyte str))
           (= (length (string-as-unibyte (string-to-multibyte str))) 5)))) "#,
+        expect_test::expect![[r#""OK (nil t 5 t 5 t \"hello\" t \"hello\" t \"hello\" t)""#]],
     );
 }
 
@@ -80,7 +83,7 @@ fn divergence_string_multibyte_operations() {
 fn divergence_string_with_unicode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((str "\x03B1\x03B2\x03B3"))
     (list (length str)
@@ -95,6 +98,7 @@ fn divergence_string_with_unicode() {
           (substring str 0 2)
           (= (length (substring str 0 2)) 2)
           (string= (substring str 1 2) "\x03B2")))) "#,
+        expect_test::expect![[r#""OK (3 t t 945 t 946 t 947 t \"αβ\" t t)""#]],
     );
 }
 
@@ -102,7 +106,7 @@ fn divergence_string_with_unicode() {
 fn divergence_coding_system_alias_and_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (define-coding-system-alias 'test-csa-xxx 'utf-8)
   (let ((aliases (coding-system-aliases 'utf-8)))
@@ -114,6 +118,7 @@ fn divergence_coding_system_alias_and_priority() {
           (consp (coding-system-priority-list))
           (>= (length (coding-system-priority-list)) 1)
           (and (memq 'utf-8 (coding-system-priority-list)) t)))) "#,
+        expect_test::expect![[r#""OK (t t t utf-8 t t t t)""#]],
     );
 }
 
@@ -121,7 +126,7 @@ fn divergence_coding_system_alias_and_priority() {
 fn divergence_char_tables_and_categories() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ct (make-char-table 'category-table t)))
     (set-char-table-range ct ?A 'letter)
@@ -139,6 +144,7 @@ fn divergence_char_tables_and_categories() {
           (set-char-table-extra-slot ct 0 'test-val)
           (char-table-extra-slot ct 0)
           (eq (char-table-extra-slot ct 0) 'test-val)))) "#,
+        expect_test::expect![[r#""ERR (void-function char-table-type)""#]],
     );
 }
 
@@ -146,7 +152,7 @@ fn divergence_char_tables_and_categories() {
 fn divergence_string_bytes_vs_length() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ascii "abcde")
         (mixed "abc\x03B1\x03B2")
@@ -163,6 +169,7 @@ fn divergence_string_bytes_vs_length() {
           (= (aref mixed 3) ?\x3B1)
           (= (aref cjk 0) ?\x4E00)
           (= (aref cjk 1) ?\x4E01)))) "#,
+        expect_test::expect![[r#""OK (t t t t t t t t t t t t)""#]],
     );
 }
 
@@ -170,7 +177,7 @@ fn divergence_string_bytes_vs_length() {
 fn divergence_unicode_property_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (get-char-code-property ?A 'general-category)
         (equal (get-char-code-property ?A 'general-category) "Lu")
@@ -183,6 +190,7 @@ fn divergence_unicode_property_lookup() {
         (get-char-code-property ?$ 'general-category)
         (equal (get-char-code-property ?$ 'general-category) "Sc")
         (char-table-p (char-script-table)))) "#,
+        expect_test::expect![[r#""ERR (void-function char-script-table)""#]],
     );
 }
 
@@ -190,7 +198,7 @@ fn divergence_unicode_property_lookup() {
 fn divergence_case_conversion_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((str "Hello World 123"))
     (list (upcase str)
@@ -205,6 +213,9 @@ fn divergence_case_conversion_functions() {
           (= (length (upcase "abc\x03B1\x03B2")) 5)
           (downcase "ABC\x0391\x0392")
           (= (length (downcase "ABC\x0391\x0392")) 5)))) "#,
+        expect_test::expect![[
+            r#""OK (\"HELLO WORLD 123\" t \"hello world 123\" t \"Hello World 123\" t \"Hello World 123\" t \"ABCΑΒ\" t \"abcαβ\" t)""#
+        ]],
     );
 }
 
@@ -212,7 +223,7 @@ fn divergence_case_conversion_functions() {
 fn divergence_string_conversion_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (number-to-string 42)
         (string= (number-to-string 42) "42")
@@ -234,5 +245,8 @@ fn divergence_string_conversion_operations() {
         (string= (format "%o" 8) "10")
         (format "%b" 10)
         (string= (format "%b" 10) "1010"))) "#,
+        expect_test::expect![[
+            r#""OK (\"42\" t \"3.14\" t 42 t 3.14 t 255 t 10 t 63 t \"ff\" t \"10\" t \"1010\" t)""#
+        ]],
     );
 }

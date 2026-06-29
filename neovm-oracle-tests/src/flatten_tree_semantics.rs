@@ -20,7 +20,10 @@ fn oracle_prop_flatten_tree_basic_nil_and_dotted_leaves() {
  (flatten-tree '(nil . tail)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7) (a b c d) (a b c) nil (42) (tail))""#]],
+    );
 }
 
 #[test]
@@ -36,7 +39,12 @@ fn oracle_prop_flatten_list_alias_and_ordering() {
    (equal (flatten-tree tree) (flatten-list tree))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (alpha beta gamma delta epsilon) (alpha beta gamma delta epsilon) t)""#
+        ]],
+    );
 }
 
 #[test]
@@ -59,7 +67,10 @@ fn oracle_prop_ensure_list_wraps_atoms_and_preserves_lists() {
    (ensure-list 17)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t ([a b]) \"abc\" t (17))""#]],
+    );
 }
 
 #[test]
@@ -73,7 +84,10 @@ fn oracle_prop_flatten_tree_after_mutating_dotted_structure() {
   (list tree (flatten-tree tree)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((a . b) (c (d . f))) (a b c d f))""#]],
+    );
 }
 
 #[test]
@@ -103,5 +117,10 @@ fn oracle_prop_flatten_tree_ensure_list_alias_arity_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil t (t t nil) (a b c d e) (wrong-number-of-arguments ((1 . 1) 0)) (wrong-number-of-arguments ((1 . 1) 2)) (wrong-number-of-arguments ((1 . 1) 0)) (wrong-number-of-arguments ((1 . 1) 2)))""#
+        ]],
+    );
 }

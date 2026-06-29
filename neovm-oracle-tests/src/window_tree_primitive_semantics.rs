@@ -23,5 +23,10 @@ fn oracle_window_tree_primitives_validate_window_arguments_like_gnu() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument window-valid-p \"not-a-window\") (wrong-type-argument window-valid-p \"not-a-window\") (error \"Not a live window\"))""#
+        ]],
+    );
 }

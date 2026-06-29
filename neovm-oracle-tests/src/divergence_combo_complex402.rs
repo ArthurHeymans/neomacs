@@ -15,7 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx402_face_remapping_add_relative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((remap (face-remap-add-relative 'bold '((:foreground "red")))))
   (unwind-protect
@@ -23,6 +23,7 @@ fn div_cx402_face_remapping_add_relative() {
             (face-remap-p 'bold))
     (face-remap-remove-relative remap)))
 "##,
+        expect_test::expect![[r#""ERR (void-function face-remap-p)""#]],
     );
 }
 
@@ -31,7 +32,7 @@ fn div_cx402_face_remapping_add_relative() {
 #[test]
 fn div_cx402_process_buffer_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx402-out*")))
   (let ((proc (make-process :name "neo-cx402-out"
@@ -43,6 +44,7 @@ fn div_cx402_process_buffer_output() {
            (string-trim-right (buffer-string) "\n"))
     (kill-buffer buf)))
 "##,
+        expect_test::expect![[r#""OK \"hello from 402\n\nProcess neo-cx402-out killed\"""#]],
     );
 }
 
@@ -51,7 +53,7 @@ fn div_cx402_process_buffer_output() {
 #[test]
 fn div_cx402_completion_table_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((alist '(("apple" . 1) ("apply" . 2) ("apt" . 3)))
       (ht (let ((h (make-hash-table :test 'equal)))
@@ -65,6 +67,9 @@ fn div_cx402_completion_table_types() {
         (all-completions "ap" alist)
         (all-completions "ban" ht)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"appl\" \"ban\" nil (\"apple\" \"apply\" \"apt\") (\"banana\" \"band\" \"bang\"))""#
+        ]],
     );
 }
 
@@ -73,7 +78,7 @@ fn div_cx402_completion_table_types() {
 #[test]
 fn div_cx402_json_parse_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((json-encoding-type 'json-object-type))
   (list (json-parse-string "{}")
@@ -84,6 +89,9 @@ fn div_cx402_json_parse_edge_cases() {
         (json-parse-string "[1,2,3]")
         (json-parse-string "{\"x\":\"café\"}")))
 "##,
+        expect_test::expect![[
+            r#""OK (#s(hash-table test equal) #s(hash-table test equal data (\"a\" 1 \"b\" 2)) json-parse-error [1 2 3] #s(hash-table test equal data (\"x\" \"café\")))""#
+        ]],
     );
 }
 
@@ -92,7 +100,7 @@ fn div_cx402_json_parse_edge_cases() {
 #[test]
 fn div_cx402_color_values_name_to_rgb() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (color-values "red")
       (color-name-to-rgb "red")
@@ -101,6 +109,9 @@ fn div_cx402_color_values_name_to_rgb() {
       (color-values "AliceBlue")
       (member "red" (defined-colors)))
 "##,
+        expect_test::expect![[
+            r#""OK ((65535 0 0) (1.0 0.0 0.0) (65535 0 0) (1.0 0.0 0.0) (65535 65535 65535) (\"red\" \"green\" \"yellow\" \"blue\" \"magenta\" \"cyan\" \"white\"))""#
+        ]],
     );
 }
 
@@ -109,7 +120,7 @@ fn div_cx402_color_values_name_to_rgb() {
 #[test]
 fn div_cx402_documentation_property_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (put 'neo-cx402-sym 'variable-documentation "my var doc")
@@ -118,6 +129,7 @@ fn div_cx402_documentation_property_variants() {
         (documentation-property 'neo-cx402-sym 'custom-documentation)
         (documentation-property 'forward-word 'function-documentation t)))
 "##,
+        expect_test::expect![[r#""OK (\"my var doc\" \"my custom doc\" nil)""#]],
     );
 }
 
@@ -126,7 +138,7 @@ fn div_cx402_documentation_property_variants() {
 #[test]
 fn div_cx402_defvaralias_indirect_variable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (make-symbol "neo-cx402-a"))
       (b (make-symbol "neo-cx402-b")))
@@ -139,6 +151,7 @@ fn div_cx402_defvaralias_indirect_variable() {
         (boundp a)
         (boundp b)))
 "##,
+        expect_test::expect![[r#""OK (neo-cx402-b neo-cx402-b 42 42 t t)""#]],
     );
 }
 
@@ -147,7 +160,7 @@ fn div_cx402_defvaralias_indirect_variable() {
 #[test]
 fn div_cx402_key_remapping_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (local-set-key (kbd "C-c C-n") 'forward-line)
@@ -156,6 +169,7 @@ fn div_cx402_key_remapping_lookup() {
         (keymap-lookup nil "C-c C-p")
         (where-is-internal 'forward-line nil t)))
 "##,
+        expect_test::expect![[r#""OK (forward-line previous-line [3 14])""#]],
     );
 }
 
@@ -164,7 +178,7 @@ fn div_cx402_key_remapping_lookup() {
 #[test]
 fn div_cx402_syntax_ppss_after_textprop_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "(a b c) (d e f)")
@@ -174,6 +188,9 @@ fn div_cx402_syntax_ppss_after_textprop_change() {
           (syntax-ppss 10)
           (syntax-ppss 4))))
 "##,
+        expect_test::expect![[
+            r#""OK ((1 9 nil nil nil nil 0 nil nil (9) nil) (1 9 nil nil nil nil 0 nil nil (9) nil) (1 1 2 nil nil nil 0 nil nil (1) nil))""#
+        ]],
     );
 }
 
@@ -182,7 +199,7 @@ fn div_cx402_syntax_ppss_after_textprop_change() {
 #[test]
 fn div_cx402_font_lock_add_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'font-lock)
   (with-temp-buffer
@@ -193,6 +210,7 @@ fn div_cx402_font_lock_add_keywords() {
     (list (get-text-property 7 'face)
           (get-text-property 1 'face))))
 "##,
+        expect_test::expect![[r#""OK (bold nil)""#]],
     );
 }
 
@@ -201,7 +219,7 @@ fn div_cx402_font_lock_add_keywords() {
 #[test]
 fn div_cx402_add_hook_depth_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((hook (make-symbol "neo-cx402-hook"))
       (calls ()))
@@ -212,6 +230,9 @@ fn div_cx402_add_hook_depth_local() {
     (run-hooks hook)
     (list before (nreverse calls))))
 "##,
+        expect_test::expect![[
+            r#""OK (((closure ((calls :c)) nil (setq calls (cons :b calls))) (closure ((calls :c)) nil (setq calls (cons :a calls))) (closure ((calls :c)) nil (setq calls (cons :c calls)))) (:b :a :c))""#
+        ]],
     );
 }
 
@@ -221,7 +242,7 @@ fn div_cx402_add_hook_depth_local() {
 #[test]
 fn div_cx402_batch_minibuffer_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"
 (list (condition-case e (read-string "prompt: " "default") (error (car e)))
       (condition-case e (read-from-minibuffer "prompt: " "default") (error (car e)))
@@ -235,7 +256,7 @@ fn div_cx402_batch_minibuffer_read() {
 #[test]
 fn div_cx402_truncate_string_to_width_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "abcde"))
   (put-text-property 2 3 'display "XXXX" s)
@@ -244,6 +265,9 @@ fn div_cx402_truncate_string_to_width_display() {
         (truncate-string-to-width s 7 nil nil t)
         (truncate-string-to-width s 2 nil nil t)))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"abc\" 2 3 (display \"XXXX\")) #(\"abcde\" 2 3 (display \"XXXX\")) #(\"abcde\" 2 3 (display \"XXXX\")) \"a…\")""#
+        ]],
     );
 }
 
@@ -252,7 +276,7 @@ fn div_cx402_truncate_string_to_width_display() {
 #[test]
 fn div_cx402_pos_visible_in_window_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdefghij\nklmnopqrst\nuvwxyz")
@@ -263,6 +287,7 @@ fn div_cx402_pos_visible_in_window_display() {
         (pos-visible-in-window-p 12)
         (pos-visible-in-window-p 30)))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     );
 }
 
@@ -271,7 +296,7 @@ fn div_cx402_pos_visible_in_window_display() {
 #[test]
 fn div_cx402_count_screen_lines_display_invisible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abc def ghi jkl mno pqr stu vwx yz")
@@ -281,6 +306,7 @@ fn div_cx402_count_screen_lines_display_invisible() {
         (count-screen-lines (point-min) 12)
         (count-screen-lines 10 (point-max))))
 "##,
+        expect_test::expect![[r#""OK (1 1 1)""#]],
     );
 }
 
@@ -289,7 +315,7 @@ fn div_cx402_count_screen_lines_display_invisible() {
 #[test]
 fn div_cx402_font_spec_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((spec (font-spec :family "monospace" :size 12)))
   (list (fontp spec)
@@ -299,6 +325,7 @@ fn div_cx402_font_spec_match() {
             (font-match spec)
           (error (car e)))))
 "##,
+        expect_test::expect![[r#""OK (t monospace 12 void-function)""#]],
     );
 }
 
@@ -307,12 +334,15 @@ fn div_cx402_font_spec_match() {
 #[test]
 fn div_cx402_format_prompt_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format-prompt "Enter name" nil)
       (format-prompt "Enter name" "default")
       (format-prompt "Select file" "/tmp/foo"))
 "##,
+        expect_test::expect![[
+            r#""OK (\"Enter name: \" \"Enter name (default default): \" \"Select file (default /tmp/foo): \")""#
+        ]],
     );
 }
 
@@ -321,7 +351,7 @@ fn div_cx402_format_prompt_default() {
 #[test]
 fn div_cx402_xml_parse_dom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -333,6 +363,7 @@ fn div_cx402_xml_parse_dom() {
               (car (last dom)))))
   (error (car e)))
 "##,
+        expect_test::expect![[r#""OK (root 4 nil (item ((id . \"2\")) \"beta\"))""#]],
     );
 }
 
@@ -341,13 +372,16 @@ fn div_cx402_xml_parse_dom() {
 #[test]
 fn div_cx402_split_string_multibyte_sep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (split-string "aαbβcγd" "α\\|β\\|γ")
       (split-string "hello世界world" "世界")
       (split-string "one::two::three" "::" t)
       (split-string "x..y..z" "\\.\\."))
 "##,
+        expect_test::expect![[
+            r#""OK ((\"a\" \"b\" \"c\" \"d\") (\"hello\" \"world\") (\"one\" \"two\" \"three\") (\"x\" \"y\" \"z\"))""#
+        ]],
     );
 }
 
@@ -356,7 +390,7 @@ fn div_cx402_split_string_multibyte_sep() {
 #[test]
 fn div_cx402_window_text_pixel_size_invisible_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "visible1\nvisible2\nvisible3\n")
@@ -366,5 +400,6 @@ fn div_cx402_window_text_pixel_size_invisible_overlay() {
         (car (window-text-pixel-size))
         (cdr (window-text-pixel-size))))
 "##,
+        expect_test::expect![[r#""OK ((12 . 1) 12 1)""#]],
     );
 }

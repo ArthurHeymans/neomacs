@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_signal_process_symbolic_sigkill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((msg nil) (proc (start-process "neo-ip-xxx" nil "sleep" "30")))
   (set-process-query-on-exit-flag proc nil)
   (set-process-sentinel proc (lambda (_p e) (setq msg e)))
@@ -18,6 +18,7 @@ fn divergence_signal_process_symbolic_sigkill() {
   (while (process-live-p proc) (accept-process-output proc 0.1))
   (while (null msg) (accept-process-output proc 0.05))
   (list (process-status proc) (process-exit-status proc) (string-match "killed" msg)))"##,
+        expect_test::expect![[r#""OK (signal 9 0)""#]],
     );
 }
 
@@ -26,12 +27,13 @@ fn divergence_signal_process_symbolic_sigkill() {
 fn divergence_signal_process_symbolic_sigterm() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((proc (start-process "neo-ses-xxx" nil "sleep" "30")))
   (set-process-query-on-exit-flag proc nil)
   (signal-process proc 'SIGTERM)
   (while (process-live-p proc) (accept-process-output proc 0.1))
   (list (process-status proc) (process-exit-status proc)))"##,
+        expect_test::expect![[r#""OK (signal 15)""#]],
     );
 }
 
@@ -40,11 +42,12 @@ fn divergence_signal_process_symbolic_sigterm() {
 fn divergence_process_exit_status_nonzero_collapses() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((proc (start-process "neo-es-xxx" nil "sh" "-c" "exit 42")))
   (set-process-query-on-exit-flag proc nil)
   (while (process-live-p proc) (accept-process-output proc 1))
   (process-exit-status proc))"##,
+        expect_test::expect![[r#""OK 42""#]],
     );
 }
 
@@ -53,11 +56,12 @@ fn divergence_process_exit_status_nonzero_collapses() {
 fn divergence_setenv_not_exported_to_subprocess() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((process-environment (copy-sequence process-environment)))
   (setenv "NEO_TEST_VAR_XYZ" "value42")
   (list (getenv "NEO_TEST_VAR_XYZ")
         (shell-command-to-string "printf %s \"$NEO_TEST_VAR_XYZ\"")))"##,
+        expect_test::expect![[r#""OK (\"value42\" \"value42\")""#]],
     );
 }
 
@@ -65,7 +69,7 @@ fn divergence_setenv_not_exported_to_subprocess() {
 fn divergence_make_process_stderr_buffer_ignored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((obuf (generate-new-buffer " neo-o2-xxx")) (ebuf (generate-new-buffer " neo-e2-xxx")))
   (let ((p (make-process :name "neo-se2-xxx"
             :command '("sh" "-c" "echo OUT; echo ERR 1>&2")
@@ -74,5 +78,8 @@ fn divergence_make_process_stderr_buffer_ignored() {
     (sit-for 0.2)
     (list (with-current-buffer obuf (buffer-string))
           (with-current-buffer ebuf (buffer-string)))))"##,
+        expect_test::expect![[
+            r#""OK (\"OUT\n\nProcess neo-se2-xxx finished\n\" \"ERR\n\nProcess neo-se2-xxx stderr finished\n\")""#
+        ]],
     );
 }

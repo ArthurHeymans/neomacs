@@ -55,7 +55,7 @@ fn oracle_prop_advice_patterns_filter_args_and_return() {
     (fmakunbound 'neovm--ap-add)
     (fmakunbound 'neovm--ap-double-args)
     (fmakunbound 'neovm--ap-square-return)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (8 16 64 256)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +113,10 @@ fn oracle_prop_advice_patterns_multiple_around_nesting() {
     (fmakunbound 'neovm--ap-around-b)
     (fmakunbound 'neovm--ap-around-c)
     (makunbound 'neovm--ap-order)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (1151 (C-enter B-enter A-enter A-exit B-exit C-exit))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +173,10 @@ fn oracle_prop_advice_patterns_selective_removal() {
     (fmakunbound 'neovm--ap-sel-b2)
     (fmakunbound 'neovm--ap-sel-b3)
     (makunbound 'neovm--ap-sel-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((before-3 before-2 before-1) (before-3 before-1) t nil t)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +234,10 @@ fn oracle_prop_advice_patterns_stateful_closures() {
     (fmakunbound 'neovm--ap-st-get-count)
     (fmakunbound 'neovm--ap-st-accum)
     (fmakunbound 'neovm--ap-st-get-results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((9 25 49 4) 4 (9 25 49 4))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -277,7 +286,10 @@ fn oracle_prop_advice_patterns_override_conditional() {
     (fmakunbound 'neovm--ap-ov-fn)
     (fmakunbound 'neovm--ap-ov-replace)
     (fmakunbound 'neovm--ap-ov-conditional)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (12 replaced (12 (negative -3)) 12)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +370,10 @@ fn oracle_prop_advice_patterns_retry_wrapper() {
     (fmakunbound 'neovm--ap-retry-advice)
     (makunbound 'neovm--ap-retry-fail-count)
     (makunbound 'neovm--ap-retry-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((success-val 5) (instant 1) (all-retries-exhausted 10))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -439,5 +454,10 @@ fn oracle_prop_advice_patterns_access_control() {
     (fmakunbound 'neovm--ap-ac-dg)
     (makunbound 'neovm--ap-ac-current-user)
     (makunbound 'neovm--ap-ac-permissions)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((data \"secret-info\") (written test-val) deleted) ((data \"secret-info\") (written edit-val) (access-denied editor delete)) ((data \"secret-info\") (access-denied viewer write) (access-denied viewer delete)))""#
+        ]],
+    );
 }

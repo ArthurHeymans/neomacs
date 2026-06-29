@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_plist_from_text_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass attr ()
     ((key :initarg :key :accessor at-key :initform "")
@@ -61,6 +61,7 @@ fn combo_eieio_plist_from_text_props() {
                 (buffer-string)
                 my-attrs))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function plist-delete)""#]],
     );
 }
 
@@ -68,7 +69,7 @@ fn combo_eieio_plist_from_text_props() {
 fn combo_eieio_alist_from_overlay_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass overlay-attr ()
     ((prop :initarg :prop :accessor oa-prop :initform "")
@@ -116,6 +117,7 @@ fn combo_eieio_alist_from_overlay_props() {
                 (buffer-string)
                 my-oas))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function remove-if-not)""#]],
     );
 }
 
@@ -123,7 +125,7 @@ fn combo_eieio_alist_from_overlay_props() {
 fn combo_eieio_plist_narrow_overlay_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass merged-prop ()
     ((source :initarg :source :accessor mp-source :initform "")
@@ -191,6 +193,7 @@ fn combo_eieio_plist_narrow_overlay_merge() {
                 (buffer-string)
                 my-mps))))
     (kill-buffer buf)"#,
+        expect_test::expect![[r#""ERR (void-variable text-plist)""#]],
     );
 }
 
@@ -198,7 +201,7 @@ fn combo_eieio_plist_narrow_overlay_merge() {
 fn combo_eieio_plist_object_key_eq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass key-obj ()
     ((name :initarg :name :accessor ko-name :initform "")))
@@ -247,6 +250,7 @@ fn combo_eieio_plist_object_key_eq() {
                 (buffer-string)
                 my-keys))))
     (kill-buffer buf))"#,
+        expect_test::expect![[r#""ERR (void-variable results)""#]],
     );
 }
 
@@ -254,7 +258,7 @@ fn combo_eieio_plist_object_key_eq() {
 fn combo_eieio_alist_sort_by_object_slot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass scored-item ()
     ((name :initarg :name :accessor si-name :initform "")
@@ -308,5 +312,6 @@ fn combo_eieio_alist_sort_by_object_slot() {
                 (buffer-string)
                 my-items))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

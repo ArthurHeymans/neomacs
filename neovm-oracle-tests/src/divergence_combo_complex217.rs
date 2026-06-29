@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx217_flyspell_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -20,13 +20,14 @@ fn div_cx217_flyspell_availability() {
             (boundp 'flyspell-highlight-properties)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx217_ispell_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -40,13 +41,14 @@ fn div_cx217_ispell_availability() {
             (boundp 'ispell-dictionary)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx217_ispell_local_dictionary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (boundp 'ispell-local-dictionary)
@@ -55,26 +57,28 @@ fn div_cx217_ispell_local_dictionary() {
           (boundp 'ispell-silently-save-pdict))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx217_spell_fu_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'spell-fu)
           (fboundp 'spell-fu-mode))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx217_flyspell_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'flyspell-mode)
@@ -82,13 +86,14 @@ fn div_cx217_flyspell_predicates() {
           (boundp 'pre-redisplay-function))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx217_flyspell_correct_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'flyspell-correct)
@@ -96,13 +101,14 @@ fn div_cx217_flyspell_correct_availability() {
           (fboundp 'flyspell-correct-previous-word))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx217_which_key_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'which-key)
@@ -110,13 +116,14 @@ fn div_cx217_which_key_availability() {
           (boundp 'which-key-idle-delay))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx217_helm_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'helm)
@@ -124,13 +131,14 @@ fn div_cx217_helm_availability() {
           (boundp 'helm-command-prefix-key))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx217_ivy_counsel_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'ivy)
@@ -139,13 +147,14 @@ fn div_cx217_ivy_counsel_availability() {
           (fboundp 'counsel-M-x))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx217_flyspell_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -173,5 +182,6 @@ fn div_cx217_flyspell_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

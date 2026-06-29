@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_eieio_buffer_local_slot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-bl-slot ()
     ((name :initarg :name :accessor test-bl-name)
@@ -25,6 +25,9 @@ fn divergence_eieio_buffer_local_slot() {
               (= (test-bl-value p) 42)
               (test-bl-value obj)
               (= (test-bl-value obj) 99)))))) "#,
+        expect_test::expect![[
+            r#""OK (#(\"alpha-42\" 0 4 (owner #s(test-bl-slot \"alpha\" 99))) t 99 nil 99 t)""#
+        ]],
     );
 }
 
@@ -32,7 +35,7 @@ fn divergence_eieio_buffer_local_slot() {
 fn divergence_cl_struct_with_textprops_and_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-sp (:constructor test-sp-make))
     label start end)
@@ -64,6 +67,9 @@ fn divergence_cl_struct_with_textprops_and_undo() {
               (test-sp-label sp2) (string= (test-sp-label sp2) "two")
               (overlay-get ov 'spans) (consp (overlay-get ov 'spans))
               (= (length (overlay-get ov 'spans)) 5)))))) "#,
+        expect_test::expect![[
+            r#""LABEL1----LABEL2----LABEL3----LABEL4----LABEL5ERR (args-out-of-range 45 50)""#
+        ]],
     );
 }
 
@@ -71,7 +77,7 @@ fn divergence_cl_struct_with_textprops_and_undo() {
 fn divergence_hash_table_as_text_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE")
   (let ((h (make-hash-table :test 'equal)))
@@ -86,6 +92,9 @@ fn divergence_hash_table_as_text_prop() {
             (eq h h2)
             (buffer-string)
             (string= (buffer-string) "AAA-BBB-CCC-DDD-EEE"))))) "#,
+        expect_test::expect![[
+            r#""AAA-BBB-CCC-DDD-EEEOK (t t t t t t #(\"AAA-BBB-CCC-DDD-EEE\" 0 2 (meta #s(hash-table test equal data (\"a\" 1 \"b\" 2 \"c\" 3)))) t)""#
+        ]],
     );
 }
 
@@ -93,7 +102,7 @@ fn divergence_hash_table_as_text_prop() {
 fn divergence_advice_around_text_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello world foo bar baz")
   (put-text-property 1 5 'word 'w1)
@@ -125,6 +134,7 @@ fn divergence_advice_around_text_edit() {
             (get-text-property 13 'word) (eq (get-text-property 13 'word) 'w3)
             (get-text-property 17 'word) (eq (get-text-property 17 'word) 'w4)
             (get-text-property 21 'word) (eq (get-text-property 21 'word) 'w5))))) "#,
+        expect_test::expect![[r#""X X X X XERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -132,7 +142,7 @@ fn divergence_advice_around_text_edit() {
 fn divergence_buffer_local_closure_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq-local 'my-test-counter 0)
   (setq-local 'my-test-trace nil)
@@ -144,6 +154,9 @@ fn divergence_buffer_local_closure_chain() {
     (funcall step1) (funcall step2) (funcall step3)
     (list my-test-counter (= my-test-counter 14)
           my-test-trace (equal my-test-trace '(14 6 2))))) "#,
+        expect_test::expect![[
+            r#""ERR (error \"Attempting to set a non-symbol: 'my-test-counter\")""#
+        ]],
     );
 }
 
@@ -151,7 +164,7 @@ fn divergence_buffer_local_closure_chain() {
 fn divergence_eieio_polymorphic_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-poly-base ()
     ((tag :initarg :tag :reader test-poly-tag)))
@@ -171,6 +184,7 @@ fn divergence_eieio_polymorphic_dispatch() {
           (test-poly-process ob) (equal (test-poly-process ob) '(b "hello"))
           (test-poly-tag oa) (eq (test-poly-tag oa) 'x)
           (test-poly-tag ob) (eq (test-poly-tag ob) 'y)))) "#,
+        expect_test::expect![[r#""OK ((a 42) t (b \"hello\") t x t y t)""#]],
     );
 }
 
@@ -178,7 +192,7 @@ fn divergence_eieio_polymorphic_dispatch() {
 fn divergence_cl_loop_with_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "one two three four five six seven eight nine ten")
   (let ((words (split-string (buffer-string))))
@@ -198,6 +212,7 @@ fn divergence_cl_loop_with_buffer_ops() {
             (cl-every #'numberp nums)
             (= (car nums) 1)
             (= (car (last nums)) 10)))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -205,7 +220,7 @@ fn divergence_cl_loop_with_buffer_ops() {
 fn divergence_nested_undo_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA BBBB CCCC DDDD EEEE")
   (put-text-property 1 4 'g 1)
@@ -241,6 +256,7 @@ fn divergence_nested_undo_groups() {
             (get-text-property 11 'g) (= (get-text-property 11 'g) 3)
             (get-text-property 16 'g) (= (get-text-property 16 'g) 4)
             (get-text-property 21 'g) (= (get-text-property 21 'g) 5))))) "#,
+        expect_test::expect![[r#""1111 2222 3333 4444 5555ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -248,7 +264,7 @@ fn divergence_nested_undo_groups() {
 fn divergence_hash_table_eieio_interop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-hash-obj ()
     ((key :initarg :key :accessor test-hash-key)
@@ -270,6 +286,7 @@ fn divergence_hash_table_eieio_interop() {
             (= (hash-table-count ht) 10)
             (= (test-hash-data (gethash 5 ht)) 25)
             (= (test-hash-data (gethash 10 ht)) 100))))) "#,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -277,7 +294,7 @@ fn divergence_hash_table_eieio_interop() {
 fn divergence_multi_buffer_undo_with_shared_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (generate-new-buffer "test-mb1"))
         (buf2 (generate-new-buffer "test-mb2")))
@@ -317,5 +334,6 @@ fn divergence_multi_buffer_undo_with_shared_markers() {
               (overlay-get ov 'buf) (eq (overlay-get ov 'buf) 'first))))
     (kill-buffer buf1)
     (kill-buffer buf2))) "#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

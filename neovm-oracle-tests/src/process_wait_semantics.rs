@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn compat_accept_process_output_drains_exited_process_io_matches_gnu_emacs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((events nil)
       (p nil))
@@ -32,5 +32,6 @@ fn compat_accept_process_output_drains_exited_process_io_matches_gnu_emacs() {
     (when p
       (ignore-errors (delete-process p)))))
 "#,
+        expect_test::expect![[r#""OK (exit ((filter \"payload\") (sentinel \"finished\n\")))""#]],
     );
 }

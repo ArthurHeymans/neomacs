@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_scan_sexps_through_narrowed_code_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ssp\")))\n\
          (with-current-buffer buf\n\
@@ -23,6 +23,7 @@ fn deficiency_scan_sexps_through_narrowed_code_with_props() {
          (buffer-string)\n\
          (get-text-property (point-min) 'face)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -30,7 +31,7 @@ fn deficiency_scan_sexps_through_narrowed_code_with_props() {
 fn deficiency_parse_partial_sexp_in_narrowed_let_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"pps\")))\n\
          (with-current-buffer buf\n\
@@ -45,6 +46,7 @@ fn deficiency_parse_partial_sexp_in_narrowed_let_binding() {
          (nth 3 p1) (nth 3 p2) (nth 3 p3)\n\
          (buffer-string)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -52,7 +54,7 @@ fn deficiency_parse_partial_sexp_in_narrowed_let_binding() {
 fn deficiency_modify_syntax_entry_then_scan_in_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mse\")))\n\
          (with-current-buffer buf\n\
@@ -67,6 +69,7 @@ fn deficiency_modify_syntax_entry_then_scan_in_narrow() {
          (list w1 w2 (buffer-string)\n\
          (get-text-property 1 'word))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable \\\"w\\\")""#]],
     );
 }
 
@@ -74,7 +77,7 @@ fn deficiency_modify_syntax_entry_then_scan_in_narrow() {
 fn deficiency_forward_comment_with_syntax_change_and_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"fcs\")))\n\
          (with-current-buffer buf\n\
@@ -93,6 +96,7 @@ fn deficiency_forward_comment_with_syntax_change_and_props() {
          (get-text-property 22 'role)\n\
          (buffer-string)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable \\\")""#]],
     );
 }
 
@@ -100,7 +104,7 @@ fn deficiency_forward_comment_with_syntax_change_and_props() {
 fn deficiency_scan_lists_nested_parens_with_overlay_arrows() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"sln\")))\n\
          (with-current-buffer buf\n\
@@ -120,6 +124,7 @@ fn deficiency_scan_lists_nested_parens_with_overlay_arrows() {
          (get-text-property 2 'group)\n\
          (get-text-property 10 'group)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -127,7 +132,7 @@ fn deficiency_scan_lists_nested_parens_with_overlay_arrows() {
 fn deficiency_parse_partial_sexp_with_comment_syntax_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ppc\")))\n\
          (with-current-buffer buf\n\
@@ -142,6 +147,7 @@ fn deficiency_parse_partial_sexp_with_comment_syntax_change() {
          (buffer-string)\n\
          (get-text-property 1 'form)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable \\\"<\\\")""#]],
     );
 }
 
@@ -149,7 +155,7 @@ fn deficiency_parse_partial_sexp_with_comment_syntax_change() {
 fn deficiency_syntax_table_copy_then_parse_in_narrowed_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"stc\")))\n\
          (with-current-buffer buf\n\
@@ -170,6 +176,7 @@ fn deficiency_syntax_table_copy_then_parse_in_narrowed_region() {
          (buffer-string)\n\
          (get-text-property (point-min) 'tok))))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable \\\"_\\\")""#]],
     );
 }
 
@@ -177,7 +184,7 @@ fn deficiency_syntax_table_copy_then_parse_in_narrowed_region() {
 fn deficiency_forward_word_boundary_with_prop_changes_mid_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"fwb\")))\n\
          (with-current-buffer buf\n\
@@ -197,6 +204,7 @@ fn deficiency_forward_word_boundary_with_prop_changes_mid_buffer() {
          (forward-word 1))\n\
          (nreverse positions)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -204,7 +212,7 @@ fn deficiency_forward_word_boundary_with_prop_changes_mid_buffer() {
 fn deficiency_kill_word_yank_in_narrowed_with_syntax_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kyn\")))\n\
          (with-current-buffer buf\n\
@@ -222,6 +230,7 @@ fn deficiency_kill_word_yank_in_narrowed_with_syntax_change() {
          (cl-loop for i from (point-min) to (point-max)\n\
          collect (cons i (get-text-property i 'pos))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -229,7 +238,7 @@ fn deficiency_kill_word_yank_in_narrowed_with_syntax_change() {
 fn deficiency_backward_up_list_through_overlay_and_prop_zones() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"bul\")))\n\
          (with-current-buffer buf\n\
@@ -251,5 +260,8 @@ fn deficiency_backward_up_list_through_overlay_and_prop_zones() {
          (overlay-get ov1 'level)\n\
          (overlay-get ov2 'level))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[
+            r#""ERR (scan-error \"Containing expression ends prematurely\" 1 1)""#
+        ]],
     );
 }

@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_g5_advice_flavor_ordering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (defun probe-adv-a (x) (push 'orig log) x)
@@ -29,13 +29,14 @@ fn div_g5_advice_flavor_ordering() {
       (advice-remove 'probe-adv-a around)
       (fmakunbound 'probe-adv-a))))
 "##,
+        expect_test::expect![[r#""OK (5 (around-in before orig after around-out))""#]],
     );
 }
 
 #[test]
 fn div_g5_advice_override_and_filter_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defun probe-adv-b (x) x)
@@ -49,13 +50,14 @@ fn div_g5_advice_override_and_filter_args() {
         (advice-remove 'probe-adv-b fa)
         (list r1 r2 (probe-adv-b 5))))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (closure (t) (x) x) 2)""#]],
     );
 }
 
 #[test]
 fn div_g5_pcase_let_and_macros() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (pcase-let ((`(,a ,b) '(1 2))) (+ a b))
       (cl-macrolet ((probe-double (x) `(* 2 ,x)))
@@ -63,13 +65,14 @@ fn div_g5_pcase_let_and_macros() {
       (cl-symbol-macrolet ((probe-sym 42))
         probe-sym))
 "##,
+        expect_test::expect![[r#""OK (3 10 42)""#]],
     );
 }
 
 #[test]
 fn div_g5_format_seconds_and_iso8601() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format-seconds "%mm %ss" 125)
       (format-seconds "%h" 7200)
@@ -77,5 +80,6 @@ fn div_g5_format_seconds_and_iso8601() {
       (decode-iso8601-string "2025-06-15T12:30:45")
       (decode-iso8601-string "2025-06-15"))
 "##,
+        expect_test::expect![[r#""ERR (void-function decode-iso8601-string)""#]],
     );
 }

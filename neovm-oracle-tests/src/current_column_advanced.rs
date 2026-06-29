@@ -42,7 +42,10 @@ fn oracle_prop_current_column_various_positions() {
                       (end-of-line)
                       (setq results (cons (current-column) results))
                       (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 1 2 3 4 5 6 7 8 9) 10 (0 6) 0 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +109,10 @@ fn oracle_prop_current_column_tabs_custom_width() {
                       (forward-char 1)
                       (setq results (cons (current-column) results)))
                     (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 8 16 16 7 8 4 4 3 4)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +153,10 @@ fn oracle_prop_move_to_column_basic() {
                       (let ((r (move-to-column 16)))
                         (setq results (cons (list r (current-column) (point)) results)))
                       (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((5 5 6) (12 12 13) (0 0 1) (5 5 23) (16 16 26))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +209,12 @@ fn oracle_prop_move_to_column_force_detailed() {
                                           (buffer-string))
                                     results))))
                     (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((past-eol 8 8 5 \"abc\t\ndef\n\") (split-tab 3 3 4 \"   \thello\n\") (exact-tab 8 8 2 \"\thello\n\") (empty-line 5 5 6 \"     \n\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +259,12 @@ fn oracle_prop_move_to_column_past_eol_no_force() {
                               (cons (list r (current-column) (point))
                                     results)))
                       (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((2 2 3 \"ab\ncd\n\nefghijkl\n\") (1 1 5) (0 0 7) (4 4 12))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +326,12 @@ fn oracle_prop_column_alignment_complex() {
                         ("Di" "22" "Chicago" "Intern"))))
             (funcall 'neovm--test-format-table data))
         (fmakunbound 'neovm--test-format-table)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Name\t     Age  City\t   Role\nAlice\t     30\t  NYC\t   Engineer\nBob\t     25\t  SF\t   Designer\nCharlemagne  45\t  LA\t   Director\nDi\t     22\t  Chicago  Intern\n\" (0 13 18 27 37) ((0 13 18 27) (0 13 18 27) (0 13 18 27) (0 13 18 27) (0 13 18 27)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -345,5 +369,8 @@ fn oracle_prop_current_column_control_chars() {
                       (move-to-column 3)
                       (setq results (cons (list 'mtc-3 (current-column) (point)) results))
                       (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 2 4 5 6 (mtc-3 4 3))""#]],
+    );
 }

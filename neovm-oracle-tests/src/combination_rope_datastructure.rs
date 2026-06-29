@@ -101,7 +101,12 @@ fn oracle_prop_rope_construction_and_length() {
     (fmakunbound 'neovm--rope-concat)
     (fmakunbound 'neovm--rope-to-string)
     (fmakunbound 'neovm--rope-depth)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 6 12 0 5 \"Hello\" \"Hello \" \"Hello World!\" \"\" \"Hello\" 1 2 3 t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +178,10 @@ fn oracle_prop_rope_index_char_at() {
     (fmakunbound 'neovm--rope-length)
     (fmakunbound 'neovm--rope-concat)
     (fmakunbound 'neovm--rope-char-at)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (97 100 101 104 105 108 nil nil \"abcdefghijkl\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +281,12 @@ fn oracle_prop_rope_split() {
     (fmakunbound 'neovm--rope-concat)
     (fmakunbound 'neovm--rope-to-string)
     (fmakunbound 'neovm--rope-split)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\" \"Hello World\" \"Hel\" \"lo World\" \"Hello\" \" World\" \"Hello Wo\" \"rld\" \"Hello World\" \"\" \"Hello World\" \"\" t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -375,7 +388,12 @@ fn oracle_prop_rope_insert_delete() {
     (fmakunbound 'neovm--rope-split)
     (fmakunbound 'neovm--rope-insert)
     (fmakunbound 'neovm--rope-delete)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello World\" \"Hello Beautiful World\" \"Hello Beautiful\" \">>> Hello World\" \"Hello World <<<\" \"Hello Elisp\" 21 15 \"Hello World\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -537,7 +555,12 @@ fn oracle_prop_rope_editor_buffer() {
     (fmakunbound 'neovm--re-buf-undo)
     (fmakunbound 'neovm--re-buf-text)
     (fmakunbound 'neovm--re-buf-cursor)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello\" 5 \"Hello World\" 11 5 \"Hello Beautiful World\" 15 \"Hello Beauti World\" 12 \"Hello Beautiful World\" 15 \"Hello World\" 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -639,5 +662,8 @@ fn oracle_prop_rope_balance() {
     (fmakunbound 'neovm--rb-collect-leaves)
     (fmakunbound 'neovm--rb-build-balanced)
     (fmakunbound 'neovm--rb-rebalance)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"abcdefgh\" 8 8 \"abcdefgh\" 4 8 t t t)""#]],
+    );
 }

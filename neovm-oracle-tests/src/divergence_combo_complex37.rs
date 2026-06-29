@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx37_superword_mode_forward_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -21,13 +21,14 @@ fn div_cx37_superword_mode_forward_word() {
         (list p1 (point))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (15 25)""#]],
     );
 }
 
 #[test]
 fn div_cx37_superword_subword_toggle_word_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -43,13 +44,14 @@ fn div_cx37_superword_subword_toggle_word_boundaries() {
             (list default-pos sub-pos super-pos)))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (3 3 18)""#]],
     );
 }
 
 #[test]
 fn div_cx37_auto_fill_mode_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -59,13 +61,14 @@ fn div_cx37_auto_fill_mode_basic() {
         (buffer-string)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"the quick brown fox jumps over\"""#]],
     );
 }
 
 #[test]
 fn div_cx37_adaptive_fill_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -75,13 +78,16 @@ fn div_cx37_adaptive_fill_prefix() {
         (buffer-string)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK \"// comment line one\n// comment line two\nmore text here\n\"""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx37_newcomment_custom_comment_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((comment-start "// ") (comment-end ""))
@@ -91,13 +97,14 @@ fn div_cx37_newcomment_custom_comment_syntax() {
       (uncomment-region 1 (point-max))
       (list commented (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx37_outline_minor_mode_headings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -110,13 +117,14 @@ fn div_cx37_outline_minor_mode_headings() {
               (outline-level))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (errored . args-out-of-range)""#]],
     );
 }
 
 #[test]
 fn div_cx37_which_function_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -129,13 +137,14 @@ fn div_cx37_which_function_mode() {
       (which-function-mode 0))
   (error (list :errored)))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx37_electric_pair_mode_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -145,13 +154,14 @@ fn div_cx37_electric_pair_mode_basic() {
       (buffer-string))
   (error (list :errored)))
 "##,
+        expect_test::expect![[r#""OK \"\"""#]],
     );
 }
 
 #[test]
 fn div_cx37_abbrev_mode_case_preserving_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((tbl (make-abbrev-table)))
   (define-abbrev tbl "neokw" "keyword-expanded" nil :case-fixed nil)
@@ -164,13 +174,16 @@ fn div_cx37_abbrev_mode_case_preserving_expansion() {
               (buffer-substring 1 (1- (point-max)))))
           '("neokw" "Neokw" "NEOKW")))
 "##,
+        expect_test::expect![[
+            r#""OK (\"keyword-expanded\" \"Keyword-expanded\" \"Keyword-Expanded\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx37_fill_paragraph_with_fill_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((fill-column 20) (fill-prefix "> "))
@@ -178,13 +191,16 @@ fn div_cx37_fill_paragraph_with_fill_prefix() {
     (fill-paragraph)
     (buffer-string)))
 "##,
+        expect_test::expect![[
+            r#""OK \"> short text\n> more text that is longer than the column width\n\"""#
+        ]],
     );
 }
 
 #[test]
 fn fn_div_cx37_subword_backward_movement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -195,13 +211,14 @@ fn fn_div_cx37_subword_backward_movement() {
       (point))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK 10""#]],
     );
 }
 
 #[test]
 fn div_cx37_comment_inline_and_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "code line\n")
@@ -209,13 +226,14 @@ fn div_cx37_comment_inline_and_block() {
     (comment-region 1 10)
     (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK \"/* code line */\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx37_outline_hide_subtree_show() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -228,13 +246,14 @@ fn div_cx37_outline_hide_subtree_show() {
         (list visible-count (count-lines (point-min) (point-max)))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (8 8)""#]],
     );
 }
 
 #[test]
 fn div_cx37_coding_system_for_write_inhibit_eol_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx37-eol-")))
   (let ((coding-system-for-write 'utf-8-mac))
@@ -244,51 +263,55 @@ fn div_cx37_coding_system_for_write_inhibit_eol_file() {
            (list (buffer-string) (string-bytes (buffer-string))))
     (ignore-errors (delete-file f))))
 "##,
+        expect_test::expect![[r#""OK (\"line1\\rline2\\r\" 12)""#]],
     );
 }
 
 #[test]
 fn div_cx37_process_exit_code_consistency_call_vs_make() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((call-code (call-process "sh" nil nil nil "-c" "exit 3")))
   (let ((p (make-process :name "neo-cx37-ec" :command '("sh" "-c" "exit 3"))))
     (accept-process-output p 2)
     (list call-code (process-exit-status p))))
 "##,
+        expect_test::expect![[r#""OK (3 3)""#]],
     );
 }
 
 #[test]
 fn div_cx37_char_syntax_in_fundamental_vs_emacs_lisp_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer (char-syntax ?_))
       (with-temp-buffer (emacs-lisp-mode) (char-syntax ?_))
       (with-temp-buffer (c-mode) (char-syntax ?_)))
 "##,
+        expect_test::expect![[r#""OK (95 95 95)""#]],
     );
 }
 
 #[test]
 fn div_cx37_display_property_space_align_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
   (put-text-property 2 4 'display '(space :align-to 10))
   (current-column))
 "##,
+        expect_test::expect![[r#""OK 13""#]],
     );
 }
 
 #[test]
 fn div_cx37_overlay_modification_hooks_fire_on_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (fired)
   (with-temp-buffer
@@ -300,25 +323,27 @@ fn div_cx37_overlay_modification_hooks_fire_on_delete() {
       (delete-region 3 4)))
   fired)
 "##,
+        expect_test::expect![[r#""OK (:fired :fired)""#]],
     );
 }
 
 #[test]
 fn div_cx37_cl_loop_with_destructuring_and_collect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-loop for (k . v) in '((a . 1) (b . 2) (c . 3))
          for i from 0
          collect (list i k v))
 "##,
+        expect_test::expect![[r#""OK ((0 a 1) (1 b 2) (2 c 3))""#]],
     );
 }
 
 #[test]
 fn div_cx37_set_buffer_multibyte_then_insert_multibyte_then_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "ascii")
@@ -327,5 +352,6 @@ fn div_cx37_set_buffer_multibyte_then_insert_multibyte_then_toggle() {
   (set-buffer-multibyte t)
   (list (length (buffer-string)) (point-max) (append (buffer-string) nil)))
 "##,
+        expect_test::expect![[r#""OK (7 8 (97 115 99 105 105 4194248 4194249))""#]],
     );
 }

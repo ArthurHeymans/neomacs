@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx131_bookmark_set_get_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -23,13 +23,14 @@ fn div_cx131_bookmark_set_get_position() {
               (assoc "neo-cx131-bm" bookmark-alist))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx131_bookmark_record_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -42,13 +43,14 @@ fn div_cx131_bookmark_record_format() {
               (consp props))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx131_recentf_add_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -59,13 +61,14 @@ fn div_cx131_recentf_add_file() {
               (recentf-include-p path))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK ((\"/tmp/neo-cx131-recentf-test.txt\") t)""#]],
     );
 }
 
 #[test]
 fn div_cx131_savehist_save_variable_to_file_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -76,13 +79,14 @@ fn div_cx131_savehist_save_variable_to_file_format() {
             (boundp 'savehist-additional-variables)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx131_saveplace_save_location_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -92,13 +96,14 @@ fn div_cx131_saveplace_save_location_format() {
             (boundp 'save-place-version-control)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil t t)""#]],
     );
 }
 
 #[test]
 fn div_cx131_desktop_save_buffer_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -112,13 +117,14 @@ fn div_cx131_desktop_save_buffer_format() {
                 (boundp 'desktop-minor-mode-table))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx131_bookmark_default_file_path() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (stringp bookmark-default-file)
@@ -126,13 +132,14 @@ fn div_cx131_bookmark_default_file_path() {
           (boundp 'bookmark-save-flag))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx131_history_variables_savehist_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (boundp 'savehist-minibuffer-history-variables)
@@ -144,13 +151,14 @@ fn div_cx131_history_variables_savehist_default() {
           (boundp 'regexp-search-ring))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx131_saveplace_visited_buffers_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -166,13 +174,14 @@ fn div_cx131_saveplace_visited_buffers_query() {
                 (boundp 'save-place-loaded)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx131_bookmark_propagate_after_kill_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -189,13 +198,14 @@ fn div_cx131_bookmark_propagate_after_kill_buffer() {
                   (bookmark-get-bookmark "neo-cx131-prop"))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx131_bookmark_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -222,13 +232,14 @@ fn div_cx131_bookmark_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx131_recentf_cleanup_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -240,5 +251,6 @@ fn div_cx131_recentf_cleanup_predicate() {
               (boundp 'recentf-max-saved-items))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }

@@ -13,7 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_utf8_char_table_range_set_get_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((ct (make-char-table 'example 0)))
   (set-char-table-range ct #x3042 'hira)
@@ -23,13 +23,14 @@ fn div_utf8_char_table_range_set_get_multibyte() {
         (char-table-range ct #x100)
         (char-table-range ct ?a)))
 "#,
+        expect_test::expect![[r#""OK (hira cjk 0 0)""#]],
     );
 }
 
 #[test]
 fn div_utf8_char_table_range_full_table_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((ct (make-char-table 'example :default)))
   (set-char-table-range ct t 'all)
@@ -38,6 +39,7 @@ fn div_utf8_char_table_range_full_table_default() {
         (char-table-range ct #x1f600)
         (char-table-range ct #x3042)))
 "#,
+        expect_test::expect![[r#""OK (all emoji all)""#]],
     );
 }
 
@@ -46,13 +48,14 @@ fn div_utf8_char_table_range_full_table_default() {
 #[test]
 fn div_utf8_aref_standard_syntax_table_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (aref (standard-syntax-table) ?é)
       (aref (standard-syntax-table) ?\x3042)
       (aref (standard-syntax-table) ?a)
       (aref (standard-syntax-table) ?1))
 "#,
+        expect_test::expect![[r#""OK ((2) (2) (2) (2))""#]],
     );
 }
 
@@ -61,7 +64,7 @@ fn div_utf8_aref_standard_syntax_table_multibyte() {
 #[test]
 fn div_utf8_map_char_table_multibyte_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((ct (make-char-table 'example nil))
       (acc nil))
@@ -73,6 +76,7 @@ fn div_utf8_map_char_table_multibyte_range() {
    ct)
   (sort acc (lambda (a b) (< (car a) (car b)))))
 "#,
+        expect_test::expect![[r#""OK ((12354 hira) (19968 19970 cjk))""#]],
     );
 }
 
@@ -81,7 +85,7 @@ fn div_utf8_map_char_table_multibyte_range() {
 #[test]
 fn div_utf8_category_table_membership() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((ct (category-table)))
   (list (char-category ?a)
@@ -90,6 +94,7 @@ fn div_utf8_category_table_membership() {
         (char-category ?1)
         (char-category ?\s)))
 "#,
+        expect_test::expect![[r#""ERR (void-function char-category)""#]],
     );
 }
 
@@ -98,7 +103,7 @@ fn div_utf8_category_table_membership() {
 #[test]
 fn div_utf8_file_append_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((tmp (make-temp-file "app-")))
   (unwind-protect
@@ -112,5 +117,6 @@ fn div_utf8_file_append_multibyte() {
           (list (buffer-string) (length (buffer-string)))))
     (delete-file tmp)))
 "#,
+        expect_test::expect![[r#""OK (\"café世界\" 6)""#]],
     );
 }

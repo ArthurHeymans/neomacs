@@ -25,7 +25,12 @@ fn oracle_prop_format_spec_missing_and_quoted_percent_semantics() {
    (format-spec "missing=%z pct=%%" '((?a . "A")) 'keep-percent)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"known=A pct=%\" (error \"Invalid format character: ‘%z’\") \"missing=%z pct=%\" \"missing= pct=%\" \"missing=%z pct=%%\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -47,7 +52,12 @@ fn oracle_prop_format_spec_flags_width_precision_and_case() {
    (format-spec "[%<06n]" '((?n . "abcdef")))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"[     abc]\" \"[abc     ]\" \"[00000042]\" \"[ABC]\" \"[abc]\" \"[abcd]\" \"[abcd]\" \"[cdef]\" \"[abcdef]\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -70,7 +80,12 @@ fn oracle_prop_format_spec_split_and_lazy_functions() {
      (format-spec "x%ay%b" '((?a . "A") (?b . "B")) nil t))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"pre-A-mid-B-post\" 2 \"only-A\" 3 (\"x\" \"A\" \"y\" \"B\"))""#
+        ]],
+    );
 }
 
 #[test]
@@ -93,5 +108,10 @@ fn oracle_prop_format_spec_make_and_invalid_inputs() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"A:B\" (error \"Invalid list of pairs\") (error \"Invalid format string\") (error \"Invalid format string\"))""#
+        ]],
+    );
 }

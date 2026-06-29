@@ -73,7 +73,12 @@ fn oracle_prop_absint_adv_interval_domain() {
     ;; Idempotence
     (funcall 'neovm--iv-join '(2 . 7) '(2 . 7))
     (funcall 'neovm--iv-meet '(2 . 7) '(2 . 7))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 . 5) (1 . 5) (1 . 8) (1 . 20) (neginf . posinf) (3 . 5) bot (5 . 10) bot (2 . 7) (2 . 7))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +149,12 @@ fn oracle_prop_absint_adv_interval_arithmetic() {
     (funcall 'neovm--iv-sub '(5 . 10) '(1 . 3))       ;; [2,9]
     (funcall 'neovm--iv-sub '(0 . 0) '(-5 . 5))       ;; [-5,5]
     (funcall 'neovm--iv-sub '(1 . 1) '(1 . 1))))"#; // [0,0]
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 . 8) (-5 . 5) (neginf . posinf) bot (-5 . -1) (-3 . 3) (0 . posinf) (2 . 9) (-5 . 5) (0 . 0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +233,12 @@ fn oracle_prop_absint_adv_congruence_domain() {
     (funcall 'neovm--cong-add '(2 . 0) '(2 . 1))   ;; 2Z+1 (even + odd = odd)
     (funcall 'neovm--cong-add '(0 . 3) '(0 . 5))   ;; 0Z+8 ({8})
     (funcall 'neovm--cong-add 'bot '(2 . 0))))"#; // bot
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 . 0) (4 . 1) (3 . 0) (2 . 0) (6 . 0) bot (0 . 5) bot (2 . 0) (2 . 1) (0 . 8) bot)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +293,12 @@ fn oracle_prop_absint_adv_interval_widening() {
     (funcall 'neovm--iv-narrow '(0 . posinf) '(-5 . 50))       ;; [0, 50]
     (funcall 'neovm--iv-narrow '(0 . 5) '(1 . 3))              ;; [0, 5]
     (funcall 'neovm--iv-narrow 'bot '(1 . 5))))"#; // bot
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 . posinf) (neginf . 5) (neginf . posinf) (0 . 5) (0 . 5) (0 . 5) (0 . 100) (-10 . 5) (0 . 50) (0 . 5) bot)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -353,7 +373,12 @@ fn oracle_prop_absint_adv_fixpoint_widening() {
       '(5 . 5)
       (lambda (x) (funcall 'neovm--fp-iadd x '(0 . 2)))
       20)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((widened (0 . posinf) iterations 2 converged t trace ((iter 1 val (0 . posinf)) (iter 2 val (0 . posinf)))) (widened (neginf . posinf) iterations 2 converged t trace ((iter 1 val (neginf . posinf)) (iter 2 val (neginf . posinf)))) (widened (5 . posinf) iterations 2 converged t trace ((iter 1 val (5 . posinf)) (iter 2 val (5 . posinf)))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -446,7 +471,12 @@ fn oracle_prop_absint_adv_reduced_product() {
     (funcall 'neovm--rp-reduce '(non-neg . (5 . 10)))
     ;; bot + anything -> bot
     (funcall 'neovm--rp-reduce '(bot . (1 . 5)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((pos 1 . posinf) (neg -10 . -1) (zero 0 . 0) (bot . bot) (pos 1 . 10) (neg -10 . -1) (zero 0 . 0) (non-neg 0 . 10) (pos 5 . 10) (bot . bot))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -529,7 +559,12 @@ fn oracle_prop_absint_adv_backward_analysis() {
            (y-pre (funcall 'neovm--back-assign-add z-post 3))
            (x-pre (funcall 'neovm--back-assign-mul y-pre 2)))
       (list 'chain z-post y-pre x-pre))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5 . 15) (neginf . -10) (2 . 4) (-5 . 5) (neginf . posinf) bot (1 . 10) (-10 . 0) bot (chain (0 . 10) (-3 . 7) (-1 . 3)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -589,7 +624,7 @@ fn oracle_prop_absint_adv_trace_partitioning() {
               (list 'more-precise
                     (and (funcall 'neovm--tp-le (car y-unpart) (car y-part))
                          (funcall 'neovm--tp-le (cdr y-part) (cdr y-unpart))))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -665,7 +700,12 @@ fn oracle_prop_absint_adv_alpha_gamma_sign() {
     (funcall 'neovm--check-gc 'neg '(-10 -1))
     (funcall 'neovm--check-gc 'non-neg '(0 1 42))
     (funcall 'neovm--check-gc 'top '(-5 0 5))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (pos neg zero non-neg non-pos non-zero top bot (1 2 3 \\...) (-3 -2 -1 \\...) (0) empty (\\... -1 0 1 \\...) (pos pos) (neg neg) (non-neg non-neg) (top top))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -719,7 +759,12 @@ fn oracle_prop_absint_adv_multi_var_program() {
       (list 'z-false z-false)
       (list 'w-false w-false)
       (list 'w-joined w-joined))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((x (0 . 10)) (y (1 . 1)) (z (1 . 11)) (z-true (6 . 11)) (w-true (7 . 12)) (z-false (1 . 5)) (w-false (0 . 4)) (w-joined (0 . 12)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -780,5 +825,10 @@ fn oracle_prop_absint_adv_interval_multiplication() {
     ;; Infinite intervals
     (funcall 'neovm--iv-mul '(1 . posinf) '(2 . 3))
     (funcall 'neovm--iv-mul '(neginf . -1) '(1 . 2))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((8 . 15) (-8 . 12) (2 . 15) (-6 . 6) (0 . 0) (5 . 10) bot (2 . posinf) (neginf . -1))""#
+        ]],
+    );
 }

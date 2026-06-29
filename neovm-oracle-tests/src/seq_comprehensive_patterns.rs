@@ -45,7 +45,12 @@ fn oracle_prop_seq_map_filter_reduce_all_types() {
                             (cons (cons c 1) acc))))
                       "abracadabra" nil)))
         (sort result (lambda (a b) (< (car a) (car b)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((2 3 4 5 6) (11 21 31) (72 69 76 76 79) (2 4 6 8) (25 30 40) (101 108 108 111 111 114 108 100) 15 24 294 ((97 . 5) (98 . 2) (99 . 1) (100 . 1) (114 . 2)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +91,10 @@ fn oracle_prop_seq_find_some_every() {
       ;; seq-every-p on string
       (seq-every-p (lambda (c) (and (>= c ?a) (<= c ?z))) "hello")
       (seq-every-p (lambda (c) (and (>= c ?a) (<= c ?z))) "Hello")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (4 nil not-found 200 108 60 nil t nil t nil t t t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +125,10 @@ fn oracle_prop_seq_count_length_elt() {
       (seq-elt [10 20 30 40] 3)
       (seq-elt "abcde" 0)
       (seq-elt "abcde" 4)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 3 3 3 0 4 3 5 0 a c e 20 40 97 101)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +163,12 @@ fn oracle_prop_seq_uniq_remove() {
       (seq-remove #'numberp '(1 2 3))
       ;; seq-remove on string
       (seq-remove (lambda (c) (= c ?l)) "hello world")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5) (a b c d) (\"hello\" \"world\" \"foo\") (\"Hello\" \"world\") (1 2 3 4) nil (1 3 5) (1 2 3) (1 3 5 7) nil (104 101 111 32 119 111 114 100))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +199,12 @@ fn oracle_prop_seq_sort_comprehensive() {
       (seq-sort #'< '(1 2 3 4 5))
       ;; seq-sort reversed
       (seq-sort #'< '(5 4 3 2 1))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8) (8 7 6 5 4 3 2 1) [10 30 40 50 80] (\"apple\" \"banana\" \"cherry\" \"date\") (\"a\" \"hi\" \"hey\" \"hello\" \"world\") nil (42) (1 2 3 4 5) (1 2 3 4 5))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +252,10 @@ fn oracle_prop_seq_data_pipeline() {
                                        records)))
           ;; Pipeline 7: total salary
           (seq-reduce #'+ (seq-map salary records) 0))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -305,5 +329,8 @@ fn oracle_prop_seq_set_operations() {
     (fmakunbound 'neovm--seq-symmetric-difference)
     (fmakunbound 'neovm--seq-subset-p)
     (fmakunbound 'neovm--seq-powerset)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }

@@ -10,11 +10,12 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn accept_output_just_exited() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((proc (start-process "neo-aje-xxx" nil "true")))
   (set-process-query-on-exit-flag proc nil)
   (while (process-live-p proc) (accept-process-output proc 1))
   (list (accept-process-output proc 0.1) (process-status proc)))"##,
+        expect_test::expect![[r#""OK (nil exit)""#]],
     );
 }
 
@@ -22,7 +23,7 @@ fn accept_output_just_exited() {
 fn datagram_udp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((srv nil) (recv nil))
   (setq srv (make-network-process :name "neo-udp-xxx" :type 'datagram :server t
              :host 'local :service t :family 'ipv4 :noquery t
@@ -34,6 +35,7 @@ fn datagram_udp() {
       (let ((k 0)) (while (and (null recv) (< k 100)) (accept-process-output nil 0.02) (setq k (1+ k))))
       (delete-process cli) (delete-process srv)
       recv)))"##,
+        expect_test::expect![[r#""OK \"ping-udp\"""#]],
     );
 }
 
@@ -41,13 +43,14 @@ fn datagram_udp() {
 fn proc_buffer_reassign() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((b1 (generate-new-buffer " neo-pb1-xxx")) (b2 (generate-new-buffer " neo-pb2-xxx")))
   (let ((proc (start-process "neo-pbr-xxx" b1 "sleep" "5")))
     (set-process-query-on-exit-flag proc nil)
     (set-process-buffer proc b2)
     (prog1 (list (eq (process-buffer proc) b2))
       (delete-process proc) (kill-buffer b1) (kill-buffer b2))))"##,
+        expect_test::expect![[r#""OK (t)""#]],
     );
 }
 
@@ -55,12 +58,13 @@ fn proc_buffer_reassign() {
 fn proc_filter_sentinel_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((proc (make-process :name "neo-fsg-xxx" :command '("cat") :connection-type 'pipe :noquery t)))
   (set-process-filter proc 'ignore)
   (set-process-sentinel proc 'ignore)
   (prog1 (list (eq (process-filter proc) 'ignore) (eq (process-sentinel proc) 'ignore))
     (delete-process proc)))"##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -68,13 +72,14 @@ fn proc_filter_sentinel_get() {
 fn proc_query_flag() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((proc (start-process "neo-qf-xxx" nil "sleep" "5")))
   (set-process-query-on-exit-flag proc t)
   (prog1 (list (process-query-on-exit-flag proc)
                (progn (set-process-query-on-exit-flag proc nil)
                       (process-query-on-exit-flag proc)))
     (delete-process proc)))"##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
@@ -82,11 +87,12 @@ fn proc_query_flag() {
 fn proc_send_after_eof() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e (let ((proc (make-process :name "neo-sae-xxx" :command '("cat") :connection-type 'pipe :noquery t)))
   (process-send-eof proc)
   (process-send-string proc "after-eof")
   (delete-process proc) 'sent) (error (cons (quote ERR) (car e))))"##,
+        expect_test::expect![[r#""OK sent""#]],
     );
 }
 
@@ -95,7 +101,7 @@ fn proc_send_after_eof() {
 fn divergence_proc_binary_filter_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((acc ""))
   (let ((proc (make-process :name "neo-bin-xxx" :command '("cat")
                :connection-type 'pipe :coding 'binary
@@ -105,6 +111,7 @@ fn divergence_proc_binary_filter_multibyte() {
     (process-send-eof proc)
     (while (process-live-p proc) (accept-process-output proc 1))
     (list (length acc) (multibyte-string-p acc) (append (string-to-unibyte acc) nil))))"##,
+        expect_test::expect![[r#""OK (6 nil (0 1 2 255 254 10))""#]],
     );
 }
 
@@ -112,8 +119,9 @@ fn divergence_proc_binary_filter_multibyte() {
 fn proc_waiting_input() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (booleanp (waiting-for-user-input-p))
         (processp (get-buffer-process (current-buffer))))"##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }

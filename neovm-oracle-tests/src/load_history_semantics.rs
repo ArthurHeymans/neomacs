@@ -45,7 +45,12 @@ fn oracle_prop_gnu_load_history_regexp_matches_suffix_rules() {
                "/var/tmp/neomacs-oracle-load-history.el")))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\\\\(\\\\`\\\\|/\\\\)foo/bar\\\\(\\\\.elc\\\\|\\\\.el\\\\|\\\\)?\\\\(\\\\.gz\\\\|\\\\.bz2\\\\|\\\\)?\\\\'\" \"\\\\(\\\\`\\\\|/\\\\)foo/bar\\\\.el\\\\(\\\\.gz\\\\|\\\\.bz2\\\\|\\\\)?\\\\'\" \"\\\\`/tmp/neomacs-oracle-load-history\\\\(\\\\.elc\\\\|\\\\.el\\\\|\\\\)?\\\\(\\\\.gz\\\\|\\\\.bz2\\\\|\\\\)?\\\\'\" (t t t t nil nil) (t t t nil nil) (t t t nil))""#
+        ]],
+    );
 }
 
 #[test]
@@ -78,5 +83,10 @@ fn oracle_prop_gnu_load_history_filename_element_preserves_match_data() {
        after))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"/tmp/neomacs-oracle-load-history/alpha.el\" (provide . alpha)) (\"/tmp/neomacs-oracle-load-history/beta.el.gz\" (provide . beta)) nil t (1 3 1 2 2 3))""#
+        ]],
+    );
 }

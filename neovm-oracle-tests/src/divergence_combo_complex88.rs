@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx88_default_toplevel_value_with_buffer_local_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((buf (get-buffer-create " *neo-cx88-tl*")))
@@ -24,13 +24,14 @@ fn div_cx88_default_toplevel_value_with_buffer_local_override() {
               (default-toplevel-value 'neo-cx88-shared))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:local :default :default :default)""#]],
     );
 }
 
 #[test]
 fn div_cx88_kill_local_variable_in_indirect_buffer_does_not_affect_base() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((base (get-buffer-create " *neo-cx88-base*")))
   (with-current-buffer base
@@ -48,13 +49,14 @@ fn div_cx88_kill_local_variable_in_indirect_buffer_does_not_affect_base() {
         (list base-val-before ind-val-before
               base-val-after ind-val-after))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx88_buffer_local_value_with_non_local_returns_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx88-glob 42)
 (let ((buf (get-buffer-create " *neo-cx88-glob*")))
@@ -65,13 +67,14 @@ fn div_cx88_buffer_local_value_with_non_local_returns_default() {
           (local-variable-p 'neo-cx88-glob buf)
           (local-variable-p 'neo-cx88-glob (current-buffer)))))
 "##,
+        expect_test::expect![[r#""OK (42 42 nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx88_frame_parameter_round_trip_for_custom_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (let ((before (frame-parameter frame 'neo-cx88-custom)))
@@ -82,13 +85,14 @@ fn div_cx88_frame_parameter_round_trip_for_custom_keys() {
         (modify-frame-parameters frame '((neo-cx88-custom)))  ; remove
         (list before v1 v2 (frame-parameter frame 'neo-cx88-custom)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx88_display_pixel_dimensions_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (integerp (display-pixel-width))
       (integerp (display-pixel-height))
@@ -99,13 +103,14 @@ fn div_cx88_display_pixel_dimensions_query() {
       (integerp (display-planar-pixels (selected-frame)))
       (display-graphic-p))
 "##,
+        expect_test::expect![[r#""ERR (void-function display-pixel-dimensions)""#]],
     );
 }
 
 #[test]
 fn div_cx88_with_current_buffer_chain_does_not_leak() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((origin (current-buffer))
       (buf-a (get-buffer-create " *neo-cx88-a*"))
@@ -121,13 +126,14 @@ fn div_cx88_with_current_buffer_chain_does_not_leak() {
       (kill-buffer buf-a)
       (kill-buffer buf-b))))
 "##,
+        expect_test::expect![[r#""OK (t \"in a\" \"in b\")""#]],
     );
 }
 
 #[test]
 fn div_cx88_buffer_local_face_remapping_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((before (buffer-local-value 'face-remapping-alist (current-buffer))))
@@ -138,13 +144,16 @@ fn div_cx88_buffer_local_face_remapping_in_buffer() {
             (assq 'default face-remapping-alist)
             (assq 'bold face-remapping-alist)))))
 "##,
+        expect_test::expect![[
+            r#""OK (nil ((default :foreground \"blue\") (bold :height 2.0)) (default :foreground \"blue\") (bold :height 2.0))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx88_set_buffer_then_with_temp_buffer_does_not_propagate_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx88-se-a*"))
       (origin (current-buffer)))
@@ -160,13 +169,14 @@ fn div_cx88_set_buffer_then_with_temp_buffer_does_not_propagate_point() {
       (kill-buffer buf-a)
       (list p-in-a p-after-temp-in-a back-in-origin))))
 "##,
+        expect_test::expect![[r#""OK (3 3 t)""#]],
     );
 }
 
 #[test]
 fn div_cx88_buffer_locals_with_let_shadowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx88-sh :global)
 (let ((buf (get-buffer-create " *neo-cx88-sh*")))
@@ -182,13 +192,14 @@ fn div_cx88_buffer_locals_with_let_shadowing() {
       (kill-buffer buf)
       (list result-in-buf after-let))))
 "##,
+        expect_test::expect![[r#""OK ((:let-shadowed t :global) :buffer-local)""#]],
     );
 }
 
 #[test]
 fn div_cx88_buffer_local_undo_boundary_with_marker_overlay_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx88-mega*")))
   (with-current-buffer buf
@@ -220,13 +231,14 @@ fn div_cx88_buffer_local_undo_boundary_with_marker_overlay_narrow_mega() {
               (text-properties-at 1)))))
   (kill-buffer buf))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }
 
 #[test]
 fn div_cx88_buffer_local_default_value_after_setq_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx88-dv 1)
 (let ((buf-a (get-buffer-create " *neo-cx88-dv-a*"))
@@ -241,5 +253,6 @@ fn div_cx88_buffer_local_default_value_after_setq_default() {
     (kill-buffer buf-b)
     (list a-val b-val default)))
 "##,
+        expect_test::expect![[r#""OK (:a 99 99)""#]],
     );
 }

@@ -36,7 +36,12 @@ fn oracle_expand_file_name_home_default_and_null_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"/tmp/neomacs-oracle-home\" \"/tmp/neomacs-oracle-home/beta\" \"/tmp/neomacs-oracle-base/~definitely-no-such-neomacs-oracle-user/leaf\" \"/tmp/neomacs-oracle-base/dir\" \"/tmp/neomacs-oracle-base/dir/relative\" \"/relative\" \"/tmp/neomacs-oracle-base/x/y/\" \"/triple/slash\" (wrong-type-argument (stringp 42)) (wrong-type-argument (filenamep \"a\\0b\")))""#
+        ]],
+    );
 }
 
 #[test]
@@ -73,7 +78,12 @@ fn oracle_expand_file_name_root_and_relative_default_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"/..\" \"/\" \"/../b\" (t t) (t t) (wrong-type-argument (stringp 42)) \"/leaf\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -128,5 +138,10 @@ fn oracle_expand_file_name_handler_dispatch_edges() {
     (makunbound 'neomacs--oracle-expand-file-name-calls)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"/handled/1\" ((expand-file-name \"/oracle-expand:name\" \"/plain/default/\")) nil \"/handled/1\" ((expand-file-name \"leaf\" \"/oracle-expand:default/\")) nil \"/handled/1/leaf\" ((expand-file-name \"relative/default/\" \"/oracle-expand:base/\")) nil (\"relative/default/relative/default/\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/relative/default/relative/default/\") (error (\"Invalid handler in ‘file-name-handler-alist’\")))""#
+        ]],
+    );
 }

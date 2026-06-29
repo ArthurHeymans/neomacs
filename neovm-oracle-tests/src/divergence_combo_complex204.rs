@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx204_ucs_normalize_nfc_nfd_roundtrip_latin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((nfc "café naïve résumé")
        (nfd (ucs-normalize-string nfc 'nfd))
@@ -17,13 +17,14 @@ fn div_cx204_ucs_normalize_nfc_nfd_roundtrip_latin() {
         (length nfc) (length nfd)
         (string-bytes nfc) (string-bytes nfd)))
 "##,
+        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
     );
 }
 
 #[test]
 fn div_cx204_ucs_normalize_nfkc_nfkd_compatibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((orig "ﬁℌ℃")  ; ligature fi, script H, degrees Celsius
        (nfkc (ucs-normalize-string orig 'nfkc))
@@ -32,13 +33,14 @@ fn div_cx204_ucs_normalize_nfkc_nfkd_compatibility() {
         (length orig) (length nfkc) (length nfkd)
         (string= nfkc nfkd)))
 "##,
+        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
     );
 }
 
 #[test]
 fn div_cx204_ucs_normalize_hangul_composition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((composed "한글")
        (decomposed (ucs-normalize-string composed 'nfd))
@@ -47,13 +49,14 @@ fn div_cx204_ucs_normalize_hangul_composition() {
         (string= composed decomposed)
         (length composed) (length decomposed)))
 "##,
+        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
     );
 }
 
 #[test]
 fn div_cx204_ucs_normalize_region_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -64,13 +67,14 @@ fn div_cx204_ucs_normalize_region_in_buffer() {
         (list nfd-len (buffer-size) (buffer-string))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx204_ucs_normalize_greek_diacritics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((nfc "άέήίόύώ")
        (nfd (ucs-normalize-string nfc 'nfd))
@@ -79,25 +83,27 @@ fn div_cx204_ucs_normalize_greek_diacritics() {
         (string= nfc nfd)
         (length nfc) (length nfd)))
 "##,
+        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
     );
 }
 
 #[test]
 fn div_cx204_ucs_normalize_idempotent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "café 한글 ﬁℌ"))
   (list (string= s (ucs-normalize-string (ucs-normalize-string s 'nfc) 'nfc))
         (string= s (ucs-normalize-string (ucs-normalize-string s 'nfd) 'nfd))))
 "##,
+        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
     );
 }
 
 #[test]
 fn div_cx204_ucs_normalize_already_normalized() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ascii "Hello World 123"))
   (list (string= ascii (ucs-normalize-string ascii 'nfc))
@@ -105,13 +111,14 @@ fn div_cx204_ucs_normalize_already_normalized() {
         (string= ascii (ucs-normalize-string ascii 'nfkc))
         (string= ascii (ucs-normalize-string ascii 'nfkd))))
 "##,
+        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
     );
 }
 
 #[test]
 fn div_cx204_ucs_normalize_empty_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (ucs-normalize-string "" 'nfc)
       (ucs-normalize-string "" 'nfd)
@@ -119,13 +126,14 @@ fn div_cx204_ucs_normalize_empty_string() {
       (ucs-normalize-string "" 'nfkd)
       (length (ucs-normalize-string "" 'nfc)))
 "##,
+        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
     );
 }
 
 #[test]
 fn div_cx204_ucs_normalize_combined_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((precomposed "é")
        (decomposed (string ?e (decode-char 'unicode #x0301)))
@@ -135,13 +143,14 @@ fn div_cx204_ucs_normalize_combined_chars() {
         (length nfc-pre) (length nfc-decomp)
         (length precomposed) (length decomposed)))
 "##,
+        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
     );
 }
 
 #[test]
 fn div_cx204_ucs_normalize_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((nfc "café 한글 naïve")
        (nfd (ucs-normalize-string nfc 'nfd))
@@ -168,5 +177,6 @@ fn div_cx204_ucs_normalize_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
     );
 }

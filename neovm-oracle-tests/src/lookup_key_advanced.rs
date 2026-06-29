@@ -52,7 +52,12 @@ fn oracle_prop_lookup_key_string_sequences() {
     ;; Unbound under existing prefix
     (lookup-key m (kbd "C-x C-z"))
     (lookup-key m (kbd "C-h a"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (beginning-of-line end-of-line execute-extended-command find-file save-buffer list-buffers compile goto-line describe-function describe-variable describe-key t t t t nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +107,12 @@ fn oracle_prop_lookup_key_vector_sequences() {
     (lookup-key m [?z])
     (lookup-key m [?x ?z])
     (lookup-key m [f4])))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (cmd-a cmd-b cmd-f1 cmd-f2 cmd-ret cmd-bs cmd-xa cmd-xb cmd-xcd t t t cmd-f3a cmd-f3b nil nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +155,12 @@ fn oracle_prop_lookup_key_nil_unbound() {
         (lookup-key empty [f1])
         (lookup-key empty (kbd "C-x C-f"))
         (null (lookup-key empty [?a]))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil nil nil nil nil nil nil nil nil nil nil t t t t (nil nil 1 t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +205,10 @@ fn oracle_prop_lookup_key_integer_too_long() {
         (integerp r1) r1
         (integerp r2) r2
         (integerp r3) r3))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 t 1 2 t 1 3 (t 1 t 2 t 3))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +266,12 @@ fn oracle_prop_lookup_key_parent_keymaps() {
     ;; Prefixes are keymaps in child
     (keymapp (lookup-key child (kbd "C-x")))
     (keymapp (lookup-key child (kbd "C-c")))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (gp-a p-b c-c p-d c-e nil p-cxf gp-cxg p-cca c-ccb gp-c nil nil gp-b nil t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +322,10 @@ fn oracle_prop_lookup_key_sparse_vs_full() {
         (lookup-key sparse [?p])
         (lookup-key full [?p])
         (eq (lookup-key sparse [?p]) (lookup-key full [?p]))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil nil t t (parent-p parent-p t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -376,5 +402,10 @@ fn oracle_prop_lookup_key_multi_level_prefix() {
 
     ;; Unbound prefix entirely
     (lookup-key m (kbd "C-z"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (cmd1 cmd2 cmd3 cmd4 cmd5 cmd6 cmd7 cmd8 cmd9 cmd10 t t t t t t t t nil nil nil t 2 nil)""#
+        ]],
+    );
 }

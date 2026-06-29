@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn buffer_marker_narrow_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (buffer-enable-undo)
   (insert "0123456789")
@@ -23,6 +23,7 @@ fn buffer_marker_narrow_undo_chain() {
       (widen)
       (primitive-undo 1 buffer-undo-list)
       (list before (buffer-string) (marker-position m1) (marker-position m2)))))"##,
+        expect_test::expect![[r#""OK (\"AB1234567CD\" \"0AB1234567CD89\" 5 9)""#]],
     );
 }
 
@@ -30,13 +31,14 @@ fn buffer_marker_narrow_undo_chain() {
 fn hash_closure_loop_sort_pipeline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(require 'cl-lib)
 (let ((h (make-hash-table :test 'equal)) (words '("apple" "banana" "apple" "cherry" "banana" "apple")))
   (dolist (w words) (cl-incf (gethash w h 0)))
   (let ((pairs nil))
     (maphash (lambda (k v) (push (cons k v) pairs)) h)
     (sort pairs (lambda (a b) (if (= (cdr a) (cdr b)) (string< (car a) (car b)) (> (cdr a) (cdr b)))))))"##,
+        expect_test::expect![[r#""OK ((\"apple\" . 3) (\"banana\" . 2) (\"cherry\" . 1))""#]],
     );
 }
 
@@ -44,7 +46,7 @@ fn hash_closure_loop_sort_pipeline() {
 fn org_table_clock_property_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org) (require 'org-clock)
   (with-temp-buffer (org-mode)
     (insert "* Project :work:\n")
@@ -56,6 +58,7 @@ fn org_table_clock_property_combo() {
     (list (org-entry-get (point-min) "Effort")
           (org-get-tags)
           (string-match "30" (buffer-string)))))"##,
+        expect_test::expect![[r#""ERR (user-error \"Not at a table\")""#]],
     );
 }
 
@@ -63,7 +66,7 @@ fn org_table_clock_property_combo() {
 fn proc_buffer_textprop_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((buf (generate-new-buffer " neo-cb1-xxx")))
   (with-current-buffer buf
     (buffer-enable-undo)
@@ -80,6 +83,9 @@ fn proc_buffer_textprop_marker_undo() {
                        (get-text-property 3 'face)
                        (= (point-max) 19))))
           (prog1 r (kill-buffer buf)))))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"X alpha beta gamma\nProcess neo-cb1-xxx finished\n\" 2 48 (face bold)) 9 bold nil)""#
+        ]],
     );
 }
 
@@ -87,7 +93,7 @@ fn proc_buffer_textprop_marker_undo() {
 fn proc_decode_search_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((acc ""))
   (let ((proc (make-process :name "neo-cb4-xxx" :command '("printf" "one\\ntwo\\nthree")
                :connection-type 'pipe :coding 'utf-8
@@ -99,6 +105,7 @@ fn proc_decode_search_replace() {
       (goto-char (point-min))
       (while (re-search-forward "^t" nil t) (replace-match "T"))
       (list (buffer-string) (count-lines (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK (\"one\nTwo\nThree\" 3)""#]],
     );
 }
 
@@ -106,13 +113,16 @@ fn proc_decode_search_replace() {
 fn string_pipeline_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let* ((input "Café, Zürich;Ños")
         (parts (split-string input "[,;] *"))
         (encoded (mapcar (lambda (s) (length (encode-coding-string s 'utf-8))) parts))
         (upped (mapcar #'upcase parts))
         (joined (mapconcat #'identity (sort (copy-sequence upped) #'string<) "|")))
   (list parts encoded upped joined))"##,
+        expect_test::expect![[
+            r#""OK ((\"Café\" \"Zürich\" \"Ños\") (5 7 4) (\"CAFÉ\" \"ZÜRICH\" \"ÑOS\") \"CAFÉ|ZÜRICH|ÑOS\")""#
+        ]],
     );
 }
 
@@ -120,7 +130,7 @@ fn string_pipeline_coding() {
 fn textprop_overlay_field_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "aaaa bbbb cccc")
   (put-text-property 1 5 'field 'f1)
@@ -130,6 +140,7 @@ fn textprop_overlay_field_combo() {
     (goto-char 7)
     (list (field-string-no-properties) (field-beginning) (field-end)
           (overlays-at 7) (get-char-property 7 'face))))"##,
+        expect_test::expect![[r#""OK (\"bbbb\" 6 10 (#<overlay in no buffer>) italic)""#]],
     );
 }
 
@@ -137,7 +148,7 @@ fn textprop_overlay_field_combo() {
 fn timer_buffer_overlay_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((buf (generate-new-buffer " neo-cb2-xxx")) (fired nil))
   (with-current-buffer buf
     (insert "hello world test")
@@ -147,5 +158,6 @@ fn timer_buffer_overlay_combo() {
       (let ((k 0)) (while (and (not fired) (< k 100)) (accept-process-output nil 0.02) (setq k (1+ k))))
       (prog1 (list (buffer-string) (overlay-start ov) (overlay-end ov) fired)
         (kill-buffer buf)))))"##,
+        expect_test::expect![[r#""OK (\"hello world test!\" 1 6 t)""#]],
     );
 }

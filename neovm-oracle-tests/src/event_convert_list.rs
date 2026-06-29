@@ -10,8 +10,14 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_
 fn oracle_prop_event_convert_list_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(event-convert-list '(control ?x))");
-    assert_oracle_parity("(event-convert-list '(meta control ?x))");
+    crate::common::assert_oracle_parity_expect(
+        "(event-convert-list '(control ?x))",
+        expect_test::expect![[r#""OK 24""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(event-convert-list '(meta control ?x))",
+        expect_test::expect![[r#""OK 134217752""#]],
+    );
 }
 
 #[test]
@@ -19,7 +25,8 @@ fn oracle_prop_event_convert_list_lookup_key_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((m (make-sparse-keymap))) (define-key m (vector (event-convert-list '(control ?x))) 'foo) (lookup-key m (vector (event-convert-list '(control ?x)))))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK foo""#]]);
     assert_ok_eq("foo", &oracle, &neovm);
 }
 
@@ -27,7 +34,10 @@ fn oracle_prop_event_convert_list_lookup_key_roundtrip() {
 fn oracle_prop_event_convert_list_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(event-convert-list 1)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(event-convert-list 1)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 

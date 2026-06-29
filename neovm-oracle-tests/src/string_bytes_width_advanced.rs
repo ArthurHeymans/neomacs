@@ -44,7 +44,12 @@ fn oracle_prop_string_bytes_width_ascii_vs_multibyte() {
               (list (length s) (string-bytes s)
                     (>= (string-bytes s) (length s))))
             strings)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 5 t 2 1 3 1 6 2 11 7 4 1 ((0 0 t) (3 3 t) (1 2 t) (2 6 t) (3 5 t) (1 4 t)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +91,10 @@ fn oracle_prop_string_bytes_width_empty_and_edge() {
   (string-bytes (make-string 100 ?A))
   ;; make-string with multibyte
   (string-bytes (make-string 50 #x4e16)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 0 0 t t t 1 5 t 1 1 (10 30) (4 10 1 2 3 4) 100 150)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +130,10 @@ fn oracle_prop_string_bytes_width_cjk_combining() {
   ;; Mixed: ASCII(1) + CJK(2) + combining(0) + fullwidth(2)
   (let ((s (concat "A" "\u4e16" (string ?e #x0301) "\uff21")))
     (list (length s) (string-width s) (string-bytes s))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 4 8 6 4 6 1 1 (1 1 t) 2 3 (5 6 10))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +172,12 @@ fn oracle_prop_string_bytes_width_vs_length() {
                   ((> (string-width s) (length s)) 'wider)
                   ((< (string-width s) (length s)) 'narrower)))))
           test-cases))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t t t equal) (t t t equal) (t t t wider) (t t t equal) (t t t wider) (t t t narrower) (t t t wider) (t t t equal))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +234,12 @@ fn oracle_prop_string_bytes_width_char_classes() {
   ;; Batch: classify width for a range of chars
   (let ((chars (list ?A #x4e16 #x0301 ?\t #xff21 #xff71 #x00e9 #xfe0f)))
     (mapcar (lambda (ch) (list ch (char-width ch))) chars)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 1 1 1 1 1 2 2 2 2 2 2 2 1 1 1 0 0 0 2 2 2 8 0 2 2 1 2 0 0 ((65 1) (19990 2) (769 0) (9 8) (65313 2) (65393 1) (233 1) (65039 0)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +328,12 @@ fn oracle_prop_string_bytes_width_fixed_columns() {
     (fmakunbound 'neovm--sbw-pad-to)
     (fmakunbound 'neovm--sbw-format-row)
     (fmakunbound 'neovm--sbw-format-table)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Alice      | Boston   | 100   \" \"张三       | 东京     | 88    \" \"A中文      | Mix测    | 42    \" (30 30 t) \"Name       | City     | Score \n------------------------------\nAlice      | NYC      | 95    \n张三       | 北京     | 88    \nBob        | LA       | 72    \" \"VeryLong\" \"世界你 \")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -390,5 +416,10 @@ fn oracle_prop_string_bytes_width_boundary_truncation() {
                 (string-width (car tw)))))
     (fmakunbound 'neovm--sbw-truncate-bytes)
     (fmakunbound 'neovm--sbw-truncate-width)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"hello ..\" . t) (\"世界..\" . t) (\"Hi..\" . t) (\"short\") (\"hello ..\" . t) (\"世界..\" . t) (\"世..\" . t) (\"A世B..\" . t) (\"abc\") (\"世界..\" t) (\"世界你..\" t) (\"Hello世..\" \"Hello世..\" 10 9))""#
+        ]],
+    );
 }

@@ -56,7 +56,12 @@ fn oracle_prop_line_position_n_argument_forward_backward() {
                               'lep-neg100 (line-end-position -100))
                         results))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((lbp-default 15 lep-default 21) (lbp-1 15 lep-1 21) (lbp-2 22 lep-2 28) (lbp-3 29 lep-3 35) (lbp-0 8 lep-0 14) (lbp-neg1 1 lep-neg1 7) (lbp-100 36 lep-100 36) (lbp-neg100 1 lep-neg100 1))""#
+        ]],
+    );
 }
 
 #[test]
@@ -77,7 +82,10 @@ fn oracle_prop_line_position_accepts_bignum_n_like_gnu() {
           (line-beginning-position tiny)
           (line-end-position tiny)
           (point))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (19 19 1 1 8)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +145,12 @@ fn oracle_prop_line_position_at_buffer_boundaries() {
                               (point-min) (point-max))
                         results)))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((at-min 1 4 1 1) (at-max-no-nl 9 12 12 12) (at-max-with-nl 13 13 13) (single-line 1 14 1 14) (empty-buf 1 1 1 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +209,12 @@ fn oracle_prop_line_position_empty_lines() {
                             all-lbp)))
       (setq results (cons (cons 'all-lines (nreverse all-lbp)) results)))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((empty-line-1 3 3 t) (empty-line-2 4 4 5 6) (from-B-back-2 3 3) (all-lines (1 2) (3 3) (4 4) (5 6) (7 7) (8 9) (10 10)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +265,12 @@ fn oracle_prop_line_position_narrowed_buffer() {
                               (line-end-position))
                         results))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((narrow-start 8 14 8 28) (narrow-line3 15 21 8 28) (narrow-beyond 8 28) (narrow-count-lines 3) (widened 15 21))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +322,12 @@ fn oracle_prop_line_position_count_lines_and_line_number() {
       (setq results (cons (list 'verify-consistency cl ln (= cl (1- ln)))
                           results)))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((total-lines 6) (lines-1-to-20 3) (lines-same 0) (lines-within-line 1) (line-nums (1 1) (6 1) (7 2) (12 2) (13 3) (20 3) (21 4) (27 5) (28 5) (33 6) (34 6)) (lnum-min 1 lnum-max 7) (verify-consistency 2 3 t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -357,7 +385,12 @@ fn oracle_prop_line_position_with_save_excursion() {
           (forward-line 1)))
       (setq results (cons (cons 'lengths (nreverse lengths)) results)))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"second line\" \"first line\" \"third line\" t ((1 . \"first line\") (2 . \"second line\") (3 . \"third line\") (4 . \"fourth line\") (5 . \"fifth line\")) (lengths 10 11 10 11 10))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -418,7 +451,12 @@ fn oracle_prop_line_position_long_lines_and_mixed() {
                               (count-lines (point-min) (point-max)))
                         results))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((long-line 1 201 200) (short-after-long 202 207) (tab-line 208 227 \"\tindented\twith\ttabs\") (empty-line 228 228 t) (last-no-nl 229 233 t) (total 5))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -468,5 +506,10 @@ fn oracle_prop_line_position_extract_line_range() {
                      (buffer-substring (point-min)
                                        (point-max))))))
     (fmakunbound 'neovm--test-extract-lines)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"beta\" \"gamma\" \"delta\") . 7) ((\"alpha\") . 1) ((\"eta\" \"theta\") . 37) ((\"zeta\" \"eta\" \"theta\" \"\") . 32) ((\"delta\") . 18) t)""#
+        ]],
+    );
 }

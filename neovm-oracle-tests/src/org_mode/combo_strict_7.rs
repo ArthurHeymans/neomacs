@@ -16,7 +16,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn strict_property_keyword_drawer_inherit_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -50,6 +50,7 @@ fn strict_property_keyword_drawer_inherit_chain() {
           (push (list :leaf-standard-props (length props)) r)
           (push (list :leaf-prop-keys (sort (mapcar #'car props) #'string-lessp)) r))
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 25)""#]],
     );
 }
 
@@ -60,7 +61,7 @@ fn strict_property_keyword_drawer_inherit_chain() {
 #[test]
 fn strict_export_env_mutate_reread() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ox)
@@ -98,6 +99,7 @@ fn strict_export_env_mutate_reread() {
           (push (list :author4 (plist-get env4 :author)) r)
           (push (list :title4 (plist-get env4 :title)) r))
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 25)""#]],
     );
 }
 
@@ -108,7 +110,7 @@ fn strict_export_env_mutate_reread() {
 #[test]
 fn strict_element_cache_coherence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -152,6 +154,7 @@ fn strict_element_cache_coherence() {
         (search-forward "X")
         (push (list :at-x-type (org-element-type (org-element-at-point))) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 43 25)""#]],
     );
 }
 
@@ -162,7 +165,7 @@ fn strict_element_cache_coherence() {
 #[test]
 fn strict_table_formula_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -195,6 +198,7 @@ fn strict_table_formula_edge_cases() {
         (goto-char (point-min))
         (push (list :to-lisp (org-table-to-lisp)) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \"Total\")""#]],
     );
 }
 
@@ -205,7 +209,7 @@ fn strict_table_formula_edge_cases() {
 #[test]
 fn strict_mixed_list_deep_integrity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -248,6 +252,7 @@ fn strict_mixed_list_deep_integrity() {
                                 (org-element-interpret-data (org-element-parse-buffer))))
                        20)) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 25)""#]],
     );
 }
 
@@ -258,7 +263,7 @@ fn strict_mixed_list_deep_integrity() {
 #[test]
 fn strict_footnote_normalize_gaps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -294,6 +299,7 @@ fn strict_footnote_normalize_gaps() {
                     (mapcar (lambda (fr) (org-element-property :label fr))
                             (org-element-map (org-element-parse-buffer) 'footnote-reference #'identity))) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (0 . 0) 1)""#]],
     );
 }
 
@@ -304,7 +310,7 @@ fn strict_footnote_normalize_gaps() {
 #[test]
 fn strict_tag_match_boolean_expressions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -342,6 +348,7 @@ fn strict_tag_match_boolean_expressions() {
                                      (lambda () (org-get-heading t t t t))
                                      "!work")) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments #<subr identity> 0)""#]],
     );
 }
 
@@ -352,7 +359,7 @@ fn strict_tag_match_boolean_expressions() {
 #[test]
 fn strict_link_abbreviation_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -390,6 +397,7 @@ fn strict_link_abbreviation_format() {
         ;; count links
         (push (list :count (length links)) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 25)""#]],
     );
 }
 
@@ -400,7 +408,7 @@ fn strict_link_abbreviation_format() {
 #[test]
 fn strict_element_interpret_roundtrip_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -438,6 +446,7 @@ fn strict_element_interpret_roundtrip_deep() {
         (push (list :bolds-match (= (length (org-element-map tree 'bold #'identity))
                                     (length (org-element-map reparsed 'bold #'identity)))) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 25)""#]],
     );
 }
 
@@ -448,7 +457,7 @@ fn strict_element_interpret_roundtrip_deep() {
 #[test]
 fn strict_export_multi_backend_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(progn
   (require 'org)
   (require 'ox-md)
@@ -488,7 +497,7 @@ fn strict_export_multi_backend_edge() {
 #[test]
 fn strict_macro_expansion_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -519,6 +528,7 @@ fn strict_macro_expansion_nested() {
           ;; no raw macro markers should remain
           (push (list :interpreted-no-braces (not (string-match-p "{{{" interpreted))) r))
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 30 25)""#]],
     );
 }
 
@@ -529,7 +539,7 @@ fn strict_macro_expansion_nested() {
 #[test]
 fn strict_dynamic_block_update() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -556,6 +566,7 @@ fn strict_dynamic_block_update() {
         (org-update-statistics-cookies t)
         (push (list :after-all-done (buffer-substring-no-properties (point-min) (point-max))) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 26 25)""#]],
     );
 }
 
@@ -566,7 +577,7 @@ fn strict_dynamic_block_update() {
 #[test]
 fn strict_table_to_lisp_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -594,6 +605,7 @@ fn strict_table_to_lisp_variants() {
         (forward-line -2)
         (push (list :empty (org-table-to-lisp)) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 27 25)""#]],
     );
 }
 
@@ -604,7 +616,7 @@ fn strict_table_to_lisp_variants() {
 #[test]
 fn strict_element_context_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -643,6 +655,7 @@ fn strict_element_context_boundaries() {
         (push (list :eob-at-point (org-element-type (org-element-at-point))) r)
         (push (list :eob-context (org-element-type (org-element-context))) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 25)""#]],
     );
 }
 
@@ -653,7 +666,7 @@ fn strict_element_context_boundaries() {
 #[test]
 fn strict_entry_properties_flag_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -685,6 +698,7 @@ fn strict_entry_properties_flag_variants() {
         (let ((props (org-entry-properties nil "EFFORT")))
           (push (list :effort-specific (assoc "EFFORT" props)) r))
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 25)""#]],
     );
 }
 
@@ -695,7 +709,7 @@ fn strict_entry_properties_flag_variants() {
 #[test]
 fn strict_element_create_interpret_parse_pipeline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-element)
@@ -741,5 +755,6 @@ fn strict_element_create_interpret_parse_pipeline() {
         ;; string representation
         (push (list :str-length (> (length str) 0)) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 25)""#]],
     );
 }

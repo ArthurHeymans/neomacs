@@ -21,7 +21,10 @@ fn oracle_prop_gnu_call_shell_region_delete_replaces_region() {
    (point)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 \"xABCY\" 5)""#]],
+    );
 }
 
 #[test]
@@ -40,7 +43,10 @@ fn oracle_prop_gnu_call_shell_region_uses_dynamic_shell_bindings() {
      (point))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 \"incsr:cmdput\" 10)""#]],
+    );
 }
 
 #[test]
@@ -55,5 +61,8 @@ fn oracle_prop_gnu_call_shell_region_mixes_stderr_when_requested() {
    (buffer-string)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 \"abcouterr\")""#]],
+    );
 }

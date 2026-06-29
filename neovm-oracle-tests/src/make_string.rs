@@ -10,10 +10,16 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_
 fn oracle_prop_make_string_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(make-string 5 ?x)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(make-string 5 ?x)",
+        expect_test::expect![[r#""OK \"xxxxx\"""#]],
+    );
     assert_ok_eq(r#""xxxxx""#, &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(make-string 3 ?A)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(make-string 3 ?A)",
+        expect_test::expect![[r#""OK \"AAA\"""#]],
+    );
     assert_ok_eq(r#""AAA""#, &o, &n);
 }
 
@@ -21,7 +27,10 @@ fn oracle_prop_make_string_basic() {
 fn oracle_prop_make_string_zero_length() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(make-string 0 ?x)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(make-string 0 ?x)",
+        expect_test::expect![[r#""OK \"\"""#]],
+    );
     assert_ok_eq(r#""""#, &o, &n);
 }
 
@@ -29,7 +38,10 @@ fn oracle_prop_make_string_zero_length() {
 fn oracle_prop_make_string_space() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(make-string 4 ?\\s)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(make-string 4 ?\\s)",
+        expect_test::expect![[r#""OK \"    \"""#]],
+    );
     assert_ok_eq(r#""    ""#, &o, &n);
 }
 
@@ -37,14 +49,20 @@ fn oracle_prop_make_string_space() {
 fn oracle_prop_make_string_newline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(length (make-string 3 ?\\n))");
+    crate::common::assert_oracle_parity_expect(
+        "(length (make-string 3 ?\\n))",
+        expect_test::expect![[r#""OK 3""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_make_string_length_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(length (make-string 10 ?z))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(length (make-string 10 ?z))",
+        expect_test::expect![[r#""OK 10""#]],
+    );
     assert_ok_eq("10", &o, &n);
 }
 
@@ -55,7 +73,12 @@ fn oracle_prop_make_string_bignum_length_error_like_gnu() {
     // GNU Emacs alloc.c:Fmake_string validates LENGTH with CHECK_FIXNAT:
     // bignum lengths are rejected as `wholenump`, not as generic `integerp`.
     let form = r#"(make-string 1000000000000000000000000000000 ?x)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""ERR (wrong-type-argument wholenump 1000000000000000000000000000000)""#
+        ]],
+    );
 }
 
 #[test]
@@ -69,7 +92,10 @@ fn oracle_make_string_float_length_error_predicate_like_gnu() {
     (make-string 1.0 ?a)
   (error (list (car err) (cdr err))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (wrong-type-argument (wholenump 1.0))""#]],
+    );
 }
 
 proptest! {

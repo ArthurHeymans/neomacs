@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx144_org_agenda_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -18,13 +18,14 @@ fn div_cx144_org_agenda_availability() {
             (boundp 'org-agenda-buffer-name)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx144_org_clock_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -35,13 +36,14 @@ fn div_cx144_org_clock_availability() {
             (boundp 'org-clock-history)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx144_org_capture_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -51,13 +53,14 @@ fn div_cx144_org_capture_availability() {
             (boundp 'org-capture-bookmark)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx144_org_deadline_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -69,13 +72,14 @@ fn div_cx144_org_deadline_parsing() {
         (list (org-entry-get (point) "DEADLINE"))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (\"<2024-12-31 Mon>\")""#]],
     );
 }
 
 #[test]
 fn div_cx144_org_schedule_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -87,13 +91,14 @@ fn div_cx144_org_schedule_parsing() {
         (list (org-entry-get (point) "SCHEDULED"))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (\"<2024-06-15 Sat>\")""#]],
     );
 }
 
 #[test]
 fn div_cx144_org_tag_extraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -105,13 +110,14 @@ fn div_cx144_org_tag_extraction() {
         (list (org-get-tags))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK ((\"alpha\" \"beta\"))""#]],
     );
 }
 
 #[test]
 fn div_cx144_org_priority_extraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -123,13 +129,14 @@ fn div_cx144_org_priority_extraction() {
         (list (org-entry-get (point) "PRIORITY"))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (\"A\")""#]],
     );
 }
 
 #[test]
 fn div_cx144_org_property_drawer_full_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -144,13 +151,14 @@ fn div_cx144_org_property_drawer_full_parse() {
               (org-entry-get (point) "Missing"))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (\"0:30\" nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx144_org_todo_state_extraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -164,13 +172,14 @@ fn div_cx144_org_todo_state_extraction() {
               (forward-line 1) (org-get-todo-state))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (\"TODO\" 0 \"DONE\" 0 nil)""#]],
     );
 }
 
 #[test]
 fn div_cx144_org_table_alignment_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -183,13 +192,14 @@ fn div_cx144_org_table_alignment_basic() {
           (list in-table (buffer-string)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t \"| Name | Age |\n|------+-----|\n| Bob  | 30  |\n\")""#]],
     );
 }
 
 #[test]
 fn div_cx144_org_sparse_tree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -205,13 +215,16 @@ fn div_cx144_org_sparse_tree() {
               (buffer-string))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (t \"* Task A\n** Sub A1\ncontent alpha\n** Sub A2\ncontent beta\n* Task B\ncontent gamma\n\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx144_org_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -238,5 +251,6 @@ fn div_cx144_org_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

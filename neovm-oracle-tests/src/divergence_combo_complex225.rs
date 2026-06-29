@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx225_face_inheritance_chain_resolution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -30,13 +30,16 @@ fn div_cx225_face_inheritance_chain_resolution() {
             (face-attribute 'neo-cx225-leaf :underline)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (unspecified unspecified italic unspecified unspecified t)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx225_face_attribute_with_inherit_flag() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -48,13 +51,14 @@ fn div_cx225_face_attribute_with_inherit_flag() {
             (face-attribute 'neo-cx225-r2 :background 'inherit)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
     );
 }
 
 #[test]
 fn div_cx225_face_all_attributes_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((attrs (face-all-attributes 'default (selected-frame))))
   (list (consp attrs)
@@ -63,13 +67,16 @@ fn div_cx225_face_all_attributes_query() {
         (assq :height attrs)
         (assq :weight attrs)))
 "##,
+        expect_test::expect![[
+            r#""OK (t t (:family . \"default\") (:height . 1) (:weight . normal))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx225_face_documentation_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (face-documentation 'default)
@@ -78,13 +85,16 @@ fn div_cx225_face_documentation_query() {
           (face-documentation 'underline))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"Basic default face.\" \"Basic bold face.\" \"Basic italic face.\" \"Basic underlined face.\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx225_face_list_all_known() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((faces (face-list)))
   (list (consp faces)
@@ -94,13 +104,16 @@ fn div_cx225_face_list_all_known() {
         (memq 'italic faces)
         (memq 'highlight faces)))
 "##,
+        expect_test::expect![[
+            r#""OK (t t (default) (bold default) (italic bold default) (highlight link-visited link shadow variable-pitch-text variable-pitch fixed-pitch-serif fixed-pitch underline bold-italic italic bold default))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx225_face_underline_attribute_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (defface neo-cx225-ul '((t :underline (:color "red" :style wave))) "ul")
@@ -109,26 +122,28 @@ fn div_cx225_face_underline_attribute_variants() {
     (list (face-attribute 'neo-cx225-ul :underline))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK ((:color \"red\" :style wave))""#]],
     );
 }
 
 #[test]
 fn div_cx225_face_attribute_height_integer_or_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((h (face-attribute 'default :height)))
   (list (or (integerp h) (floatp h))
         (> h 0)
         (if (floatp h) :float :int)))
 "##,
+        expect_test::expect![[r#""OK (t t :int)""#]],
     );
 }
 
 #[test]
 fn div_cx225_set_face_attribute_temporary_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -140,13 +155,14 @@ fn div_cx225_set_face_attribute_temporary_override() {
           (list before after (face-attribute 'neo-cx225-set :weight)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (normal bold normal)""#]],
     );
 }
 
 #[test]
 fn div_cx225_face_spec_attr_in_frame_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (face-attribute 'default :foreground frame)
@@ -156,13 +172,16 @@ fn div_cx225_face_spec_attr_in_frame_query() {
         (face-attribute 'default :weight frame)
         (face-attribute 'default :slant frame)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"unspecified-fg\" \"unspecified-bg\" \"default\" 1 normal normal)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx225_face_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -193,5 +212,6 @@ fn div_cx225_face_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_undo_list_insert_entries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-entry ()
     ((type :initarg :type :accessor ue-type :initform "")
@@ -72,6 +72,7 @@ fn combo_eieio_undo_list_insert_entries() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -79,7 +80,7 @@ fn combo_eieio_undo_list_insert_entries() {
 fn combo_eieio_undo_list_prop_changes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-prop-entry ()
     ((type :initarg :type :accessor upe-type :initform "")
@@ -139,6 +140,7 @@ fn combo_eieio_undo_list_prop_changes() {
                 (overlay-start ov) (overlay-end ov)
                 (get-text-property 1 'zone)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -146,7 +148,7 @@ fn combo_eieio_undo_list_prop_changes() {
 fn combo_eieio_undo_list_overlay_changes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-ov-entry ()
     ((step :initarg :step :accessor uoe-step :initform "")
@@ -206,6 +208,7 @@ fn combo_eieio_undo_list_overlay_changes() {
                 (overlay-start ov) (overlay-end ov)
                 (overlay-get ov 'face)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -213,7 +216,7 @@ fn combo_eieio_undo_list_overlay_changes() {
 fn combo_eieio_undo_narrow_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-narrow-snap ()
     ((step :initarg :step :accessor uns-step :initform "")
@@ -274,6 +277,7 @@ fn combo_eieio_undo_narrow_interaction() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -281,7 +285,7 @@ fn combo_eieio_undo_narrow_interaction() {
 fn combo_eieio_undo_list_marker_movement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-marker-snap ()
     ((step :initarg :step :accessor ums-step :initform "")
@@ -344,5 +348,6 @@ fn combo_eieio_undo_list_marker_movement() {
                 (overlay-start ov) (overlay-end ov)
                 (get-text-property 1 'zone)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

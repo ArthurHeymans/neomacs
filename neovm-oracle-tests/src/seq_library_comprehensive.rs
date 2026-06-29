@@ -39,7 +39,10 @@ fn oracle_prop_seq_lib_elt_comprehensive() {
     (seq-length nil)
     (seq-length [])
     (seq-length "")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +68,10 @@ fn oracle_prop_seq_lib_do_comprehensive() {
           (seq-do (lambda (x) (push x acc)) nil)
           (let ((empty-result acc))
             (list list-result vec-result str-result empty-result)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 #[test]
@@ -97,7 +103,12 @@ fn oracle_prop_seq_lib_doseq_macro_binding_and_return_contracts() {
       (seq-doseq (x nil)
         (push x out))
       out)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((seq-do (lambda (x) (push x out)) [1 2]) (3 2 1) (\"ab\" (66 65)) (outer (b a)) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +134,10 @@ fn oracle_prop_seq_lib_map_indexed() {
     (seq-map-indexed (lambda (elt idx) (cons idx elt)) nil)
     ;; map-indexed on single element
     (seq-map-indexed (lambda (elt idx) (list idx elt)) '(42))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +176,10 @@ fn oracle_prop_seq_lib_contains_position() {
     ;; seq-position on string
     (seq-position "abcdef" ?d)
     (seq-position "abcdef" ?z)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 #[test]
@@ -204,7 +221,12 @@ fn oracle_prop_seq_lib_contains_position_testfn_return_values() {
     (condition-case err
         (seq-position '(1 2 3) 2 (lambda (_element _target) (signal 'wrong-type-argument '(integerp bad))))
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (found-token 1 (t ((a b) (b b))) (1 ((a b) (b b))) t 1 (wrong-type-argument integerp) (wrong-type-argument integerp))""#
+        ]],
+    );
 }
 
 #[test]
@@ -236,7 +258,12 @@ fn oracle_prop_seq_lib_positions_semantics() {
                        (lambda (_element _target)
                          (signal 'wrong-type-argument '(integerp bad))))
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 2 4) nil (0 2 4) (1 3 5) nil ((1 2 3) ((1 2) (2 2) (3 2) (4 2))) (1 2) (wrong-type-argument integerp))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +295,10 @@ fn oracle_prop_seq_lib_concatenate() {
     (seq-concatenate 'string '(?a ?b ?c) '(?d ?e ?f))
     ;; Three-way concatenation
     (seq-concatenate 'list '(1 2) '(3 4) '(5 6))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +321,10 @@ fn oracle_prop_seq_lib_partition() {
     ;; If N is nonpositive, GNU returns nil.
     (seq-partition '(1 2 3) 0)
     (seq-partition '(1 2 3) -1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +353,10 @@ fn oracle_prop_seq_lib_group_by() {
     (seq-group-by #'identity nil)
     ;; Group by modulo
     (seq-group-by (lambda (x) (% x 3)) '(1 2 3 4 5 6 7 8 9))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -350,7 +386,10 @@ fn oracle_prop_seq_lib_min_max() {
     ;; seq-min/max with negative and positive mix
     (seq-min '(-100 0 100 -50 50))
     (seq-max '(-100 0 100 -50 50))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 #[test]
@@ -380,7 +419,12 @@ fn oracle_prop_seq_lib_min_max_string_and_error_contracts() {
     (condition-case err
         (seq-max [1 "x"])
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (65 99 (wrong-number-of-arguments #<subr min>) (wrong-number-of-arguments #<subr max>) (wrong-type-argument number-or-marker-p) (wrong-type-argument number-or-marker-p))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +461,12 @@ fn oracle_prop_seq_lib_random_elt_seeded_and_empty_errors() {
     (condition-case err
         (seq-random-elt "")
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (b 20 98 (error \"Sequence cannot be empty\") (error \"Sequence cannot be empty\") (error \"Sequence cannot be empty\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -450,7 +499,12 @@ fn oracle_prop_seq_lib_split_keep_type_and_error_contracts() {
     (seq-keep (lambda (c)
                 (and (<= ?a c ?z) (char-to-string c)))
               "aBz")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a b) (c d) (e)) ([1 2] [3 4] [5]) (\"ab\" \"cd\" \"e\") nil (error \"Sub-sequence length must be larger than zero\") (error \"Sub-sequence length must be larger than zero\") (10 20 0) (\"a\" \"z\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -488,7 +542,10 @@ fn oracle_prop_seq_lib_take_drop_while() {
     (seq-drop-while #'cl-evenp '(2 4 6 7 8 10))
     (seq-drop-while #'identity '(t t t nil t))
     (seq-drop-while (lambda (x) (< x 100)) nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -522,7 +579,10 @@ fn oracle_prop_seq_lib_into() {
     (seq-into '(1 2 3) 'list)
     (seq-into [1 2 3] 'vector)
     (seq-into "abc" 'string)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -559,7 +619,10 @@ fn oracle_prop_seq_lib_chained_transformations() {
                         new-max))
                     data nil)
         (nreverse running)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -612,5 +675,8 @@ fn oracle_prop_seq_lib_nested_data_operations() {
         (seq-every-p (lambda (s) (> (plist-get s :grade) 60)) students)
         ;; Any student with grade = 100?
         (seq-some (lambda (s) (= (plist-get s :grade) 100)) students)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
+    );
 }

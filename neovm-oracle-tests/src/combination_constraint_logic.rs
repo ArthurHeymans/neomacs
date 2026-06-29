@@ -94,7 +94,10 @@ fn oracle_prop_constraint_logic_finite_domains() {
     (fmakunbound 'neovm--cl-fd-constrain)
     (fmakunbound 'neovm--cl-fd-intersect)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 4 6) (6 7 8 9 10) nil nil (2 4) nil t 4)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +201,7 @@ fn oracle_prop_constraint_logic_arithmetic_constraints() {
     (fmakunbound 'neovm--cl-arith-bt)
     (fmakunbound 'neovm--cl-arith-get)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (nil nil)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +307,10 @@ fn oracle_prop_constraint_logic_all_different() {
     (fmakunbound 'neovm--cl-ad-bt2)
     (fmakunbound 'neovm--cl-ad-count-perms)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t (t t) t (1 4 3 2) 24)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -421,7 +427,12 @@ fn oracle_prop_constraint_logic_arc_consistency() {
     (fmakunbound 'neovm--cl-ac3-revise)
     (fmakunbound 'neovm--cl-ac3-propagate)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t (1 2 3 4 5) (1 2 3 4 5) (1 2 3 4 5) ((1 2 3) (2 3 4) (3 4 5)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -513,7 +524,12 @@ fn oracle_prop_constraint_logic_send_more_money() {
            (list min-ef max-ef))))
     (fmakunbound 'neovm--cl-money-solve)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (476 t t ((12 35 47) (12 36 48) (12 37 49) (12 38 50) (12 46 58)) (39 98))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -652,7 +668,10 @@ fn oracle_prop_constraint_logic_zebra_puzzle() {
     (fmakunbound 'neovm--cl-zebra-solve)
     (fmakunbound 'neovm--cl-zebra-perms)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -740,5 +759,8 @@ fn oracle_prop_constraint_logic_magic_square() {
     (fmakunbound 'neovm--cl-magic-solve)
     (fmakunbound 'neovm--cl-magic-bt)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (8 (t t t t t t t t t) t)""#]],
+    );
 }

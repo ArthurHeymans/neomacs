@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_bool_vector_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((a (make-bool-vector 16 t))
         (b (make-bool-vector 16 nil)))
   (aset b 0 t)
@@ -20,6 +20,7 @@ fn divergence_bool_vector_operations() {
         (aref b 0)
         (aref a 1)
         (aref b 1)))"#,
+        expect_test::expect![[r#""ERR (void-function bool-vector-count-matches)""#]],
     );
 }
 
@@ -27,7 +28,7 @@ fn divergence_bool_vector_operations() {
 fn divergence_bool_vector_union_intersection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((a (make-bool-vector 8 nil))
         (b (make-bool-vector 8 nil)))
   (aset a 0 t) (aset a 2 t) (aset a 4 t)
@@ -36,6 +37,7 @@ fn divergence_bool_vector_union_intersection() {
         (bool-vector-intersection a b)
         (bool-vector-set-difference a b)
         (bool-vector-not a)))"#,
+        expect_test::expect![[r#""OK (#&8\"\u{1f}\" #&8\"\u{4}\" #&8\"\u{11}\" #&8\"\\352\")""#]],
     );
 }
 
@@ -43,7 +45,7 @@ fn divergence_bool_vector_union_intersection() {
 fn divergence_char_table_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((ct (make-char-table 'syntax-table 'default-val)))
   (list (char-table-default ct)
         (aref ct ?A)
@@ -51,6 +53,7 @@ fn divergence_char_table_default() {
         (set-char-table-default ct 'new-default)
         (char-table-default ct)
         (aref ct ?z)))"#,
+        expect_test::expect![[r#""ERR (void-function char-table-default)""#]],
     );
 }
 
@@ -58,7 +61,7 @@ fn divergence_char_table_default() {
 fn divergence_record_vs_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((v [1 2 3])
         (r (record 'tag 1 2 3)))
   (list (vectorp v)
@@ -70,6 +73,7 @@ fn divergence_record_vs_vector() {
         (aref v 0)
         (aref r 0)
         (aref r 1)))"#,
+        expect_test::expect![[r#""OK (t nil nil t 3 4 1 tag 1)""#]],
     );
 }
 
@@ -77,12 +81,13 @@ fn divergence_record_vs_vector() {
 fn divergence_record_type_descriptor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'make-record-type)
   (fboundp 'record-type-name)
   (fboundp 'record-type-fields)
   (fboundp 'record-type-p))"#,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     );
 }
 
@@ -90,7 +95,7 @@ fn divergence_record_type_descriptor() {
 fn divergence_string_byte_vs_char_index() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((s "Héllo"))
   (list (length s)
         (string-bytes s)
@@ -98,6 +103,7 @@ fn divergence_string_byte_vs_char_index() {
         (aref s 1)
         (= (length s) 5)
         (= (string-bytes s) 6)))"#,
+        expect_test::expect![[r#""OK (5 6 72 233 t t)""#]],
     );
 }
 
@@ -105,13 +111,14 @@ fn divergence_string_byte_vs_char_index() {
 fn divergence_string_eq_vs_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((s1 "hello")
         (s2 "hello"))
   (list (eq s1 s2)
         (equal s1 s2)
         (string= s1 s2)
         (string-equal s1 s2)))"#,
+        expect_test::expect![[r#""OK (nil t t t)""#]],
     );
 }
 
@@ -119,13 +126,14 @@ fn divergence_string_eq_vs_equal() {
 fn divergence_multibyte_string_char_index() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((s "中文测试"))
   (list (length s)
         (string-bytes s)
         (= (aref s 0) ?中)
         (= (aref s 1) ?文)
         (substring s 0 2)))"#,
+        expect_test::expect![[r#""OK (4 12 t t \"中文\")""#]],
     );
 }
 
@@ -133,12 +141,13 @@ fn divergence_multibyte_string_char_index() {
 fn divergence_unibyte_string_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((us (string ?a ?b ?c)))
   (list (multibyte-string-p us)
         (length us)
         (string-bytes us)
         (aref us 0)))"#,
+        expect_test::expect![[r#""OK (nil 3 3 97)""#]],
     );
 }
 
@@ -146,11 +155,12 @@ fn divergence_unibyte_string_operations() {
 fn divergence_string_as_unibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((ms "abc"))
   (list (multibyte-string-p ms)
         (string-as-unibyte ms)
         (string-as-unibyte "abc")
         (string-to-multibyte "abc"))) "#,
+        expect_test::expect![[r#""OK (nil \"abc\" \"abc\" \"abc\")""#]],
     );
 }

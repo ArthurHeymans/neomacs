@@ -74,7 +74,12 @@ fn oracle_prop_functional_lens_basic_construction() {
     (fmakunbound 'neovm--lens-get)
     (fmakunbound 'neovm--lens-set)
     (fmakunbound 'neovm--lens-over)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (alice 30 95 ((name . alice) (age . 31) (score . 95)) 30 ((name . alice) (age . 31) (score . 95)) ((name . alice) (age . 30) (score . 190)) ((name . bob) (age . 31) (score . 95)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +158,12 @@ fn oracle_prop_functional_lens_composition() {
     (fmakunbound 'neovm--lens-set)
     (fmakunbound 'neovm--lens-over)
     (fmakunbound 'neovm--lens-compose)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Portland\" \"97201\" ((name . alice) (address (city . \"Seattle\") (zip . \"97201\") (state . \"OR\"))) ((name . alice) (address (city . \"Portland\") (zip . \"97201-0000\") (state . \"OR\"))) \"Portland\" t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -220,7 +230,10 @@ fn oracle_prop_functional_lens_laws() {
     (fmakunbound 'neovm--lens-make)
     (fmakunbound 'neovm--lens-get)
     (fmakunbound 'neovm--lens-set)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t (t t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -288,7 +301,12 @@ fn oracle_prop_functional_lens_prism() {
     (fmakunbound 'neovm--prism-preview)
     (fmakunbound 'neovm--prism-review)
     (fmakunbound 'neovm--prism-over)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t . 42) (nil) (some . 99) (some . 10) (none) (t . \"error\") (nil) (right . 11) (left . \"err\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -381,7 +399,12 @@ fn oracle_prop_functional_lens_traversal() {
     (fmakunbound 'neovm--lens-then-traverse)
     (fmakunbound 'neovm--traversal-get-all)
     (fmakunbound 'neovm--traversal-over-all)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((85 90 78 92 88) ((name . alice) (scores 90 95 83 97 93)) ((name . alice) (scores 85 90 78 92 88)) (2 4 6 8 10) (12 14 16 18 20) (85 90 78 92 88))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -450,7 +473,12 @@ fn oracle_prop_functional_lens_pipeline() {
     (fmakunbound 'neovm--lens-set)
     (fmakunbound 'neovm--lens-over)
     (fmakunbound 'neovm--lens-pipeline)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((name . \"ALICE\") (age . 31) (score . 95) (level . 2)) ((name . \"alice\") (age . 30) (score . 100) (level . 2)) t 85)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -532,5 +560,10 @@ fn oracle_prop_functional_lens_record_update() {
     (fmakunbound 'neovm--lens-set)
     (fmakunbound 'neovm--lens-over)
     (fmakunbound 'neovm--lens-compose)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (30 31 \"Portland\" \"Seattle\" \"97201\" \"98101\" \"Alice B.\" t t 31)""#
+        ]],
+    );
 }

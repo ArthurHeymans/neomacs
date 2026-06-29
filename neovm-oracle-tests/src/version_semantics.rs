@@ -27,7 +27,12 @@ fn oracle_prop_version_to_list_valid_forms() {
  (version-to-list "22.3Z"))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 5) (0 9 -3) (0 9 -3 1) (0 9 -4) (1 0 -4) (1 0 7 5) (1 0 -4) (1 0 -1 2) (22 8 -2 3) (22 3 1) (22 3 26))""#
+        ]],
+    );
 }
 
 #[test]
@@ -43,7 +48,12 @@ fn oracle_prop_version_to_list_invalid_forms() {
  '("1.0prepre2" "1.0..7.5" "22.8X3" "alpha3.2" "" "pre1"))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((error \"Invalid version syntax: ‘1.0prepre2’\") (error \"Invalid version syntax: ‘1.0..7.5’\") (error \"Invalid version syntax: ‘22.8X3’\") (error \"Invalid version syntax: ‘alpha3.2’ (must start with a number)\") (error \"Invalid version syntax: ‘’ (must start with a number)\") (error \"Invalid version syntax: ‘pre1’ (must start with a number)\"))""#
+        ]],
+    );
 }
 
 #[test]
@@ -65,7 +75,10 @@ fn oracle_prop_version_list_comparison_trailing_zeroes_and_prereleases() {
  (version-list-not-zero '(0 0 0)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t nil t t -2 0)""#]],
+    );
 }
 
 #[test]
@@ -86,7 +99,10 @@ fn oracle_prop_version_string_comparison_wrappers() {
  (version< "22.3b" "22.3.3"))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t t t)""#]],
+    );
 }
 
 #[test]
@@ -122,5 +138,10 @@ fn oracle_prop_version_dynamic_separator_regexp_and_error_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 5) (1 2 3) (1 2 -2 3) (1 -4 2)) ((1 -9 2) (1 -8 4) t t t) (error (\"Version must be a string\")) (wrong-type-argument (number-or-marker-p a)) (wrong-type-argument (number-or-marker-p a)))""#
+        ]],
+    );
 }

@@ -14,13 +14,34 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 fn oracle_prop_apply_builtin_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(apply #'+ '(1 2 3 4 5))");
-    assert_oracle_parity("(apply #'* '(1 2 3 4 5))");
-    assert_oracle_parity("(apply #'max '(3 1 4 1 5 9))");
-    assert_oracle_parity("(apply #'min '(3 1 4 1 5 9))");
-    assert_oracle_parity("(apply #'concat '(\"a\" \"b\" \"c\"))");
-    assert_oracle_parity("(apply #'list '(1 2 3))");
-    assert_oracle_parity("(apply #'vector '(1 2 3))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ '(1 2 3 4 5))",
+        expect_test::expect![r#""OK 15""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'* '(1 2 3 4 5))",
+        expect_test::expect![r#""OK 120""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'max '(3 1 4 1 5 9))",
+        expect_test::expect![r#""OK 9""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'min '(3 1 4 1 5 9))",
+        expect_test::expect![r#""OK 1""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'concat '(\"a\" \"b\" \"c\"))",
+        expect_test::expect![[r#""OK \"abc\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'list '(1 2 3))",
+        expect_test::expect![r#""OK (1 2 3)""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'vector '(1 2 3))",
+        expect_test::expect![r#""OK [1 2 3]""#],
+    );
 }
 
 #[test]
@@ -28,17 +49,32 @@ fn oracle_prop_apply_with_leading_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // apply with individual args before the list
-    assert_oracle_parity("(apply #'+ 1 2 '(3 4 5))");
-    assert_oracle_parity("(apply #'list 'a 'b '(c d e))");
-    assert_oracle_parity("(apply #'concat \"x\" '(\"y\" \"z\"))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ 1 2 '(3 4 5))",
+        expect_test::expect![r#""OK 15""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'list 'a 'b '(c d e))",
+        expect_test::expect![r#""OK (a b c d e)""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'concat \"x\" '(\"y\" \"z\"))",
+        expect_test::expect![[r#""OK \"xyz\"""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_apply_with_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(apply (lambda (a b c) (+ (* a b) c)) '(3 4 5))");
-    assert_oracle_parity("(apply (lambda (a &rest r) (cons a r)) 1 '(2 3 4))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply (lambda (a b c) (+ (* a b) c)) '(3 4 5))",
+        expect_test::expect![r#""OK 17""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply (lambda (a &rest r) (cons a r)) 1 '(2 3 4))",
+        expect_test::expect![r#""OK (1 2 3 4)""#],
+    );
 }
 
 #[test]
@@ -48,17 +84,23 @@ fn oracle_prop_apply_with_optional_args() {
     let form = "(apply (lambda (a &optional b c)
                          (list a (or b 'default-b) (or c 'default-c)))
                        '(1))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (1 default-b default-c)""#],
+    );
 
     let form = "(apply (lambda (a &optional b c)
                          (list a (or b 'default-b) (or c 'default-c)))
                        '(1 2))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (1 2 default-c)""#],
+    );
 
     let form = "(apply (lambda (a &optional b c)
                          (list a (or b 'default-b) (or c 'default-c)))
                        '(1 2 3))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (1 2 3)""#]);
 }
 
 #[test]
@@ -66,21 +108,30 @@ fn oracle_prop_apply_with_rest_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(apply (lambda (&rest args) (length args)) '(a b c d))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK 4""#]);
 
     let form = "(apply (lambda (x &rest args)
                          (cons x (length args)))
                        1 2 '(3 4 5))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (1 . 4)""#]);
 }
 
 #[test]
 fn oracle_prop_apply_empty_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(apply #'+ '())");
-    assert_oracle_parity("(apply #'* '())");
-    assert_oracle_parity("(apply #'list '())");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ '())",
+        expect_test::expect![r#""OK 0""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'* '())",
+        expect_test::expect![r#""OK 1""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'list '())",
+        expect_test::expect![r#""OK nil""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +157,7 @@ fn oracle_prop_apply_variadic_compose() {
                                         (lambda (x) (* x x))))))
                     (list (funcall transform 3)
                           (funcall transform 5))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (49 121)""#]);
 }
 
 #[test]
@@ -128,7 +179,7 @@ fn oracle_prop_apply_dispatch_table() {
                     (list (funcall dispatch '+ '(1 2 3))
                           (funcall dispatch '* '(2 3 4))
                           (funcall dispatch 'max '(5 2 8 1)))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (6 24 8)""#]);
 }
 
 #[test]
@@ -138,5 +189,8 @@ fn oracle_prop_apply_spread_args() {
     // Use apply to spread a list as args to format
     let form = r#"(let ((args-list '("hello %s, you are %d" "world" 42)))
                     (apply #'format args-list))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"hello world, you are 42\"""#]],
+    );
 }

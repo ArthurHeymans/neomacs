@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_class_alloc_shared_counter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass shared-counter ()
     ((instance-name :initarg :name :accessor sc-name :initform "")
@@ -61,6 +61,7 @@ fn combo_eieio_class_alloc_shared_counter() {
               (overlay-start ov) (overlay-end ov)
               my-ca-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -68,7 +69,7 @@ fn combo_eieio_class_alloc_shared_counter() {
 fn combo_eieio_class_alloc_shared_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass shared-list ()
     ((tag :initarg :tag :accessor sl-tag :initform "")
@@ -118,6 +119,7 @@ fn combo_eieio_class_alloc_shared_list() {
               (marker-position m)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -125,7 +127,7 @@ fn combo_eieio_class_alloc_shared_list() {
 fn combo_eieio_class_alloc_marker_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass shared-marker-obj ()
     ((label :initarg :label :accessor smo-label :initform "")
@@ -179,6 +181,7 @@ fn combo_eieio_class_alloc_marker_shared() {
               (overlay-start ov) (overlay-end ov)
               my-smk-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -186,7 +189,7 @@ fn combo_eieio_class_alloc_marker_shared() {
 fn combo_eieio_class_alloc_with_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass shared-state ()
     ((id :initarg :id :accessor ss-id :initform "")
@@ -245,6 +248,7 @@ fn combo_eieio_class_alloc_with_narrow_undo() {
               (marker-position m)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -252,7 +256,7 @@ fn combo_eieio_class_alloc_with_narrow_undo() {
 fn combo_eieio_class_alloc_inherited_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass base-shared ()
     ((shared-counter :allocation :class :initarg :sc :accessor bs-sc :initform 0)
@@ -308,5 +312,6 @@ fn combo_eieio_class_alloc_inherited_shared() {
               (overlay-start ov) (overlay-end ov)
               my-cs-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

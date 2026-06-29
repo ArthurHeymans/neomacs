@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx266_benchmark_run_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -17,13 +17,14 @@ fn div_cx266_benchmark_run_availability() {
             (fboundp 'benchmark)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     )
 }
 
 #[test]
 fn div_cx266_benchmark_run_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((result (benchmark-run 10 (+ 1 2 3))))
@@ -32,13 +33,14 @@ fn div_cx266_benchmark_run_basic() {
             (integerp (cadr result))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx266_face_underline_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -50,13 +52,14 @@ fn div_cx266_face_underline_variants() {
             (face-attribute 'neo-cx266-ul3 :underline)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t (:color \"red\" :style wave) (:color \"blue\"))""#]],
     )
 }
 
 #[test]
 fn div_cx266_face_box_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -68,13 +71,16 @@ fn div_cx266_face_box_variants() {
             (face-attribute 'neo-cx266-box3 :box)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (1 (:color \"red\" :line-width 2) (:color \"blue\" :line-width (2 . 2) :style released-button))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx266_face_inverse_video_and_stipple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -82,13 +88,14 @@ fn div_cx266_face_inverse_video_and_stipple() {
       (list (face-attribute 'neo-cx266-inv :inverse-video)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t)""#]],
     )
 }
 
 #[test]
 fn div_cx266_face_inherit_nil_explicit_disable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -99,13 +106,14 @@ fn div_cx266_face_inherit_nil_explicit_disable() {
             (face-attribute 'neo-cx266-no-inherit :foreground)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
     )
 }
 
 #[test]
 fn div_cx266_face_all_attributes_complete_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((attrs (face-all-attributes 'default (selected-frame))))
   (list (assq :family attrs)
@@ -116,13 +124,16 @@ fn div_cx266_face_all_attributes_complete_query() {
         (assq :inverse-video attrs)
         (assq :stipple attrs)))
 "##,
+        expect_test::expect![[
+            r#""OK ((:family . \"default\") (:height . 1) (:weight . normal) (:slant . normal) (:underline) (:inverse-video) (:stipple))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx266_face_foreground_background_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (face-attribute 'default :foreground frame)
@@ -130,13 +141,16 @@ fn div_cx266_face_foreground_background_query() {
         (face-attribute 'font-lock-keyword-face :foreground frame)
         (face-attribute 'font-lock-string-face :foreground frame)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"unspecified-fg\" \"unspecified-bg\" unspecified unspecified)""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx266_face_id_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -147,13 +161,14 @@ fn div_cx266_face_id_consistency() {
             (not (= (face-id 'neo-cx266-id1) (face-id 'neo-cx266-id2)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx266_face_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -184,5 +199,6 @@ fn div_cx266_face_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     )
 }

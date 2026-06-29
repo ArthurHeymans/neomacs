@@ -71,7 +71,12 @@ fn oracle_prop_rwe_mode_line_format_processing() {
                                                                    (copy-sequence state)
                                                                    :modified nil)
                                                                   :read-only nil)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"** init.el  L142 C28  (emacs-lisp)  [utf-8-unix]  4.0K\" \"%% init.el\" \"-- init.el\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +140,12 @@ fn oracle_prop_rwe_package_dependency_resolver() {
        (funcall 'neovm--test-resolve-deps
                 '((d c) (c b) (b a) (a))))
     (fmakunbound 'neovm--test-resolve-deps)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((app lib-b lib-a utils core) (pkg-c pkg-b pkg-a) (d c b a))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +193,12 @@ fn oracle_prop_rwe_config_generator() {
                               (cdr (assq 'port (cdr (assq 'network config))))
                               (cdr (assq 'debug (cdr (assq 'general config))))
                               (length config)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"[general]\nuser = alice\nversion = 2.1\ndebug = false\n\n[network]\nhost = localhost\nport = 8080\ntimeout = 30\nssl = true\n\n[database]\ndriver = postgres\nname = mydb\npool-size = 10\n\" 8080 nil 3)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +306,12 @@ fn oracle_prop_rwe_undo_redo_text_editor() {
                                         after-undo1
                                         after-undo2
                                         after-redo)))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello, World!\" \"Hello, !\" \"Hello, Emacs!\" \"Hello, !\" \"Hello, World!\" \"Hello, !\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -355,7 +375,12 @@ fn oracle_prop_rwe_ring_buffer() {
                                       after-rotate-2
                                       after-rotate-back
                                       ring-size))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"fourth\" \"third\" \"second\" \"first\") \"fourth\" (\"fifth\" \"fourth\" \"third\" \"second\") \"fifth\" \"fourth\" \"third\" \"fifth\" 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -418,5 +443,10 @@ fn oracle_prop_rwe_completion_scoring() {
                                 (setq top (cons entry top))
                                 (setq count (1+ count))))
                             (nreverse top))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"find-file\" . 166) (\"fill-paragraph\" . 163) (\"find-file-other-window\" . 159) (\"format\" . 17) (\"forward-char\" . 14))""#
+        ]],
+    );
 }

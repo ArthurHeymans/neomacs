@@ -11,17 +11,18 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_j2_process_lines_sync() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (process-lines shell-file-name shell-command-switch "printf 'a\nb\nc'")
 "##,
+        expect_test::expect![[r#""OK (\"a\" \"b\" \"c\")""#]],
     );
 }
 
 #[test]
 fn div_j2_process_lines_with_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (process-lines shell-file-name shell-command-switch "echo single")
       (length (process-lines shell-file-name shell-command-switch "seq 1 5"))
@@ -29,13 +30,16 @@ fn div_j2_process_lines_with_error() {
           (process-lines shell-file-name shell-command-switch "exit 7")
         (file-error (car (cdr err)))))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"/nix/store/i27rhb3nr65rkrwz36bchkwmav6ggsmn-bash-5.3p9/bin/bash exited with status 7\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_j2_process_send_string_and_eof() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (generate-new-buffer " *probe-send*"))
        (proc (make-process :name "probe-psend"
@@ -49,13 +53,14 @@ fn div_j2_process_send_string_and_eof() {
   (list (with-current-buffer buf (buffer-string))
         (process-status proc)))
 "##,
+        expect_test::expect![[r#""ERR (void-variable proc)""#]],
     );
 }
 
 #[test]
 fn div_j2_process_query_on_exit_and_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "probe-pqoe"
                           :command (list shell-file-name shell-command-switch "sleep 1"))))
@@ -63,13 +68,14 @@ fn div_j2_process_query_on_exit_and_delete() {
         (progn (set-process-query-on-exit-flag proc t) (process-query-on-exit-flag proc))
         (progn (delete-process proc) (process-status proc))))
 "##,
+        expect_test::expect![[r#""OK (t t signal)""#]],
     );
 }
 
 #[test]
 fn div_j2_process_environment_option() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (generate-new-buffer " *probe-env-out*")))
   (let ((proc (make-process :name "probe-penv"
@@ -80,13 +86,14 @@ fn div_j2_process_environment_option() {
     (accept-process-output proc 1))
   (with-current-buffer buf (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK \"\n\"""#]],
     );
 }
 
 #[test]
 fn div_j2_process_send_string_return() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (generate-new-buffer " *probe-sr*"))
        (proc (make-process :name "probe-psr"
@@ -99,5 +106,6 @@ fn div_j2_process_send_string_return() {
         (accept-process-output proc 1)
         (with-current-buffer buf (buffer-string))))
 "##,
+        expect_test::expect![[r#""ERR (void-variable proc)""#]],
     );
 }

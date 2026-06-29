@@ -47,5 +47,10 @@ fn oracle_prop_gnu_subr_conditional_binding_macro_contracts() {
              (if-let* ((x 1) (y 2)) (list x y))
              (and-let* ((x 1)))
              (while-let ((x (pop xs))) x)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((then 1 2 (a b)) (else 1 nil (a b)) (body (test)) (body (ignored)) (symbol 7) 7 t nil (old-single 42) (old-when 42) (1 2) ((error error (\"`let' bindings can have only one value-form\" x 1 2)) (let* ((x (and t 1)) (y (and x 2))) (if y (list x y))) (let* ((x (and t 1))) x) (catch 'done0 (while t (if-let* ((x (pop xs))) (progn x) (throw 'done0 nil))))))""#
+        ]],
+    );
 }

@@ -42,7 +42,12 @@ fn oracle_prop_subr_x_string_trim_variants() {
     (string-trim-right "   hello")
     (string-trim-right "")
     (string-trim-right "helloxxxx" "x+")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello world\" \"spaced\" \"\" \"\" \"no-spaces\" \"hello\" \"test---\" \"dots\" \"hello\" \"hello\" \"hello   \" \"\" \"hello\" \"hello\" \"hello\" \"   hello\" \"\" \"hello\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +74,10 @@ fn oracle_prop_string_empty_p_semantics() {
    (condition-case err
        (string-empty-p 'symbol)
      (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil nil nil nil nil)""#]],
+    );
 }
 
 #[test]
@@ -89,7 +97,10 @@ fn oracle_prop_subr_x_string_blank_p() {
     (string-blank-p "\n")
     ;; Technically not blank
     (string-blank-p "0")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 0 0 nil nil nil 0 0 nil)""#]],
+    );
 }
 
 #[test]
@@ -114,7 +125,12 @@ fn oracle_prop_subr_x_string_blank_p_argument_semantics() {
      (condition-case err
          (string-blank-p 'symbol)
        (error (list (car err) (cadr err)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (0 nil nil nil (wrong-type-argument stringp) (wrong-type-argument stringp))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +164,12 @@ fn oracle_prop_subr_x_string_join() {
     (string-join '("" "" "") ",")
     ;; Join mixed empty and non-empty
     (string-join '("a" "" "b" "" "c") ",")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello world\" \"a, b, c, d\" \"one-two-three\" \"abc\" \"alone\" \"\" \"helloworld\" \"foo :: bar :: baz\" \"line1\nline2\nline3\" \",,\" \"a,,b,,c\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +202,12 @@ fn oracle_prop_subr_x_remove_prefix_suffix() {
       (string-remove-prefix "~/.emacs.d/" "~/.emacs.d/init.el"))
     ;; Remove prefix that is longer than string
     (string-remove-prefix "very-long-prefix" "hi")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"fix\" \"no-match\" \"hello\" \"\" \" world\" \"hello\" \"init\" \"no-match\" \"hello\" \"\" \"hello \" \"file.el\" \"init\" \"hi\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -218,7 +244,12 @@ fn oracle_prop_subr_x_remove_prefix_suffix_identity_and_properties() {
         (condition-case err
             (string-remove-suffix 'suf s)
           (error (list (car err) (cadr err))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t bold source t t bold source (wrong-type-argument sequencep) (wrong-type-argument sequencep))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +284,10 @@ fn oracle_prop_subr_x_string_clean_chop_replace() {
     (string-replace "x" "y" "no match")
     (string-replace "" "x" "hello")
     (string-replace "hello" "" "hello world hello")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-length-argument 0)""#]],
+    );
 }
 
 #[test]
@@ -278,7 +312,12 @@ fn oracle_prop_subr_x_string_clean_whitespace_exact_blank_regexp() {
       (condition-case err
           (string-clean-whitespace 'symbol)
         (error (list (car err) (cadr err)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"alpha beta\" \"\u{b}alpha\u{c}\" \"alpha\u{b} \u{c}beta\" \"\u{b} \u{c}\" (wrong-type-argument arrayp) (wrong-type-argument sequencep))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +348,12 @@ fn oracle_prop_subr_x_string_fill_limit_pad() {
     (string-pad "hello" 3)
     (string-pad "" 5)
     (string-pad "hi" 8 ?- t)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"This is a long\nsentence that should\nbe wrapped at a\nreasonable column\nwidth\" \"short\" \"\" \"hello\" \"hello\" \"world\" \"\" \"abc\" \"hello     \" \"hello.....\" \"     hello\" \"hello\" \"     \" \"------hi\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -356,7 +400,12 @@ fn oracle_prop_subr_x_string_limit_pad_identity_errors_and_coding() {
       (condition-case err
           (string-pad pad-source 5 "x")
         (error (list (car err) (cadr err)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t \"\" \"\" \"he\" \"lo\" \"\" \"\\303\\251\" \"\\303\\251\" \"\\303\\251\\303\\251\" \"\\303\\251\" 2 nil t t \"pad  \" \"pad..\" \"..pad\" (wrong-type-argument natnump) (wrong-type-argument natnump) (wrong-type-argument natnump) (wrong-type-argument characterp))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -406,7 +455,10 @@ fn oracle_prop_subr_x_when_let_if_let() {
     (when-let ((x '(1 2 3)))
       (when-let ((y (nth 2 x)))
         (* y 10)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (9 nil 30 nil value not-found 3 nope 30)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -457,7 +509,10 @@ fn oracle_prop_subr_x_thread_first_last() {
     ;; (- 1 5) vs (- 5 1)
     (list (thread-first 5 (- 1))
           (thread-last 5 (- 1)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument sequencep 0)""#]],
+    );
 }
 
 #[test]
@@ -483,7 +538,12 @@ fn oracle_prop_subr_x_thread_macroexpansion_and_named_let_lexical_contracts() {
     (condition-case err
         (macroexpand '(named-let f ((x 1)) x))
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((- (* (+ 5 3) 2)) (- (* 2 (+ 3 5))) (internal--thread-argument t x f) (internal--thread-argument nil x f) (car (append (list 1 2) '(3))) (error \"‘named-let’ requires lexical binding\") (error \"‘named-let’ requires lexical binding\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -547,7 +607,12 @@ fn oracle_prop_subr_x_named_let() {
            ((< (aref vec mid) target) (bsearch vec target (1+ mid) hi))
            (t (bsearch vec target lo (1- mid)))))))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3628800 610 55 (e d c b a) (5 4 3 2 1) 6 (5 4 3 1 2 6 7) 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -595,7 +660,10 @@ fn oracle_prop_subr_x_thread_edge_cases() {
     (if-let ((x (assoc 'missing '((a . 1) (b . 2)))))
       (cdr x)
       (+ 10 20 30))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument sequencep 32)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -650,7 +718,10 @@ fn oracle_prop_subr_x_combined_text_processing() {
                (port (alist-get 'port db)))
         (format "%s:%d" host port)
         "not configured"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument sequencep 44)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -704,5 +775,8 @@ fn oracle_prop_subr_x_named_let_advanced_algorithms() {
         (if (cl-evenp n)
             (collatz (/ n 2) (1+ steps))
           (collatz (+ (* 3 n) 1) (1+ steps)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((3 9 10 27 38 43 82) (15 (A B) (B C)) 29 111)""#]],
+    );
 }

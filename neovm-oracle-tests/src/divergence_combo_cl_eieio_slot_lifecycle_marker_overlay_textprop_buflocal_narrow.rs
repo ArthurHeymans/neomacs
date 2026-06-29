@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_slot_boundp_makeunbound_with_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass slot-tracker ()
     ((name :initarg :name :accessor st-name :initform "")
@@ -78,6 +78,7 @@ fn combo_eieio_slot_boundp_makeunbound_with_edit() {
               (overlay-start ov) (overlay-end ov)
               my-sl-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -85,7 +86,7 @@ fn combo_eieio_slot_boundp_makeunbound_with_edit() {
 fn combo_eieio_slot_boundp_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass slot-narrow-obj ()
     ((tag :initarg :tag :accessor sno-tag :initform "")
@@ -145,6 +146,7 @@ fn combo_eieio_slot_boundp_narrow_undo() {
               (overlay-start ov) (overlay-end ov)
               my-sno-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -152,7 +154,7 @@ fn combo_eieio_slot_boundp_narrow_undo() {
 fn combo_eieio_slot_missing_handler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass missing-obj ()
     ((name :initarg :name :accessor mo-name :initform "")))
@@ -204,6 +206,7 @@ fn combo_eieio_slot_missing_handler() {
               (overlay-start ov) (overlay-end ov)
               my-sm-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -211,7 +214,7 @@ fn combo_eieio_slot_missing_handler() {
 fn combo_eieio_slot_boundp_marker_in_slot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass marker-slot-obj ()
     ((label :initarg :label :accessor mso-label :initform "")
@@ -266,6 +269,7 @@ fn combo_eieio_slot_boundp_marker_in_slot() {
               (overlay-start ov) (overlay-end ov)
               my-mso-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -273,7 +277,7 @@ fn combo_eieio_slot_boundp_marker_in_slot() {
 fn combo_eieio_slot_boundp_overlay_in_slot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass overlay-slot-obj ()
     ((ident :initarg :ident :accessor oso-ident :initform "")
@@ -330,5 +334,6 @@ fn combo_eieio_slot_boundp_overlay_in_slot() {
               (marker-position m)
               my-oso-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
     );
 }

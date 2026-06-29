@@ -34,7 +34,12 @@ fn oracle_prop_split_string_default_separator() {
   (split-string "")
   ;; Vertical tab and form feed
   (split-string "a\vb\fc"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"hello\" \"world\") (\"a\" \"b\" \"c\") (\"foo\" \"bar\" \"baz\") (\"alpha\" \"beta\" \"gamma\") (\"onlyone\") nil nil (\"a\" \"b\" \"c\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +67,12 @@ fn oracle_prop_split_string_explicit_regex_separators() {
   (split-string "one , two ; three" "[ \t]*[,;][ \t]*")
   ;; Newlines only as separator
   (split-string "line1\nline2\nline3" "\n"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"a\" \"b\" \"c\" \"d\") (\"hello\" \"world\" \"foo\") (\"one\" \"two\" \"three\" \"four\") (\"192\" \"168\" \"1\" \"100\") (\"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\") (\"field1\" \"field2\" \"field3\") (\"one\" \"two\" \"three\") (\"line1\" \"line2\" \"line3\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +105,12 @@ fn oracle_prop_split_string_omit_nulls_combinations() {
   ;; Regex separator with omit-nulls
   (split-string "::a::b::" ":+" nil)
   (split-string "::a::b::" ":+" t))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"\" \"a\" \"b\" \"c\") (\"a\" \"b\" \"c\") (\"a\" \"b\" \"c\" \"\") (\"a\" \"b\" \"c\") (\"\" \"a\" \"b\" \"c\" \"\") (\"a\" \"b\" \"c\") (\"a\" \"\" \"b\" \"\" \"\" \"c\") (\"a\" \"b\" \"c\") (\"\" \"\" \"\" \"\") nil (\"hello\") (\"hello\") (\"\" \"a\" \"b\" \"\") (\"a\" \"b\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +138,12 @@ fn oracle_prop_split_string_trim_parameter() {
   (split-string "foo(1),bar(2),baz(3)" "," t "([0-9]+)")
   ;; Trim that removes everything from some pieces, with omit-nulls
   (split-string "123,abc,456,def" "," t "[0-9]+"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"a\" \"b\" \"c\") (\"one\" \"two\" \"three\") (\"abc\" \"def\") (\"\" \"hello\" \"\" \"world\" \"\") (\"hello\" \"world\") (\"alpha\" \"beta\" \"gamma\") (\"foo\" \"bar\" \"baz\") (\"abc\" \"def\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +175,12 @@ fn oracle_prop_split_string_boundary_and_consecutive() {
   ;; Two consecutive separator chars only
   (split-string "::" ":" nil)
   (split-string "::" ":" t))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"\" \"usr\" \"local\" \"bin\") (\"usr\" \"local\" \"bin\") (\"usr\" \"local\" \"bin\" \"\") (\"usr\" \"local\" \"bin\") (\"\" \"usr\" \"local\" \"bin\" \"\") (\"usr\" \"local\" \"bin\") (\"a\" \"\" \"\" \"b\" \"\" \"\" \"\" \"c\") (\"a\" \"b\" \"c\") (\"one\" \"two\" \"three\") (\"\" \"\") nil (\"\" \"\" \"\") nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +232,12 @@ fn oracle_prop_split_string_csv_parsing() {
     (fmakunbound 'neovm--csv-parse-field)
     (fmakunbound 'neovm--csv-parse-row)
     (fmakunbound 'neovm--csv-parse)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"name\" \"age\" \"score\" \"active\") (\"Alice\" 30 95.5 t) (\"Bob\" 25 87.3 nil) (\"Charlie\" 35 nil t)) (\"hello\" 42 3.14 t) (\"a\" \"b\" \"c\" nil) (nil \"x\" \"y\" \"z\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +315,12 @@ fn oracle_prop_split_string_path_manipulation() {
     (fmakunbound 'neovm--path-basename)
     (fmakunbound 'neovm--path-extension)
     (fmakunbound 'neovm--path-normalize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"usr\" \"local\" \"bin\" \"emacs\") (\"relative\" \"path\" \"file.txt\") nil \"/usr/local/bin\" \".\" \"/\" \"emacs\" \"file.tar.gz\" \"txt\" \"gz\" nil \"/usr/bin/emacs\" \"a/c/e\" \"/c\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +408,12 @@ fn oracle_prop_split_string_log_parsing() {
     (fmakunbound 'neovm--parse-log-line)
     (fmakunbound 'neovm--filter-logs)
     (fmakunbound 'neovm--log-summary)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:date \"2024-01-15\" :time \"10:30:00.123\" :level \"INFO\" :component \"server\" :message \"Started on port 8080\") (:date \"2024-01-15\" :time \"10:30:03.012\" :level \"ERROR\" :component \"handler\" :message \"Request timeout after 30s\") 2 2 2 ((\"DEBUG\" . 2) (\"ERROR\" . 2) (\"INFO\" . 2) (\"WARN\" . 1)) (\"Request timeout after 30s\" \"Connection refused\") (\"server\" \"db\" \"auth\" \"handler\" \"server\" \"cache\" \"db\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -407,5 +447,10 @@ fn oracle_prop_split_string_all_params_combined() {
     (split-string "aaa,bbb,ccc" "," t "[a-c]+")
     ;; Same without omit-nulls: keeps the empty strings
     (split-string "aaa,bbb,ccc" "," nil "[a-c]+")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"hello\" \"world\") (\"  [hello] \" \" [world] \" \" [] \" \" [foo]  \") (\"  [hello] \" \" [world] \" \" [] \" \" [foo]  \") (\"  [hello] \" \" [world] \" \" [] \" \" [foo]  \") (\"[hello]\" \"[world]\" \"[]\" \"[foo]\") (\"[hello]\" \"[world]\" \"[]\" \"[foo]\") (\"hello\" \"world\" \"\" \"foo\") (\"hello\" \"world\" \"foo\") nil (\"\" \"\" \"\"))""#
+        ]],
+    );
 }

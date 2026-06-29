@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx198_encode_decode_roundtrip_utf8_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((text "Hello café 世界 😀 end")
        (enc (encode-coding-string text 'utf-8))
@@ -18,13 +18,14 @@ fn div_cx198_encode_decode_roundtrip_utf8_multibyte() {
         (string-bytes enc)
         (length enc)))
 "##,
+        expect_test::expect![[r#""OK (t t 19 27 27)""#]],
     );
 }
 
 #[test]
 fn div_cx198_encode_with_signature_bom_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((text "café世界")
        (plain (encode-coding-string text 'utf-8))
@@ -34,13 +35,14 @@ fn div_cx198_encode_with_signature_bom_check() {
         (aref sig 0) (aref sig 1) (aref sig 2)
         (string= (substring sig 3) plain)))
 "##,
+        expect_test::expect![[r#""OK (11 14 239 187 191 t)""#]],
     );
 }
 
 #[test]
 fn div_cx198_decode_invalid_bytes_per_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((raw (unibyte-string #x68 #x65 #x6c #x6c #x6f #xff #xc3 #xa9)))
   (mapcar (lambda (cs)
@@ -51,13 +53,16 @@ fn div_cx198_decode_invalid_bytes_per_coding() {
               (error (list cs :err (car e)))))
           '(utf-8 latin-1 iso-8859-1 no-conversion)))
 "##,
+        expect_test::expect![[
+            r#""OK ((utf-8 7 9 (ascii ascii ascii ascii ascii eight-bit unicode-bmp)) (latin-1 8 11 (ascii ascii ascii ascii ascii unicode-bmp unicode-bmp unicode-bmp)) (iso-8859-1 8 11 (ascii ascii ascii ascii ascii unicode-bmp unicode-bmp unicode-bmp)) (no-conversion 8 8 (ascii ascii ascii ascii ascii unicode-bmp unicode-bmp unicode-bmp)))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx198_encode_coding_region_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (set-buffer-multibyte nil)
@@ -66,13 +71,14 @@ fn div_cx198_encode_coding_region_in_buffer() {
   (encode-coding-region (point-min) (point-max) 'utf-8-unix (current-buffer))
   (list (buffer-string) (buffer-size)))
 "##,
+        expect_test::expect![[r#""OK (\"hello\\377\\376\" 7)""#]],
     );
 }
 
 #[test]
 fn div_cx198_decode_coding_region_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (set-buffer-multibyte nil)
@@ -81,13 +87,14 @@ fn div_cx198_decode_coding_region_in_buffer() {
   (decode-coding-region (point-min) (point-max) 'utf-8-unix (current-buffer) t)
   (list (buffer-string) (buffer-size) (string-bytes (buffer-string))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments decode-coding-region 5)""#]],
     );
 }
 
 #[test]
 fn div_cx198_coding_system_plist_query_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (cs)
           (let ((p (coding-system-plist cs)))
@@ -99,25 +106,29 @@ fn div_cx198_coding_system_plist_query_all() {
         '(utf-8 utf-8-with-signature latin-1 iso-8859-9
           utf-16 utf-16le utf-16be big5 gb2312 no-conversion))
 "##,
+        expect_test::expect![[
+            r#""OK ((utf-8 utf-8 85 utf-8 t) (utf-8-with-signature utf-8-with-signature 85 nil nil) (latin-1 iso-latin-1 49 iso-8859-1 t) (iso-8859-9 iso-latin-5 57 iso-8859-9 t) (utf-16 utf-16 85 utf-16 nil) (utf-16le utf-16le 85 utf-16le nil) (utf-16be utf-16be 85 utf-16be nil) (big5 chinese-big5 66 big5 t) (gb2312 chinese-iso-8bit 99 gb2312 t) (no-conversion no-conversion 61 nil t))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx198_set_buffer_file_coding_system_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (set-buffer-file-coding-system 'utf-8-unix)
   (list (buffer-local-value 'buffer-file-coding-system (current-buffer))))
 "##,
+        expect_test::expect![[r#""OK (utf-8-unix)""#]],
     );
 }
 
 #[test]
 fn div_cx198_string_make_unibyte_then_multibyte_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((mb "café 世界")
        (uni (string-make-unibyte mb))
@@ -130,13 +141,16 @@ fn div_cx198_string_make_unibyte_then_multibyte_data() {
         (string-bytes mb) (string-bytes uni) (string-bytes back)
         (equal mb back)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"café 世界\" \"caf\\351 \u{16}L\" \"caf\\351 \u{16}L\" t nil t 7 7 7 12 7 8 nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx198_coding_system_aliases_and_parents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (cs)
           (condition-case e
@@ -145,13 +159,16 @@ fn div_cx198_coding_system_aliases_and_parents() {
             (error (list cs :err (car e)))))
         '(utf-8 utf-8-unix latin-1 iso-8859-1))
 "##,
+        expect_test::expect![[
+            r#""OK ((utf-8 :err void-function) (utf-8-unix :err void-function) (latin-1 :err void-function) (iso-8859-1 :err void-function))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx198_coding_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((text "café 世界 😀 hello")
        (enc (encode-coding-string text 'utf-8))
@@ -179,5 +196,6 @@ fn div_cx198_coding_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

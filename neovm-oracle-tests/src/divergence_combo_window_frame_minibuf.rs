@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_window_configuration_save_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((wconf (current-window-configuration))
         (w (selected-window))
@@ -26,6 +26,9 @@ fn divergence_window_configuration_save_restore() {
             (string= s1 "WINDOW-CONFIG-TEST")
             (get-text-property 1 'tag)
             (eq (get-text-property 1 'tag) 'tag))))) "#,
+        expect_test::expect![[
+            r#""WINDOW-CONFIG-TESTOK (t t t t t #(\"WINDOW-CONFIG-TEST\" 0 7 (tag wconf)) t wconf nil)""#
+        ]],
     );
 }
 
@@ -33,7 +36,7 @@ fn divergence_window_configuration_save_restore() {
 fn divergence_window_edges_and_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((w (selected-window)))
     (let ((edges (window-edges w))
@@ -57,6 +60,7 @@ fn divergence_window_edges_and_dimensions() {
             (>= (window-body-width w t) 0)
             (window-body-height w t)
             (>= (window-body-height w t) 0))))) "#,
+        expect_test::expect![[r#""ERR (void-function window-total-edges)""#]],
     );
 }
 
@@ -64,7 +68,7 @@ fn divergence_window_edges_and_dimensions() {
 fn divergence_frame_parameters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((f (selected-frame)))
     (let ((params (frame-parameters f)))
@@ -79,6 +83,7 @@ fn divergence_frame_parameters() {
             (framep f)
             (memq (framep f) '(x w32 ns pc t))
             (not (framep 'nonexistent-xxx)))))) "#,
+        expect_test::expect![[r#""OK (t nil t nil t nil t t t (t) t)""#]],
     );
 }
 
@@ -86,7 +91,7 @@ fn divergence_frame_parameters() {
 fn divergence_minibuffer_window_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((mw (minibuffer-window)))
     (list (windowp mw)
@@ -100,6 +105,7 @@ fn divergence_minibuffer_window_properties() {
           (eq (minibufferp (window-buffer mw)) t)
           (active-minibuffer-window)
           (null (active-minibuffer-window))))) "#,
+        expect_test::expect![[r#""OK (t t t t t t t t t nil t)""#]],
     );
 }
 
@@ -107,7 +113,7 @@ fn divergence_minibuffer_window_properties() {
 fn divergence_window_buffer_relationship() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let* ((buf1 (generate-new-buffer " test-wbr1-xxx"))
          (buf2 (generate-new-buffer " test-wbr2-xxx"))
@@ -135,6 +141,7 @@ fn divergence_window_buffer_relationship() {
               (string= s2 "BUFFER2")
               (eq p1 'buf1)
               (eq p2 'buf2)))))) "#,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
@@ -142,7 +149,7 @@ fn divergence_window_buffer_relationship() {
 fn divergence_window_point_and_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 500 ?X))
   (let ((w (selected-window)))
@@ -156,6 +163,9 @@ fn divergence_window_point_and_start() {
             (window-point w)
             (= (window-point w) 1)
             (= bp 500))))) "#,
+        expect_test::expect![[
+            r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXOK (t t nil 1 t t)""#
+        ]],
     );
 }
 
@@ -163,7 +173,7 @@ fn divergence_window_point_and_start() {
 fn divergence_window_hscroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 200 ?Y))
   (let ((w (selected-window)))
@@ -176,6 +186,9 @@ fn divergence_window_hscroll() {
               (<= hs2 hs1)
               (integerp hs1)
               (integerp hs2)))))) "#,
+        expect_test::expect![[
+            r#""YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYOK (t t t t t)""#
+        ]],
     );
 }
 
@@ -183,7 +196,7 @@ fn divergence_window_hscroll() {
 fn divergence_window_dedicated() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((w (selected-window)))
     (list (window-dedicated-p w)
@@ -194,6 +207,7 @@ fn divergence_window_dedicated() {
           (set-window-dedicated-p w nil)
           (window-dedicated-p w)
           (null (window-dedicated-p w))))) "#,
+        expect_test::expect![[r#""OK (nil t t t t nil nil t)""#]],
     );
 }
 
@@ -201,7 +215,7 @@ fn divergence_window_dedicated() {
 fn divergence_buffer_display_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "DISPLAY-TIME-TEST")
   (let ((buf (current-buffer))
@@ -215,6 +229,9 @@ fn divergence_buffer_display_time() {
           (null (buffer-modified-p))
           (set-buffer-modified-p nil)
           (null (buffer-modified-p))))) "#,
+        expect_test::expect![[
+            r#""DISPLAY-TIME-TESTOK (t t nil \"DISPLAY-TIME-TEST\" t t nil nil t)""#
+        ]],
     );
 }
 
@@ -222,7 +239,7 @@ fn divergence_buffer_display_time() {
 fn divergence_frame_list_and_selected() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((frames (frame-list))
         (sel (selected-frame)))
@@ -235,5 +252,6 @@ fn divergence_frame_list_and_selected() {
           (>= (length (visible-frame-list)) 1)
           (eq (selected-frame) sel)
           (frame-live-p (next-frame sel))))) "#,
+        expect_test::expect![[r#""OK (t t t t t t t t t)""#]],
     );
 }

@@ -38,7 +38,10 @@ fn oracle_prop_make_hash_table_test_eq() {
                         ;; Different object, same structure: NOT found under eq
                         (gethash (list 1 2 3) h)
                         (hash-table-count h))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (eq 10 2 found by-identity nil 4)""#]],
+    );
 }
 
 #[test]
@@ -69,7 +72,10 @@ fn oracle_prop_make_hash_table_test_eql() {
                         ;; Different cons, same structure: not found (eql = eq for lists)
                         (gethash (list 'a 'b) h)
                         (hash-table-count h))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (eql one-again two pi symbol-val list-val nil 5)""#]],
+    );
 }
 
 #[test]
@@ -102,7 +108,10 @@ fn oracle_prop_make_hash_table_test_equal() {
                       ;; Vector lookup
                       (gethash (vector 1 2 3) h)
                       (hash-table-count h)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (equal 10 2 abc nums nested vec 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +152,10 @@ fn oracle_prop_make_hash_table_size_parameter() {
                               (gethash 0 h1)
                               (gethash 25 h1)
                               (gethash 49 h1)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil t t t t t 0 0 0 (50 0 625 2401))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +200,12 @@ fn oracle_prop_make_hash_table_weakness_parameter() {
                       (hash-table-p h-nil)
                       (hash-table-p h-key)
                       (hash-table-p h-val)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil key value key-or-value key-and-value (1 2 3 4 1 1 1 1) t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +242,12 @@ fn oracle_prop_make_hash_table_rehash_params() {
                           (gethash 50 h1)
                           (gethash "key-50" h2)
                           (gethash 50 h3)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1.5 0.8125 1.5 0.8125 1.5 0.8125 (100 100 100 100 nil -50))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +280,12 @@ fn oracle_prop_make_hash_table_accessors() {
                           (hash-table-rehash-size h)
                           (hash-table-rehash-threshold h)))
                       tables))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t eql 0 t nil 1.5 0.8125) (t eq 0 t nil 1.5 0.8125) (t eql 0 t nil 1.5 0.8125) (t equal 0 t nil 1.5 0.8125) (t eq 0 t nil 1.5 0.8125) (t equal 0 t key 1.5 0.8125))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -303,7 +330,12 @@ fn oracle_prop_make_hash_table_structural_key_patterns() {
                       (gethash '(2025 3 1) h 'not-found)
                       ;; Count
                       (hash-table-count h)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"event-a-updated\" \"event-b\" (admin active) (viewer active) x-axis y-axis z-axis config-a config-b not-found 9)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -351,7 +383,12 @@ fn oracle_prop_make_hash_table_benchmark_creation() {
                      (nth 2 cfg)))
           configs))
     (fmakunbound 'neovm--mht-create-and-populate)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((eq 50 0 2401) (eq 50 0 2401) (eql 50 0 2401) (eql 50 0 2401) (equal 50 0 2401) (equal 50 0 2401) (eq 200 0 39601) (equal 200 0 39601))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -416,5 +453,8 @@ fn oracle_prop_make_hash_table_scope_chain() {
             ;; Only global
             (funcall 'neovm--mht-scope-lookup (list global) 'x))))
     (fmakunbound 'neovm--mht-scope-lookup)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (999 888 3 200 314 777 nil 100 nil 1)""#]],
+    );
 }

@@ -56,7 +56,10 @@ fn oracle_prop_church_encoding_numerals() {
    ;; Church numeral as function application count
    (funcall (funcall c3 (lambda (s) (concat s "!"))) "hi")
    (funcall (funcall c5 (lambda (n) (* n 2))) 1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 1 2 3 5 7 0 4 10 \"hi!!!\" 32)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +114,10 @@ fn oracle_prop_church_encoding_arithmetic() {
    (funcall to-int (funcall mul (funcall add c2 c3) c2))
    ;; (2*3) + (4*1) = 10
    (funcall to-int (funcall add (funcall mul c2 c3) (funcall mul c4 c1)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 3 5 10 t 0 5 6 12 25 t t 8 9 10 10)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +181,12 @@ fn oracle_prop_church_encoding_booleans() {
            (funcall to-bool (funcall xor ctrue cfalse))
            (funcall to-bool (funcall xor cfalse ctrue))
            (funcall to-bool (funcall xor cfalse cfalse))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t nil yes no t nil nil nil t t t nil nil t t nil t t 1 (nil t t nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +238,10 @@ fn oracle_prop_church_encoding_pairs() {
        (list (funcall ccar swapped) (funcall ccdr swapped)))
      ;; Pair equality check
      (and (= (funcall ccar p1) 10) (= (funcall ccdr p1) 20)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 20 hello world 1 2 3 4 x y z (20 10) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +311,10 @@ fn oracle_prop_church_encoding_predecessor() {
    (funcall to-int (funcall pred (funcall pred c5)))  ;; 3
    ;; pred applied 4 times to 4 = 0
    (funcall to-int (funcall pred (funcall pred (funcall pred (funcall pred c4)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 0 1 4 7 3 7 0 5 3 5 0 0 3 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -414,7 +431,12 @@ fn oracle_prop_church_encoding_lists() {
                     (fmakunbound 'neovm--test-church-foldr)))
               (fmakunbound 'neovm--test-church-from-list)))
         (fmakunbound 'neovm--test-church-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 20 30 40) 10 (20 30 40) t nil (20 40 60 80) 4 0 100 (10 20 30 40 5 6 7) 7 (100 200 300) 110)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -492,7 +514,10 @@ fn oracle_prop_church_encoding_comparisons() {
       (funcall to-int (funcall cmax c2 c5))
       (funcall to-int (funcall cmin c4 c1))
       (funcall to-int (funcall cmax c4 c1))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil nil t t t t nil t t nil nil t t nil nil (2 5 1 4))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -539,5 +564,10 @@ fn oracle_prop_church_encoding_roundtrip_validation() {
               results))
       (setq k (1+ k)))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 0 0 0 0 t t t t) (1 1 1 1 0 t t t t) (2 2 2 2 0 t t t t) (3 3 3 3 0 t t t t) (4 4 4 4 0 t t t t) (5 5 5 5 0 t t t t))""#
+        ]],
+    );
 }

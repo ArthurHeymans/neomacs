@@ -25,5 +25,10 @@ fn oracle_suppress_keymap_mutates_digits_and_remap_contract() {
    (condition-case e
        (suppress-keymap 42)
      (error (list (car e) (cadr e) (caddr e))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil undefined negative-argument digit-argument digit-argument nil t undefined nil nil nil nil (wrong-type-argument keymapp 42))""#
+        ]],
+    );
 }

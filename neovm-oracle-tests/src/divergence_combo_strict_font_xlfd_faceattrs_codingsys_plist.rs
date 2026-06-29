@@ -9,10 +9,11 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_q4_font_xlfd_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (font-xlfd-name (font-spec :family "Monospace" :weight 'normal))
 "##,
+        expect_test::expect![[r#""OK \"-*-Monospace-normal-*-*-*-*-*-*-*-*-*-*-*\"""#]],
     );
 }
 
@@ -24,34 +25,37 @@ fn div_q4_font_face_attributes_weight_canonicalization() {
     // Neomacs:   OK (:family "Monospace" :weight normal)
     // font-face-attributes canonicalizes :weight 'normal to the canonical name
     // 'regular in GNU Emacs; Neomacs returns the alias 'normal.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (font-face-attributes (font-spec :family "Monospace" :weight 'normal))
 "##,
+        expect_test::expect![[r#""OK (:family \"Monospace\" :weight regular)""#]],
     );
 }
 
 #[test]
 fn div_q4_coding_system_plist_introspect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (plist-get (coding-system-plist 'utf-8) :mime-charset)
       (plist-get (coding-system-plist 'utf-8) :name)
       (plist-get (coding-system-plist 'iso-8859-1) :mime-charset)
       (plist-get (coding-system-plist 'utf-8-unix) :eol-type))
 "##,
+        expect_test::expect![[r#""OK (utf-8 utf-8 iso-8859-1 nil)""#]],
     );
 }
 
 #[test]
 fn div_q4_fontset_info_introspect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((fs (car (fontset-list))))
   (list (stringp fs)
         (condition-case err (fontset-info fs) (error (car err)))))
 "##,
+        expect_test::expect![[r#""OK (t error)""#]],
     );
 }

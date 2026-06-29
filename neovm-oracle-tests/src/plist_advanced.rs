@@ -39,7 +39,12 @@ fn oracle_prop_plist_all_value_types() {
                           (plist-get pl :vec)
                           (plist-get pl :pair)
                           (plist-get pl :nested)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (42 3.14 \"hello\" world :keyword-val t nil (1 2 3) [4 5 6] (a . b) (:x 1 :y 2))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +79,12 @@ fn oracle_prop_plist_create_vs_update() {
                           (plist-get pl :b)
                           (plist-get pl :c)
                           (length pl)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:a 1) (:a 1 :b 2 :c 3) \"now-a-string\" (now a list) nil 6)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +111,10 @@ fn oracle_prop_plist_member_tail_semantics() {
                      ;; Can get remaining keys from tail
                      (let ((tail (plist-member pl :b)))
                        (length tail))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((:a 1 :b 2 :c 3 :d 4) (:c 3 :d 4) (:d 4) nil 2 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +153,10 @@ fn oracle_prop_symbol_plist_full_lifecycle() {
         (setq results (cons (get 'neovm--test-sym-pl 'nonexistent) results))
         (nreverse results))
     (setplist 'neovm--test-sym-pl nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil (red 42 \"test\") blue (nil new-val) nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +187,10 @@ fn oracle_prop_put_get_shorthand() {
                 ;; Missing key
                 (get 'neovm--test-pg 'missing))))
     (setplist 'neovm--test-pg nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (99 10 20 30 99 10 nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +240,12 @@ fn oracle_prop_plist_record_system() {
                               ;; Read fields from valid record
                               (plist-get r1 :name)
                               (plist-get r1 :tags)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t nil) (nil (\":age: expected integerp, got \\\"not-a-number\\\"\")) (nil (\":name: expected stringp, got 42\" \":age: expected integerp, got \\\"old\\\"\" \":score: expected numberp, got \\\"high\\\"\" \":tags: expected listp, got \\\"none\\\"\")) \"Alice\" (fast smart))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +324,12 @@ fn oracle_prop_plist_merge_and_diff() {
                        (funcall plist-intersect p1 p2)
                        ;; Keys of p1
                        (funcall plist-keys p1))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:a 1 :b 20 :c 3 :d 4 :e 5 :f 6) (((:a . 1) (:d . 4)) ((:e . 5) (:f . 6)) ((:b 2 20))) (:b 2 :c 3) (:a :b :c :d))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -355,5 +384,10 @@ fn oracle_prop_plist_config_inheritance() {
                        ;; Has checks
                        (funcall config-has final :host)
                        (funcall config-has final :nonexistent))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"prod.example.com\" 3000 nil 60 3 debug \"fallback\" t nil)""#
+        ]],
+    );
 }

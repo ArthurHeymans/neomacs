@@ -22,7 +22,10 @@ fn oracle_prop_while_complex_conditions() {
                       (setq i (1+ i))
                       (setq j (- j 2)))
                     (nreverse result))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 . 100) (1 . 98) (2 . 96) (3 . 94) (4 . 92))""#]],
+    );
 
     // or condition: either condition continues the loop
     let form2 = r#"(let ((x 0) (count 0) (phases nil))
@@ -32,7 +35,10 @@ fn oracle_prop_while_complex_conditions() {
                         (setq count (1+ count))
                         (when (> count 20) (setq x 100)))
                       (list count (nreverse phases)))"#;
-    assert_oracle_parity(form2);
+    crate::common::assert_oracle_parity_expect(
+        form2,
+        expect_test::expect![[r#""OK (5 ((0 t t) (1 t nil) (2 t nil) (3 t t) (4 t nil)))""#]],
+    );
 
     // Nested and/or
     let form3 = r#"(let ((a 0) (b 20) (c 10) (steps nil))
@@ -43,7 +49,10 @@ fn oracle_prop_while_complex_conditions() {
                         (setq b (1- b))
                         (setq c (1- c)))
                       (list (length steps) (car (nreverse steps)) (car steps)))"#;
-    assert_oracle_parity(form3);
+    crate::common::assert_oracle_parity_expect(
+        form3,
+        expect_test::expect![[r#""OK (8 (0 20 10) (7 13 3))""#]],
+    );
 
     // not in condition
     let form4 = r#"(let ((lst '(1 2 3 nil 4 5)) (acc nil))
@@ -51,7 +60,7 @@ fn oracle_prop_while_complex_conditions() {
                         (setq acc (cons (* (car lst) (car lst)) acc))
                         (setq lst (cdr lst)))
                       (nreverse acc))"#;
-    assert_oracle_parity(form4);
+    crate::common::assert_oracle_parity_expect(form4, expect_test::expect![[r#""OK (1 4 9)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +90,10 @@ fn oracle_prop_while_setq_accumulation() {
                           (setq odd-count (1+ odd-count))))
                       (setq rest (cdr rest)))
                     (list sum product count min-val max-val even-count odd-count))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (44 486000 11 1 9 3 8)""#]],
+    );
 
     // Accumulate into multiple buckets
     let form2 = r#"(let ((nums '(15 22 3 47 8 31 12 45 6 29))
@@ -98,7 +110,10 @@ fn oracle_prop_while_setq_accumulation() {
                       (list (sort (nreverse small) #'<)
                             (sort (nreverse medium) #'<)
                             (sort (nreverse large) #'<)))"#;
-    assert_oracle_parity(form2);
+    crate::common::assert_oracle_parity_expect(
+        form2,
+        expect_test::expect![[r#""OK ((3 6 8) (12 15 22 29) (31 45 47))""#]],
+    );
 
     // Fibonacci with while + multiple setq
     let form3 = r#"(let ((a 0) (b 1) (n 15) (fibs nil) (i 0))
@@ -109,7 +124,10 @@ fn oracle_prop_while_setq_accumulation() {
                           (setq b tmp))
                         (setq i (1+ i)))
                       (nreverse fibs))"#;
-    assert_oracle_parity(form3);
+    crate::common::assert_oracle_parity_expect(
+        form3,
+        expect_test::expect![[r#""OK (0 1 1 2 3 5 8 13 21 34 55 89 144 233 377)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +151,10 @@ fn oracle_prop_while_nested_comprehensive() {
                         (setq result (cons (nreverse col) result)))
                       (setq j (1+ j)))
                     (nreverse result))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 4 7) (2 5 8) (3 6 9))""#]],
+    );
 
     // Generate multiplication table with inner accumulation
     let form2 = r#"(let ((result nil) (i 1))
@@ -145,7 +166,12 @@ fn oracle_prop_while_nested_comprehensive() {
                           (setq result (cons (nreverse row) result)))
                         (setq i (1+ i)))
                       (nreverse result))"#;
-    assert_oracle_parity(form2);
+    crate::common::assert_oracle_parity_expect(
+        form2,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5) (2 4 6 8 10) (3 6 9 12 15) (4 8 12 16 20) (5 10 15 20 25))""#
+        ]],
+    );
 
     // Triple nested: find Pythagorean triples
     let form3 = r#"(let ((triples nil) (limit 20) (a 1))
@@ -160,7 +186,12 @@ fn oracle_prop_while_nested_comprehensive() {
                             (setq b (1+ b))))
                         (setq a (1+ a)))
                       (nreverse triples))"#;
-    assert_oracle_parity(form3);
+    crate::common::assert_oracle_parity_expect(
+        form3,
+        expect_test::expect![[
+            r#""OK ((3 4 5) (5 12 13) (6 8 10) (8 15 17) (9 12 15) (12 16 20))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -172,13 +203,19 @@ fn oracle_prop_dotimes_comprehensive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Basic dotimes with result
-    assert_oracle_parity(r#"(let ((sum 0)) (dotimes (i 10 sum) (setq sum (+ sum i))))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(let ((sum 0)) (dotimes (i 10 sum) (setq sum (+ sum i))))"#,
+        expect_test::expect![[r#""OK 45""#]],
+    );
 
     // dotimes building a list, result is the list
     let form = r#"(let ((result nil))
                     (dotimes (i 8 (nreverse result))
                       (setq result (cons (* i i) result))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 1 4 9 16 25 36 49)""#]],
+    );
 
     // dotimes with conditional accumulation
     let form2 = r#"(let ((evens nil) (odds nil))
@@ -187,7 +224,10 @@ fn oracle_prop_dotimes_comprehensive() {
                             (setq evens (cons i evens))
                           (setq odds (cons i odds))))
                       (list (nreverse evens) (nreverse odds)))"#;
-    assert_oracle_parity(form2);
+    crate::common::assert_oracle_parity_expect(
+        form2,
+        expect_test::expect![[r#""OK ((0 2 4 6 8 10) (1 3 5 7 9 11))""#]],
+    );
 
     // dotimes with index used in complex expressions
     let form3 = r#"(let ((table nil))
@@ -199,7 +239,12 @@ fn oracle_prop_dotimes_comprehensive() {
                                          (if (= (% i 2) 0) 'even 'odd)
                                          (> i 3))
                                     table))))"#;
-    assert_oracle_parity(form3);
+    crate::common::assert_oracle_parity_expect(
+        form3,
+        expect_test::expect![[
+            r#""OK ((0 0 0 even nil) (1 1 1 odd nil) (2 4 8 even nil) (3 9 27 odd nil) (4 16 64 even t) (5 25 125 odd t))""#
+        ]],
+    );
 
     // Nested dotimes
     let form4 = r#"(let ((pairs nil))
@@ -208,12 +253,24 @@ fn oracle_prop_dotimes_comprehensive() {
                           (when (< i j)
                             (setq pairs (cons (list i j (+ i j)) pairs)))))
                       (nreverse pairs))"#;
-    assert_oracle_parity(form4);
+    crate::common::assert_oracle_parity_expect(
+        form4,
+        expect_test::expect![[r#""OK ((0 1 1) (0 2 2) (0 3 3) (1 2 3) (1 3 4) (2 3 5))""#]],
+    );
 
     // dotimes result form references loop variable (always COUNT after loop)
-    assert_oracle_parity(r#"(dotimes (i 5 i))"#);
-    assert_oracle_parity(r#"(dotimes (i 0 i))"#);
-    assert_oracle_parity(r#"(dotimes (i 0 42))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(dotimes (i 5 i))"#,
+        expect_test::expect![[r#""OK 5""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(dotimes (i 0 i))"#,
+        expect_test::expect![[r#""OK 0""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(dotimes (i 0 42))"#,
+        expect_test::expect![[r#""OK 42""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -228,26 +285,32 @@ fn oracle_prop_dolist_comprehensive() {
     let form = r#"(let ((sum 0))
                     (dolist (x '(1 2 3 4 5) sum)
                       (setq sum (+ sum x))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 15""#]]);
 
     // dolist building reversed copy
     let form2 = r#"(let ((result nil))
                       (dolist (x '(a b c d e) (nreverse result))
                         (setq result (cons x result))))"#;
-    assert_oracle_parity(form2);
+    crate::common::assert_oracle_parity_expect(
+        form2,
+        expect_test::expect![[r#""OK (a b c d e)""#]],
+    );
 
     // dolist with conditional, result is a filtered list
     let form3 = r#"(let ((positives nil))
                       (dolist (x '(-3 1 -2 4 0 -5 7 2) positives)
                         (when (> x 0)
                           (setq positives (cons x positives)))))"#;
-    assert_oracle_parity(form3);
+    crate::common::assert_oracle_parity_expect(form3, expect_test::expect![[r#""OK (2 7 4 1)""#]]);
 
     // dolist transforming elements
     let form4 = r#"(let ((mapped nil))
                       (dolist (pair '((a . 1) (b . 2) (c . 3)) (nreverse mapped))
                         (setq mapped (cons (cons (cdr pair) (car pair)) mapped))))"#;
-    assert_oracle_parity(form4);
+    crate::common::assert_oracle_parity_expect(
+        form4,
+        expect_test::expect![[r#""OK ((1 . a) (2 . b) (3 . c))""#]],
+    );
 
     // dolist with nested dolist
     let form5 = r#"(let ((result nil))
@@ -255,14 +318,26 @@ fn oracle_prop_dolist_comprehensive() {
                         (dolist (x lst)
                           (setq result (cons (* x 10) result))))
                       (nreverse result))"#;
-    assert_oracle_parity(form5);
+    crate::common::assert_oracle_parity_expect(
+        form5,
+        expect_test::expect![[r#""OK (10 20 30 40 50 60)""#]],
+    );
 
     // dolist over empty list
-    assert_oracle_parity(r#"(let ((x 42)) (dolist (e nil x)))"#);
-    assert_oracle_parity(r#"(dolist (e nil))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(let ((x 42)) (dolist (e nil x)))"#,
+        expect_test::expect![[r#""OK 42""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(dolist (e nil))"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
 
     // dolist result form is nil by default
-    assert_oracle_parity(r#"(dolist (x '(1 2 3)))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(dolist (x '(1 2 3)))"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +356,10 @@ fn oracle_prop_loop_catch_throw_exit() {
                           (throw 'found (list 'found-at i)))
                         (setq i (1+ i)))
                       'not-found))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (found-at 45)""#]],
+    );
 
     // Early exit from nested loops
     let form2 = r#"(catch 'done
@@ -293,14 +371,17 @@ fn oracle_prop_loop_catch_throw_exit() {
                                 (throw 'done (list i j)))
                               (setq j (1+ j))))
                           (setq i (1+ i)))))"#;
-    assert_oracle_parity(form2);
+    crate::common::assert_oracle_parity_expect(form2, expect_test::expect![[r#""OK (3 7)""#]]);
 
     // catch/throw with dolist
     let form3 = r#"(catch 'found
                       (dolist (x '(10 20 30 40 50 60 70))
                         (when (> x 45)
                           (throw 'found (list 'first-above-45 x)))))"#;
-    assert_oracle_parity(form3);
+    crate::common::assert_oracle_parity_expect(
+        form3,
+        expect_test::expect![[r#""OK (first-above-45 50)""#]],
+    );
 
     // Nested catch for multiple exit points
     let form4 = r#"(catch 'outer
@@ -313,7 +394,10 @@ fn oracle_prop_loop_catch_throw_exit() {
                             (when (> sum 30)
                               (throw 'outer (list 'overflow sum i)))))
                         (list 'completed sum)))"#;
-    assert_oracle_parity(form4);
+    crate::common::assert_oracle_parity_expect(
+        form4,
+        expect_test::expect![[r#""OK (overflow 37 10)""#]],
+    );
 
     // throw value propagation
     let form5 = r#"(let ((result (catch 'tag
@@ -324,7 +408,10 @@ fn oracle_prop_loop_catch_throw_exit() {
                                           (throw 'tag (nreverse acc))))
                                       (nreverse acc)))))
                       (list 'result result))"#;
-    assert_oracle_parity(form5);
+    crate::common::assert_oracle_parity_expect(
+        form5,
+        expect_test::expect![[r#""OK (result (1 4 9))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +433,12 @@ fn oracle_prop_loop_build_complex_structures() {
                     (list (nreverse alist)
                           (cdr (assq 'name (nreverse alist)))
                           (cdr (assq 'age (nreverse alist)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((name . \"Alice\") (age . 30) (city . \"NYC\") (score . 95)) nil nil)""#
+        ]],
+    );
 
     // Build a tree-like structure (nested alists)
     let form2 = r#"(let ((tree nil) (i 0))
@@ -362,7 +454,12 @@ fn oracle_prop_loop_build_complex_structures() {
                                            tree)))
                         (setq i (1+ i)))
                       (nreverse tree))"#;
-    assert_oracle_parity(form2);
+    crate::common::assert_oracle_parity_expect(
+        form2,
+        expect_test::expect![[
+            r#""OK ((\"parent-0\" (0 . \"node-0-0\") (1 . \"node-0-1\") (2 . \"node-0-2\")) (\"parent-1\" (10 . \"node-1-0\") (11 . \"node-1-1\") (12 . \"node-1-2\")) (\"parent-2\" (20 . \"node-2-0\") (21 . \"node-2-1\") (22 . \"node-2-2\")))""#
+        ]],
+    );
 
     // Build vector from loop results
     let form3 = r#"(let ((v (make-vector 10 0))
@@ -376,7 +473,10 @@ fn oracle_prop_loop_build_complex_structures() {
                                 (setq sum (+ sum (aref v k)))
                                 (setq k (1+ k)))
                               sum)))"#;
-    assert_oracle_parity(form3);
+    crate::common::assert_oracle_parity_expect(
+        form3,
+        expect_test::expect![[r#""OK ([0 -1 4 -3 16 -5 36 -7 64 -9] 16 -7 95)""#]],
+    );
 
     // Build hash table from loop
     let form4 = r#"(let ((ht (make-hash-table :test 'equal))
@@ -386,7 +486,12 @@ fn oracle_prop_loop_build_complex_structures() {
                       (let ((entries nil))
                         (maphash (lambda (k v) (setq entries (cons (cons k v) entries))) ht)
                         (sort entries (lambda (a b) (string< (car a) (car b))))))"#;
-    assert_oracle_parity(form4);
+    crate::common::assert_oracle_parity_expect(
+        form4,
+        expect_test::expect![[
+            r#""OK ((\"cat\" . 2) (\"mat\" . 1) (\"on\" . 1) (\"sat\" . 1) (\"the\" . 3))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -414,7 +519,12 @@ fn oracle_prop_loop_mutation_tracking() {
                                 (t state)))
                         (setq log (cons (list event old-state '-> state) log))))
                     (list (nreverse log) state))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((start idle -> running) (process running -> running) (pause running -> paused) (resume paused -> running) (process running -> running) (finish running -> done) (reset done -> idle) (start idle -> running)) running)""#
+        ]],
+    );
 
     // Track mutations on a list (cons cell sharing)
     let form2 = r#"(let* ((original '(1 2 3 4 5))
@@ -424,7 +534,10 @@ fn oracle_prop_loop_mutation_tracking() {
                      (list original copy reversed sorted-copy
                            (equal original copy)
                            (equal original '(1 2 3 4 5))))"#;
-    assert_oracle_parity(form2);
+    crate::common::assert_oracle_parity_expect(
+        form2,
+        expect_test::expect![[r#""OK ((1 2 3 4 5) (1 2 3 4 5) (5 4 3 2 1) (5 4 3 2 1) t t)""#]],
+    );
 
     // Accumulator pattern with history
     let form3 = r#"(let ((value 0) (history nil) (ops '((add 5) (mul 3) (sub 7) (add 2) (mul 2))))
@@ -438,7 +551,12 @@ fn oracle_prop_loop_mutation_tracking() {
                                   (t value)))
                           (setq history (cons (list (car op) (cadr op) old '-> value) history))))
                       (list value (nreverse history)))"#;
-    assert_oracle_parity(form3);
+    crate::common::assert_oracle_parity_expect(
+        form3,
+        expect_test::expect![[
+            r#""OK (20 ((add 5 0 -> 5) (mul 3 5 -> 15) (sub 7 15 -> 8) (add 2 8 -> 10) (mul 2 10 -> 20)))""#
+        ]],
+    );
 
     // Bubble sort with swap counting
     let form4 = r#"(let ((v (vector 5 3 8 1 9 2 7 4 6))
@@ -457,5 +575,8 @@ fn oracle_prop_loop_mutation_tracking() {
                                 (setq swaps (1+ swaps)))
                               (setq i (1+ i))))))
                       (list v swaps passes))"#;
-    assert_oracle_parity(form4);
+    crate::common::assert_oracle_parity_expect(
+        form4,
+        expect_test::expect![[r#""OK ([1 2 3 4 5 6 7 8 9] 17 5)""#]],
+    );
 }

@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_kill_rectangle_yank_rectangle_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kry\")))\n\
          (with-current-buffer buf\n\
@@ -36,6 +36,7 @@ fn deficiency_kill_rectangle_yank_rectangle_undo() {
          (get-text-property 7 'row)\n\
          (get-text-property 20 'row)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -43,7 +44,7 @@ fn deficiency_kill_rectangle_yank_rectangle_undo() {
 fn deficiency_delete_indentation_undo_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"diu\")))\n\
          (with-current-buffer buf\n\
@@ -70,6 +71,7 @@ fn deficiency_delete_indentation_undo_props() {
          (get-text-property 10 'indent)\n\
          (get-text-property 20 'indent)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -77,7 +79,7 @@ fn deficiency_delete_indentation_undo_props() {
 fn deficiency_kill_whole_line_undo_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kwl\")))\n\
          (with-current-buffer buf\n\
@@ -103,6 +105,7 @@ fn deficiency_kill_whole_line_undo_props() {
          (get-text-property 15 'lnum)\n\
          (get-text-property 29 'lnum)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -110,7 +113,7 @@ fn deficiency_kill_whole_line_undo_props() {
 fn deficiency_append_to_kill_ring_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"aku\")))\n\
          (with-current-buffer buf\n\
@@ -135,6 +138,7 @@ fn deficiency_append_to_kill_ring_undo() {
          (get-text-property 5 'word)\n\
          (get-text-property 9 'word)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -142,7 +146,7 @@ fn deficiency_append_to_kill_ring_undo() {
 fn deficiency_yank_pop_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ypu\")))\n\
          (with-current-buffer buf\n\
@@ -166,6 +170,7 @@ fn deficiency_yank_pop_undo_chain() {
          (marker-position m1)\n\
          (marker-position m2)))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -173,7 +178,7 @@ fn deficiency_yank_pop_undo_chain() {
 fn deficiency_region_active_with_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ran\")))\n\
          (with-current-buffer buf\n\
@@ -199,6 +204,7 @@ fn deficiency_region_active_with_narrow_undo() {
          (get-text-property 1 'row)\n\
          (get-text-property 3 'row))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 3 3)""#]],
     );
 }
 
@@ -206,7 +212,7 @@ fn deficiency_region_active_with_narrow_undo() {
 fn deficiency_exchange_point_mark_undo_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"epm\")))\n\
          (with-current-buffer buf\n\
@@ -230,6 +236,7 @@ fn deficiency_exchange_point_mark_undo_props() {
          (get-text-property 11 'word)\n\
          (get-text-property 17 'word))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 17 17)""#]],
     );
 }
 
@@ -237,7 +244,7 @@ fn deficiency_exchange_point_mark_undo_props() {
 fn deficiency_kill_region_with_overlay_bounds_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kro\")))\n\
          (with-current-buffer buf\n\
@@ -266,6 +273,7 @@ fn deficiency_kill_region_with_overlay_bounds_undo() {
          (overlay-get ov-h 'section)\n\
          (overlay-get ov-f 'section))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 12 18)""#]],
     );
 }
 
@@ -273,7 +281,7 @@ fn deficiency_kill_region_with_overlay_bounds_undo() {
 fn deficiency_copy_region_as_kill_yank_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cky\")))\n\
          (with-current-buffer buf\n\
@@ -297,6 +305,7 @@ fn deficiency_copy_region_as_kill_yank_undo() {
          (get-text-property 1 'action)\n\
          (get-text-property 16 'action)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -304,7 +313,7 @@ fn deficiency_copy_region_as_kill_yank_undo() {
 fn deficiency_insert_buffer_substring_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf1 (generate-new-buffer \"ib1\"))\n\
          (buf2 (generate-new-buffer \"ib2\")))\n\
@@ -329,5 +338,6 @@ fn deficiency_insert_buffer_substring_undo() {
          (get-text-property 7 'type))))\n\
          (kill-buffer buf1)\n\
          (kill-buffer buf2)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }

@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_html_export_drawer_special_footnote_filter_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
   (with-temp-buffer
@@ -45,6 +45,9 @@ fn org_html_export_drawer_special_footnote_filter_combo() {
        (not (null (string-match-p "footnotes" html)))
        (null (string-match-p "Should not export" html))
        normalized))))"##,
+        expect_test::expect![[
+            r##""OK (nil nil nil nil t t \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> Kept</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<div class=\\\"callout aside\\\" data-x=\\\"yes\\\" id=\\\"org-id\\\">\n<p>\nAside with <sup><a id=\\\"fnr.a\\\" class=\\\"footref\\\" href=\\\"#fn.a\\\" role=\\\"doc-backlink\\\">1</a></sup><sup>, </sup><sup><a id=\\\"fnr.b\\\" class=\\\"footref\\\" href=\\\"#fn.b\\\" role=\\\"doc-backlink\\\">2</a></sup> and <a href=\\\"https://example.org\\\">link</a>.\n</p>\n\n</div>\n</div>\n</div>\n<div id=\\\"footnotes\\\">\n<h2 class=\\\"footnotes\\\">Footnotes: </h2>\n<div id=\\\"text-footnotes\\\">\n\n<div class=\\\"footdef\\\"><sup><a id=\\\"fn.a\\\" class=\\\"footnum\\\" href=\\\"#fnr.a\\\" role=\\\"doc-backlink\\\">1</a></sup> <div class=\\\"footpara\\\" role=\\\"doc-footnote\\\"><p class=\\\"footpara\\\">\nAlpha footnote.\n</p></div></div>\n\n<div class=\\\"footdef\\\"><sup><a id=\\\"fn.b\\\" class=\\\"footnum\\\" href=\\\"#fnr.b\\\" role=\\\"doc-backlink\\\">2</a></sup> <div class=\\\"footpara\\\" role=\\\"doc-footnote\\\"><p class=\\\"footpara\\\">\nBeta footnote.\n</p></div></div>\n\n\n</div>\n</div>\")""##
+        ]],
     );
 }
 
@@ -52,7 +55,7 @@ fn org_html_export_drawer_special_footnote_filter_combo() {
 fn org_html_export_visible_subtree_planning_filter_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -146,6 +149,7 @@ fn org_html_export_visible_subtree_planning_filter_combo() {
                  "org[[:alnum:]]+"
                  "org-id"
                  html))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -153,7 +157,7 @@ fn org_html_export_visible_subtree_planning_filter_combo() {
 fn org_export_multi_backend_resolution_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
   (require 'ox-ascii)
@@ -234,6 +238,7 @@ fn org_export_multi_backend_resolution_combo() {
              html)
             ascii
             org-out))))"##,
+        expect_test::expect![[r#""ERR (user-error \"Definition not found for footnote a\")""#]],
     );
 }
 
@@ -241,7 +246,7 @@ fn org_export_multi_backend_resolution_combo() {
 fn org_latex_export_entities_footnotes_special_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-latex)
   (with-temp-buffer
@@ -271,6 +276,9 @@ fn org_latex_export_entities_footnotes_special_combo() {
        (not (null (string-match-p "frametitle={Box}" latex)))
        (not (null (string-match-p "\\\\textbf{bold}" latex)))
        normalized))))"##,
+        expect_test::expect![[
+            r#""OK (t t t t t t t \"\\\\section{H}\n\\\\label{sec:org-id}\nText \\\\(\\\\alpha\\\\) and \\\\(\\\\rightarrow\\\\) with \\\\footnote{First footnote.}\\\\textsuperscript{,}\\\\,\\\\footnote{Second footnote with \\\\emph{italic}.}.\n\\\\begin{tcolorbox}frametitle={Box}\nInside \\\\textbf{bold} and \\\\(x^2\\\\).\n\\\\end{tcolorbox}\n\")""#
+        ]],
     );
 }
 
@@ -278,7 +286,7 @@ fn org_latex_export_entities_footnotes_special_combo() {
 fn org_export_data_entities_footnote_numbers_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
   (with-temp-buffer
@@ -306,6 +314,7 @@ fn org_export_data_entities_footnote_numbers_combo() {
                         (org-export-data ref info))
                       refs)))
       (list entities numbers rendered))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument hash-table-p nil)""#]],
     );
 }
 
@@ -313,7 +322,7 @@ fn org_export_data_entities_footnote_numbers_combo() {
 fn org_export_filter_pipeline_order_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
   (with-temp-buffer
@@ -362,6 +371,7 @@ fn org_export_filter_pipeline_order_combo() {
                  "org[[:alnum:]]+"
                  "org-id"
                  html))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -369,7 +379,7 @@ fn org_export_filter_pipeline_order_combo() {
 fn org_export_collect_options_references_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
   (with-temp-buffer
@@ -411,6 +421,7 @@ fn org_export_collect_options_references_combo() {
             headlines
             tables
             links))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument hash-table-p nil)""#]],
     );
 }
 
@@ -418,7 +429,7 @@ fn org_export_collect_options_references_combo() {
 fn org_export_derived_backend_transcoder_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
   (org-export-define-derived-backend
@@ -451,6 +462,7 @@ fn org_export_derived_backend_transcoder_combo() {
                   "org[[:alnum:]]+"
                   "org-id"
                   html))))))"##,
+        expect_test::expect![[r#""ERR (void-variable html)""#]],
     );
 }
 
@@ -458,7 +470,7 @@ fn org_export_derived_backend_transcoder_combo() {
 fn org_export_headline_number_tags_todo_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ox-html)
@@ -497,6 +509,7 @@ fn org_export_headline_number_tags_todo_deep_state_combo() {
                "sec:org[[:alnum:]-]+" "sec:org-id"
                (replace-regexp-in-string
                 "org[[:alnum:]-]\\{8,\\}" "orgHASH" html))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 64)""#]],
     );
 }
 
@@ -504,7 +517,7 @@ fn org_export_headline_number_tags_todo_deep_state_combo() {
 fn org_export_latex_math_table_footnote_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ox-latex)
@@ -539,6 +552,7 @@ fn org_export_latex_math_table_footnote_deep_state_combo() {
               (not (null (string-match-p "E = mc" latex)))
               (replace-regexp-in-string
                "sec:org[[:alnum:]-]+" "sec:org-id" latex)))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 63)""#]],
     );
 }
 
@@ -546,7 +560,7 @@ fn org_export_latex_math_table_footnote_deep_state_combo() {
 fn org_export_options_tags_toc_num_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ox-html)
@@ -591,6 +605,7 @@ fn org_export_options_tags_toc_num_deep_state_combo() {
              "sec:org[[:alnum:]-]+" "sec:org-id"
              (replace-regexp-in-string "org[[:alnum:]-]\\{8,\\}" "orgHASH"
                                        html)))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 50)""#]],
     );
 }
 
@@ -598,7 +613,7 @@ fn org_export_options_tags_toc_num_deep_state_combo() {
 fn org_export_filter_babel_call_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ox-html)
@@ -643,6 +658,7 @@ fn org_export_filter_babel_call_deep_state_combo() {
                "org[[:alnum:]]+" "org-id"
                (replace-regexp-in-string
                 "sec:org[[:alnum:]-]+" "sec:org-id" html))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 64)""#]],
     );
 }
 
@@ -650,7 +666,7 @@ fn org_export_filter_babel_call_deep_state_combo() {
 fn org_org_export_native_planning_macro_footnote_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-org)
   (with-temp-buffer
@@ -722,6 +738,9 @@ fn org_org_export_native_planning_macro_footnote_combo() {
        (not (null (string-match-p "LOGBOOK" out)))
        (null (string-match-p "Should not appear" out))
        out))))"##,
+        expect_test::expect![[
+            r##""OK ((#(\"Native\" 0 6 (:parent (#(\"Native\" 0 6 (:parent #4)))))) t t t nil ((planning \"<2026-05-27 Wed 09:00>\" \"<2026-05-28 Thu>\") (drawer \"LOGBOOK\") (macro \"badge\" (\"ok\")) (link \"https://example.org\" \"https\" \"//example.org\") (footnote \"n\")) t t t t t \"#+macro: badge Badge-$1\n* TODO Keep                                                            :work:\nDEADLINE: <2026-05-28 Thu> SCHEDULED: <2026-05-27 Wed 09:00>\n:PROPERTIES:\n:Owner:    Ada\n:Score:    7\n:END:\n:LOGBOOK:\n- State \\\"TODO\\\" from \\\"\\\" [2026-05-26 Tue]\n:END:\nParagraph Badge-ok with [[https://example.org][link]] and footnote[fn:n].\n#+begin_quote\nQuoted *bold* text.\n#+end_quote\n\n[fn:n] Note body with /italic/.\n\")""##
+        ]],
     );
 }
 
@@ -729,7 +748,7 @@ fn org_org_export_native_planning_macro_footnote_combo() {
 fn org_export_hooks_parse_tree_navigation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
   (with-temp-buffer
@@ -823,5 +842,6 @@ fn org_export_hooks_parse_tree_navigation_combo() {
                  "org[[:alnum:]]+"
                  "org-id"
                  html))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

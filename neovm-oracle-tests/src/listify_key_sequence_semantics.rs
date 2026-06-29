@@ -12,7 +12,10 @@ fn oracle_listify_key_sequence_vector_appends_elements_verbatim() {
    listed
    (eq (nth 2 listed) event)
    (eq (nth 3 listed) nested)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((97 f1 (mouse-1 (posn-placeholder)) [nested]) t t)""#]],
+    );
 }
 
 #[test]
@@ -23,7 +26,10 @@ fn oracle_listify_key_sequence_string_decodes_high_bit_events() {
  (listify-key-sequence (unibyte-string 225 129))
  (mapcar #'single-key-description
          (listify-key-sequence (unibyte-string 225 129))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((65 122) (134217825 134217729) (\"M-a\" \"C-M-a\"))""#]],
+    );
 }
 
 #[test]
@@ -33,7 +39,12 @@ fn oracle_string_rejects_modified_character_events() {
  (condition-case err (string ?\M-a) (error (car err)))
  (condition-case err (string ?\M-\C-a) (error (car err)))
  (condition-case err (string (event-convert-list '(meta ?a))) (error (car err))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (wrong-type-argument wrong-type-argument wrong-type-argument)""#
+        ]],
+    );
 }
 
 #[test]
@@ -43,5 +54,8 @@ fn oracle_listify_key_sequence_rejects_non_sequences_like_gnu() {
  (condition-case err (listify-key-sequence nil) (error (car err)))
  (condition-case err (listify-key-sequence 'mouse-1) (error (car err)))
  (condition-case err (listify-key-sequence 123) (error (car err))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil wrong-type-argument wrong-type-argument)""#]],
+    );
 }

@@ -69,7 +69,12 @@ fn oracle_prop_combination_game_theory_payoff_matrix() {
     (fmakunbound 'neovm--gt-payoff)
     (fmakunbound 'neovm--gt-p1-payoff)
     (fmakunbound 'neovm--gt-p2-payoff)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((cooperate defect) (cooperate defect) (3 . 3) (0 . 5) (5 . 0) (1 . 1) 5 0 (3 6))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +161,10 @@ fn oracle_prop_combination_game_theory_dominant_strategy() {
     (fmakunbound 'neovm--gt-p2-dominates)
     (fmakunbound 'neovm--gt-find-dominant-p1)
     (fmakunbound 'neovm--gt-find-dominant-p2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 1) (nil nil) (0 nil) nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +246,12 @@ fn oracle_prop_combination_game_theory_nash_equilibrium() {
     (fmakunbound 'neovm--gt-best-response-p1)
     (fmakunbound 'neovm--gt-best-response-p2)
     (fmakunbound 'neovm--gt-find-nash)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 1 (1 . 1))) ((0 0 (3 . 2)) (1 1 (2 . 3))) nil ((0 0 (2 . 2)) (1 1 (1 . 1))) 1)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -318,7 +331,12 @@ fn oracle_prop_combination_game_theory_iterated_pd() {
     (fmakunbound 'neovm--ipd-grudger)
     (fmakunbound 'neovm--ipd-round-payoff)
     (fmakunbound 'neovm--ipd-play)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((15 15) (5 5) (0 25) (15 15) (4 9 ((C D) (D D) (D D) (D D) (D D))) (15 15) (15 15))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -402,7 +420,12 @@ fn oracle_prop_combination_game_theory_tournament() {
     (fmakunbound 'neovm--tour-payoff)
     (fmakunbound 'neovm--tour-play)
     (fmakunbound 'neovm--tour-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((always-d . 78) (grudger . 69) (tit-for-tat . 69) (always-c . 60)) always-d (78 69 69 60) (9 . 14) 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -497,7 +520,12 @@ fn oracle_prop_combination_game_theory_zero_sum_minimax() {
     (fmakunbound 'neovm--zs-maximin)
     (fmakunbound 'neovm--zs-minimax)
     (fmakunbound 'neovm--zs-saddle-point)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((no-saddle 2 4) (saddle 2 0 7) (no-saddle -1 1) (0 -1) (0 3) (saddle 0 1 3))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -558,5 +586,10 @@ fn oracle_prop_combination_game_theory_mixed_strategy() {
        (funcall 'neovm--ms-compute 4 1 2 3))
     (fmakunbound 'neovm--ms-compute)
     (fmakunbound 'neovm--ms-verify)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((500 500 0) (0 0 t) (600 500 1000) (500 500 1000) degenerate (250 500 2500))""#
+        ]],
+    );
 }

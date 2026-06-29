@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_advice_insert_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass insert-advice-log ()
     ((call-count :initarg :call-count :accessor ial-count :initform 0)
@@ -64,6 +64,7 @@ fn combo_eieio_advice_insert_tracking() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -71,7 +72,7 @@ fn combo_eieio_advice_insert_tracking() {
 fn combo_eieio_advice_delete_region_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass delete-advice-log ()
     ((call-count :initarg :call-count :accessor dal-count :initform 0)
@@ -125,6 +126,7 @@ fn combo_eieio_advice_delete_region_tracking() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -132,7 +134,7 @@ fn combo_eieio_advice_delete_region_tracking() {
 fn combo_eieio_advice_goto_char_with_fields() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass goto-advice-log ()
     ((call-count :initarg :call-count :accessor gal-count :initform 0)
@@ -188,6 +190,7 @@ fn combo_eieio_advice_goto_char_with_fields() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -195,7 +198,7 @@ fn combo_eieio_advice_goto_char_with_fields() {
 fn combo_eieio_advice_narrow_to_region_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-advice-log ()
     ((call-count :initarg :call-count :accessor nal-count :initform 0)
@@ -254,6 +257,7 @@ fn combo_eieio_advice_narrow_to_region_tracking() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -261,7 +265,7 @@ fn combo_eieio_advice_narrow_to_region_tracking() {
 fn combo_eieio_advice_buffer_substring_overlay_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass substring-advice-log ()
     ((call-count :initarg :call-count :accessor sal-count :initform 0)
@@ -321,5 +325,6 @@ fn combo_eieio_advice_buffer_substring_overlay_props() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

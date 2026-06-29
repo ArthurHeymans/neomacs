@@ -13,7 +13,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo50_multi_backend_export_pipeline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-html)
@@ -53,6 +53,9 @@ fn combo50_multi_backend_export_pipeline() {
           (push (list :md-has-heading (string-match-p "Export Test" md)) r)
           (push (list :md-has-bold (string-match-p "\\*\\*" md)) r)))
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:html-has-table 646) (:html-has-bold 386) (:html-has-italic 399) (:html-has-link 499) (:html-has-ul 120) (:latex-has-section 0) (:latex-has-textbf 56) (:latex-has-tabular 315) (:latex-has-href 142) (:ascii-has-heading 2) (:ascii-has-bullet 123) (:md-success t) (:md-has-heading nil) (:md-has-bold nil))""#
+        ]],
     );
 }
 
@@ -63,7 +66,7 @@ fn combo50_multi_backend_export_pipeline() {
 #[test]
 fn combo50_multibuffer_parse_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((r '()))
   ;; buffer 1
   (with-temp-buffer
@@ -98,6 +101,7 @@ fn combo50_multibuffer_parse_consistency() {
     (push (list :buf1-reparse-headlines
                 (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r))
   (nreverse r))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
     );
 }
 
@@ -108,7 +112,7 @@ fn combo50_multibuffer_parse_consistency() {
 #[test]
 fn combo50_org_id_create_goto_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-id)
@@ -138,6 +142,7 @@ fn combo50_org_id_create_goto_link() {
           (push (list :other-id-created (and id2 (stringp id2))) r)
           (push (list :other-has-id (and (org-entry-get nil "ID") t)) r)))
       (nreverse r))))"##,
+        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]],
     );
 }
 
@@ -148,7 +153,7 @@ fn combo50_org_id_create_goto_link() {
 #[test]
 fn combo50_citation_activate_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'oc)
@@ -182,6 +187,9 @@ fn combo50_citation_activate_export() {
       ;; try to activate: just verify no error when calling oc-basic-register
       (push (list :oc-basic-loaded (fboundp 'org-cite-basic-activate)) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:citation-count 2) (:ref-count 3) (:c1-refs (\"doe2024\" \"smith2023\")) (:c2-style nil) (:oc-basic-loaded t))""#
+        ]],
     );
 }
 
@@ -192,7 +200,7 @@ fn combo50_citation_activate_export() {
 #[test]
 fn combo50_sort_entries_with_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n:PROPERTIES:\n:PRIO: 3\n:END:\n")
@@ -216,6 +224,7 @@ fn combo50_sort_entries_with_properties() {
     ;; buffer after sorts
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (user-error \"Nothing to sort\")""#]],
     );
 }
 
@@ -226,7 +235,7 @@ fn combo50_sort_entries_with_properties() {
 #[test]
 fn combo50_org_lint_basic_checks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-lint)
@@ -246,6 +255,9 @@ fn combo50_org_lint_basic_checks() {
     ;; check that org-lint is callable and it exists
     (push (list :org-lint-fboundp (fboundp 'org-lint)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:lint-result-type cons) (:lint-report-count 3) (:lint-error \"Wrong type argument: listp, 2\") (:org-lint-fboundp t))""#
+        ]],
     );
 }
 
@@ -256,7 +268,7 @@ fn combo50_org_lint_basic_checks() {
 #[test]
 fn combo50_element_at_point_vs_context_edits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\n\nSome *bold* and /italic/ and =code=.\n\n| a | b |\n| 1 | 2 |\n")
@@ -283,6 +295,9 @@ fn combo50_element_at_point_vs_context_edits() {
     (push (list :table-at (org-element-type (org-element-at-point))) r)
     (push (list :table-ctx (org-element-type (org-element-context))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:h-at headline) (:h-ctx headline) (:bold-at paragraph) (:bold-ctx bold) (:after-del-at paragraph) (:after-del-ctx paragraph) (:table-at table-row) (:table-ctx table-cell))""#
+        ]],
     );
 }
 
@@ -293,7 +308,7 @@ fn combo50_element_at_point_vs_context_edits() {
 #[test]
 fn combo50_table_recalc_relative_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| a | b | sum | avg |\n|---+---+-----+-----|\n")
@@ -327,6 +342,7 @@ fn combo50_table_recalc_relative_range() {
     (goto-char (point-min))
     (push (list :to-lisp (org-table-to-lisp)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \"sum\")""#]],
     );
 }
 
@@ -337,7 +353,7 @@ fn combo50_table_recalc_relative_range() {
 #[test]
 fn combo50_element_map_info_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-element)
@@ -361,6 +377,9 @@ fn combo50_element_map_info_variants() {
           (push (list :tbl-caption (org-element-property :caption tbl)) r)
           (push (list :tbl-name (org-element-property :name tbl)) r))))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:all-types 14) (:list-types 8) (:no-recurse 14) (:first-match-type table) (:with-affiliated 1) (:tbl-caption (((#(\"Captioned\" 0 9 (:parent (#(\"Captioned\" 0 9 (:parent #7))))))))) (:tbl-name \"my-table\"))""#
+        ]],
     );
 }
 
@@ -371,7 +390,7 @@ fn combo50_element_map_info_variants() {
 #[test]
 fn combo50_structure_template_completion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-tempo)
@@ -401,5 +420,8 @@ fn combo50_structure_template_completion() {
       (error nil))
     (push (list :q-template (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:keys (\"a\" \"e\" \"q\" \"s\" \"E\")) (:vals (\"export ascii\" \"example\" \"quote\" \"src\" \"export html\")) (:before-completion \"<s\") (:completion-error t) (:after-completion \"<s\") (:q-template \"<q\"))""#
+        ]],
     );
 }

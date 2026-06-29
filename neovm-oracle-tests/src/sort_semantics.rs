@@ -23,7 +23,10 @@ fn oracle_sort_old_style_list_is_destructive() {
    (memq first sorted)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3) (1 2 3) (1 2 3) t nil)""#]],
+    );
 }
 
 #[test]
@@ -44,7 +47,10 @@ fn oracle_sort_keyword_default_copies_list_and_vector() {
    (eq sorted-vec vec)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3) (3 1 2) nil [1 2 3] [3 1 2] nil)""#]],
+    );
 }
 
 #[test]
@@ -62,7 +68,12 @@ fn oracle_sort_keyword_in_place_and_reverse_stability() {
    rev-list))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([(1 . a) (1 . c) (1 . e) (2 . b) (2 . d)] t ((2 . b) (2 . d) (1 . a) (1 . c) (1 . e)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -77,7 +88,10 @@ fn oracle_sort_default_value_lessp_and_nil() {
  (sort '("b" "a" "c")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil [1 2 3] (1 2 3) (\"a\" \"b\" \"c\"))""#]],
+    );
 }
 
 #[test]
@@ -103,7 +117,12 @@ fn oracle_sort_keyword_errors_and_type_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((void-function (:lessp)) (error (\"Invalid keyword argument\" :unknown)) (wrong-type-argument (list-or-vector-p \"abc\")) (invalid-function (42)) (invalid-function (42)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -123,7 +142,12 @@ fn oracle_sort_rejects_bool_vector_like_gnu() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument (list-or-vector-p #&3\"\u{5}\")) (wrong-type-argument (list-or-vector-p #&3\"\u{5}\")))""#
+        ]],
+    );
 }
 
 #[test]
@@ -159,5 +183,10 @@ fn oracle_sort_validates_list_before_key_or_lessp_calls() {
     (nreverse lessp-calls))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((wrong-type-argument (listp tail)) nil nil) ((circular-list ((3 1 3 1 . #2))) nil nil))""#
+        ]],
+    );
 }

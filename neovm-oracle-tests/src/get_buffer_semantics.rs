@@ -23,5 +23,8 @@ fn oracle_get_buffer_ignores_text_properties_in_name_argument() {
     (when (buffer-live-p buf)
       (kill-buffer buf))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t (wrong-type-argument (stringp 42)))""#]],
+    );
 }

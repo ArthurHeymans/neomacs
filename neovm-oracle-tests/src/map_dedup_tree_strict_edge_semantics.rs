@@ -7,58 +7,79 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_mapconcat_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(mapconcat 'identity '("a" "b" "c") ",")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(mapconcat 'identity '("a" "b" "c") ",")"#,
+        expect_test::expect![[r#""OK \"a,b,c\"""#]],
+    );
     assert_ok_eq("\"a,b,c\"", &o, &n);
 }
 
 #[test]
 fn oracle_mapconcat_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(mapconcat 'identity nil ",")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(mapconcat 'identity nil ",")"#,
+        expect_test::expect![[r#""OK \"\"""#]],
+    );
     assert_ok_eq("\"\"", &o, &n);
 }
 
 #[test]
 fn oracle_mapconcat_single() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(mapconcat 'identity '("x") "-")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(mapconcat 'identity '("x") "-")"#,
+        expect_test::expect![[r#""OK \"x\"""#]],
+    );
     assert_ok_eq("\"x\"", &o, &n);
 }
 
 #[test]
 fn oracle_delete_dups_removes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(delete-dups '(a b a c b d))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(delete-dups '(a b a c b d))"#,
+        expect_test::expect![[r#""OK (a b c d)""#]],
+    );
     assert_ok_eq("(a b c d)", &o, &n);
 }
 
 #[test]
 fn oracle_delete_dups_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(delete-dups nil)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(delete-dups nil)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_copy_alist_is_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) =
-        eval_oracle_and_neovm(r#"(equal '((a . 1) (b . 2)) (copy-alist '((a . 1) (b . 2))))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(equal '((a . 1) (b . 2)) (copy-alist '((a . 1) (b . 2))))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_copy_sequence_list_is_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(equal '(a b c) (copy-sequence '(a b c)))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(equal '(a b c) (copy-sequence '(a b c)))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_maphash_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (defvar neovm--test-mh-count 0) (let ((h (make-hash-table))) (puthash 'a 1 h) (puthash 'b 2 h) (maphash (lambda (_k _v) (setq neovm--test-mh-count (1+ neovm--test-mh-count))) h)) neovm--test-mh-count)"#,
+        expect_test::expect![[r#""OK 2""#]],
     );
     assert_ok_eq("2", &o, &n);
 }

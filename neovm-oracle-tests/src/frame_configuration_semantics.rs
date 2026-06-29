@@ -16,5 +16,8 @@ fn oracle_prop_frame_configuration_p_shape_contract() {
               '(frame-configuration . payload)
               '(x frame-configuration)
               [frame-configuration]))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil nil t t nil nil)""#]],
+    );
 }

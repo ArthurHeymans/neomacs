@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_window_point_sync_across_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (current-buffer))
         (buf2 (generate-new-buffer " test-wp-xxx")))
@@ -22,6 +22,7 @@ fn divergence_window_point_sync_across_buffers() {
           (with-current-buffer buf2 (point))
           (= (with-current-buffer buf2 (point)) 8)
           (kill-buffer buf2)))) "#,
+        expect_test::expect![[r#""AAAAAAAAAAOK (5 t 8 t t)""#]],
     );
 }
 
@@ -29,7 +30,7 @@ fn divergence_window_point_sync_across_buffers() {
 fn divergence_temporary_buffer_set_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "MAIN")
   (let ((m (copy-marker 2)))
@@ -40,6 +41,7 @@ fn divergence_temporary_buffer_set_marker() {
           (buffer-string)
           (= (marker-position m) 2)
           (string= (buffer-string) "MAIN")))) "#,
+        expect_test::expect![[r#""MAINERR (wrong-type-argument number-or-marker-p nil)""#]],
     );
 }
 
@@ -47,7 +49,7 @@ fn divergence_temporary_buffer_set_marker() {
 fn divergence_marker_insertion_type_across_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (current-buffer))
         (buf2 (generate-new-buffer " test-mk-xxx")))
@@ -67,6 +69,7 @@ fn divergence_marker_insertion_type_across_buffers() {
                           (marker-insertion-type m2))))
         (kill-buffer buf2)
         result)))) "#,
+        expect_test::expect![[r#""AXXAAAOK (4 2 t nil)""#]],
     );
 }
 
@@ -74,7 +77,7 @@ fn divergence_marker_insertion_type_across_buffers() {
 fn divergence_save_excursion_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((ov (make-overlay 3 7)))
@@ -88,6 +91,7 @@ fn divergence_save_excursion_marker_overlay() {
           (buffer-string)
           (overlay-start ov) (overlay-end ov)
           (overlay-get ov 'tag)))) "#,
+        expect_test::expect![[r#""BCDXXEFGHIOK (12 nil \"BCDXXEFGHI\" 3 9 test)""#]],
     );
 }
 
@@ -95,7 +99,7 @@ fn divergence_save_excursion_marker_overlay() {
 fn divergence_buffer_list_order_after_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (current-buffer))
         (b2 (generate-new-buffer " test-blo1-xxx"))
@@ -110,6 +114,7 @@ fn divergence_buffer_list_order_after_switch() {
             (>= (length bl) 3)
             (kill-buffer b2)
             (kill-buffer b3)))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -117,7 +122,7 @@ fn divergence_buffer_list_order_after_switch() {
 fn divergence_point_min_max_after_multiple_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((m (copy-marker 5)))
@@ -132,6 +137,7 @@ fn divergence_point_min_max_after_multiple_narrow() {
                 (= min2 4) (= max2 7)
                 (= min3 1) (= max3 10)
                 (marker-position m))))))) "#,
+        expect_test::expect![[r#""ABCDEFGHIJOK (3 8 4 7 1 11 t t t t t nil 5)""#]],
     );
 }
 
@@ -139,7 +145,7 @@ fn divergence_point_min_max_after_multiple_narrow() {
 fn divergence_kill_buffer_undo_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ORIGINAL")
   (undo-boundary)
@@ -155,6 +161,7 @@ fn divergence_kill_buffer_undo_list() {
             (eq ul1 buffer-undo-list)
             bs1 (buffer-size)
             (= bs1 (buffer-size)))))) "#,
+        expect_test::expect![[r#""ORIGXXINALOK (t t t 10 10 t)""#]],
     );
 }
 
@@ -162,7 +169,7 @@ fn divergence_kill_buffer_undo_list() {
 fn divergence_get_buffer_create_existing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((name " test-gbc-xxx"))
     (let ((b1 (get-buffer-create name)))
@@ -175,6 +182,7 @@ fn divergence_get_buffer_create_existing() {
               (buffer-name b1)
               (= (with-current-buffer b1 (buffer-size)) 4)
               (kill-buffer b1)))))) "#,
+        expect_test::expect![[r#""OK (t t t \" test-gbc-xxx\" t t)""#]],
     );
 }
 
@@ -182,7 +190,7 @@ fn divergence_get_buffer_create_existing() {
 fn divergence_marker_after_revert_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((m1 (copy-marker 3))
@@ -195,6 +203,7 @@ fn divergence_marker_after_revert_buffer() {
           (= (buffer-size) 3)
           (null (marker-position m1))
           (null (marker-position m2))))) "#,
+        expect_test::expect![[r#""XYZOK (1 1 \"XYZ\" t nil nil)""#]],
     );
 }
 
@@ -202,7 +211,7 @@ fn divergence_marker_after_revert_buffer() {
 fn divergence_window_buffer_swap_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (current-buffer))
         (buf2 (generate-new-buffer " test-wbs1-xxx"))
@@ -220,5 +229,6 @@ fn divergence_window_buffer_swap_consistency() {
               (eq (current-buffer) buf1)
               (kill-buffer buf2)
               (kill-buffer buf3)))))) "#,
+        expect_test::expect![[r#""AAAAOK (5 5 nil nil t t t)""#]],
     );
 }

@@ -158,7 +158,12 @@ fn oracle_prop_interval_tree_adv_insert_delete() {
     (fmakunbound 'neovm--itadv-inorder)
     (fmakunbound 'neovm--itadv-min-node)
     (fmakunbound 'neovm--itadv-delete)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 4 \"E\") (3 8 \"C\") (5 15 \"A\") (10 20 \"B\") (25 35 \"D\")) 35 ((3 8 \"C\") (5 15 \"A\") (10 20 \"B\") (25 35 \"D\")) ((1 4 \"E\") (5 15 \"A\") (10 20 \"B\") (25 35 \"D\")) (((1 4 \"E\") (3 8 \"C\") (10 20 \"B\") (25 35 \"D\")) 35) ((1 4 \"E\") (3 8 \"C\") (5 15 \"A\") (10 20 \"B\") (25 35 \"D\")) 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -239,7 +244,12 @@ fn oracle_prop_interval_tree_adv_stabbing_query() {
     (fmakunbound 'neovm--itadv-stab)
     (fmakunbound 'neovm--itadv-stab-count)
     (fmakunbound 'neovm--itadv-max-depth-point)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"A\" \"B\" \"F\") (\"B\" \"C\" \"G\") (\"D\" \"E\") nil nil 3 3 1 (3 3) nil ((5 5 \"pt\")) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -330,7 +340,12 @@ fn oracle_prop_interval_tree_adv_union_intersection() {
     (fmakunbound 'neovm--itadv-union)
     (fmakunbound 'neovm--itadv-intersect)
     (fmakunbound 'neovm--itadv-complement)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 3) (5 7) (9 11)) ((1 10)) ((1 10)) ((1 4) (5 15)) nil ((3 5) (8 9)) nil ((3 7)) ((3 5) (8 10) (18 20)) ((0 2) (4 7) (9 12)) nil ((0 10)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +405,12 @@ fn oracle_prop_interval_tree_adv_sweep_line() {
                   '((1 3 "T1") (3 5 "T2") (5 7 "T3")))))
     (fmakunbound 'neovm--itadv-all-intersections)
     (fmakunbound 'neovm--itadv-overlap-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"A\" \"B\") (\"B\" \"C\") (\"D\" \"E\")) 3 nil ((\"P\" \"Q\") (\"P\" \"R\") (\"Q\" \"R\")) nil nil ((\"T1\" \"T2\") (\"T2\" \"T3\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -483,7 +503,12 @@ fn oracle_prop_interval_tree_adv_scheduling() {
     (fmakunbound 'neovm--itadv-schedule-max)
     (fmakunbound 'neovm--itadv-min-removals)
     (fmakunbound 'neovm--itadv-schedule-weighted)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 3 \"A\") (4 7 \"C\") (8 10 \"E\")) 3 2 ((1 3 \"X\") (5 7 \"Y\") (9 11 \"Z\")) ((1 5 \"P\")) ((1 10 \"S\")) nil 24 100)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -572,7 +597,12 @@ fn oracle_prop_interval_tree_adv_gap_finding() {
     (fmakunbound 'neovm--itadv-total-gap)
     (fmakunbound 'neovm--itadv-coverage-pct)
     (fmakunbound 'neovm--itadv-largest-gap)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 2) (5 8) (12 15) (20 25)) 13 48 ((20 25) 5) nil 0 ((0 10)) 10 ((0 1) (12 15)) nil ((10 20)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -649,7 +679,10 @@ fn oracle_prop_interval_tree_adv_range_coverage() {
     (fmakunbound 'neovm--itadv-total-coverage)
     (fmakunbound 'neovm--itadv-redundancy)
     (fmakunbound 'neovm--itadv-density)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 9 9 10 0 0 3 0 60 100 100)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -725,7 +758,12 @@ fn oracle_prop_interval_tree_adv_partitioning() {
        (funcall 'neovm--itadv-partition '((1 5) (2 6) (3 7))))
     (fmakunbound 'neovm--itadv-min-rooms)
     (fmakunbound 'neovm--itadv-partition)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 3 2 1 0 (2 (((1 3) (4 7)) ((2 5) (6 9)))) (1 (((1 3) (5 7) (9 11)))) (3 (((1 5)) ((2 6)) ((3 7)))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -781,5 +819,10 @@ fn oracle_prop_interval_tree_adv_flatten() {
        ;; Three stacked at same point
        (funcall 'neovm--itadv-flatten '((1 5 "A") (1 5 "B") (1 5 "C"))))
     (fmakunbound 'neovm--itadv-flatten)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 3 (\"A\")) (3 5 (\"A\" \"B\")) (5 8 (\"B\"))) ((1 3 (\"A\")) (3 5 (\"A\" \"B\")) (5 6 (\"A\" \"B\" \"C\")) (6 8 (\"B\" \"C\")) (8 10 (\"C\"))) ((1 3 (\"X\")) (5 7 (\"Y\"))) ((1 3 (\"O\")) (3 7 (\"O\" \"I\")) (7 10 (\"O\"))) ((1 5 (\"S\"))) nil ((1 5 (\"A\" \"B\" \"C\"))))""#
+        ]],
+    );
 }

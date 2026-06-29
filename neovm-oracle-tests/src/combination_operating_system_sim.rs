@@ -443,7 +443,7 @@ fn oracle_prop_combination_os_sim_filesystem() {
     (fmakunbound 'neovm--os-fs-ls)
     (fmakunbound 'neovm--os-fs-find)
     (fmakunbound 'neovm--os-fs-rm)))"##;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -534,7 +534,10 @@ fn oracle_prop_combination_os_sim_shell_parser() {
                 tests))
     (fmakunbound 'neovm--os-shell-tokenize)
     (fmakunbound 'neovm--os-shell-parse)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-function \\(setf\\ or\\))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -655,7 +658,12 @@ fn oracle_prop_combination_os_sim_pipe_redirection() {
     (fmakunbound 'neovm--os-cmd-head)
     (fmakunbound 'neovm--os-cmd-wc)
     (fmakunbound 'neovm--os-run-pipeline)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"apple crisp\" \"apple pie\" \"apple sauce\") (\"apple crisp\" \"apple pie\" \"apple sauce\") (\"8\") (\"6\") (\"2\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -714,5 +722,10 @@ fn oracle_prop_combination_os_sim_optimal_page_replacement() {
             (nth 1 r2)
             (nth 2 r2))))
     (fmakunbound 'neovm--os-optimal-replace)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (7 ((3 . 3) (6 . 4) (9 . 1) (10 . 2)) (5 3 4) 7 ((5 . 7) (7 . 1) (13 . 0)) (2 3 4 1))""#
+        ]],
+    );
 }

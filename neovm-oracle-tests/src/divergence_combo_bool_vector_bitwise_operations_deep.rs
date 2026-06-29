@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_bool_vector_create_and_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((bv (make-bool-vector 10 nil)))\n\
          (aset bv 0 t)\n\
@@ -17,6 +17,7 @@ fn deficiency_bool_vector_create_and_access() {
          (list (aref bv 0) (aref bv 1) (aref bv 3)\n\
          (aref bv 7) (aref bv 9)\n\
          (length bv))))",
+        expect_test::expect![[r#""OK (t nil t t nil 10)""#]],
     );
 }
 
@@ -24,7 +25,7 @@ fn deficiency_bool_vector_create_and_access() {
 fn deficiency_bool_vector_union_intersection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((a (make-bool-vector 8 nil))\n\
          (b (make-bool-vector 8 nil)))\n\
@@ -36,6 +37,9 @@ fn deficiency_bool_vector_union_intersection() {
          (list (append union nil)\n\
          (append intersection nil)\n\
          (append diff nil)))))",
+        expect_test::expect![[
+            r#""OK ((t t t nil t t t nil) (nil nil t nil nil nil t nil) (t nil nil nil t nil nil nil))""#
+        ]],
     );
 }
 
@@ -43,13 +47,14 @@ fn deficiency_bool_vector_union_intersection() {
 fn deficiency_bool_vector_complement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((bv (make-bool-vector 8 nil)))\n\
          (aset bv 1 t) (aset bv 3 t) (aset bv 5 t)\n\
          (let ((comp (bool-vector-complement bv)))\n\
          (list (append bv nil)\n\
          (append comp nil)))))",
+        expect_test::expect![[r#""ERR (void-function bool-vector-complement)""#]],
     );
 }
 
@@ -57,7 +62,7 @@ fn deficiency_bool_vector_complement() {
 fn deficiency_bool_vector_subsetp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((a (make-bool-vector 8 nil))\n\
          (b (make-bool-vector 8 nil)))\n\
@@ -66,6 +71,7 @@ fn deficiency_bool_vector_subsetp() {
          (list (bool-vector-subsetp a b)\n\
          (bool-vector-subsetp b a)\n\
          (bool-vector-subsetp a a))))",
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }
 
@@ -73,7 +79,7 @@ fn deficiency_bool_vector_subsetp() {
 fn deficiency_bool_vector_xor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((a (make-bool-vector 8 nil))\n\
          (b (make-bool-vector 8 nil)))\n\
@@ -81,6 +87,7 @@ fn deficiency_bool_vector_xor() {
          (aset b 2 t) (aset b 4 t) (aset b 6 t)\n\
          (let ((xor (bool-vector-exclusive-or a b)))\n\
          (append xor nil))))",
+        expect_test::expect![[r#""OK (t nil nil nil nil nil t nil)""#]],
     );
 }
 
@@ -88,12 +95,13 @@ fn deficiency_bool_vector_xor() {
 fn deficiency_bool_vector_population_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((bv (make-bool-vector 16 nil)))\n\
          (aset bv 0 t) (aset bv 3 t) (aset bv 7 t)\n\
          (aset bv 10 t) (aset bv 15 t)\n\
          (bool-vector-count-matches bv t)))",
+        expect_test::expect![[r#""ERR (void-function bool-vector-count-matches)""#]],
     );
 }
 
@@ -101,13 +109,14 @@ fn deficiency_bool_vector_population_count() {
 fn deficiency_bool_vector_from_list_and_back() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let* ((bits '(t nil t t nil nil t nil))\n\
          (bv (apply 'bool-vector bits)))\n\
          (list (length bv)\n\
          (append bv nil)\n\
          (equal bits (append bv nil)))))",
+        expect_test::expect![[r#""OK (8 (t nil t t nil nil t nil) t)""#]],
     );
 }
 
@@ -115,12 +124,13 @@ fn deficiency_bool_vector_from_list_and_back() {
 fn deficiency_bool_vector_not_in_place() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((bv (make-bool-vector 4 nil)))\n\
          (aset bv 1 t) (aset bv 3 t)\n\
          (bool-vector-not bv)\n\
          (append bv nil)))",
+        expect_test::expect![[r#""OK (nil t nil t)""#]],
     );
 }
 
@@ -128,7 +138,7 @@ fn deficiency_bool_vector_not_in_place() {
 fn deficiency_bool_vector_large_intersection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((a (make-bool-vector 64 nil))\n\
          (b (make-bool-vector 64 nil)))\n\
@@ -138,6 +148,7 @@ fn deficiency_bool_vector_large_intersection() {
          (let ((inter (bool-vector-intersection a b)))\n\
          (cl-loop for i from 0 to 63\n\
          when (aref inter i) collect i))))",
+        expect_test::expect![[r#""OK (0 6 12 18 24 30 36 42 48 54 60)""#]],
     );
 }
 
@@ -145,7 +156,7 @@ fn deficiency_bool_vector_large_intersection() {
 fn deficiency_bool_vector_empty_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((empty (make-bool-vector 8 nil))\n\
          (full (make-bool-vector 8 t)))\n\
@@ -154,5 +165,6 @@ fn deficiency_bool_vector_empty_operations() {
          (bool-vector-count-matches empty t)\n\
          (bool-vector-count-matches full t)\n\
          (append (bool-vector-union empty full) nil))))",
+        expect_test::expect![[r#""ERR (void-function bool-vector-count-matches)""#]],
     );
 }

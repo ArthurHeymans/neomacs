@@ -22,7 +22,10 @@ fn oracle_prop_insert_buffer_comp_multi_arg_types() {
       ;; Mix strings and character codes
       (insert "Hello" ?  "World" ?! ?\n "Line2" 65 66 67)
       (buffer-string))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"Hello World!\nLine2ABC\"""#]],
+    );
 }
 
 #[test]
@@ -43,7 +46,10 @@ fn oracle_prop_insert_buffer_comp_empty_and_edge_cases() {
             ;; Many string args
             (insert "a" "b" "c" "d" "e" "f" "g" "h" "i" "j")
             (list r1 r2 r3 (buffer-string))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"\" \"a\" \"abcαdefβghi\" \"abcdefghij\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +86,12 @@ fn oracle_prop_insert_buffer_comp_insert_char_count_inherit() {
               (let ((r5 (buffer-string))
                     (r5-props (text-properties-at 4)))
                 (list r1 r2 r3 r4 r5 r5-props)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"xxxxx\" \"\" \"z\" \"☃☃☃\" #(\"abcXX\" 0 5 (face bold)) (face bold))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +126,10 @@ fn oracle_prop_insert_buffer_comp_insert_before_markers() {
           (let ((pos-after-ibm (marker-position m)))
             (list pos-after-insert pos-after-ibm
                   (buffer-string) (point))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (4 6 \"abcYYdef\" 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +165,10 @@ fn oracle_prop_insert_buffer_comp_buffer_substring() {
                     (let ((r4 (buffer-string)))
                       (list r1 r2 r3 r4)))))))
         (kill-buffer src-buf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"0123456789abcdef\" \"456789abcdef\" \"23456\" \"\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +198,10 @@ fn oracle_prop_insert_buffer_comp_no_properties() {
                       (r2-props (text-properties-at 1)))
                   (list r1 r1-props r2 r2-props)))))
         (kill-buffer src-buf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"hello world\" nil \"hello\" nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +239,12 @@ fn oracle_prop_insert_buffer_comp_point_movement() {
               (let ((p5 (point))
                     (s5 (buffer-string)))
                 (list p1 p2 s2 p3 s3 p4 s4 p5 s5)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (7 6 \"abcXYdef\" 3 \">>abcXYdef\" 13 \">>abcXYdef<<\" 8 \">>abABCcXYdef<<\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +278,10 @@ fn oracle_prop_insert_buffer_comp_marker_behavior() {
                             (point)
                             (buffer-string))))
               (list r1 r2))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((3 5 11 \"0123XXX456789\") (10 10 \"0123XXXYY456789\"))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +307,12 @@ fn oracle_prop_insert_buffer_comp_insert_and_inherit() {
             (p4 (get-text-property 4 'face))
             (p7 (get-text-property 7 'face)))
         (list s (length s) p1 p4 p7)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (#(\"aaaXXXbbb\" 0 6 (face bold) 6 9 (face italic)) 9 bold bold italic)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +345,12 @@ fn oracle_prop_insert_buffer_comp_insert_for_yank() {
                   (r4-face (get-text-property 1 'face))
                   (r4-help (get-text-property 1 'help-echo)))
               (list r1 r1-point r2 r2-props r3 r4 r4-face r4-help))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello\" 6 #(\"world\" 0 4 (face bold) 4 5 (rear-nonsticky t face bold)) bold \"\" #(\"test\" 0 3 (face underline) 3 4 (rear-nonsticky t face underline)) underline nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -347,5 +385,10 @@ fn oracle_prop_insert_buffer_comp_narrow_interaction() {
             (let ((r4 (buffer-string)))
               (widen)
               (list r1 r1-pmin r1-pmax r2 r2-point r3 r4 (buffer-string)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"3456\" 4 8 \">>3456\" 6 \"012>>3456789\" \"345678<<\" \"012>>345678<<9\")""#
+        ]],
+    );
 }

@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_id_create_save_reload_find_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -43,6 +43,9 @@ fn org_id_create_save_reload_find_combo() {
       (delete-file file)
       (when (file-exists-p org-id-locations-file)
         (delete-file org-id-locations-file)))))"##,
+        expect_test::expect![[
+            r#""OK (t \"org\" 2 t \"B\" \"* A\n:PROPERTIES:\n:ID: a-id\n:END:\nBody\n* B\n:PROPERTIES:\n:ID:       <generated-id>\n:END:\n\")""#
+        ]],
     );
 }
 
@@ -50,7 +53,7 @@ fn org_id_create_save_reload_find_combo() {
 fn org_fuzzy_link_search_and_open_heading_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -69,6 +72,7 @@ fn org_fuzzy_link_search_and_open_heading_combo() {
             (save-excursion
               (org-open-at-point)
               (org-get-heading t t t t))))))"##,
+        expect_test::expect![[r#""OK (\"fuzzy\" \"*Target\" \"Target\" \"Target\")""#]],
     );
 }
 
@@ -76,7 +80,7 @@ fn org_fuzzy_link_search_and_open_heading_combo() {
 fn org_id_relative_locations_reload_and_find_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -116,6 +120,9 @@ fn org_id_relative_locations_reload_and_find_combo() {
       (when (get-file-buffer file-a) (kill-buffer (get-file-buffer file-a)))
       (when (get-file-buffer file-b) (kill-buffer (get-file-buffer file-b)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK (\"\n((\\\"a.org\\\" \\\"rel-a\\\") (\\\"sub/b.org\\\" \\\"rel-b\\\"))\n\" 2 \"a.org\" \"sub/b.org\" \"A\" \"B\")""#
+        ]],
     );
 }
 
@@ -123,7 +130,7 @@ fn org_id_relative_locations_reload_and_find_combo() {
 fn org_id_store_parent_context_and_open_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -160,6 +167,9 @@ fn org_id_store_parent_context_and_open_combo() {
       (delete-file file)
       (when (file-exists-p org-id-locations-file)
         (delete-file org-id-locations-file)))))"##,
+        expect_test::expect![[
+            r#""OK (\"id:parent-id::*Child\" (:link \"id:parent-id::*Child\" :description \"Child\" :type \"id\") \"Child\" nil \"* Parent\n:PROPERTIES:\n:ID: parent-id\n:END:\n** Child\nBody\n** Sibling\n\")""#
+        ]],
     );
 }
 
@@ -167,7 +177,7 @@ fn org_id_store_parent_context_and_open_combo() {
 fn org_store_link_custom_id_and_id_policy_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -204,6 +214,7 @@ fn org_store_link_custom_id_and_id_policy_combo() {
       (delete-file file)
       (when (file-exists-p org-id-locations-file)
         (delete-file org-id-locations-file)))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 36 47)""#]],
     );
 }
 
@@ -211,7 +222,7 @@ fn org_store_link_custom_id_and_id_policy_combo() {
 fn org_id_encoding_paste_tracker_lookup_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -270,6 +281,7 @@ fn org_id_encoding_paste_tracker_lookup_combo() {
                     missing-id)))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 58 34)""#]],
     );
 }
 
@@ -277,7 +289,7 @@ fn org_id_encoding_paste_tracker_lookup_combo() {
 fn org_id_open_option_and_colon_id_fallback_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -352,6 +364,9 @@ fn org_id_open_option_and_colon_id_fallback_combo() {
       (when (get-file-buffer file-a) (kill-buffer (get-file-buffer file-a)))
       (when (get-file-buffer file-b) (kill-buffer (get-file-buffer file-b)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK (\"id:<generated>\" (:link \"id:<generated>\" :description \"Child Beta\" :type \"id\") (\"a.org\" \"Child Beta\" 7) (\"a.org\" \"Child Beta\" \"<<beta-target>>\n\") (\"b.org\" \"Literal Colon ID\" 1) nil (\"a.org\" \"b.org\"))""#
+        ]],
     );
 }
 
@@ -359,7 +374,7 @@ fn org_id_open_option_and_colon_id_fallback_combo() {
 fn org_id_get_force_copy_marker_override_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -442,6 +457,9 @@ fn org_id_get_force_copy_marker_override_combo() {
                          (point-min) (point-max)))))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK (\"parent-id\" \"parent-id\" nil \"parent-id\" t t t 0 \"Child\" \"Child\" t \"override.org\" (\"ids.org\" \"override.org\") \"* Parent\n:PROPERTIES:\n:ID: parent-id\n:END:\n** Child\n:PROPERTIES:\n:ID:       <forced-id>\n:END:\nBody\n* Numeric\n:PROPERTIES:\n:ID: 123\n:END:\n\")""#
+        ]],
     );
 }
 
@@ -449,7 +467,7 @@ fn org_id_get_force_copy_marker_override_combo() {
 fn org_id_link_move_reload_visibility_navigation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -599,6 +617,9 @@ fn org_id_link_move_reload_visibility_navigation_combo() {
                        (point-min) (point-max)))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r##""OK (\"id:deep-id\" (:link \"id:deep-id\" :description \"Deep Target\" :type \"id\") 3 ((\"id\" \"deep-id\" \"id:deep-id\" \"[[id:deep-id][Deep ID]] \" 19 nil) (\"custom-id\" \"deep-custom\" \"#deep-custom\" \"[[#deep-custom][Deep Custom]] \" 19 nil) (\"fuzzy\" \"*Deep Target\" \"*Deep Target\" \"[[*Deep Target][Deep Fuzzy]] \" 19 nil) (\"fuzzy\" \"radio-deep\" \"radio-deep\" \"[[radio-deep][Radio]]\" 19 nil)) \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\" (#(\"Deep Target\" 0 11 (face org-level-3)) 10 nil) (#(\"Deep Target\" 0 11 (face org-level-3)) 10 \"deep-custom\") (#(\"Deep Target\" 0 11 (face org-level-3)) 3 10 nil) (#(\"Deep Target\" 0 11 (face org-level-3)) 3 10) ((\"https\" \"//example.test\" \"https://example.test\" \"web\") (\"id\" \"deep-id\" \"id:deep-id\" \"Deep ID\") (\"custom-id\" \"deep-custom\" \"#deep-custom\" \"Deep Custom\") (\"fuzzy\" \"*Deep Target\" \"*Deep Target\" \"Deep Fuzzy\") (\"fuzzy\" \"radio-deep\" \"radio-deep\" \"Radio\")) ((19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\") (19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\") (19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\") (19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\") (19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\")) \"#+TITLE: ID Link Nav\n* Project\n:PROPERTIES:\n:ID: project-id\n:END:\n** Alpha\n:PROPERTIES:\n:ID: alpha-id\n:END:\n*** Deep Target\n:PROPERTIES:\n:ID: deep-id\n:CUSTOM_ID: deep-custom\n:END:\nDeep body with <<radio-deep>> and [[https://example.test][web]].\n** Beta\nBeta body.\n* Links\n[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\n\")""##
+        ]],
     );
 }
 
@@ -606,7 +627,7 @@ fn org_id_link_move_reload_visibility_navigation_combo() {
 fn org_id_create_find_open_cross_file_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -666,5 +687,6 @@ fn org_id_create_find_open_cross_file_deep_state_combo() {
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 59 34)""#]],
     );
 }

@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_repeated_cycle_preserves_visibility_and_text_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-cycle)
@@ -33,6 +33,9 @@ fn org_repeated_cycle_preserves_visibility_and_text_combo() {
       (org-fold-show-all)
       (push (funcall snapshot) states)
       (nreverse states))))"#,
+        expect_test::expect![[
+            r#""OK ((\"* A\nbody A\n** B\nbody B\n*** C\nbody C\n* D\nbody D\n\" (2 2 2 2 nil 2 nil)) (\"* A\nbody A\n** B\nbody B\n*** C\nbody C\n* D\nbody D\n\" (nil nil 2 2 nil nil nil)) (\"* A\nbody A\n** B\nbody B\n*** C\nbody C\n* D\nbody D\n\" (nil nil nil nil nil nil nil)) (\"* A\nbody A\n** B\nbody B\n*** C\nbody C\n* D\nbody D\n\" (2 2 2 2 nil 2 nil)) (\"* A\nbody A\n** B\nbody B\n*** C\nbody C\n* D\nbody D\n\" (nil nil 2 2 nil nil nil)) (\"* A\nbody A\n** B\nbody B\n*** C\nbody C\n* D\nbody D\n\" (nil nil nil nil nil nil nil)) (\"* A\nbody A\n** B\nbody B\n*** C\nbody C\n* D\nbody D\n\" (nil nil nil nil nil nil nil)))""#
+        ]],
     );
 }
 
@@ -40,7 +43,7 @@ fn org_repeated_cycle_preserves_visibility_and_text_combo() {
 fn org_fold_subtree_show_sublevels_recovery_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-fold)
@@ -85,6 +88,9 @@ fn org_fold_subtree_show_sublevels_recovery_combo() {
                 shown-b
                 sublevels
                 (buffer-substring-no-properties (point-min) (point-max))))))))"#,
+        expect_test::expect![[
+            r#""OK ((2 2 nil 2) (nil nil nil nil) (2 nil 2 2 2 nil 2 nil) \"* A\nbody A\n** B\nbody B\n*** C\nbody C\n* D\nbody D\n\")""#
+        ]],
     );
 }
 
@@ -92,7 +98,7 @@ fn org_fold_subtree_show_sublevels_recovery_combo() {
 fn org_font_lock_heading_faces_level_four_plus_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (with-temp-buffer
@@ -107,6 +113,9 @@ fn org_font_lock_heading_faces_level_four_plus_combo() {
                     (get-text-property (line-beginning-position) 'face))
               out))
       (nreverse out))))"#,
+        expect_test::expect![[
+            r#""OK ((\"L1\" org-level-1 org-level-1) (\"L2\" org-level-2 org-level-2) (\"L3\" org-level-3 org-level-3) (\"L4\" org-level-4 org-level-4) (\"L5\" org-level-5 org-level-5) (\"L6\" org-level-6 org-level-6))""#
+        ]],
     );
 }
 
@@ -114,7 +123,7 @@ fn org_font_lock_heading_faces_level_four_plus_combo() {
 fn org_local_cycle_then_edit_preserves_newline_structure_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-cycle)
@@ -153,6 +162,9 @@ fn org_local_cycle_then_edit_preserves_newline_structure_combo() {
                   (point))))
              '("inserted" "D" "body D"))
             (buffer-substring-no-properties (point-min) (point-max))))))"#,
+        expect_test::expect![[
+            r#""OK (((nil nil nil nil nil nil) (nil nil nil nil nil nil) (nil nil nil nil nil nil) (nil nil nil nil nil nil) (nil nil nil nil nil nil)) (nil nil nil) \"* A\nbody A\n** B\nbody B\ninserted under B\n*** C\nbody C\n**** D\nbody D\n\")""#
+        ]],
     );
 }
 
@@ -160,7 +172,7 @@ fn org_local_cycle_then_edit_preserves_newline_structure_combo() {
 fn org_cycle_cut_paste_subtree_reexpand_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-cycle)
@@ -192,6 +204,9 @@ fn org_cycle_cut_paste_subtree_reexpand_integrity_combo() {
            (point))))
       '("body A" "B" "body B" "C" "body C" "E" "body E"))
      (buffer-substring-no-properties (point-min) (point-max)))))"#,
+        expect_test::expect![[
+            r#""OK ((nil nil nil nil nil nil nil) \"* A\nbody A\n** B\nbody B\n* E\nbody E\n** C\nbody C\n\")""#
+        ]],
     );
 }
 
@@ -199,7 +214,7 @@ fn org_cycle_cut_paste_subtree_reexpand_integrity_combo() {
 fn org_cycle_hide_drawers_show_all_recovery_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-cycle)
@@ -237,6 +252,9 @@ fn org_cycle_hide_drawers_show_all_recovery_combo() {
         (list hidden
               shown
               (buffer-substring-no-properties (point-min) (point-max)))))))"#,
+        expect_test::expect![[
+            r#""OK ((2 nil nil nil) (nil nil nil nil) \"* A\n:PROPERTIES:\n:X: y\n:END:\nbody\n** B\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:00] =>  1:00\n:END:\nbody B\n\")""#
+        ]],
     );
 }
 
@@ -244,7 +262,7 @@ fn org_cycle_hide_drawers_show_all_recovery_combo() {
 fn org_deep_heading_font_lock_after_level_edits_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (with-temp-buffer
@@ -271,6 +289,7 @@ fn org_deep_heading_font_lock_after_level_edits_combo() {
                 out))
         (list (nreverse out)
               (buffer-substring-no-properties (point-min) (point-max))))))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -278,7 +297,7 @@ fn org_deep_heading_font_lock_after_level_edits_combo() {
 fn org_global_cycle_deep_sibling_visibility_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-cycle)
@@ -308,6 +327,9 @@ fn org_global_cycle_deep_sibling_visibility_integrity_combo() {
       (push (funcall snapshot) states)
       (list (nreverse states)
             (buffer-substring-no-properties (point-min) (point-max))))))"#,
+        expect_test::expect![[
+            r#""OK ((((\"Root\" t) (\"A body\" t) (\"A1\" t) (\"A1a body\" t) (\"B body\" t) (\"B1\" t) (\"B1a body\" nil) (\"Tail\" t) (\"Tail body\" nil)) ((\"Root\" t) (\"A body\" t) (\"A1\" t) (\"A1a body\" t) (\"B body\" t) (\"B1\" t) (\"B1a body\" nil) (\"Tail\" t) (\"Tail body\" nil)) ((\"Root\" t) (\"A body\" t) (\"A1\" t) (\"A1a body\" t) (\"B body\" t) (\"B1\" t) (\"B1a body\" nil) (\"Tail\" t) (\"Tail body\" nil)) ((\"Root\" t) (\"A body\" t) (\"A1\" t) (\"A1a body\" t) (\"B body\" t) (\"B1\" t) (\"B1a body\" nil) (\"Tail\" t) (\"Tail body\" nil)) ((\"Root\" t) (\"A body\" t) (\"A1\" t) (\"A1a body\" t) (\"B body\" t) (\"B1\" t) (\"B1a body\" nil) (\"Tail\" t) (\"Tail body\" nil)) ((\"Root\" nil) (\"A body\" nil) (\"A1\" nil) (\"A1a body\" nil) (\"B body\" nil) (\"B1\" nil) (\"B1a body\" nil) (\"Tail\" nil) (\"Tail body\" nil))) \"* Root\n** A\nA body\n*** A1\nA1 body\n**** A1a\nA1a body\n** B\nB body\n*** B1\nB1 body\n**** B1a\nB1a body\n* Tail\nTail body\n\")""#
+        ]],
     );
 }
 
@@ -315,7 +337,7 @@ fn org_global_cycle_deep_sibling_visibility_integrity_combo() {
 fn org_reveal_hidden_deep_heading_context_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-fold)
@@ -340,6 +362,7 @@ fn org_reveal_hidden_deep_heading_context_combo() {
               '("A body" "B" "B body" "C" "C body" "D" "D body" "E" "E body"))))
         (list visibility
               (buffer-substring-no-properties (point-min) (point-max))))))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -347,7 +370,7 @@ fn org_reveal_hidden_deep_heading_context_combo() {
 fn org_mixed_cycle_deep_siblings_no_line_merge_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-cycle)
@@ -394,6 +417,7 @@ fn org_mixed_cycle_deep_siblings_no_line_merge_combo() {
       (list (nreverse states)
             (count-matches "^\\*+ " (point-min) (point-max))
             (buffer-substring-no-properties (point-min) (point-max))))))"#,
+        expect_test::expect![[r#""ERR (void-variable states)""#]],
     );
 }
 
@@ -401,7 +425,7 @@ fn org_mixed_cycle_deep_siblings_no_line_merge_combo() {
 fn org_fold_region_boundaries_after_hidden_edit_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-cycle)
@@ -445,6 +469,7 @@ fn org_fold_region_boundaries_after_hidden_edit_combo() {
             after
             (mapcar probe '("B body" "D body" "Inserted" "Child body"))
             (buffer-substring-no-properties (point-min) (point-max))))))"#,
+        expect_test::expect![[r#""ERR (void-variable before)""#]],
     );
 }
 
@@ -452,7 +477,7 @@ fn org_fold_region_boundaries_after_hidden_edit_combo() {
 fn org_repeated_fold_hidden_boundary_complex_edit_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -569,6 +594,7 @@ fn org_repeated_fold_hidden_boundary_complex_edit_combo() {
                    "*** TODO Beta inserted" "** TODO Gamma" "* Tail"))
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -576,7 +602,7 @@ fn org_repeated_fold_hidden_boundary_complex_edit_combo() {
 fn org_font_lock_deep_headings_after_cycle_and_edits_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-cycle)
@@ -625,6 +651,7 @@ fn org_font_lock_deep_headings_after_cycle_and_edits_combo() {
                 out))
         (list (nreverse out)
               (buffer-substring-no-properties (point-min) (point-max))))))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -632,7 +659,7 @@ fn org_font_lock_deep_headings_after_cycle_and_edits_combo() {
 fn org_cycle_startup_visibility_archived_drawers_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -681,6 +708,7 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
                     (funcall snapshot)
                    (buffer-substring-no-properties
                     (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -688,7 +716,7 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v60() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -738,6 +766,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v60() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -745,7 +774,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v60() {
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v59() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -795,6 +824,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v59() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -802,7 +832,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v59() {
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v58() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -852,6 +882,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v58() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -859,7 +890,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v58() {
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v57() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -909,6 +940,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v57() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -916,7 +948,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v57() {
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v56() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -966,6 +998,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v56() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -973,7 +1006,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v56() {
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v55() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1023,6 +1056,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v55() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1030,7 +1064,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v55() {
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v54() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1080,6 +1114,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v54() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1087,7 +1122,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v54() {
 fn org_fold_hide_all_edit_cycle_tag_prop_clock_font_v53() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1137,6 +1172,7 @@ fn org_fold_hide_all_edit_cycle_tag_prop_clock_font_v53() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1144,7 +1180,7 @@ fn org_fold_hide_all_edit_cycle_tag_prop_clock_font_v53() {
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v52() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1194,6 +1230,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v52() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1201,7 +1238,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v52() {
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v51() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1251,6 +1288,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v51() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1258,7 +1296,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v51() {
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v50() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1309,6 +1347,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v50() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1316,7 +1355,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v50() {
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v49() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1365,6 +1404,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v49() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1372,7 +1412,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v49() {
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_v48() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1414,6 +1454,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_v48() {
                 (list initial after-hide after-edit after-show after-cycle
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1421,7 +1462,7 @@ fn org_fold_hide_edit_show_cycle_clock_tag_prop_v48() {
 fn org_fold_hide_all_edit_cycle_font_face_v47() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1470,6 +1511,7 @@ fn org_fold_hide_all_edit_cycle_font_face_v47() {
                   (list initial after-hide after-edit after-show after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1477,7 +1519,7 @@ fn org_fold_hide_all_edit_cycle_font_face_v47() {
 fn org_fold_hide_all_edit_cycle_multi_tag_prop_clock_v46() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1522,6 +1564,7 @@ fn org_fold_hide_all_edit_cycle_multi_tag_prop_clock_v46() {
                 (list initial after-hide after-edit after-show after-cycle
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1529,7 +1572,7 @@ fn org_fold_hide_all_edit_cycle_multi_tag_prop_clock_v46() {
 fn org_fold_hide_all_edit_cycle_tag_prop_clock_v45() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1574,6 +1617,7 @@ fn org_fold_hide_all_edit_cycle_tag_prop_clock_v45() {
                 (list initial after-hide after-edit after-show after-cycle
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1581,7 +1625,7 @@ fn org_fold_hide_all_edit_cycle_tag_prop_clock_v45() {
 fn org_fold_hide_all_edit_cycle_tag_clock_v44() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1636,6 +1680,7 @@ fn org_fold_hide_all_edit_cycle_tag_clock_v44() {
                       after-cycle
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1643,7 +1688,7 @@ fn org_fold_hide_all_edit_cycle_tag_clock_v44() {
 fn org_fold_hide_all_edit_cycle_prop_inherit_clock_v43() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1696,6 +1741,7 @@ fn org_fold_hide_all_edit_cycle_prop_inherit_clock_v43() {
                       after-cycle
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1703,7 +1749,7 @@ fn org_fold_hide_all_edit_cycle_prop_inherit_clock_v43() {
 fn org_fold_hide_edit_show_cycle_clock_prop_v42() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1753,6 +1799,7 @@ fn org_fold_hide_edit_show_cycle_clock_prop_v42() {
                       after-cycle
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1760,7 +1807,7 @@ fn org_fold_hide_edit_show_cycle_clock_prop_v42() {
 fn org_fold_hide_subtree_scheduled_deadline_cycle_v41() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1809,6 +1856,7 @@ fn org_fold_hide_subtree_scheduled_deadline_cycle_v41() {
                       after-cycle
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 57)""#]],
     );
 }
 
@@ -1816,7 +1864,7 @@ fn org_fold_hide_subtree_scheduled_deadline_cycle_v41() {
 fn org_fold_hide_subtree_edit_cycle_prop_clock_v40() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1871,6 +1919,7 @@ fn org_fold_hide_subtree_edit_cycle_prop_clock_v40() {
                       after-cycle
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 57)""#]],
     );
 }
 
@@ -1878,7 +1927,7 @@ fn org_fold_hide_subtree_edit_cycle_prop_clock_v40() {
 fn org_fold_hide_all_prop_inherit_edit_cycle_v39() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1930,6 +1979,7 @@ fn org_fold_hide_all_prop_inherit_edit_cycle_v39() {
                       after-cycle
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -1937,7 +1987,7 @@ fn org_fold_hide_all_prop_inherit_edit_cycle_v39() {
 fn org_fold_hide_subtree_prop_drawer_edit_cycle_show_v38() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -1988,6 +2038,7 @@ fn org_fold_hide_subtree_prop_drawer_edit_cycle_show_v38() {
                       after-cycle
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 50 57)""#]],
     );
 }
 
@@ -1995,7 +2046,7 @@ fn org_fold_hide_subtree_prop_drawer_edit_cycle_show_v38() {
 fn org_fold_hide_all_edit_cycle_font_face_v37() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2050,6 +2101,7 @@ fn org_fold_hide_all_edit_cycle_font_face_v37() {
                         after-cycle
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
     );
 }
 
@@ -2057,7 +2109,7 @@ fn org_fold_hide_all_edit_cycle_font_face_v37() {
 fn org_fold_cycle_subtree_edit_show_all_v36() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2103,6 +2155,7 @@ fn org_fold_cycle_subtree_edit_show_all_v36() {
                       after-cycle
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 57)""#]],
     );
 }
 
@@ -2110,7 +2163,7 @@ fn org_fold_cycle_subtree_edit_show_all_v36() {
 fn org_fold_subtree_hide_edit_show_font_face_v35_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2159,6 +2212,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v35_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"Inserted\" 4 nil 4 org-level-4) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* DONE Root\n** TODO Alpha\n*** DONE Beta\n**** DONE Inserted under Beta\nInserted body.\n\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -2166,7 +2222,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v35_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v34_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2215,6 +2271,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v34_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 6 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"Inserted\" 3 nil 3 org-level-3) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n** DONE Alpha\n*** DONE Inserted under Alpha\nInserted body.\n\n*** TODO Beta\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -2222,7 +2281,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v34_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v33_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2271,6 +2330,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v33_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 4 nil 4 org-level-4) (\"Inserted\" 5 nil 4 org-level-4) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* DONE Root\n** TODO Alpha\n*** DONE Beta\n**** WAIT Gamma\n**** DONE Inserted under Gamma\nInserted body.\n\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -2278,7 +2340,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v33_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v32_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2327,6 +2389,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v32_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 4 nil 4 org-level-4) (\"SIBLING\" 5 nil 2 org-level-2) (\"New\" 6 nil 2 org-level-2)) nil \"* DONE Root\n** TODO Alpha\n*** DONE Beta\n**** WAIT Gamma\n** NEXT Sibling\n** DONE New top\nNew body.\n\n\")""#
+        ]],
     );
 }
 
@@ -2334,7 +2399,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v32_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v31_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2383,6 +2448,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v31_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 5 nil 2 org-level-2) (\"Beta\" 6 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"New\" 2 nil 1 org-level-1) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* DONE Root\n* DONE New top\nNew body.\n\n** TODO Alpha\n*** DONE Beta\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -2390,7 +2458,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v31_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v30_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2439,6 +2507,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v30_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 4 nil 4 org-level-4) (\"Inserted\" 5 nil 4 org-level-4) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n** DONE Alpha\n*** TODO Beta\n**** WAIT Gamma\n**** DONE Inserted under Gamma\nInserted body.\n\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -2446,7 +2517,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v30_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v29_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2495,6 +2566,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v29_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 4 nil 4 org-level-4) (\"SIBLING\" 5 nil 2 org-level-2) (\"New\" 6 nil 2 org-level-2)) nil \"* DONE Root\n** TODO Alpha\n*** DONE Beta\n**** WAIT Gamma\n** NEXT Sibling\n** DONE New top\nNew body.\n\n\")""#
+        ]],
     );
 }
 
@@ -2502,7 +2576,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v29_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v28_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2551,6 +2625,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v28_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 6 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"Inserted\" 3 nil 3 org-level-3) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* DONE Root\n** TODO Alpha\n*** DONE Inserted under Alpha\nInserted body.\n\n*** DONE Beta\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -2558,7 +2635,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v28_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v27_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2607,6 +2684,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v27_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"Inserted\" 4 nil 4 org-level-4) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* DONE Root\n** TODO Alpha\n*** DONE Beta\n**** DONE Inserted under Beta\nInserted body.\n\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -2614,7 +2694,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v27_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v26_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2663,6 +2743,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v26_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 5 nil 2 org-level-2) (\"Beta\" 6 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"New\" 2 nil 1 org-level-1) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n* DONE New top\nNew body.\n\n** DONE Alpha\n*** TODO Beta\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -2670,7 +2753,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v26_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v25_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2720,6 +2803,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v25_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 4 nil 4 org-level-4) (\"Inserted\" 5 nil 4 org-level-4) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n** DONE Alpha\n*** TODO Beta\n**** WAIT Gamma\n**** DONE Inserted under Gamma\nInserted body.\n\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -2727,7 +2813,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v25_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v24_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2777,6 +2863,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v24_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 4 nil 4 org-level-4) (\"SIBLING\" 5 nil 2 org-level-2) (\"Inserted\" 6 nil 2 org-level-2)) nil \"* DONE Root\n** TODO Alpha\n*** DONE Beta\n**** WAIT Gamma\n** NEXT Sibling\n** DONE Inserted after Sibling\nInserted body.\n\n\")""#
+        ]],
     );
 }
 
@@ -2784,7 +2873,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v24_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v23_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2833,6 +2922,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v23_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 5 nil 2 org-level-2) (\"Beta\" 6 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"New\" 2 nil 1 org-level-1) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n* DONE New top\nNew body.\n\n** DONE Alpha\n*** TODO Beta\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -2840,7 +2932,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v23_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v22_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2889,6 +2981,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v22_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 4 nil 4 org-level-4) (\"Inserted\" 5 nil 4 org-level-4) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n** DONE Alpha\n*** TODO Beta\n**** WAIT Gamma\n**** DONE Inserted under Gamma\nInserted body.\n\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -2896,7 +2991,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v22_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v21_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -2945,6 +3040,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v21_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"Inserted\" 4 nil 4 org-level-4) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n** DONE Alpha\n*** TODO Beta\n**** DONE Inserted under Beta\nInserted body.\n\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -2952,7 +3050,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v21_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v20_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3001,6 +3099,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v20_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 4 nil 4 org-level-4) (\"SIBLING\" 5 nil 2 org-level-2) (\"New\" 6 nil 2 org-level-2)) nil \"* DONE Root\n** TODO Alpha\n*** DONE Beta\n**** WAIT Gamma\n** NEXT Sibling\n** DONE New top\nNew body.\n\n\")""#
+        ]],
     );
 }
 
@@ -3008,7 +3109,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v20_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v19_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3057,6 +3158,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v19_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 6 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"Inserted\" 3 nil 3 org-level-3) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n** DONE Alpha\n*** DONE Inserted A\nInserted A body.\n\n*** TODO Beta\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -3064,7 +3168,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v19_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v18_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3113,6 +3217,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v18_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"Inserted\" 4 nil 4 org-level-4) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* DONE Root\n** TODO Alpha\n*** DONE Beta\n**** DONE Inserted under Beta\nInserted body.\n\n**** TODO Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -3120,7 +3227,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v18_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v17_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3170,6 +3277,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v17_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 4 nil 4 org-level-4) (\"SIBLING\" 5 nil 2 org-level-2) (\"New\" 6 nil 2 org-level-2)) nil \"* TODO Root\n** DONE Alpha\n*** TODO Beta\n**** WAIT Gamma\n** NEXT Sibling\n** DONE New top\nNew body.\n\n\")""#
+        ]],
     );
 }
 
@@ -3177,7 +3287,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v17_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v16_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3226,6 +3336,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v16_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 5 nil 2 org-level-2) (\"Beta\" 6 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"New\" 2 nil 1 org-level-1) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n* DONE New top\nNew body.\n\n** DONE Alpha\n*** TODO Beta\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -3233,7 +3346,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v16_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v15_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3282,6 +3395,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v15_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 4 nil 4 org-level-4) (\"Inserted\" 5 nil 4 org-level-4) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* DONE Root\n** TODO Alpha\n*** DONE Beta\n**** TODO Gamma\n**** DONE Inserted under Gamma\nInserted body.\n\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -3289,7 +3405,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v15_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v14_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3338,6 +3454,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v14_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 5 nil 2 org-level-2) (\"Beta\" 6 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"Inserted\" 2 nil 1 org-level-1) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n* DONE Inserted after Root\nInserted body.\n\n** DONE Alpha\n*** TODO Beta\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -3345,7 +3464,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v14_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v13_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3395,6 +3514,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v13_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 6 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"Inserted\" 3 nil 3 org-level-3) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n** DONE Alpha\n*** DONE Inserted under Alpha\nInserted body.\n\n*** TODO Beta\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -3402,7 +3524,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v13_combo() {
 fn org_fold_subtree_hide_edit_show_font_face_v12_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3451,6 +3573,9 @@ fn org_fold_subtree_hide_edit_show_font_face_v12_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 4 nil 4 org-level-4) (\"SIBLING\" 5 nil 2 org-level-2) (\"Inserted\" 6 nil 2 org-level-2)) nil \"* DONE Root\n** TODO Alpha\n*** DONE Beta\n**** TODO Gamma\n** NEXT Sibling\n** DONE Inserted after Sibling\nInserted body.\n\n\")""#
+        ]],
     );
 }
 
@@ -3458,7 +3583,7 @@ fn org_fold_subtree_hide_edit_show_font_face_v12_combo() {
 fn org_fold_subtree_hide_edit_show_all_font_v11_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3507,6 +3632,9 @@ fn org_fold_subtree_hide_edit_show_all_font_v11_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 4 nil 4 org-level-4) (\"Inserted\" 5 nil 4 org-level-4) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n** DONE Alpha\n*** TODO Beta\n**** WAIT Gamma\n**** DONE Inserted under Gamma\nInserted body.\n\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -3514,7 +3642,7 @@ fn org_fold_subtree_hide_edit_show_all_font_v11_combo() {
 fn org_fold_subtree_edit_global_show_font_face_v10_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -3567,6 +3695,9 @@ fn org_fold_subtree_edit_global_show_font_face_v10_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 3 nil 3 org-level-3) (\"Gamma\" 7 nil 4 org-level-4) (\"Inserted\" 4 nil 4 org-level-4) (\"SIBLING\" 8 nil 2 org-level-2)) nil \"* TODO Root\n** DONE Alpha\n*** TODO Beta\n**** DONE Inserted under Beta\nInserted body.\n\n**** WAIT Gamma\n** NEXT Sibling\n\")""#
+        ]],
     );
 }
 
@@ -3574,7 +3705,7 @@ fn org_fold_subtree_edit_global_show_font_face_v10_combo() {
 fn org_fold_font_face_after_todo_toggle_cycle_show_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -3630,6 +3761,7 @@ fn org_fold_font_face_after_todo_toggle_cycle_show_v2_combo() {
                 (nreverse merged)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 55 48)""#]],
     );
 }
 
@@ -3637,7 +3769,7 @@ fn org_fold_font_face_after_todo_toggle_cycle_show_v2_combo() {
 fn org_fold_subtree_edit_cycle_show_font_face_v9_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -3690,6 +3822,7 @@ fn org_fold_subtree_edit_cycle_show_font_face_v9_combo() {
                 (nreverse merged)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 48)""#]],
     );
 }
 
@@ -3697,7 +3830,7 @@ fn org_fold_subtree_edit_cycle_show_font_face_v9_combo() {
 fn org_fold_hide_subtree_edit_cycle_show_font_face_v8_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -3750,6 +3883,7 @@ fn org_fold_hide_subtree_edit_cycle_show_font_face_v8_combo() {
                 (nreverse merged)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 48)""#]],
     );
 }
 
@@ -3757,7 +3891,7 @@ fn org_fold_hide_subtree_edit_cycle_show_font_face_v8_combo() {
 fn org_fold_hide_sublevels_reveal_context_font_level_v4_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3807,6 +3941,7 @@ fn org_fold_hide_sublevels_reveal_context_font_level_v4_combo() {
                 (nreverse merged)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (search-failed \"Delta body\")""#]],
     );
 }
 
@@ -3814,7 +3949,7 @@ fn org_fold_hide_sublevels_reveal_context_font_level_v4_combo() {
 fn org_fold_hide_subtree_edit_show_font_face_level_v7_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3864,6 +3999,7 @@ fn org_fold_hide_subtree_edit_show_font_face_level_v7_combo() {
                 (nreverse merged)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 48)""#]],
     );
 }
 
@@ -3871,7 +4007,7 @@ fn org_fold_hide_subtree_edit_show_font_face_level_v7_combo() {
 fn org_fold_subtree_hide_edit_show_font_level_visibility_v6_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -3920,6 +4056,7 @@ fn org_fold_subtree_hide_edit_show_font_level_visibility_v6_combo() {
                 (nreverse merged)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 48)""#]],
     );
 }
 
@@ -3927,7 +4064,7 @@ fn org_fold_subtree_hide_edit_show_font_level_visibility_v6_combo() {
 fn org_fold_narrow_edit_widen_cycle_font_face_level_v4_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -3980,6 +4117,7 @@ fn org_fold_narrow_edit_widen_cycle_font_face_level_v4_combo() {
                 (nreverse merged)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 48)""#]],
     );
 }
 
@@ -3987,7 +4125,7 @@ fn org_fold_narrow_edit_widen_cycle_font_face_level_v4_combo() {
 fn org_fold_hide_sublevels_reveal_font_face_level_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -4036,6 +4174,7 @@ fn org_fold_hide_sublevels_reveal_font_face_level_v3_combo() {
                 (nreverse merged)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (search-failed \"Gamma body\")""#]],
     );
 }
 
@@ -4043,7 +4182,7 @@ fn org_fold_hide_sublevels_reveal_font_face_level_v3_combo() {
 fn org_fold_subtree_edit_show_global_font_level_v5_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -4096,6 +4235,7 @@ fn org_fold_subtree_edit_show_global_font_level_v5_combo() {
                 (nreverse merged)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 48)""#]],
     );
 }
 
@@ -4103,7 +4243,7 @@ fn org_fold_subtree_edit_show_global_font_level_v5_combo() {
 fn org_fold_export_html_after_cycle_font_state_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -4153,6 +4293,7 @@ fn org_fold_export_html_after_cycle_font_state_deep_combo() {
                   "sec:org[[:alnum:]-]+" "sec:org-id"
                   (replace-regexp-in-string
                    "org[[:alnum:]-]\\{8,\\}" "orgHASH" html))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -4160,7 +4301,7 @@ fn org_fold_export_html_after_cycle_font_state_deep_combo() {
 fn org_fold_font_face_after_narrow_cycle_edit_widen_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -4204,6 +4345,9 @@ fn org_fold_font_face_after_narrow_cycle_edit_widen_v3_combo() {
             (list headings
                   (buffer-substring-no-properties
                    (point-min) (point-max)))))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Alpha\" 1 nil 2) (\"Beta\" 3 nil 3) (\"Gamma\" 5 nil 4) (\"Inserted\" 6 nil 4) (\"Root\" not-found nil nil) (\"SIBLING\" not-found nil nil)) \"** Alpha\nAlpha body.\n*** Beta\nBeta body.\n**** Gamma\nGamma body.*** Inserted in narrow\nInserted body.\n\")""#
+        ]],
     );
 }
 
@@ -4211,7 +4355,7 @@ fn org_fold_font_face_after_narrow_cycle_edit_widen_v3_combo() {
 fn org_fold_font_face_after_narrow_subtree_cycle_edit_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -4261,6 +4405,9 @@ fn org_fold_font_face_after_narrow_subtree_cycle_edit_v2_combo() {
           (list narrowed-headings
                 (buffer-substring-no-properties
                  (point-min) (point-max))))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Alpha\" 1 nil 2) (\"Beta\" 3 nil 3) (\"Gamma\" 5 nil 4) (\"Inserted\" 6 nil 4) (\"Root\" not-found nil nil) (\"SIBLING\" not-found nil nil)) \"** Alpha\nAlpha body.\n*** Beta\nBeta body.\n**** Gamma\nGamma body.*** Inserted in narrow\nInserted body.\n\")""#
+        ]],
     );
 }
 
@@ -4268,7 +4415,7 @@ fn org_fold_font_face_after_narrow_subtree_cycle_edit_v2_combo() {
 fn org_fold_font_face_after_demote_subtree_show_all_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -4318,6 +4465,7 @@ fn org_fold_font_face_after_demote_subtree_show_all_v3_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 45)""#]],
     );
 }
 
@@ -4325,7 +4473,7 @@ fn org_fold_font_face_after_demote_subtree_show_all_v3_combo() {
 fn org_fold_font_face_after_multiple_hidden_edits_global_show_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -4387,6 +4535,9 @@ fn org_fold_font_face_after_multiple_hidden_edits_global_show_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 3 nil 2 org-level-2) (\"Beta\" 8 nil 3 org-level-3) (\"Gamma\" 10 nil 2 org-level-2) (\"Inserted A\" 4 nil 3 org-level-3) (\"Inserted G\" 11 nil 2 org-level-2)) nil \"* TODO Root\nRoot body.\n** DONE Alpha\n*** TODO Inserted A\nInserted A body.\n\nAlpha body.\n*** TODO Beta\nBeta body.\n** NEXT Gamma\n** DONE Inserted G\nInserted G body.\n\nGamma body.\n\")""#
+        ]],
     );
 }
 
@@ -4394,7 +4545,7 @@ fn org_fold_font_face_after_multiple_hidden_edits_global_show_combo() {
 fn org_fold_font_face_after_promote_cycle_show_all_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -4449,6 +4600,9 @@ fn org_fold_font_face_after_promote_cycle_show_all_v2_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[
+            r#""ERR (user-error \"Cannot promote to level 0.  UNDO to recover if necessary\")""#
+        ]],
     );
 }
 
@@ -4456,7 +4610,7 @@ fn org_fold_font_face_after_promote_cycle_show_all_v2_combo() {
 fn org_fold_font_face_after_demote_promote_cycle_global_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -4510,6 +4664,7 @@ fn org_fold_font_face_after_demote_promote_cycle_global_v2_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 53 45)""#]],
     );
 }
 
@@ -4517,7 +4672,7 @@ fn org_fold_font_face_after_demote_promote_cycle_global_v2_combo() {
 fn org_fold_font_face_after_cut_paste_cycle_global_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -4570,6 +4725,7 @@ fn org_fold_font_face_after_cut_paste_cycle_global_v2_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 45)""#]],
     );
 }
 
@@ -4577,7 +4733,7 @@ fn org_fold_font_face_after_cut_paste_cycle_global_v2_combo() {
 fn org_fold_font_face_after_cut_paste_promote_demote_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -4634,6 +4790,7 @@ fn org_fold_font_face_after_cut_paste_promote_demote_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 45)""#]],
     );
 }
 
@@ -4641,7 +4798,7 @@ fn org_fold_font_face_after_cut_paste_promote_demote_combo() {
 fn org_fold_font_face_after_multiple_todo_toggle_show_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -4703,6 +4860,7 @@ fn org_fold_font_face_after_multiple_todo_toggle_show_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (user-error \"State ‘CANCELED’ not valid in this file\")""#]],
     );
 }
 
@@ -4710,7 +4868,7 @@ fn org_fold_font_face_after_multiple_todo_toggle_show_combo() {
 fn org_fold_font_face_after_todo_toggle_cycle_show_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -4773,6 +4931,7 @@ fn org_fold_font_face_after_todo_toggle_cycle_show_combo() {
                "CLOSED: \\[.*\\]" "CLOSED: [stamp]"
                (buffer-substring-no-properties
                 (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (user-error \"State ‘CANCELED’ not valid in this file\")""#]],
     );
 }
 
@@ -4780,7 +4939,7 @@ fn org_fold_font_face_after_todo_toggle_cycle_show_combo() {
 fn org_fold_font_face_level_after_cut_paste_subtree_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -4833,6 +4992,7 @@ fn org_fold_font_face_level_after_cut_paste_subtree_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 45)""#]],
     );
 }
 
@@ -4840,7 +5000,7 @@ fn org_fold_font_face_level_after_cut_paste_subtree_combo() {
 fn org_fold_subtree_hide_edit_global_show_font_deep_v4_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -4893,6 +5053,7 @@ fn org_fold_subtree_hide_edit_global_show_font_deep_v4_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 45)""#]],
     );
 }
 
@@ -4900,7 +5061,7 @@ fn org_fold_subtree_hide_edit_global_show_font_deep_v4_combo() {
 fn org_fold_sublevels_show_context_font_level_visibility_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -4967,6 +5128,7 @@ fn org_fold_sublevels_show_context_font_level_visibility_v2_combo() {
                   (nreverse merged)
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -4974,7 +5136,7 @@ fn org_fold_sublevels_show_context_font_level_visibility_v2_combo() {
 fn org_fold_multiple_subtree_hide_cycle_show_font_level_v5_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -5039,6 +5201,9 @@ fn org_fold_multiple_subtree_hide_cycle_show_font_level_v5_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 7 nil 3 org-level-3) (\"Gamma\" 9 nil 4 org-level-4) (\"Inserted A\" 3 nil 3 org-level-3) (\"Sibling\" 11 nil 2 org-level-2) (\"Inserted S\" 12 nil 2 org-level-2)) nil \"* TODO Root\n** DONE Alpha\n*** TODO Inserted A\nInserted A body.\n\nAlpha body.\n*** TODO Beta\nBeta body.\n**** WAIT Gamma\nGamma body.\n** NEXT Sibling\n** DONE Inserted S\nInserted S body.\n\nSibling body.\n\")""#
+        ]],
     );
 }
 
@@ -5046,7 +5211,7 @@ fn org_fold_multiple_subtree_hide_cycle_show_font_level_v5_combo() {
 fn org_fold_font_level_visibility_after_multiple_cycles_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -5111,6 +5276,7 @@ fn org_fold_font_level_visibility_after_multiple_cycles_v2_combo() {
               level-ok
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 64 45)""#]],
     );
 }
 
@@ -5118,7 +5284,7 @@ fn org_fold_font_level_visibility_after_multiple_cycles_v2_combo() {
 fn org_fold_overview_local_global_show_font_face_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -5182,6 +5348,7 @@ fn org_fold_overview_local_global_show_font_face_deep_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-cycle-contents)""#]],
     );
 }
 
@@ -5189,7 +5356,7 @@ fn org_fold_overview_local_global_show_font_face_deep_combo() {
 fn org_fold_subtree_hide_edit_show_all_font_face_level_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -5247,6 +5414,7 @@ fn org_fold_subtree_hide_edit_show_all_font_face_level_v2_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 45)""#]],
     );
 }
 
@@ -5254,7 +5422,7 @@ fn org_fold_subtree_hide_edit_show_all_font_face_level_v2_combo() {
 fn org_fold_hide_sublevels_reveal_cycle_font_level_deep_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -5324,6 +5492,7 @@ fn org_fold_hide_sublevels_reveal_cycle_font_level_deep_v3_combo() {
                   (nreverse merged)
                   (buffer-substring-no-properties
                    (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (search-failed \"Delta body\")""#]],
     );
 }
 
@@ -5331,7 +5500,7 @@ fn org_fold_hide_sublevels_reveal_cycle_font_level_deep_v3_combo() {
 fn org_fold_repeated_global_cycle_show_all_font_level_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -5386,6 +5555,7 @@ fn org_fold_repeated_global_cycle_show_all_font_level_v2_combo() {
               level-ok
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 45)""#]],
     );
 }
 
@@ -5393,7 +5563,7 @@ fn org_fold_repeated_global_cycle_show_all_font_level_v2_combo() {
 fn org_fold_narrow_subtree_show_all_widen_font_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -5441,6 +5611,9 @@ fn org_fold_narrow_subtree_show_all_widen_font_deep_combo() {
           (list narrowed-state
                 (buffer-substring-no-properties
                  (point-min) (point-max))))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Alpha\" 1 nil 2) (\"Beta\" 6 nil 3) (\"Gamma\" 8 nil 4) (\"Inserted\" 2 nil 3) (\"Root\" not-found nil nil) (\"Sibling\" not-found nil nil)) \"** Alpha\n*** Inserted under Alpha\nInserted body.\n\nAlpha body.\n*** Beta\nBeta body.\n**** Gamma\nGamma body.\")""#
+        ]],
     );
 }
 
@@ -5448,7 +5621,7 @@ fn org_fold_narrow_subtree_show_all_widen_font_deep_combo() {
 fn org_fold_cycle_global_local_mixed_font_level_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -5513,6 +5686,7 @@ fn org_fold_cycle_global_local_mixed_font_level_integrity_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-cycle-contents)""#]],
     );
 }
 
@@ -5520,7 +5694,7 @@ fn org_fold_cycle_global_local_mixed_font_level_integrity_combo() {
 fn org_fold_subtree_hide_show_all_font_face_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -5575,6 +5749,7 @@ fn org_fold_subtree_hide_show_all_font_face_integrity_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 45)""#]],
     );
 }
 
@@ -5582,7 +5757,7 @@ fn org_fold_subtree_hide_show_all_font_face_integrity_combo() {
 fn org_fold_font_level_visibility_after_demote_promote_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -5632,6 +5807,7 @@ fn org_fold_font_level_visibility_after_demote_promote_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 45)""#]],
     );
 }
 
@@ -5639,7 +5815,7 @@ fn org_fold_font_level_visibility_after_demote_promote_combo() {
 fn org_fold_font_level_visibility_after_todo_toggle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -5699,6 +5875,7 @@ fn org_fold_font_level_visibility_after_todo_toggle_combo() {
                "CLOSED: \\[.*\\]" "CLOSED: [stamp]"
                (buffer-substring-no-properties
                 (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (user-error \"State ‘CANCELED’ not valid in this file\")""#]],
     );
 }
 
@@ -5706,7 +5883,7 @@ fn org_fold_font_level_visibility_after_todo_toggle_combo() {
 fn org_fold_show_all_after_multiple_hidden_edits_font_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -5766,6 +5943,9 @@ fn org_fold_show_all_after_multiple_hidden_edits_font_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 1 nil 1 org-level-1) (\"Alpha\" 2 nil 2 org-level-2) (\"Beta\" 7 nil 3 org-level-3) (\"Inserted under Alpha\" 3 nil 3 org-level-3) (\"Sibling\" 9 nil 2 org-level-2) (\"New sibling\" 10 nil 2 org-level-2)) nil \"* TODO Root\n** DONE Alpha\n*** TODO Inserted under Alpha\nInserted Alpha body.\n\nAlpha body.\n*** TODO Beta\nBeta body.\n** NEXT Sibling\n** DONE New sibling\nNew sibling body.\n\nSibling body.\n\")""#
+        ]],
     );
 }
 
@@ -5773,7 +5953,7 @@ fn org_fold_show_all_after_multiple_hidden_edits_font_combo() {
 fn org_fold_subtree_hide_edit_reveal_font_level_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -5830,6 +6010,7 @@ fn org_fold_subtree_hide_edit_reveal_font_level_v2_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 45)""#]],
     );
 }
 
@@ -5837,7 +6018,7 @@ fn org_fold_subtree_hide_edit_reveal_font_level_v2_combo() {
 fn org_fold_indirect_buffer_decouple_font_level_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -5886,6 +6067,7 @@ fn org_fold_indirect_buffer_decouple_font_level_v2_combo() {
                     (kill-buffer clone)
                     (list 'ok clone-state)))
               (error (list 'divergence (car err) (cdr err))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 67)""#]],
     );
 }
 
@@ -5893,7 +6075,7 @@ fn org_fold_indirect_buffer_decouple_font_level_v2_combo() {
 fn org_fold_deep_level_cycle_hidden_edit_show_all_font_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -5975,6 +6157,7 @@ fn org_fold_deep_level_cycle_hidden_edit_show_all_font_v3_combo() {
               level-ok
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 81 45)""#]],
     );
 }
 
@@ -5982,7 +6165,7 @@ fn org_fold_deep_level_cycle_hidden_edit_show_all_font_v3_combo() {
 fn org_fold_narrow_widen_cycle_font_level_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -6039,6 +6222,7 @@ fn org_fold_narrow_widen_cycle_font_level_integrity_combo() {
                 narrowed-show
                 (buffer-substring-no-properties
                  (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -6046,7 +6230,7 @@ fn org_fold_narrow_widen_cycle_font_level_integrity_combo() {
 fn org_fold_overview_content_all_local_cycle_font_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -6122,6 +6306,7 @@ fn org_fold_overview_content_all_local_cycle_font_deep_combo() {
                     (nreverse merged)
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-cycle-contents)""#]],
     );
 }
 
@@ -6129,7 +6314,7 @@ fn org_fold_overview_content_all_local_cycle_font_deep_combo() {
 fn org_fold_cut_paste_subtree_reexpand_font_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -6190,6 +6375,7 @@ fn org_fold_cut_paste_subtree_reexpand_font_integrity_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 60 45)""#]],
     );
 }
 
@@ -6197,7 +6383,7 @@ fn org_fold_cut_paste_subtree_reexpand_font_integrity_combo() {
 fn org_fold_startup_visibility_property_cycle_font_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -6264,6 +6450,7 @@ fn org_fold_startup_visibility_property_cycle_font_deep_combo() {
                   (nreverse merged)
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 66 51)""#]],
     );
 }
 
@@ -6271,7 +6458,7 @@ fn org_fold_startup_visibility_property_cycle_font_deep_combo() {
 fn org_fold_hide_sublevels_show_context_cycle_font_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -6328,6 +6515,7 @@ fn org_fold_hide_sublevels_show_context_cycle_font_deep_v2_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (search-failed \"Delta body\")""#]],
     );
 }
 
@@ -6335,7 +6523,7 @@ fn org_fold_hide_sublevels_show_context_cycle_font_deep_v2_combo() {
 fn org_fold_sublevels_reveal_context_font_state_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -6393,6 +6581,9 @@ fn org_fold_sublevels_reveal_context_font_state_deep_combo() {
                   (nreverse merged)
                   (buffer-substring-no-properties
                    (point-min) (point-max)))))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Root\" 2 1 org-level-1) (\"Alpha\" 2 2 org-level-2) (\"Beta\" 2 3 org-level-3) (\"Gamma\" 2 4 org-level-4) (\"Delta\" 2 5 org-level-5) (\"Epsilon\" 2 6 org-level-6) (\"Sibling\" 2 2 org-level-2)) ((\"Root\" 2 1) (\"Alpha\" 2 2) (\"Beta\" 2 3) (\"Gamma\" 2 4) (\"Delta\" 2 5) (\"Epsilon\" nil 6) (\"Sibling\" 2 2)) nil \"* Root\nRoot body.\n** Alpha\nAlpha body.\n*** Beta\nBeta body.\n**** Gamma\nGamma body.\n***** Delta\nDelta body.\n****** Epsilon\nEpsilon body.\n** Sibling\nSibling body.\n\")""#
+        ]],
     );
 }
 
@@ -6400,7 +6591,7 @@ fn org_fold_sublevels_reveal_context_font_state_deep_combo() {
 fn org_fold_subtree_hide_edit_show_all_font_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -6466,6 +6657,7 @@ fn org_fold_subtree_hide_edit_show_all_font_integrity_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 65 45)""#]],
     );
 }
 
@@ -6473,7 +6665,7 @@ fn org_fold_subtree_hide_edit_show_all_font_integrity_combo() {
 fn org_fold_multiple_hidden_edits_global_cycle_font_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -6553,6 +6745,7 @@ fn org_fold_multiple_hidden_edits_global_cycle_font_combo() {
               level-ok
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 79 45)""#]],
     );
 }
 
@@ -6560,7 +6753,7 @@ fn org_fold_multiple_hidden_edits_global_cycle_font_combo() {
 fn org_fold_font_face_visibility_after_promote_demote_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -6610,6 +6803,7 @@ fn org_fold_font_face_visibility_after_promote_demote_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 45)""#]],
     );
 }
 
@@ -6617,7 +6811,7 @@ fn org_fold_font_face_visibility_after_promote_demote_combo() {
 fn org_fold_deep_heading_cycle_hidden_edit_font_regression_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -6686,6 +6880,7 @@ fn org_fold_deep_heading_cycle_hidden_edit_font_regression_v2_combo() {
               level-ok
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 68 45)""#]],
     );
 }
 
@@ -6693,7 +6888,7 @@ fn org_fold_deep_heading_cycle_hidden_edit_font_regression_v2_combo() {
 fn org_fold_global_cycle_overview_content_all_font_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -6751,6 +6946,7 @@ fn org_fold_global_cycle_overview_content_all_font_deep_combo() {
                 (nreverse merged)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 48)""#]],
     );
 }
 
@@ -6758,7 +6954,7 @@ fn org_fold_global_cycle_overview_content_all_font_deep_combo() {
 fn org_fold_narrow_subtree_cycle_edit_widen_font_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -6847,6 +7043,7 @@ fn org_fold_narrow_subtree_cycle_edit_widen_font_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 88 45)""#]],
     );
 }
 
@@ -6854,7 +7051,7 @@ fn org_fold_narrow_subtree_cycle_edit_widen_font_combo() {
 fn org_fold_font_face_level_visibility_deep_state_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -6930,6 +7127,7 @@ fn org_fold_font_face_level_visibility_deep_state_v2_combo() {
                       (nreverse merged)
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p nil)""#]],
     );
 }
 
@@ -6937,7 +7135,7 @@ fn org_fold_font_face_level_visibility_deep_state_v2_combo() {
 fn org_fold_local_cycle_global_cycle_show_all_font_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -7017,6 +7215,7 @@ fn org_fold_local_cycle_global_cycle_show_all_font_combo() {
                   (nreverse merged)
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 79 51)""#]],
     );
 }
 
@@ -7024,7 +7223,7 @@ fn org_fold_local_cycle_global_cycle_show_all_font_combo() {
 fn org_fold_hide_show_subtree_font_face_level_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -7086,6 +7285,9 @@ fn org_fold_hide_show_subtree_font_face_level_combo() {
                   (nreverse merged)
                   (buffer-substring-no-properties
                    (point-min) (point-max)))))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"L1\" 1 nil 1 org-level-1) (\"L2\" 3 2 2 org-level-2) (\"L3\" 5 2 3 org-level-3) (\"L4\" 7 2 4 org-level-4) (\"L5\" 9 2 5 org-level-5)) ((\"L1\" nil 1 org-level-1) (\"L2\" nil 2 org-level-2) (\"L3\" nil 3 org-level-3) (\"L4\" nil 4 org-level-4) (\"L5\" nil 5 org-level-5)) nil \"* L1\nL1 body\n** L2\nL2 body\n*** L3\nL3 body\n**** L4\nL4 body\n***** L5\nL5 body\n\")""#
+        ]],
     );
 }
 
@@ -7093,7 +7295,7 @@ fn org_fold_hide_show_subtree_font_face_level_combo() {
 fn org_fold_repeated_global_cycle_font_level_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -7147,6 +7349,7 @@ fn org_fold_repeated_global_cycle_font_level_integrity_combo() {
                 level-consistent
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p nil)""#]],
     );
 }
 
@@ -7154,7 +7357,7 @@ fn org_fold_repeated_global_cycle_font_level_integrity_combo() {
 fn org_fold_cycle_cut_paste_subtree_expand_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -7214,6 +7417,7 @@ fn org_fold_cycle_cut_paste_subtree_expand_integrity_combo() {
             (nreverse merged)
             (buffer-substring-no-properties
              (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 59 42)""#]],
     );
 }
 
@@ -7221,7 +7425,7 @@ fn org_fold_cycle_cut_paste_subtree_expand_integrity_combo() {
 fn org_font_lock_deep_heading_face_after_demote_promote_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -7264,6 +7468,7 @@ fn org_font_lock_deep_heading_face_after_demote_promote_combo() {
                 (nreverse merged)
                 (buffer-substring-no-properties
                  (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p nil)""#]],
     );
 }
 
@@ -7271,7 +7476,7 @@ fn org_font_lock_deep_heading_face_after_demote_promote_combo() {
 fn org_fold_subtree_show_all_font_level_state_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -7318,6 +7523,7 @@ fn org_fold_subtree_show_all_font_level_state_deep_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p nil)""#]],
     );
 }
 
@@ -7325,7 +7531,7 @@ fn org_fold_subtree_show_all_font_level_state_deep_combo() {
 fn org_fold_hide_sublevels_show_context_font_level_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -7380,6 +7586,9 @@ fn org_fold_hide_sublevels_show_context_font_level_deep_combo() {
                   (nreverse merged)
                   (buffer-substring-no-properties
                    (point-min) (point-max)))))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"L1\" 1 2 1 org-level-1) (\"L2\" 3 2 2 org-level-2) (\"L3\" 5 2 3 org-level-3) (\"L4\" 7 2 4 org-level-4) (\"L5\" 9 2 5 org-level-5) (\"L6\" 11 2 6 org-level-6) (\"L2b\" 13 2 2 org-level-2)) ((\"L1\" 2 1) (\"L2\" 2 2) (\"L3\" 2 3) (\"L4\" 2 4) (\"L5\" nil 5) (\"L6\" 2 6) (\"L2b\" 2 2)) nil \"* L1\nL1 body\n** L2\nL2 body\n*** L3\nL3 body\n**** L4\nL4 body\n***** L5\nL5 body\n****** L6\nL6 body\n** L2b\nL2b body\n\")""#
+        ]],
     );
 }
 
@@ -7387,7 +7596,7 @@ fn org_fold_hide_sublevels_show_context_font_level_deep_combo() {
 fn org_fold_cycle_hidden_edit_global_font_state_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -7463,6 +7672,7 @@ fn org_fold_cycle_hidden_edit_global_font_state_deep_combo() {
                       (search-forward "Inserted under hidden Fifth" nil t)
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p nil)""#]],
     );
 }
 
@@ -7470,7 +7680,7 @@ fn org_fold_cycle_hidden_edit_global_font_state_deep_combo() {
 fn org_font_lock_todo_keyword_face_level_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -7519,6 +7729,7 @@ fn org_font_lock_todo_keyword_face_level_deep_state_combo() {
                 (nreverse merged)
                 (buffer-substring-no-properties
                  (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p nil)""#]],
     );
 }
 
@@ -7526,7 +7737,7 @@ fn org_font_lock_todo_keyword_face_level_deep_state_combo() {
 fn org_fold_font_face_level_visibility_deep_state_capture_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -7619,6 +7830,7 @@ fn org_fold_font_face_level_visibility_deep_state_capture_combo() {
                               (nreverse merged)
                               (buffer-substring-no-properties
                                (point-min) (point-max)))))))))))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p nil)""#]],
     );
 }
 
@@ -7626,7 +7838,7 @@ fn org_fold_font_face_level_visibility_deep_state_capture_combo() {
 fn org_repeated_deep_cycle_edit_fontify_no_merge_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -7712,6 +7924,7 @@ fn org_repeated_deep_cycle_edit_fontify_no_merge_combo() {
                                (point-min) (point-max))
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -7719,7 +7932,7 @@ fn org_repeated_deep_cycle_edit_fontify_no_merge_combo() {
 fn org_fold_core_mixed_regions_recovery_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -7768,6 +7981,7 @@ fn org_fold_core_mixed_regions_recovery_combo() {
                 shown
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -7775,7 +7989,7 @@ fn org_fold_core_mixed_regions_recovery_combo() {
 fn org_fold_reveal_context_after_hidden_search_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -7817,6 +8031,7 @@ fn org_fold_reveal_context_after_hidden_search_combo() {
                   (funcall visible)
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -7824,7 +8039,7 @@ fn org_fold_reveal_context_after_hidden_search_combo() {
 fn org_get_level_face_options_matrix_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -7854,6 +8069,7 @@ fn org_get_level_face_options_matrix_combo() {
                         (org-get-level-face 3))
                   out))))
       (nreverse out))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
     );
 }
 
@@ -7861,7 +8077,7 @@ fn org_get_level_face_options_matrix_combo() {
 fn org_fontify_like_org_mode_deep_markup_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let* ((org-link-descriptive t)
@@ -7889,6 +8105,9 @@ fn org_fontify_like_org_mode_deep_markup_combo() {
           (mapcar probe
                   '("TODO" "L1" "WAIT" "L4" "Example" "DONE" "L5"
                     "italic" "code" "bold" "target" "{{{macro(arg)}}}")))))"##,
+        expect_test::expect![[
+            r#""OK (\"* TODO L1 :tag:\n**** WAIT L4 Example\n***** DONE L5 /italic/ =code= *bold*\nfile:plain.txt <<target>> {{{macro(arg)}}}\n\" ((\"TODO\" 2 \"TODO\" (org-todo org-level-1) nil nil nil nil nil nil nil) (\"L1\" 7 \"L1\" org-level-1 nil nil nil nil nil nil nil) (\"WAIT\" 21 \"WAIT\" org-level-3 nil nil nil nil nil nil nil) (\"L4\" 26 \"L4\" org-level-3 nil nil nil nil nil nil nil) (\"Example\" 29 \"Example\" (org-link org-level-3) highlight \"LINK: https://example.org\" (:uri \"https://example.org\") nil t nil t) (\"DONE\" 43 \"DONE\" (org-done org-level-3) nil nil nil nil nil nil nil) (\"L5\" 48 \"L5\" (org-headline-done org-level-3) nil nil nil nil nil nil nil) (\"italic\" 52 \"italic\" (italic org-headline-done org-level-3) nil nil nil t t nil nil) (\"code\" 61 \"code\" (org-verbatim org-headline-done org-level-3) nil nil nil t t nil nil) (\"bold\" 68 \"bold\" (bold org-headline-done org-level-3) nil nil nil t t nil nil) (\"target\" 91 \"target\" (org-target) nil nil nil nil nil nil nil) (\"{{{macro(arg)}}}\" 100 \"{{{macro(arg)}}}\" org-macro nil nil nil nil t t nil)))""#
+        ]],
     );
 }
 
@@ -7896,7 +8115,7 @@ fn org_fontify_like_org_mode_deep_markup_combo() {
 fn org_indent_deep_cycle_prefix_properties_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -7931,6 +8150,7 @@ fn org_indent_deep_cycle_prefix_properties_combo() {
                       '("L1" "body 1" "L2" "body 2" "L3" "body 3"
                         "L4" "body 4" "L5" "body 5" "L6" "body 6"))
               (buffer-substring-no-properties (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -7938,7 +8158,7 @@ fn org_indent_deep_cycle_prefix_properties_combo() {
 fn org_cycle_plain_list_drawer_block_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -8009,6 +8229,7 @@ fn org_cycle_plain_list_drawer_block_integrity_combo() {
         (list (nreverse states)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""ERR (void-variable states)""#]],
     );
 }
 
@@ -8016,7 +8237,7 @@ fn org_cycle_plain_list_drawer_block_integrity_combo() {
 fn org_deep_visibility_property_cycle_recovery_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -8098,6 +8319,7 @@ fn org_deep_visibility_property_cycle_recovery_combo() {
         (list (nreverse states)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""ERR (void-variable states)""#]],
     );
 }
 
@@ -8105,7 +8327,7 @@ fn org_deep_visibility_property_cycle_recovery_combo() {
 fn org_repeated_deep_fold_expand_edit_no_heading_merge_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -8229,6 +8451,7 @@ fn org_repeated_deep_fold_expand_edit_no_heading_merge_combo() {
                 (split-string
                  (buffer-substring-no-properties (point-min) (point-max))
                  "\n" t))))))"##,
+        expect_test::expect![[r#""ERR (void-variable snapshot)""#]],
     );
 }
 
@@ -8236,7 +8459,7 @@ fn org_repeated_deep_fold_expand_edit_no_heading_merge_combo() {
 fn org_fold_move_reveal_deep_font_faces_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -8379,6 +8602,7 @@ fn org_fold_move_reveal_deep_font_faces_combo() {
                   (nreverse bad-lines)
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -8386,7 +8610,7 @@ fn org_fold_move_reveal_deep_font_faces_combo() {
 fn org_fold_mixed_deep_objects_reveal_font_roundtrip_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -8535,6 +8759,7 @@ fn org_fold_mixed_deep_objects_reveal_font_roundtrip_combo() {
                             "[fn:one] Footnote body."))
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (void-variable snapshot)""#]],
     );
 }
 
@@ -8542,7 +8767,7 @@ fn org_fold_mixed_deep_objects_reveal_font_roundtrip_combo() {
 fn org_fold_repeated_deep_heading_merge_font_regression_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -8720,6 +8945,7 @@ fn org_fold_repeated_deep_heading_merge_font_regression_combo() {
                       "***** TODO Fifth B1"))
                    (buffer-substring-no-properties
                     (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (void-variable snapshot)""#]],
     );
 }
 
@@ -8727,7 +8953,7 @@ fn org_fold_repeated_deep_heading_merge_font_regression_combo() {
 fn org_deep_level_aggressive_cycle_hidden_edit_font_regression_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-cycle)
@@ -8884,5 +9110,8 @@ fn org_deep_level_aggressive_cycle_hidden_edit_font_regression_combo() {
                      "********* DONE L9"))
                   (buffer-substring-no-properties
                    (point-min) (point-max)))))))))"##,
+        expect_test::expect![[
+            r#""OK (((initial nil nil ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 nil org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 nil org-level-7 org-level-7) (\"L8\" 15 nil org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 nil org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 10 nil) (\"L6 body\" 12 nil) (\"L7 body\" 14 nil) (\"L8 body\" 16 nil) (\"L9 body\" 18 nil) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (cycle-l4 nil folded ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 2 org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 2 org-level-7 org-level-7) (\"L8\" 15 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 2) (\"L5 body\" 10 2) (\"L6 body\" 12 2) (\"L7 body\" 14 2) (\"L8 body\" 16 2) (\"L9 body\" 18 2) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (cycle-l4 nil children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 2 org-level-7 org-level-7) (\"L8\" 15 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 10 2) (\"L6 body\" 12 2) (\"L7 body\" 14 2) (\"L8 body\" 16 2) (\"L9 body\" 18 2) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (cycle-l4 nil folded ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 2 org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 2 org-level-7 org-level-7) (\"L8\" 15 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 2) (\"L5 body\" 10 2) (\"L6 body\" 12 2) (\"L7 body\" 14 2) (\"L8 body\" 16 2) (\"L9 body\" 18 2) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (cycle-l4 nil children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 2 org-level-7 org-level-7) (\"L8\" 15 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 10 2) (\"L6 body\" 12 2) (\"L7 body\" 14 2) (\"L8 body\" 16 2) (\"L9 body\" 18 2) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (cycle-l4 nil folded ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 2 org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 2 org-level-7 org-level-7) (\"L8\" 15 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 2) (\"L5 body\" 10 2) (\"L6 body\" 12 2) (\"L7 body\" 14 2) (\"L8 body\" 16 2) (\"L9 body\" 18 2) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (cycle-l4 nil children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 2 org-level-7 org-level-7) (\"L8\" 15 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 10 2) (\"L6 body\" 12 2) (\"L7 body\" 14 2) (\"L8 body\" 16 2) (\"L9 body\" 18 2) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (cycle-l7 nil children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 nil org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 nil org-level-7 org-level-7) (\"L8\" 15 nil org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 10 2) (\"L6 body\" 12 2) (\"L7 body\" 14 nil) (\"L8 body\" 16 2) (\"L9 body\" 18 2) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (cycle-l7 nil folded ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 nil org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 nil org-level-7 org-level-7) (\"L8\" 15 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 10 2) (\"L6 body\" 12 2) (\"L7 body\" 14 2) (\"L8 body\" 16 2) (\"L9 body\" 18 2) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (cycle-l7 nil children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 nil org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 nil org-level-7 org-level-7) (\"L8\" 15 nil org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 10 2) (\"L6 body\" 12 2) (\"L7 body\" 14 nil) (\"L8 body\" 16 2) (\"L9 body\" 18 2) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (cycle-l7 nil folded ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 nil org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 nil org-level-7 org-level-7) (\"L8\" 15 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 10 2) (\"L6 body\" 12 2) (\"L7 body\" 14 2) (\"L8 body\" 16 2) (\"L9 body\" 18 2) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (cycle-l7 nil children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 nil org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 nil org-level-7 org-level-7) (\"L8\" 15 nil org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 10 2) (\"L6 body\" 12 2) (\"L7 body\" 14 nil) (\"L8 body\" 16 2) (\"L9 body\" 18 2) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (hide-l5 nil children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 11 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 13 2 org-level-7 org-level-7) (\"L8\" 15 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 17 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 19 nil org-level-2 org-level-2) (\"Sibling child\" 21 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 23 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 10 2) (\"L6 body\" 12 2) (\"L7 body\" 14 2) (\"L8 body\" 16 2) (\"L9 body\" 18 2) (\"Sibling body\" 20 nil) (\"Sibling child body\" 22 nil) (\"Tail body\" 24 nil)) 12 24 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (hidden-insert nil children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 14 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 16 2 org-level-7 org-level-7) (\"L8\" 18 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 20 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 22 nil org-level-2 org-level-2) (\"Sibling child\" 24 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 26 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 11 nil) (\"L6 body\" 15 2) (\"L7 body\" 17 2) (\"L8 body\" 19 2) (\"L9 body\" 21 2) (\"Sibling body\" 23 nil) (\"Sibling child body\" 25 nil) (\"Tail body\" 27 nil)) 13 27 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"***** TODO Inserted under hidden L5\" \"Inserted L5 body.\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (show-l5 nil children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 14 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 16 2 org-level-7 org-level-7) (\"L8\" 18 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 20 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 22 nil org-level-2 org-level-2) (\"Sibling child\" 24 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 26 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 11 nil) (\"L6 body\" 15 2) (\"L7 body\" 17 2) (\"L8 body\" 19 2) (\"L9 body\" 21 2) (\"Sibling body\" 23 nil) (\"Sibling child body\" 25 nil) (\"Tail body\" 27 nil)) 13 27 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"***** TODO Inserted under hidden L5\" \"Inserted L5 body.\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (hide-l8-insert nil children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 14 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 16 2 org-level-7 org-level-7) (\"L8\" 18 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 23 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 25 nil org-level-2 org-level-2) (\"Sibling child\" 27 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 29 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 11 nil) (\"L6 body\" 15 2) (\"L7 body\" 17 2) (\"L8 body\" 20 nil) (\"L9 body\" 24 2) (\"Sibling body\" 26 nil) (\"Sibling child body\" 28 nil) (\"Tail body\" 30 nil)) 14 30 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"***** TODO Inserted under hidden L5\" \"Inserted L5 body.\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"******** TODO Inserted under hidden L8\" \"Inserted L8 body.\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (global-cycle overview children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 2 org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 2 org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 2 org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 2 org-level-5 (org-headline-todo org-level-5)) (\"L6\" 14 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 16 2 org-level-7 org-level-7) (\"L8\" 18 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 23 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 25 2 org-level-2 org-level-2) (\"Sibling child\" 27 2 org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 29 nil org-level-1 org-level-1)) ((\"Root body\" 2 2) (\"L2 body\" 4 2) (\"L3 body\" 6 2) (\"L4 body\" 8 2) (\"L5 body\" 11 2) (\"L6 body\" 15 2) (\"L7 body\" 17 2) (\"L8 body\" 20 2) (\"L9 body\" 24 2) (\"Sibling body\" 26 2) (\"Sibling child body\" 28 2) (\"Tail body\" 30 2)) 14 30 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"***** TODO Inserted under hidden L5\" \"Inserted L5 body.\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"******** TODO Inserted under hidden L8\" \"Inserted L8 body.\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (global-cycle overview children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 2 org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 2 org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 2 org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 2 org-level-5 (org-headline-todo org-level-5)) (\"L6\" 14 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 16 2 org-level-7 org-level-7) (\"L8\" 18 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 23 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 25 2 org-level-2 org-level-2) (\"Sibling child\" 27 2 org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 29 nil org-level-1 org-level-1)) ((\"Root body\" 2 2) (\"L2 body\" 4 2) (\"L3 body\" 6 2) (\"L4 body\" 8 2) (\"L5 body\" 11 2) (\"L6 body\" 15 2) (\"L7 body\" 17 2) (\"L8 body\" 20 2) (\"L9 body\" 24 2) (\"Sibling body\" 26 2) (\"Sibling child body\" 28 2) (\"Tail body\" 30 2)) 14 30 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"***** TODO Inserted under hidden L5\" \"Inserted L5 body.\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"******** TODO Inserted under hidden L8\" \"Inserted L8 body.\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (global-cycle overview children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 2 org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 2 org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 2 org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 2 org-level-5 (org-headline-todo org-level-5)) (\"L6\" 14 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 16 2 org-level-7 org-level-7) (\"L8\" 18 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 23 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 25 2 org-level-2 org-level-2) (\"Sibling child\" 27 2 org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 29 nil org-level-1 org-level-1)) ((\"Root body\" 2 2) (\"L2 body\" 4 2) (\"L3 body\" 6 2) (\"L4 body\" 8 2) (\"L5 body\" 11 2) (\"L6 body\" 15 2) (\"L7 body\" 17 2) (\"L8 body\" 20 2) (\"L9 body\" 24 2) (\"Sibling body\" 26 2) (\"Sibling child body\" 28 2) (\"Tail body\" 30 2)) 14 30 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"***** TODO Inserted under hidden L5\" \"Inserted L5 body.\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"******** TODO Inserted under hidden L8\" \"Inserted L8 body.\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (global-cycle overview children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 2 org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 2 org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 2 org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 2 org-level-5 (org-headline-todo org-level-5)) (\"L6\" 14 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 16 2 org-level-7 org-level-7) (\"L8\" 18 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 23 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 25 2 org-level-2 org-level-2) (\"Sibling child\" 27 2 org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 29 nil org-level-1 org-level-1)) ((\"Root body\" 2 2) (\"L2 body\" 4 2) (\"L3 body\" 6 2) (\"L4 body\" 8 2) (\"L5 body\" 11 2) (\"L6 body\" 15 2) (\"L7 body\" 17 2) (\"L8 body\" 20 2) (\"L9 body\" 24 2) (\"Sibling body\" 26 2) (\"Sibling child body\" 28 2) (\"Tail body\" 30 2)) 14 30 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"***** TODO Inserted under hidden L5\" \"Inserted L5 body.\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"******** TODO Inserted under hidden L8\" \"Inserted L8 body.\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (global-cycle overview children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 2 org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 2 org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 2 org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 2 org-level-5 (org-headline-todo org-level-5)) (\"L6\" 14 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 16 2 org-level-7 org-level-7) (\"L8\" 18 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 23 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 25 2 org-level-2 org-level-2) (\"Sibling child\" 27 2 org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 29 nil org-level-1 org-level-1)) ((\"Root body\" 2 2) (\"L2 body\" 4 2) (\"L3 body\" 6 2) (\"L4 body\" 8 2) (\"L5 body\" 11 2) (\"L6 body\" 15 2) (\"L7 body\" 17 2) (\"L8 body\" 20 2) (\"L9 body\" 24 2) (\"Sibling body\" 26 2) (\"Sibling child body\" 28 2) (\"Tail body\" 30 2)) 14 30 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"***** TODO Inserted under hidden L5\" \"Inserted L5 body.\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"******** TODO Inserted under hidden L8\" \"Inserted L8 body.\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (global-cycle overview children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 2 org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 2 org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 2 org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 2 org-level-5 (org-headline-todo org-level-5)) (\"L6\" 14 2 org-level-6 (org-headline-done org-level-6)) (\"L7\" 16 2 org-level-7 org-level-7) (\"L8\" 18 2 org-level-8 (org-headline-todo org-level-8)) (\"L9\" 23 2 org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 25 2 org-level-2 org-level-2) (\"Sibling child\" 27 2 org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 29 nil org-level-1 org-level-1)) ((\"Root body\" 2 2) (\"L2 body\" 4 2) (\"L3 body\" 6 2) (\"L4 body\" 8 2) (\"L5 body\" 11 2) (\"L6 body\" 15 2) (\"L7 body\" 17 2) (\"L8 body\" 20 2) (\"L9 body\" 24 2) (\"Sibling body\" 26 2) (\"Sibling child body\" 28 2) (\"Tail body\" 30 2)) 14 30 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"***** TODO Inserted under hidden L5\" \"Inserted L5 body.\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"******** TODO Inserted under hidden L8\" \"Inserted L8 body.\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\")) (final overview children ((\"Root\" 1 nil org-level-1 (org-headline-todo org-level-1)) (\"L2\" 3 nil org-level-2 (org-headline-todo org-level-2)) (\"L3\" 5 nil org-level-3 (org-headline-todo org-level-3)) (\"L4\" 7 nil org-level-4 (org-headline-todo org-level-4)) (\"L5\" 9 nil org-level-5 (org-headline-todo org-level-5)) (\"L6\" 14 nil org-level-6 (org-headline-done org-level-6)) (\"L7\" 16 nil org-level-7 org-level-7) (\"L8\" 18 nil org-level-8 (org-headline-todo org-level-8)) (\"L9\" 23 nil org-level-1 (org-headline-done org-level-1)) (\"Sibling\" 25 nil org-level-2 org-level-2) (\"Sibling child\" 27 nil org-level-3 (org-headline-todo org-level-3)) (\"Tail\" 29 nil org-level-1 org-level-1)) ((\"Root body\" 2 nil) (\"L2 body\" 4 nil) (\"L3 body\" 6 nil) (\"L4 body\" 8 nil) (\"L5 body\" 11 nil) (\"L6 body\" 15 nil) (\"L7 body\" 17 nil) (\"L8 body\" 20 nil) (\"L9 body\" 24 nil) (\"Sibling body\" 26 nil) (\"Sibling child body\" 28 nil) (\"Tail body\" 30 nil)) 14 30 (\"* TODO Root\" \"Root body.\" \"** TODO L2\" \"L2 body.\" \"*** TODO L3\" \"L3 body.\" \"**** TODO L4\" \"L4 body.\" \"***** TODO L5\" \"***** TODO Inserted under hidden L5\" \"Inserted L5 body.\" \"L5 body.\" \"****** DONE L6\" \"L6 body.\" \"******* WAIT L7\" \"L7 body.\" \"******** TODO L8\" \"******** TODO Inserted under hidden L8\" \"Inserted L8 body.\" \"L8 body.\" \"********* DONE L9\" \"L9 body.\" \"** NEXT Sibling\" \"Sibling body.\" \"*** TODO Sibling child\" \"Sibling child body.\" \"* Tail\" \"Tail body.\"))) nil nil (136 154 269 287 315) \"* TODO Root\nRoot body.\n** TODO L2\nL2 body.\n*** TODO L3\nL3 body.\n**** TODO L4\nL4 body.\n***** TODO L5\n***** TODO Inserted under hidden L5\nInserted L5 body.\n\nL5 body.\n****** DONE L6\nL6 body.\n******* WAIT L7\nL7 body.\n******** TODO L8\n******** TODO Inserted under hidden L8\nInserted L8 body.\n\nL8 body.\n********* DONE L9\nL9 body.\n** NEXT Sibling\nSibling body.\n*** TODO Sibling child\nSibling child body.\n* Tail\nTail body.\n\")""#
+        ]],
     );
 }

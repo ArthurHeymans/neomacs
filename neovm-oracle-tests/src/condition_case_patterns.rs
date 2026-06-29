@@ -43,7 +43,12 @@ fn oracle_prop_ccpat_specific_error_symbols() {
       (funcall 'neovm--definitely-unbound-fn-xyz 1)
     (void-function
      (list 'void-fn (car err) (cadr err)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wta wrong-type-argument listp) (arith arith-error) (void void-variable neovm--definitely-unbound-var-xyz) (wrong-nargs wrong-number-of-arguments) (void-fn void-function neovm--definitely-unbound-fn-xyz))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +77,12 @@ fn oracle_prop_ccpat_multiple_handler_dispatch() {
    (funcall classify-error (lambda () (signal 'file-error '("not found"))))
    ;; No error case
    (funcall classify-error (lambda () 'all-good))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (caught-arith caught-wta caught-void-var caught-void-fn (caught-generic file-error) all-good)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +108,12 @@ fn oracle_prop_ccpat_nested_resignal() {
     (error
      (setq log (cons 'level-1 log))
      (list (nreverse log) (cadr outer-err) (caddr outer-err)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((level-3 level-2 level-1) \"double-wrapped\" \"wrapped-arith\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +150,10 @@ fn oracle_prop_ccpat_error_in_let_bindings() {
       (let ((x 10) (y 20))
         (+ x y))
     (error 'should-not-reach)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +203,12 @@ fn oracle_prop_ccpat_with_unwind_protect_ordering() {
         (error
          (setq log (cons 'outer-handler log))))
       (list pattern1 pattern2 (nreverse log)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((body-start cleanup handler) (outer-body inner-body inner-handler outer-cleanup) (body cleanup-start cleanup-end outer-handler))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +247,12 @@ fn oracle_prop_ccpat_error_as_early_return() {
    (funcall process-items '(100 200 9999 1))
    (funcall process-items '())
    (funcall process-items '(500 500 1 500))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((success 15) (early-return bad-type \"bad\" 30) (early-return negative -5 3) (early-return overflow 9999 300) (success 0) (success 1501))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +307,12 @@ fn oracle_prop_ccpat_transaction_rollback() {
             (gethash "balance-c" db)
             ;; A should also be unchanged (rollback undid the +100)
             (gethash "balance-a" db)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (committed 50 250 (rolled-back \"insufficient funds\") 50 50)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -314,5 +347,10 @@ fn oracle_prop_ccpat_condition_case_with_catch_throw() {
       (catch 'tag
         (/ 1 0))
     (arith-error 'arith-caught-outside-catch)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (thrown-through (caught \"passes through catch\") (escaped arith-error) arith-caught-outside-catch)""#
+        ]],
+    );
 }

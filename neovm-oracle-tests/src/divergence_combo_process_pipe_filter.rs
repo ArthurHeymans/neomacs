@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_process_output_to_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " test-proc-xxx")))
     (with-current-buffer buf
@@ -19,6 +19,7 @@ fn divergence_process_output_to_buffer() {
           (list (string-match "hello world" output)
                 (>= (length output) 11)
                 (stringp output))))))) "#,
+        expect_test::expect![[r#""OK (0 t t)""#]],
     );
 }
 
@@ -26,7 +27,7 @@ fn divergence_process_output_to_buffer() {
 fn divergence_process_exit_status() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((proc (start-process "test-exit-xxx" nil "sh" "-c" "exit 42")))
     (set-process-query-on-exit-flag proc nil)
@@ -35,6 +36,7 @@ fn divergence_process_exit_status() {
           (= (process-exit-status proc) 42)
           (eq (process-status proc) 'exit)
           (null (process-live-p proc)))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -42,7 +44,7 @@ fn divergence_process_exit_status() {
 fn divergence_process_arg_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " test-args-xxx")))
     (with-current-buffer buf
@@ -54,6 +56,7 @@ fn divergence_process_arg_parsing() {
           (list (string= output "hello-world")
                 (= (length output) 11)
                 (stringp output)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -61,12 +64,13 @@ fn divergence_process_arg_parsing() {
 fn divergence_shell_command_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((out (shell-command-to-string "echo test123")))
     (list (string= out "test123\n")
           (= (length out) 8)
           (string-match "test123" out)))) "#,
+        expect_test::expect![[r#""OK (t t 0)""#]],
     );
 }
 
@@ -74,13 +78,14 @@ fn divergence_shell_command_output() {
 fn divergence_process_environment_var() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((out (shell-command-to-string "echo $HOME")))
     (list (> (length out) 1)
           (string-match "^/" out)
           (= (string-match "^/" out) 0)
           (string-match "\n" out)))) "#,
+        expect_test::expect![[r#""OK (t 0 t 10)""#]],
     );
 }
 
@@ -88,11 +93,12 @@ fn divergence_process_environment_var() {
 fn divergence_process_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (listp (process-list))
         (every (lambda (p) (processp p)) (process-list))
         (listp (process-names)))) "#,
+        expect_test::expect![[r#""ERR (void-function every)""#]],
     );
 }
 
@@ -100,7 +106,7 @@ fn divergence_process_list() {
 fn divergence_call_process_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " test-call-xxx")))
     (call-process "echo" nil buf nil "call-test")
@@ -108,6 +114,7 @@ fn divergence_call_process_output() {
       (kill-buffer buf)
       (list (string= output "call-test\n")
             (= (length output) 10))))) "#,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -115,7 +122,7 @@ fn divergence_call_process_output() {
 fn divergence_two_sequential_processes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (generate-new-buffer " test-seq1-xxx"))
         (buf2 (generate-new-buffer " test-seq2-xxx")))
@@ -133,6 +140,7 @@ fn divergence_two_sequential_processes() {
             (string= out2 "second-output\n")
             (= (length out1) 13)
             (= (length out2) 14))))) "#,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     );
 }
 
@@ -140,7 +148,7 @@ fn divergence_two_sequential_processes() {
 fn divergence_call_process_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "INPUT DATA FOR CALL")
   (let ((buf (generate-new-buffer " test-cpr-xxx")))
@@ -149,6 +157,7 @@ fn divergence_call_process_region() {
       (kill-buffer buf)
       (list (string= output "INPUT DATA FOR CALL")
             (= (length output) 19))))) "#,
+        expect_test::expect![[r#""INPUT DATA FOR CALLOK (nil nil)""#]],
     );
 }
 
@@ -156,7 +165,7 @@ fn divergence_call_process_region() {
 fn divergence_process_multiline_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " test-ml-xxx")))
     (let ((proc (start-process "test-ml-xxx" buf "sh" "-c"
@@ -175,5 +184,6 @@ fn divergence_process_multiline_output() {
         (kill-buffer buf)
         (list (= (length (nreverse lines)) 4)
               (string= output "line1\nline2\nline3\n")))))) "#,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }

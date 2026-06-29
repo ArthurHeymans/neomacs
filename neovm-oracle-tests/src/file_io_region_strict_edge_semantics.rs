@@ -91,5 +91,8 @@ fn oracle_write_region_insert_file_contents_and_append_edges() {
       (ignore-errors (delete-directory root t)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 77 50)""#]],
+    );
 }

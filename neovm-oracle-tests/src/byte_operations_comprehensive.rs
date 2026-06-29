@@ -38,7 +38,12 @@ fn oracle_prop_byte_ops_unibyte_string_basic() {
   (length (unibyte-string 1 2 3 4 5))
   ;; string-bytes on unibyte string
   (string-bytes (unibyte-string 72 101 108 108 111)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""\n        OK (\"Hello\" \"A\" \"\" \"\\200\\310\\377\" \" !~\u{7f}\" \"\\0\" \"\\0A\\200\\377\n        \\r\" nil 5 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +74,10 @@ fn oracle_prop_byte_ops_multibyte_string_p() {
     (wrong-type-argument (list 'error (car err))))
   (condition-case err (multibyte-string-p nil)
     (wrong-type-argument (list 'error (car err)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (nil nil t nil nil nil nil nil nil)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +110,10 @@ fn oracle_prop_byte_ops_string_bytes() {
   ;; Emoji-like high codepoint (4 bytes in UTF-8)
   (string-bytes "\U0001f600")
   (length "\U0001f600"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (5 5 t 0 2 1 3 1 (4 3) (3 3) 4 1)""#],
+    );
 }
 
 #[test]
@@ -133,7 +144,12 @@ fn oracle_prop_byte_ops_get_byte_empty_string_position_validation_like_gnu() {
  (get-byte nil "abc")
  (get-byte 2 "abc"))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (0 (args-out-of-range (\"\" 0)) (args-out-of-range (\"\" 1)) (wrong-type-argument (wholenump -1)) (args-out-of-range (\"abc\" 3)) 97 99)""#
+        ]],
+    );
 }
 
 #[test]
@@ -162,7 +178,12 @@ fn oracle_prop_byte_ops_buffer_byte_position_boundaries_like_gnu() {
          (byte-to-position "2")
        (error (list (car err) (cdr err)))))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((nil 1 2 4 5 nil) (nil 1 2 2 3 4 nil) 2 (wrong-type-argument (fixnump #<marker in no buffer>)) (wrong-type-argument (integer-or-marker-p \"2\")) (wrong-type-argument (fixnump \"2\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +219,10 @@ fn oracle_prop_byte_ops_string_to_multibyte() {
          (m (string-to-multibyte s)))
     (list (length s) (length m)
           (multibyte-string-p m))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((nil t t 5 5) (t t) \"\" \"\" (1 1 1 2) (3 3 t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +255,10 @@ fn oracle_prop_byte_ops_string_as_unibyte() {
          (m (string-as-multibyte u)))
     (list (string= s m)
           (multibyte-string-p m))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((nil nil t 5 5) (nil 3) \"\" (t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -267,7 +294,12 @@ fn oracle_prop_byte_ops_char_conversions() {
                         (unibyte-char-to-multibyte b)))
                   results)))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (65 t 65 t 127 127 0 0 (4194176 4194208 4194248 4194303) (t t t t t t))""#
+        ],
+    );
 }
 
 #[test]
@@ -308,7 +340,12 @@ fn oracle_prop_byte_ops_char_conversion_errors_and_raw_bytes() {
      (multibyte-char-to-unibyte "A")
    (error (list (car err) (cdr err)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((4194303 t 255) (4194176 t 128) 255 -1 233 -1 (error (\"Not a unibyte character: 256\")) (wrong-type-argument (characterp -1)) (wrong-type-argument (characterp nil)) (wrong-type-argument (characterp -1)) (wrong-type-argument (characterp \"A\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -344,7 +381,12 @@ fn oracle_prop_byte_ops_unibyte_substring() {
     (list (string= s c)
           (multibyte-string-p c)
           (eq s c))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"ABC\" \"CDE\" \"BCD\" nil 3) (0 128 255) (nil 4 \"ABCD\") (t nil nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -377,7 +419,10 @@ fn oracle_prop_byte_ops_encoding_edge_cases() {
         (m "ABC"))
     (list (string= u m)
           (equal u m))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((nil t 5) (error error) (nil 5 5) (nil 3) (t t))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -421,7 +466,12 @@ fn oracle_prop_byte_ops_boundary_analysis() {
         (let ((s (make-string 100 ?x)))
           (list (string-bytes s) (length s) (= (string-bytes s) (length s)))))
     (fmakunbound 'neovm--byte-analyze)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((3 3 nil (65 66 67)) (0 0 nil nil) (1 2 t (233)) (3 3 nil (65 128 255)) (3 6 t (97 233 19990)) (2 2 nil (9 10)) (100 100 t))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -479,5 +529,8 @@ fn oracle_prop_byte_ops_pipeline() {
                             key))))
     (fmakunbound 'neovm--byte-xor-encrypt)
     (fmakunbound 'neovm--byte-checksum)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (t t nil nil t 28 0 144 t)""#],
+    );
 }

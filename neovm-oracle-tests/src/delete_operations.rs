@@ -19,7 +19,7 @@ fn oracle_prop_delete_char_forward() {
                     (goto-char (point-min))
                     (delete-char 3)
                     (buffer-string))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK \"defgh\"""#]]);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn oracle_prop_delete_char_backward() {
                     (goto-char (point-max))
                     (delete-char -3)
                     (buffer-string))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK \"abcde\"""#]]);
 }
 
 #[test]
@@ -43,7 +43,10 @@ fn oracle_prop_delete_char_middle() {
                     (goto-char 6)  ;; before "world"
                     (delete-char 5) ;; delete "world"
                     (list (buffer-string) (point)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"hellod\" 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +61,10 @@ fn oracle_prop_delete_region_basic() {
                     (insert "0123456789")
                     (delete-region 4 8)
                     (list (buffer-string) (point)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"012789\" 7)""#]],
+    );
 }
 
 #[test]
@@ -69,7 +75,7 @@ fn oracle_prop_delete_region_entire() {
                     (insert "hello world")
                     (delete-region (point-min) (point-max))
                     (list (buffer-string) (buffer-size) (point)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (\"\" 0 1)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +92,10 @@ fn oracle_prop_delete_and_extract() {
                       (list extracted
                             (buffer-string)
                             (point))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\" beautiful\" \"hello world\" 12)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +114,10 @@ fn oracle_prop_erase_buffer() {
                             (buffer-size)
                             (buffer-string)
                             (point))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (41 0 \"\" 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +142,10 @@ fn oracle_prop_delete_selective_lines() {
                                          (1+ (line-end-position)))
                         (forward-line 1)))
                     (buffer-string))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"keep this\nkeep this too\nalso keep\n\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +183,10 @@ fn oracle_prop_delete_extract_restructure() {
                         (list header
                               footer
                               (buffer-string)))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"Title\" \"End\" \"body line 1\nbody line 2\n\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -197,5 +215,8 @@ fn oracle_prop_delete_word_by_word() {
                                   (cons word deleted-words)))))
                       (list (nreverse deleted-words)
                             (buffer-string))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"the\" \"quick\") \"brown fox\")""#]],
+    );
 }

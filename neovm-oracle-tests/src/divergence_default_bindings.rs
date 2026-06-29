@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_db_cursor_motion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (lookup-key global-map "\C-a")
       (lookup-key global-map "\C-e")
@@ -22,13 +22,16 @@ fn div_db_cursor_motion() {
       (lookup-key global-map "\M-f")
       (lookup-key global-map "\M-b"))
 "##,
+        expect_test::expect![[
+            r#""OK (move-beginning-of-line move-end-of-line forward-char backward-char next-line previous-line forward-word backward-word)""#
+        ]],
     );
 }
 
 #[test]
 fn div_db_editing_kill_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (lookup-key global-map "\C-d")
       (lookup-key global-map "\C-k")
@@ -38,26 +41,32 @@ fn div_db_editing_kill_yank() {
       (lookup-key global-map "\M-d")
       (lookup-key (current-global-map) "\C-_"))
 "##,
+        expect_test::expect![[
+            r#""OK (delete-char kill-line yank kill-region kill-ring-save kill-word undo)""#
+        ]],
     );
 }
 
 #[test]
 fn div_db_search_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (lookup-key global-map "\C-s")
       (lookup-key global-map "\C-r")
       (lookup-key global-map "\M-%")
       (lookup-key global-map [?\M-%]))
 "##,
+        expect_test::expect![[
+            r#""OK (isearch-forward isearch-backward query-replace query-replace)""#
+        ]],
     );
 }
 
 #[test]
 fn div_db_scroll_buffer_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (lookup-key global-map "\C-v")
       (lookup-key global-map "\M-v")
@@ -68,13 +77,16 @@ fn div_db_scroll_buffer_navigation() {
       (lookup-key global-map "\C-x\C-f")
       (lookup-key global-map "\C-x\C-s"))
 "##,
+        expect_test::expect![[
+            r#""OK (scroll-up-command scroll-down-command beginning-of-buffer end-of-buffer switch-to-buffer kill-buffer find-file save-buffer)""#
+        ]],
     );
 }
 
 #[test]
 fn div_db_prefix_and_misc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (lookup-key global-map "\C-x")
       (lookup-key global-map "\C-c")
@@ -84,13 +96,16 @@ fn div_db_prefix_and_misc() {
       (lookup-key global-map "\C-u")
       (lookup-key global-map "\C-x\C-c"))
 "##,
+        expect_test::expect![[
+            r#""OK (Control-X-prefix mode-specific-command-prefix help-command execute-extended-command keyboard-quit universal-argument save-buffers-kill-terminal)""#
+        ]],
     );
 }
 
 #[test]
 fn div_db_self_insert_and_special() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (lookup-key global-map "a")
       (lookup-key global-map " ")
@@ -99,13 +114,16 @@ fn div_db_self_insert_and_special() {
       (lookup-key global-map "\d")
       (lookup-key global-map "\e"))
 "##,
+        expect_test::expect![[
+            r#""OK (self-insert-command self-insert-command newline indent-for-tab-command delete-backward-char ESC-prefix)""#
+        ]],
     );
 }
 
 #[test]
 fn div_db_function_and_arrow_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (lookup-key global-map [left])
       (lookup-key global-map [right])
@@ -116,13 +134,16 @@ fn div_db_function_and_arrow_keys() {
       (lookup-key global-map [prior])
       (lookup-key global-map [next]))
 "##,
+        expect_test::expect![[
+            r#""OK (left-char right-char previous-line next-line move-beginning-of-line move-end-of-line scroll-down-command scroll-up-command)""#
+        ]],
     );
 }
 
 #[test]
 fn div_db_ctl_x_map_common() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ctlx (lookup-key global-map "\C-x")))
   (list (lookup-key ctlx "o")
@@ -132,5 +153,8 @@ fn div_db_ctl_x_map_common() {
         (lookup-key ctlx "s")
         (lookup-key ctlx "i")))
 "##,
+        expect_test::expect![[
+            r#""OK (other-window delete-window delete-other-windows split-window-below save-some-buffers insert-file)""#
+        ]],
     );
 }

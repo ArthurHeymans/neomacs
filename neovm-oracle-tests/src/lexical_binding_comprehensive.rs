@@ -25,7 +25,10 @@ fn oracle_prop_lexical_binding_vs_dynamic_basic() {
     (let ((x 99))
       ;; Under lexical binding, reader still sees x=10
       (list (funcall reader) x))))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (10 99)""#]],
+    );
     assert_ok_eq("(10 99)", &o, &n);
 }
 
@@ -42,7 +45,10 @@ fn oracle_prop_lexical_binding_closure_survives_scope_exit() {
         (g2 (funcall make-getter 'hello))
         (g3 (funcall make-getter '(a b c))))
     (list (funcall g1) (funcall g2) (funcall g3))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 hello (a b c))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +73,8 @@ fn oracle_prop_lexical_binding_shared_env_counter() {
       (funcall inc)
       (funcall inc)
       (list after-ops (funcall read-count)))))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (2 4)""#]]);
     assert_ok_eq("(2 4)", &o, &n);
 }
 
@@ -100,7 +107,10 @@ fn oracle_prop_lexical_binding_shared_env_stack() {
       (funcall pop-fn)            ;; a
       (funcall pop-fn)            ;; empty
       (funcall size-fn))))"#; // 0
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 a b c 3 c c b a 1 a empty 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +139,10 @@ fn oracle_prop_lexical_binding_setq_accumulator() {
       (funcall a2 20)   ;; 130
       (funcall a2 -30)  ;; 100
       (funcall a1 0))))"#; // 10
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (5 8 110 10 130 100 10)""#]],
+    );
     assert_ok_eq("(5 8 110 10 130 100 10)", &o, &n);
 }
 
@@ -157,7 +170,10 @@ fn oracle_prop_lexical_binding_let_star_sequential_refs() {
       ;; Shadowing a in new let doesn't affect the closure
       (let ((a 999))
         (funcall snapshot)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 11 22 21) t (1 11 22 21))""#]],
+    );
 }
 
 #[test]
@@ -170,7 +186,8 @@ fn oracle_prop_lexical_binding_let_parallel_bindings() {
   (let ((x y) (y x))
     ;; x should be 2 (old y), y should be 1 (old x) — swap
     (list x y)))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (2 1)""#]]);
     assert_ok_eq("(2 1)", &o, &n);
 }
 
@@ -201,7 +218,10 @@ fn oracle_prop_lexical_binding_nested_closure_three_levels() {
                 (funcall inner2 6)
                 ;; Re-using mid creates new independent inner
                 (funcall (funcall mid 10) 10)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3 4 24) (1 2 5 6 60) (1 2 10 10 200))""#]],
+    );
 }
 
 #[test]
@@ -226,7 +246,12 @@ fn oracle_prop_lexical_binding_closure_returning_closure_mutation() {
       (funcall log-info "done")
       (list (length history)
             (reverse history)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 (\"INFO: started\" \"ERROR: disk full\" \"INFO: retrying\" \"ERROR: timeout\" \"INFO: done\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +281,10 @@ fn oracle_prop_lexical_binding_closure_with_mapcar() {
                       zipped))
           (setq i (1+ i))))
       (list results (nreverse zipped)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((20 30 50 70 110) (2 6 15 28 55))""#]],
+    );
 }
 
 #[test]
@@ -284,7 +312,7 @@ fn oracle_prop_lexical_binding_closure_compose_chain() {
             (funcall chain 0)   ;; add1(double(square(0))) = 1
             (funcall chain -2)  ;; add1(double(square(2))) = add1(double(4)) = add1(8) = 9
             (funcall chain 1)))))))  ;; add1(double(square(-1))) = add1(double(1)) = add1(2) = 3"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (19 1 9 3)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +351,10 @@ fn oracle_prop_lexical_binding_defvar_special_override() {
     (fmakunbound 'neovm--lbc-read-dyn)
     (fmakunbound 'neovm--lbc-test-dynamic)
     (makunbound 'neovm--lbc-dynvar)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((initial rebound deep-rebound) initial)""#]],
+    );
 }
 
 #[test]
@@ -358,7 +389,10 @@ fn oracle_prop_lexical_binding_defvar_mixed_with_lexical() {
               (funcall 'neovm--lbc-mix-reader)))))
     (fmakunbound 'neovm--lbc-mix-reader)
     (makunbound 'neovm--lbc-mix-dyn)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (dyn-rebound lex-value (lex-value shadowed) dyn-deeper)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -408,7 +442,12 @@ fn oracle_prop_lexical_binding_closure_object_dispatch() {
       (length (funcall acct2 'history))
       (funcall acct1 'history)
       (funcall acct2 'history))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Alice\" 1050 700 2 2 ((deposit 200 1200) (withdraw 150 1050)) ((deposit 300 800) (withdraw 100 700)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -431,5 +470,8 @@ fn oracle_prop_lexical_binding_loop_independent_closures() {
   (let ((reversed-results (mapcar 'funcall fns))
         (forward-results (mapcar 'funcall (reverse fns))))
     (list reversed-results forward-results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((16 9 4 1 0) (0 1 4 9 16))""#]],
+    );
 }

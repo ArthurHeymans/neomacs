@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx108_message_basic_and_current_message() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (message "hello %s" "world")
@@ -15,13 +15,14 @@ fn div_cx108_message_basic_and_current_message() {
     (prog1 m
       (message nil))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx108_message_clears_with_nil_arg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (message "first")
@@ -30,13 +31,14 @@ fn div_cx108_message_clears_with_nil_arg() {
     (let ((after-nil (current-message)))
       (list first after-nil))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx108_with_temp_message_restores_after() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (message "outer")
@@ -46,13 +48,14 @@ fn div_cx108_with_temp_message_restores_after() {
                  :inside))))
     (list result (current-message))))
 "##,
+        expect_test::expect![[r#""OK ((nil :inside) nil)""#]],
     );
 }
 
 #[test]
 fn div_cx108_format_message_with_backtick_quotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (format-message "plain")
@@ -61,13 +64,16 @@ fn div_cx108_format_message_with_backtick_quotes() {
  (format-message "with `nested %s inside'" "y")
  (format "%s and `backtick' literal" "z"))
 "##,
+        expect_test::expect![[
+            r#""OK (\"plain\" \"with ‘quotes’ here\" \"with x substitution\" \"with ‘nested y inside’\" \"z and `backtick' literal\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx108_message_or_box_or_neutral() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'message-or-box)
@@ -75,13 +81,14 @@ fn div_cx108_message_or_box_or_neutral() {
           (fboundp 'message-with-echo-area))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx108_sit_for_returns_t_on_idle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((r1 (sit-for 0))
@@ -89,13 +96,14 @@ fn div_cx108_sit_for_returns_t_on_idle() {
       (list r1 r2))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx108_sleep_for_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (sleep-for 0)
@@ -103,13 +111,14 @@ fn div_cx108_sleep_for_basic() {
           (sleep-for 0 100))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx108_redisplay_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((r1 (redisplay))
@@ -118,13 +127,14 @@ fn div_cx108_redisplay_basic() {
       (list r1 r2 r3))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx108_force_mode_line_update() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'force-mode-line-update)
@@ -133,13 +143,14 @@ fn div_cx108_force_mode_line_update() {
           (fboundp 'window-height))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx108_progress_reporter_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((reporter (make-progress-reporter "Doing work..." 0 100)))
@@ -150,13 +161,14 @@ fn div_cx108_progress_reporter_basic() {
       (current-message))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx108_format_propertized_message() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((formatted (format "%s %d %s"
@@ -169,13 +181,16 @@ fn div_cx108_format_propertized_message() {
       (list formatted props-1 props-7 props-10))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"ALPHA 42 OMEGA\" 0 5 (face bold) 9 14 (face italic)) (face bold) nil (face italic))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx108_minibuffer_message_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'minibuffer-message)
@@ -184,13 +199,14 @@ fn div_cx108_minibuffer_message_basic() {
           (fboundp 'read-string))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx108_message_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((outer-msg (progn (message "outer") (current-message))))
   (with-temp-buffer
@@ -215,5 +231,6 @@ fn div_cx108_message_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

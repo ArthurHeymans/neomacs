@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_pcomplete_file_options_startup_tags_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-pcomplete)
@@ -44,6 +44,9 @@ fn org_pcomplete_file_options_startup_tags_combo() {
               (complete-at "#+SELECT_TAGS: ")
               (complete-at "#+EXCLUDE_TAGS: ")
               (complete-at "#+AUTHOR: "))))))"##,
+        expect_test::expect![[
+            r#""OK ((\"STA\" (#(\"STARTUP: \" 0 1 (completion--unquoted \"STARTUP: \" face completions-common-part) 1 3 (face completions-common-part)))) (\"hid\" (#(\"hideblocks\" 0 1 (completion--unquoted \"hideblocks\" face completions-common-part) 1 3 (face completions-common-part)) #(\"hidedrawers\" 0 1 (completion--unquoted \"hidedrawers\" face completions-common-part) 1 3 (face completions-common-part)) #(\"hidestars\" 0 1 (completion--unquoted \"hidestars\" face completions-common-part) 1 3 (face completions-common-part)))) (\"\" (#(\"work(w) home(h) { a(a) b(b) }\" 0 1 (completion--unquoted \"work(w) home(h) { a(a) b(b) }\")))) (\"\" (#(\"export ship\" 0 1 (completion--unquoted \"export ship\")))) (\"\" (#(\"noexport draft\" 0 1 (completion--unquoted \"noexport draft\")))) (\"\" (#(\"Ada Lovelace\" 0 1 (completion--unquoted \"Ada Lovelace\")))))""#
+        ]],
     );
 }
 
@@ -51,7 +54,7 @@ fn org_pcomplete_file_options_startup_tags_combo() {
 fn org_pcomplete_heading_todo_tag_property_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-pcomplete)
@@ -85,6 +88,7 @@ fn org_pcomplete_heading_todo_tag_property_combo() {
         (list (complete-at "* TO")
               (complete-at ":ur")
               (complete-at ":Eff")))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -92,7 +96,7 @@ fn org_pcomplete_heading_todo_tag_property_combo() {
 fn org_pcomplete_link_drawer_src_block_option_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-pcomplete)
@@ -125,6 +129,9 @@ fn org_pcomplete_link_drawer_src_block_option_combo() {
               (complete-at ":PRO")
               (complete-at ":res")
               (complete-at ":sc"))))))"##,
+        expect_test::expect![[
+            r#""OK ((\"is\" (#(\"issue:\" 0 1 (completion--unquoted \"issue:\" face completions-common-part) 1 2 (face completions-common-part))) (\"link\") \"link\") (\"PRO\" (#(\"PROPERTIES:\" 0 1 (completion--unquoted \"PROPERTIES:\" face completions-common-part) 1 3 (face completions-common-part))) (\"drawer\") \"drawer\") (\":res\" (#(\":results\" 0 1 (completion--unquoted \":results\" face completions-common-part) 1 4 (face completions-common-part))) (\"block-option\" . \"src\") \"block-option/src\") (\":sc\" (#(\":scope\" 0 1 (completion--unquoted \":scope\" face completions-common-part) 1 3 (face completions-common-part))) (\"block-option\" . \"clocktable\") \"block-option/clocktable\"))""#
+        ]],
     );
 }
 
@@ -132,7 +139,7 @@ fn org_pcomplete_link_drawer_src_block_option_combo() {
 fn org_pcomplete_entities_searchhead_options_matrix_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-pcomplete)
@@ -186,6 +193,7 @@ fn org_pcomplete_entities_searchhead_options_matrix_combo() {
               (complete-at "#+PRIORITIES: ")
               (complete-at "#+FILETAGS: ")
               (complete-at "to"))))))"##,
+        expect_test::expect![[r#""ERR (void-function complete-at)""#]],
     );
 }
 
@@ -193,7 +201,7 @@ fn org_pcomplete_entities_searchhead_options_matrix_combo() {
 fn org_pcomplete_keyword_tag_drawer_property_omission_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-pcomplete)
@@ -246,6 +254,7 @@ fn org_pcomplete_keyword_tag_drawer_property_omission_combo() {
               (complete-at ":work:ur")
               (complete-at ":Eff")
               (complete-at ":LO"))))))"##,
+        expect_test::expect![[r#""ERR (void-function complete-at)""#]],
     );
 }
 
@@ -253,7 +262,7 @@ fn org_pcomplete_keyword_tag_drawer_property_omission_combo() {
 fn org_pcomplete_repeated_options_babel_searchhead_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-pcomplete)
@@ -351,6 +360,9 @@ fn org_pcomplete_repeated_options_babel_searchhead_combo() {
               (complete-at "[[*Alpha He")
               (complete-at "[[bu")
                (complete-at "\\bet"))))))"##,
+        expect_test::expect![[
+            r#""ERR (error \"ispell-lookup-words: No plain word-list found at systemdefault locations.  Customize ‘ispell-alternate-dictionary’ to set yours.\")""#
+        ]],
     );
 }
 
@@ -358,7 +370,7 @@ fn org_pcomplete_repeated_options_babel_searchhead_combo() {
 fn org_pcomplete_keyword_tag_link_option_at_point_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'pcomplete)
@@ -401,5 +413,8 @@ fn org_pcomplete_keyword_tag_link_option_at_point_combo() {
             (funcall complete-at ":wor")
             (funcall complete-at "[[")
             (funcall complete-at "[[b")))))"##,
+        expect_test::expect![[
+            r##""OK ((\"#+\" (\"file-option\" . \"TITLE\") \"file-option/title\" ((\"#+TITLE:\" \"Test\") 1 10) \"TITLE: \" nil 9 2) (\"#+T\" (\"file-option\" . \"TITLE\") \"file-option/title\" ((\"#+TITLE:\" \"Test\") 1 10) \"ITLE: \" nil 9 3) (\"#+TAGS: \" (\"file-option\" . \"TAGS\") \"file-option/tags\" ((\"#+TAGS:\" \"work(w)\" \"home(h)\" \"urgent(u)\") 15 23 31 39) nil nil nil nil) (\"#+TODO: \" (\"file-option\" . \"TODO\") \"file-option/todo\" ((\"#+TODO:\" \"TODO\" \"WAIT\" \"|\" \"DONE\" \"CANCELED\") 49 57 62 67 69 74) nil nil nil nil) (\"* TODO \" nil nil ((\"*\" \"TODO\" \"Alpha\" \":work:\") 83 85 90 96) nil nil nil nil) (\":wor\" (\"tag\") \"tag\" ((\"*\" \"TODO\" \"Alpha\" \":work:\") 83 85 90 96) \"\" (#(\"home:\" 0 1 (completion--unquoted \"home:\"))) 99 99) (\"[[\" (\"file-option\" . \"TITLE\") \"file-option/title\" ((\"#+TITLE:\" \"Test\") 1 10) \"#+TITLE: \" nil 9 0) (\"[[b\" (\"file-option\" . \"TITLE\") \"file-option/title\" ((\"#+TITLE:\" \"Test\") 1 10) \"#+TITLE: \" nil 9 0))""##
+        ]],
     );
 }

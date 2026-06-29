@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_call_process_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (fboundp 'call-process)
   (fboundp 'call-process-region)
@@ -15,6 +15,7 @@ fn divergence_call_process_output() {
   (fboundp 'process-file-region)
   (listp (process-environment))
   (stringp (getenv \"PATH\"))) ",
+        expect_test::expect![[r#""ERR (void-function process-environment)""#]],
     );
 }
 
@@ -22,7 +23,7 @@ fn divergence_call_process_output() {
 fn divergence_shell_command_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (fboundp 'shell-command)
   (fboundp 'shell-command-to-string)
@@ -30,6 +31,7 @@ fn divergence_shell_command_deep() {
   (stringp shell-file-name)
   (boundp 'shell-command-switch)
   (stringp shell-command-switch)) ",
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
@@ -37,13 +39,14 @@ fn divergence_shell_command_deep() {
 fn divergence_process_env_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (listp process-environment)
   (fboundp 'getenv)
   (fboundp 'setenv)
   (boundp 'initial-environment)
   (listp initial-environment)) ",
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -51,7 +54,7 @@ fn divergence_process_env_deep() {
 fn divergence_signal_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (fboundp 'signal-process)
   (fboundp 'interrupt-process)
@@ -59,6 +62,7 @@ fn divergence_signal_handling() {
   (fboundp 'quit-process)
   (fboundp 'stop-process)
   (fboundp 'continue-process)) ",
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
@@ -66,13 +70,14 @@ fn divergence_signal_handling() {
 fn divergence_process_io() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (fboundp 'process-send-string)
   (fboundp 'process-send-region)
   (fboundp 'process-send-buffer)
   (fboundp 'process-send-eof)
   (fboundp 'accept-process-output)) ",
+        expect_test::expect![[r#""OK (t t nil t t)""#]],
     );
 }
 
@@ -80,7 +85,7 @@ fn divergence_process_io() {
 fn divergence_process_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (fboundp 'process-list)
   (fboundp 'get-process)
@@ -88,6 +93,7 @@ fn divergence_process_query() {
   (fboundp 'process-command)
   (fboundp 'process-status)
   (fboundp 'process-exit-status)) ",
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
@@ -95,12 +101,13 @@ fn divergence_process_query() {
 fn divergence_process_tty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (fboundp 'make-serial-process)
   (fboundp 'serial-process-config)
   (fboundp 'make-network-process)
   (fboundp 'set-network-process-option)) ",
+        expect_test::expect![[r#""OK (t nil t t)""#]],
     );
 }
 
@@ -108,13 +115,14 @@ fn divergence_process_tty() {
 fn divergence_process_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (fboundp 'set-process-filter)
   (fboundp 'set-process-sentinel)
   (fboundp 'set-process-buffer)
   (fboundp 'set-process-window-size)
   (fboundp 'set-process-query-on-exit-flag)) ",
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -122,12 +130,13 @@ fn divergence_process_filter() {
 fn divergence_process_coding_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (fboundp 'set-process-coding-system)
   (fboundp 'process-coding-system)
   (fboundp 'set-process-plist)
   (fboundp 'process-plist)) ",
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -135,7 +144,7 @@ fn divergence_process_coding_deep() {
 fn divergence_process_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (fboundp 'process-get)
   (fboundp 'process-put)
@@ -143,5 +152,6 @@ fn divergence_process_properties() {
   (fboundp 'process-type)
   (fboundp 'process-tty-name)
   (fboundp 'process-multithreaded)) ",
+        expect_test::expect![[r#""OK (t t t t t nil)""#]],
     );
 }

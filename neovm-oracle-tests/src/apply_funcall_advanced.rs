@@ -16,19 +16,40 @@ fn oracle_prop_apply_varying_trailing_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // 0 trailing args
-    assert_oracle_parity("(apply #'+ '(1 2 3))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ '(1 2 3))",
+        expect_test::expect![r#""OK 6""#],
+    );
     // 1 trailing arg
-    assert_oracle_parity("(apply #'+ 10 '(1 2 3))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ 10 '(1 2 3))",
+        expect_test::expect![r#""OK 16""#],
+    );
     // 2 trailing args
-    assert_oracle_parity("(apply #'+ 10 20 '(1 2 3))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ 10 20 '(1 2 3))",
+        expect_test::expect![r#""OK 36""#],
+    );
     // 3 trailing args
-    assert_oracle_parity("(apply #'+ 10 20 30 '(1 2 3))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ 10 20 30 '(1 2 3))",
+        expect_test::expect![r#""OK 66""#],
+    );
     // 4 trailing args
-    assert_oracle_parity("(apply #'list 'a 'b 'c 'd '(e f))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'list 'a 'b 'c 'd '(e f))",
+        expect_test::expect![r#""OK (a b c d e f)""#],
+    );
     // trailing args with nil final list
-    assert_oracle_parity("(apply #'list 'a 'b 'c '())");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'list 'a 'b 'c '())",
+        expect_test::expect![r#""OK (a b c)""#],
+    );
     // All args via trailing, empty final list
-    assert_oracle_parity("(apply #'+ 1 2 3 4 5 '())");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ 1 2 3 4 5 '())",
+        expect_test::expect![r#""OK 15""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -45,7 +66,7 @@ fn oracle_prop_apply_nested_function_arg() {
                     (unwind-protect
                         (apply (symbol-function 'neovm--test-afa-add) '(1 2 3))
                       (fmakunbound 'neovm--test-afa-add)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK 6""#]);
 
     // Selecting function from alist
     let form = r#"(let ((ops '((add . +) (mul . *) (cat . concat))))
@@ -53,7 +74,10 @@ fn oracle_prop_apply_nested_function_arg() {
                      (apply (cdr (assq 'add ops)) '(10 20 30))
                      (apply (cdr (assq 'mul ops)) '(2 3 4))
                      (apply (cdr (assq 'cat ops)) '("a" "b" "c"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (60 24 \"abc\")""#]],
+    );
 
     // Function returned from a closure
     let form = r#"(let ((make-adder (lambda (n) (lambda (&rest args) (apply #'+ n args)))))
@@ -61,7 +85,7 @@ fn oracle_prop_apply_nested_function_arg() {
                       (list (funcall add10 1 2 3)
                             (funcall add10)
                             (apply add10 '(5 5 5)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (16 10 25)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -73,28 +97,36 @@ fn oracle_prop_funcall_direct_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Simple direct lambda
-    assert_oracle_parity("(funcall (lambda (x y) (+ (* x x) (* y y))) 3 4)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (x y) (+ (* x x) (* y y))) 3 4)",
+        expect_test::expect![r#""OK 25""#],
+    );
 
     // Lambda with &optional
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list (funcall (lambda (a &optional b) (list a b)) 1)
                (funcall (lambda (a &optional b) (list a b)) 1 2))",
+        expect_test::expect![r#""OK ((1 nil) (1 2))""#],
     );
 
     // Lambda with &rest
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(funcall (lambda (head &rest tail) (cons head (length tail))) 'a 'b 'c 'd)",
+        expect_test::expect![r#""OK (a . 3)""#],
     );
 
     // Nested lambda application
-    assert_oracle_parity("(funcall (funcall (lambda (x) (lambda (y) (+ x y))) 10) 20)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (funcall (lambda (x) (lambda (y) (+ x y))) 10) 20)",
+        expect_test::expect![r#""OK 30""#],
+    );
 
     // Lambda with destructuring via let inside
     let form = r#"(funcall (lambda (pair)
                               (let ((a (car pair)) (b (cdr pair)))
                                 (* a b)))
                             '(6 . 7))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK 42""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +150,7 @@ fn oracle_prop_funcall_symbol_function_chain() {
                              (symbol-function 'neovm--test-afa-f1)))
                       (fmakunbound 'neovm--test-afa-f1)
                       (fmakunbound 'neovm--test-afa-f2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (10 10 10 t)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +167,10 @@ fn oracle_prop_apply_mapcar_flatten() {
                            (mapcar (lambda (sub)
                                      (if sub (mapcar #'1+ sub) nil))
                                    data)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (2 3 4 5 6 7 8 9 10 11)""#],
+    );
 
     // Build format strings and concat via apply
     let form = r#"(let ((parts '(("hello" . "HELLO") ("world" . "WORLD"))))
@@ -143,12 +178,18 @@ fn oracle_prop_apply_mapcar_flatten() {
                            (mapcar (lambda (p)
                                      (format "%s->%s " (car p) (cdr p)))
                                    parts)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"hello->HELLO world->WORLD \"""#]],
+    );
 
     // Transpose a matrix via mapcar + apply
     let form = r#"(let ((matrix '((1 2 3) (4 5 6) (7 8 9))))
                     (apply #'mapcar #'list matrix))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""ERR (wrong-number-of-arguments #<subr mapcar> 4)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +227,7 @@ fn oracle_prop_funcall_rest_accumulator() {
                             (funcall get "a")
                             (funcall get "c")
                             (funcall get "d"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (4 1 3 4)""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +281,10 @@ fn oracle_prop_apply_method_dispatch() {
                          (funcall dispatch 'area circ)
                          (funcall dispatch 'scale rect 2)
                          (plist-get (funcall dispatch 'scale circ 3) :r)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (12 7850 (:kind rect :w 6 :h 8) 15)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -281,5 +325,10 @@ fn oracle_prop_funcall_middleware_chain() {
                         (let ((result1 (funcall chain "hello"))
                               (result2 (funcall chain "")))
                           (list result1 result2 (nreverse log))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok \"processed:HELLO\") (error \"validation failed\") ((enter \"core\") (exit \"core\")))""#
+        ]],
+    );
 }

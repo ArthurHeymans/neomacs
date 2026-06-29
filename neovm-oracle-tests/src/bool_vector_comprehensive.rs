@@ -38,7 +38,10 @@ fn oracle_prop_bool_vector_comprehensive_constructor_and_predicate() {
     (aref bv1 0) (aref bv1 1) (aref bv1 2) (aref bv1 3) (aref bv1 4)
     ;; read back bv4
     (aref bv4 0) (aref bv4 7)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (t t t nil nil nil 5 0 3 8 t nil t nil t t t)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +73,10 @@ fn oracle_prop_bool_vector_comprehensive_count_population() {
     (let ((before (bool-vector-count-population bv)))
       (aset bv 0 nil) (aset bv 5 nil) (aset bv 10 nil)
       (list before (bool-vector-count-population bv)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (0 32 0 4 1 0 3 (16 13))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +107,10 @@ fn oracle_prop_bool_vector_comprehensive_count_consecutive() {
     (bool-vector-count-consecutive (make-bool-vector 20 nil) nil 0)
     ;; Edge: count from end boundary
     (bool-vector-count-consecutive (make-bool-vector 10 t) t 9)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (3 2 2 0 0 1 20 20 1)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +140,10 @@ fn oracle_prop_bool_vector_comprehensive_subsetp() {
         (b (bool-vector t t t nil t nil t t)))
     (list (bool-vector-subsetp a b)
           (bool-vector-subsetp b a))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (t t nil t t t nil (t nil))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +171,10 @@ fn oracle_prop_bool_vector_comprehensive_not() {
     (bool-vector-count-population (bool-vector-not (make-bool-vector 16 nil)))
     ;; Not of empty
     (length (bool-vector-not (make-bool-vector 0 nil)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (8 nil t nil t nil t nil t (t nil t nil) 0 16 0)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +202,10 @@ fn oracle_prop_bool_vector_comprehensive_union() {
     ;; Self-union
     (let ((self-u (bool-vector-union a a)))
       (list (aref self-u 0) (aref self-u 1) (aref self-u 2)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (6 t nil t nil t t (t t) 6 0 (t nil t))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -214,7 +232,10 @@ fn oracle_prop_bool_vector_comprehensive_intersection() {
     ;; Self intersection = self
     (let ((self-i (bool-vector-intersection b b)))
       (bool-vector-count-population self-i))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (6 t nil nil t nil t (t t nil t nil t) 0 4)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +268,12 @@ fn oracle_prop_bool_vector_comprehensive_setdiff_xor() {
     ;; XOR is symmetric: pop(a XOR b) == pop(b XOR a)
     (= (bool-vector-count-population (bool-vector-exclusive-or a b))
        (bool-vector-count-population (bool-vector-exclusive-or b a)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (nil t nil nil nil t nil nil t nil nil nil nil t t nil nil t 0 0 t)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +338,10 @@ fn oracle_prop_bool_vector_comprehensive_bitset_set_operations() {
                    (funcall 'neovm--bvc-to-list or-nots)))))
     (fmakunbound 'neovm--bvc-make-set)
     (fmakunbound 'neovm--bvc-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((2) (3 5 7 11 13 17 19) (0 1 4 6 8 9) 22 t t t nil t)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -342,5 +371,8 @@ fn oracle_prop_bool_vector_comprehensive_in_place_destination() {
           (list union-pop inter-pop xor-pop not-pop
                 ;; Verify dest contents after not
                 (aref dest 0) (aref dest 1) (aref dest 2) (aref dest 3)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (8 0 8 4 nil t nil t)""#],
+    );
 }

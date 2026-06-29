@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_tp_face_vs_overlay_face_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tp-ov-face-snap ()
     ((step :initarg :step :accessor tof-step :initform "")
@@ -84,6 +84,7 @@ fn combo_eieio_tp_face_vs_overlay_face_priority() {
               (overlay-start ov) (overlay-end ov)
               my-face-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -91,7 +92,7 @@ fn combo_eieio_tp_face_vs_overlay_face_priority() {
 fn combo_eieio_tp_face_overlay_multi_region_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tp-ov-undo-snap ()
     ((step :initarg :step :accessor tou-step :initform "")
@@ -175,6 +176,7 @@ fn combo_eieio_tp_face_overlay_multi_region_undo() {
               (overlay-start ov2) (overlay-end ov2)
               (overlay-start ov3) (overlay-end ov3))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -182,7 +184,7 @@ fn combo_eieio_tp_face_overlay_multi_region_undo() {
 fn combo_eieio_tp_face_narrow_overlay_intersect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tp-narrow-snap ()
     ((step :initarg :step :accessor tns-step :initform "")
@@ -256,6 +258,7 @@ fn combo_eieio_tp_face_narrow_overlay_intersect() {
               (length snaps) (marker-position m)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -263,7 +266,7 @@ fn combo_eieio_tp_face_narrow_overlay_intersect() {
 fn combo_eieio_tp_face_sticky_nonsticky_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tp-sticky-snap ()
     ((step :initarg :step :accessor tss-step :initform "")
@@ -333,6 +336,7 @@ fn combo_eieio_tp_face_sticky_nonsticky_props() {
               (get-text-property 5 'rear-nonsticky)
               (get-text-property 10 'rear-nonsticky))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -340,7 +344,7 @@ fn combo_eieio_tp_face_sticky_nonsticky_props() {
 fn combo_eieio_tp_face_property_search_next_prev() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tp-search-snap ()
     ((step :initarg :step :accessor tps-step :initform "")
@@ -408,5 +412,6 @@ fn combo_eieio_tp_face_property_search_next_prev() {
               (overlay-start ov) (overlay-end ov)
               my-search-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

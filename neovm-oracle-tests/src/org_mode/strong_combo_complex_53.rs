@@ -15,7 +15,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo53_clock_exact_duration_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-clock)
@@ -44,6 +44,9 @@ fn combo53_clock_exact_duration_chain() {
       (push (list :logbook-count (length (org-element-map (org-element-parse-buffer) 'drawer
                                           (lambda (d) (equal "LOGBOOK" (org-element-property :drawer-name d)))))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:entry1-minutes 0) (:entry2-minutes 0) (:entry3-minutes 0) (:clock-count 3) (:clock-durations (\"0:00\" \"0:00\" \"0:00\")) (:clock-values ((timestamp (:standard-properties [25 nil nil nil 72 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive-range :range-type daterange :raw-value \"[2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31]\" :year-start 2026 :month-start 6 :day-start 29 :hour-start 6 :minute-start 31 :year-end 2026 :month-end 6 :day-end 29 :hour-end 6 :minute-end 31)) (timestamp (:standard-properties [88 nil nil nil 135 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive-range :range-type daterange :raw-value \"[2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31]\" :year-start 2026 :month-start 6 :day-start 29 :hour-start 6 :minute-start 31 :year-end 2026 :month-end 6 :day-end 29 :hour-end 6 :minute-end 31)) (timestamp (:standard-properties [151 nil nil nil 198 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive-range :range-type daterange :raw-value \"[2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31]\" :year-start 2026 :month-start 6 :day-start 29 :hour-start 6 :minute-start 31 :year-end 2026 :month-end 6 :day-end 29 :hour-end 6 :minute-end 31)))) (:logbook-count 1))""#
+        ]],
     );
 }
 
@@ -54,7 +57,7 @@ fn combo53_clock_exact_duration_chain() {
 #[test]
 fn combo53_babel_session_persistence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -77,6 +80,9 @@ fn combo53_babel_session_persistence() {
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (push (list :src-count (length (org-element-map (org-element-parse-buffer) 'src-block #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""ERR (error \"ob-emacs-lisp backend does not support sessions\")""#
+        ]],
     );
 }
 
@@ -87,7 +93,7 @@ fn combo53_babel_session_persistence() {
 #[test]
 fn combo53_element_deep_modify_reinterpret() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-element)
@@ -123,6 +129,7 @@ fn combo53_element_deep_modify_reinterpret() {
           (push (list :re-priority (org-element-property :priority hl2)) r))
         (push (list :re-para-count (length (org-element-map tree2 'paragraph #'identity))) r)))
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (void-function org-element-adopt-element)""#]],
     );
 }
 
@@ -133,7 +140,7 @@ fn combo53_element_deep_modify_reinterpret() {
 #[test]
 fn combo53_multi_list_full_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- Dog\n- Cat\n- Bird\n- Ant\n")
@@ -168,6 +175,7 @@ fn combo53_multi_list_full_cycle() {
     (push (list :plain-list-count (length (org-element-map (org-element-parse-buffer) 'plain-list #'identity))) r)
     (push (list :item-count (length (org-element-map (org-element-parse-buffer) 'item #'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp nil)""#]],
     );
 }
 
@@ -178,7 +186,7 @@ fn combo53_multi_list_full_cycle() {
 #[test]
 fn combo53_map_entries_mutate_inside_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO A\n* TODO B\n* TODO C\n* DONE D\n")
@@ -199,6 +207,9 @@ fn combo53_map_entries_mutate_inside_lambda() {
     (push (list :done-count (length (org-map-entries (lambda () (org-get-todo-state)) "TODO=\"DONE\""))) r)
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:todos-before (\"A\" \"B\" \"C\")) (:all-done ((#(\"A\" 0 1 (org-todo-head \"TODO\")) #(\"DONE\" 0 4 (org-todo-head \"TODO\")) \"2024-06-15\") (#(\"B\" 0 1 (org-todo-head \"TODO\")) #(\"DONE\" 0 4 (org-todo-head \"TODO\")) \"2024-06-15\") (#(\"C\" 0 1 (org-todo-head \"TODO\")) #(\"DONE\" 0 4 (org-todo-head \"TODO\")) \"2024-06-15\") (\"D\" \"DONE\" nil))) (:done-count 4) (:buffer \"* DONE A\n:PROPERTIES:\n:CLOSED_AT: 2024-06-15\n:END:\n* DONE B\n:PROPERTIES:\n:CLOSED_AT: 2024-06-15\n:END:\n* DONE C\n:PROPERTIES:\n:CLOSED_AT: 2024-06-15\n:END:\n* DONE D\n\"))""#
+        ]],
     );
 }
 
@@ -209,7 +220,7 @@ fn combo53_map_entries_mutate_inside_lambda() {
 #[test]
 fn combo53_property_inherit_override_clear_reinherit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Root\n:PROPERTIES:\n:COLOR: blue\n:SIZE: large\n:END:\n")
@@ -243,6 +254,9 @@ fn combo53_property_inherit_override_clear_reinherit() {
     (search-forward "*** Leaf") (beginning-of-line)
     (push (list :leaf-color-reinherit (org-entry-get nil "COLOR" t)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:leaf-color \"blue\") (:leaf-size \"medium\") (:leaf-size-after \"small\") (:leaf-size-reinherit \"medium\") (:leaf-color-after-delete nil) (:leaf-color-reinherit \"green\"))""#
+        ]],
     );
 }
 
@@ -253,7 +267,7 @@ fn combo53_property_inherit_override_clear_reinherit() {
 #[test]
 fn combo53_table_cell_by_cell_formula() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| Item | Qty | Price | Total |\n|------+-----+-------+-------|\n")
@@ -288,6 +302,7 @@ fn combo53_table_cell_by_cell_formula() {
     (goto-char (point-min))
     (push (list :to-lisp (org-table-to-lisp)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \"Total\")""#]],
     );
 }
 
@@ -298,7 +313,7 @@ fn combo53_table_cell_by_cell_formula() {
 #[test]
 fn combo53_export_struct_diff_after_edits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-ascii)
@@ -328,6 +343,9 @@ fn combo53_export_struct_diff_after_edits() {
         (push (list :export2-has-A (and out2 (string-match-p "Content A" out2))) r)
         (push (list :export2-has-B (and out2 (string-match-p "Content B" out2))) r))
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:init-headlines (\"Doc\" \"A\" \"B\" \"Notes\")) (:init-sections 2) (:export1-has-A 28) (:export1-has-B 56) (:after-del-headlines (\"Doc\" \"B\" \"Notes\")) (:export2-has-A nil) (:export2-has-B 28))""#
+        ]],
     );
 }
 
@@ -338,7 +356,7 @@ fn combo53_export_struct_diff_after_edits() {
 #[test]
 fn combo53_narrow_edit_widen_renarrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** A1\nBody A1.\n** A2\nBody A2.\n* B\n** B1\nBody B1.\n* C\nBody C.\n")
@@ -376,6 +394,9 @@ fn combo53_narrow_edit_widen_renarrow() {
     (search-forward "** B2") (beginning-of-line)
     (push (list :b2-at-type (org-element-type (org-element-at-point))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:full-headlines (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"C\")) (:narrow-A-headlines (\"A\" \"A1\" \"A2\")) (:narrow-B-headlines (\"B\" \"B1\")) (:final-headlines (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"C\")) (:a3-at-type paragraph) (:b2-at-type paragraph))""#
+        ]],
     );
 }
 
@@ -386,7 +407,7 @@ fn combo53_narrow_edit_widen_renarrow() {
 #[test]
 fn combo53_merge_subtrees_verify_integrity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\nBody A.\n** A-child1\n** A-child2\n* B\nBody B.\n** B-child1\n")
@@ -418,5 +439,8 @@ fn combo53_merge_subtrees_verify_integrity() {
     ;; buffer state
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init-headlines ((1 \"A\") (2 \"A-child1\") (2 \"A-child2\") (1 \"B\") (2 \"B-child1\"))) (:after-promote ((1 \"A\") (1 \"A-child1\") (1 \"A-child2\") (1 \"B\") (2 \"B-child1\"))) (:after-move ((1 \"A\") (1 \"A-child2\") (1 \"B\") (2 \"B-child1\") (2 \"A-child1\"))) (:buffer \"* A\nBody A.\n* A-child2\n* B\nBody B.\n** B-child1\n** A-child1\n\"))""#
+        ]],
     );
 }

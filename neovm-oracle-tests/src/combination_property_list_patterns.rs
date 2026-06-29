@@ -63,7 +63,12 @@ fn oracle_prop_plist_deep_chain_building() {
              (list (plist-get updated :age)
                    (plist-get updated :adult))))))
     (fmakunbound 'neovm--test-plist-deep-dummy)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Alice\" \"Boston\" \"02101\" \"456 Oak Ave\" t nil 2 \"Alice <alice@ex.com>\" (18 t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +124,10 @@ fn oracle_prop_plist_as_struct() {
                (list (funcall point-x translated)
                      (funcall point-y translated)))))))
     (fmakunbound 'neovm--test-plist-struct-dummy)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (point rect 5 10 600 inside outside (105 210))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +169,12 @@ fn oracle_prop_plist_member_existence() {
          (when (plist-member pl k)
            (setq count (1+ count))))
        count))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil nil (:b nil :c 3 :d nil :e 5) nil t t nil nil fallback 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +225,12 @@ fn oracle_prop_plist_alist_conversion() {
                  (cons (car pair)
                        (funcall plist-to-alist (cdr pair))))
                outer-al)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((:name . \"Alice\") (:age . 30) (:active . t) (:score . 95.5)) (\"Alice\" :name 30 :age t :active 95.5 :score) nil (10 x 20 y 30 z) nil nil ((:a (:x . 1) (:y . 2)) (:b (:x . 3) (:y . 4))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +304,12 @@ fn oracle_prop_plist_merge_override() {
         ;; cache should be merged
         (plist-get (plist-get deep :cache) :enabled)  ;; t
         (plist-get (plist-get deep :cache) :ttl))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"localhost\" 3000 t 4 \"myapp\" (\"localhost\" 5433 \"mydb\" t t 600))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -347,7 +370,10 @@ fn oracle_prop_plist_schema_validation() {
                    (funcall validate-schema user-schema r3)
                    (funcall validate-schema user-schema r4))))))))
     (fmakunbound 'neovm--test-plist-schema-dummy)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable validate-field)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -424,7 +450,12 @@ fn oracle_prop_plist_message_format() {
                (list (funcall dispatch req-dec)
                      (funcall dispatch resp-dec)))))))
     (fmakunbound 'neovm--test-plist-msg-dummy)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"type=\\\"request\\\"|id=42|method=\\\"get\\\"|path=\\\"/api/users\\\"\" t t t \"login\" 200 \"abc123\" (\"Processing request #1: login\" \"Response #1 status=200\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -494,5 +525,8 @@ fn oracle_prop_plist_event_system() {
              (plist-get r1 :type)
              (plist-get r2 :type)))))
     (fmakunbound 'neovm--test-plist-event-dummy)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable handle-event)""#]],
+    );
 }

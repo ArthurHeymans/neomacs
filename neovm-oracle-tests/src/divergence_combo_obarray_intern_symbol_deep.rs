@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_intern_soft_vs_intern_obarray_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ob (make-vector 13 0)))\n\
          (intern \\\"hello\\\" ob)\n\
@@ -18,6 +18,7 @@ fn deficiency_intern_soft_vs_intern_obarray_lookup() {
          (intern-soft \\\"world\\\" ob)\n\
          (intern-soft \\\"missing\\\" ob)\n\
          (intern-soft \\\"HELLO\\\" ob))))",
+        expect_test::expect![[r#""ERR (void-variable \\\"hello\\\")""#]],
     );
 }
 
@@ -25,7 +26,7 @@ fn deficiency_intern_soft_vs_intern_obarray_lookup() {
 fn deficiency_mapatoms_counts_and_collect_with_custom_obarray() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ob (make-vector 7 0))\n\
          (collected nil))\n\
@@ -37,6 +38,7 @@ fn deficiency_mapatoms_counts_and_collect_with_custom_obarray() {
          (nth 0 sorted) (nth 4 sorted) (nth 9 sorted)\n\
          (intern-soft \\\"sym-00\\\" ob)\n\
          (intern-soft \\\"sym-09\\\" ob))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -44,7 +46,7 @@ fn deficiency_mapatoms_counts_and_collect_with_custom_obarray() {
 fn deficiency_unintern_then_reintern_preserves_identity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ob (make-vector 7 0)))\n\
          (let ((s1 (intern \\\"test-sym\\\" ob)))\n\
@@ -57,6 +59,7 @@ fn deficiency_unintern_then_reintern_preserves_identity() {
          (eq s1 s2)\n\
          (symbol-value s2)\n\
          (intern-soft \\\"test-sym\\\" ob))))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -64,7 +67,7 @@ fn deficiency_unintern_then_reintern_preserves_identity() {
 fn deficiency_intern_with_symbol_function_and_value_cells() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ob (make-vector 13 0)))\n\
          (let ((fn-sym (intern \\\"my-test-fn\\\" ob)))\n\
@@ -78,6 +81,7 @@ fn deficiency_intern_with_symbol_function_and_value_cells() {
          (boundp val-sym)\n\
          (symbol-name fn-sym)\n\
          (symbol-name val-sym)))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -85,7 +89,7 @@ fn deficiency_intern_with_symbol_function_and_value_cells() {
 fn deficiency_symbol_plist_with_obarray_interned_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ob (make-vector 7 0)))\n\
          (let ((s1 (intern \\\"plist-sym\\\" ob)))\n\
@@ -100,6 +104,7 @@ fn deficiency_symbol_plist_with_obarray_interned_symbols() {
          (eq s1 s2)\n\
          (symbol-plist s1)\n\
          (symbol-plist s2))))))",
+        expect_test::expect![[r#""ERR (void-variable \\\"plist-sym\\\")""#]],
     );
 }
 
@@ -107,7 +112,7 @@ fn deficiency_symbol_plist_with_obarray_interned_symbols() {
 fn deficiency_mapatoms_with_fboundp_and_boundp_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ob (make-vector 11 0)))\n\
          (dolist (name '(\\\"alpha\\\" \\\"beta\\\" \\\"gamma\\\" \\\"delta\\\" \\\"epsilon\\\"))\n\
@@ -121,6 +126,7 @@ fn deficiency_mapatoms_with_fboundp_and_boundp_filter() {
          (list (sort fbound-syms #'string<)\n\
          (length fbound-syms)\n\
          (intern-soft \\\"beta\\\" ob))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -128,7 +134,7 @@ fn deficiency_mapatoms_with_fboundp_and_boundp_filter() {
 fn deficiency_obarray_hash_collision_with_similar_names() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ob (make-vector 3 0)))\n\
          (intern \\\"abc\\\" ob)\n\
@@ -144,6 +150,7 @@ fn deficiency_obarray_hash_collision_with_similar_names() {
          (intern-soft \\\"def\\\" ob)\n\
          (intern-soft \\\"pqr\\\" ob)\n\
          (intern-soft \\\"xyz\\\" ob))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -151,7 +158,7 @@ fn deficiency_obarray_hash_collision_with_similar_names() {
 fn deficiency_symbol_name_intern_and_substring_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let* ((base \\\"test-prefix-\\\")\n\
          (ob (make-vector 7 0))\n\
@@ -165,6 +172,7 @@ fn deficiency_symbol_name_intern_and_substring_interaction() {
          (mapcar (lambda (s) (get s 'index)) syms)\n\
          (intern-soft \\\"test-prefix-3\\\" ob)\n\
          (intern-soft \\\"test-prefix-6\\\" ob)))))",
+        expect_test::expect![[r#""ERR (void-variable \\\"test-prefix-\\\")""#]],
     );
 }
 
@@ -172,7 +180,7 @@ fn deficiency_symbol_name_intern_and_substring_interaction() {
 fn deficiency_unintern_during_mapatoms_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ob (make-vector 7 0)))\n\
          (dotimes (i 5)\n\
@@ -190,6 +198,7 @@ fn deficiency_unintern_during_mapatoms_iteration() {
          (list after-map post-count\n\
          (intern-soft \\\"item-0\\\" ob)\n\
          (intern-soft \\\"item-2\\\" ob))))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -197,7 +206,7 @@ fn deficiency_unintern_during_mapatoms_iteration() {
 fn deficiency_intern_global_vs_obarray_namespace_isolation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ob (make-vector 7 0)))\n\
          (intern \\\"unique-test-name-xyzzy\\\" ob)\n\
@@ -206,5 +215,6 @@ fn deficiency_intern_global_vs_obarray_namespace_isolation() {
          (list (if in-ob 'found-in-ob 'missing-in-ob)\n\
          (if in-global 'found-in-global 'missing-in-global)\n\
          (eq in-ob in-global)))))",
+        expect_test::expect![[r#""ERR (void-variable \\\"unique-test-name-xyzzy\\\")""#]],
     );
 }

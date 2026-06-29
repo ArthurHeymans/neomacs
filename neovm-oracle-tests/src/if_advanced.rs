@@ -39,7 +39,12 @@ fn oracle_prop_if_complex_predicates() {
                       'complex-true 'complex-false))
                  results))))
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((all-pos moderate no-zeros complex-true) (not-all-pos moderate has-zero complex-true) (not-all-pos moderate has-zero complex-true) (not-all-pos moderate has-zero complex-false) (not-all-pos extreme no-zeros complex-false) (all-pos extreme no-zeros complex-true) (not-all-pos moderate has-zero complex-false))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +79,12 @@ fn oracle_prop_if_progn_bodies_and_returns() {
             ;; if with else that has multiple forms (implicit progn)
             (r4 (if nil 'nope 'first-else 'second-else 'third-else)))
         (list r1 r2 r3 r4 (nreverse log))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (then-result 42 nil third-else (then-1 then-2 then-3 else-a else-b))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +122,12 @@ fn oracle_prop_when_unless_return_values() {
        (when "" 'empty-string-truthy)
        ;; Side effect log
        (nreverse side)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (when-true-val nil unless-false-val nil deep-when-val unless-complex-val zero-is-truthy empty-string-truthy (w1 w2 u1 nested unless-complex))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +175,12 @@ fn oracle_prop_if_cond_nested_dispatch() {
        (funcall classify 'triangle 30 30)
        (funcall classify 'triangle 40 20)
        (funcall classify 'polygon 10 10)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (large-circle medium-circle small-circle tiny-circle small-square small-square wide-rect rect tall-rect large-equilateral small-equilateral scalene unknown)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +221,12 @@ fn oracle_prop_cond_fallthrough_and_catchall() {
           (let ((decade (/ x 10)))
             (list 'medium decade)))
          ((>= x 50) 'large))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (42 \"hello\" 30 catch-all 10 only-option nil (1 2 3) (medium 4))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -244,7 +269,12 @@ fn oracle_prop_if_side_effects_both_branches() {
                     (setq n (- n i))))
                 n))))
         (list vals (nreverse trace))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((took-then took-else 2 done -3) (a-then b-else c-inner-else when-fire unless-fire))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +346,10 @@ fn oracle_prop_if_decision_tree() {
          (funcall 'neovm--test-dt-classify tree
                   '((has-fur . 1) (has-feathers . 0) (can-fly . 0) (has-claws . 1) (size . 200)))))
     (fmakunbound 'neovm--test-dt-classify)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (fish bird penguin rabbit horse cat bear)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -421,5 +454,10 @@ fn oracle_prop_cond_pattern_matching_simulation() {
                 cases))
     (fmakunbound 'neovm--test-expr-simplify)
     (fmakunbound 'neovm--test-expr-pretty)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"(0 + x)\" \"x\") (\"(x + 0)\" \"x\") (\"(3 + 4)\" \"7\") (\"(x + x)\" \"(2 * x)\") (\"(x * 0)\" \"0\") (\"(x * 1)\" \"x\") (\"--y\" \"y\") (\"-0\" \"0\") (\"((2 + 3) * (1 + 0))\" \"5\") (\"((x + 0) + (0 + y))\" \"(x + y)\"))""#
+        ]],
+    );
 }

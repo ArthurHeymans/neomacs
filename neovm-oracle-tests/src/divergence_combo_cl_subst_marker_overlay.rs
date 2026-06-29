@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_cl_subst_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "csu")))
     (with-current-buffer buf
@@ -36,6 +36,7 @@ fn combo_cl_subst_marker_overlay_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -43,7 +44,7 @@ fn combo_cl_subst_marker_overlay_undo() {
 fn combo_cl_subst_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "csn")))
     (with-current-buffer buf
@@ -73,6 +74,7 @@ fn combo_cl_subst_narrow_marker() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -80,7 +82,7 @@ fn combo_cl_subst_narrow_marker() {
 fn combo_cl_subst_clone_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "csc")))
     (with-current-buffer buf
@@ -110,6 +112,7 @@ fn combo_cl_subst_clone_overlay() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -117,7 +120,7 @@ fn combo_cl_subst_clone_overlay() {
 fn combo_cl_subst_multi_subst() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "csm")))
     (with-current-buffer buf
@@ -152,6 +155,7 @@ fn combo_cl_subst_multi_subst() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -159,7 +163,7 @@ fn combo_cl_subst_multi_subst() {
 fn combo_cl_subst_overlay_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "csx")))
     (with-current-buffer buf
@@ -189,5 +193,6 @@ fn combo_cl_subst_overlay_narrow_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

@@ -12,32 +12,34 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_g6_byte_compile_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (byte-compile (lambda (x y) (+ (* x 2) y)))))
   (list (funcall f 3 4)
         (funcall f 10 -5)
         (compiled-function-p f)))
 "##,
+        expect_test::expect![[r#""OK (10 15 t)""#]],
     );
 }
 
 #[test]
 fn div_g6_byte_compile_closure_counter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((counter 0))
   (let ((f (byte-compile (lambda () (cl-incf counter)))))
     (list (funcall f) (funcall f) (funcall f))))
 "##,
+        expect_test::expect![[r#""OK (1 2 3)""#]],
     );
 }
 
 #[test]
 fn div_g6_byte_compile_dolist_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (byte-compile
           (lambda (lst)
@@ -46,13 +48,14 @@ fn div_g6_byte_compile_dolist_loop() {
                 (push (* x x) acc)))))))
   (list (funcall f '(1 2 3 4)) (funcall f nil)))
 "##,
+        expect_test::expect![[r#""OK ((1 4 9 16) nil)""#]],
     );
 }
 
 #[test]
 fn div_g6_byte_compile_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (byte-compile
           (lambda (x)
@@ -61,18 +64,20 @@ fn div_g6_byte_compile_condition_case() {
               (arith-error 'caught))))))
   (list (funcall f 2) (funcall f 0)))
 "##,
+        expect_test::expect![[r#""OK (5 caught)""#]],
     );
 }
 
 #[test]
 fn div_g6_byte_compile_named_recursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defun probe-bc-fact (n) (if (<= n 1) 1 (* n (probe-bc-fact (1- n)))))
   (byte-compile 'probe-bc-fact)
   (list (probe-bc-fact 6) (probe-bc-fact 0) (probe-bc-fact 10)))
 "##,
+        expect_test::expect![[r#""OK (720 1 3628800)""#]],
     );
 }

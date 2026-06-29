@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_mega_combo_edit_undo_overlays_markers_textprops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "fn foo(x) {\n  return x + 1;\n}\n\nfn bar(y) {\n  return y * 2;\n}\n")
   (let ((ov-fn1 (make-overlay 1 7))
@@ -47,6 +47,7 @@ fn divergence_mega_combo_edit_undo_overlays_markers_textprops() {
             (marker-position m-return2)
             (get-text-property 1 'syntax)
             (eq (get-text-property 1 'syntax) 'keyword)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 39 60)""##]],
     );
 }
 
@@ -54,7 +55,7 @@ fn divergence_mega_combo_edit_undo_overlays_markers_textprops() {
 fn divergence_mega_combo_eieio_closure_eval_advice_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-mega-obj-xxx ()
     ((name :initarg :name :accessor test-mega-name-xxx)
@@ -91,6 +92,7 @@ fn divergence_mega_combo_eieio_closure_eval_advice_marker() {
                               (lambda (obj event)
                                 (push (list 'advised event)
                                       (slot-value obj 'history))))))))) #"#,
+        expect_test::expect![[r#""TRACXXKINGERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -98,7 +100,7 @@ fn divergence_mega_combo_eieio_closure_eval_advice_marker() {
 fn divergence_mega_combo_buffer_narrow_overlay_undo_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "SECTION1-AAAA SECTION2-BBBB SECTION3-CCCC SECTION4-DDDD")
   (let ((ov1 (make-overlay 1 13))
@@ -139,6 +141,7 @@ fn divergence_mega_combo_buffer_narrow_overlay_undo_regex() {
             (get-text-property 14 'group)
             (eq (get-text-property 14 'group) 'b)
             (= (buffer-size) 52))))) #"#,
+        expect_test::expect![[r#"" SECTION2-YYYY SECTION3-CERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -146,7 +149,7 @@ fn divergence_mega_combo_buffer_narrow_overlay_undo_regex() {
 fn divergence_mega_combo_keymap_closure_eieio_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-mkce-xxx ()
     ((val :initarg :val :initform 0)
@@ -175,6 +178,7 @@ fn divergence_mega_combo_keymap_closure_eieio_error() {
             (funcall (lookup-key map "d"))
             (funcall (lookup-key map "g"))
             (= (funcall (lookup-key map "g")) 11))))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 28 55)""##]],
     );
 }
 
@@ -182,7 +186,7 @@ fn divergence_mega_combo_keymap_closure_eieio_error() {
 fn divergence_mega_combo_multibyte_overlay_undo_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "start-\xc3\xa9\xc3\xa0-\xc3\xb9-end")
   (let ((ov (make-overlay 7 9))
@@ -213,5 +217,6 @@ fn divergence_mega_combo_multibyte_overlay_undo_marker() {
             (eq (get-text-property 7 'part) 'accent)
             (get-text-property 10 'part)
             (eq (get-text-property 10 'part) 'post)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 30 56)""##]],
     );
 }

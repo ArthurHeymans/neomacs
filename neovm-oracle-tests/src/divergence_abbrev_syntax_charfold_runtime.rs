@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn ab2_abbrev_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((fired nil))
   (define-abbrev-table 'neo-at4-xyz '())
   (defun neo-ab-hook-xyz () (setq fired t))
@@ -20,6 +20,7 @@ fn ab2_abbrev_hook() {
     (setq local-abbrev-table neo-at4-xyz) (abbrev-mode 1)
     (insert "x") (expand-abbrev)
     (list (buffer-string) fired)))"##,
+        expect_test::expect![[r#""OK (\"expanded\" t)""#]],
     );
 }
 
@@ -27,12 +28,13 @@ fn ab2_abbrev_hook() {
 fn ab2_abbrev_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(define-abbrev-table 'neo-at3-xyz '())
 (define-abbrev neo-at3-xyz "foo" "foobar" nil :count 0 :case-fixed t)
 (list (abbrev-expansion "foo" neo-at3-xyz)
       (abbrev-get (intern "foo" neo-at3-xyz) :case-fixed)
       (abbrev-table-p neo-at3-xyz))"##,
+        expect_test::expect![[r#""OK (\"foobar\" t t)""#]],
     );
 }
 
@@ -40,11 +42,12 @@ fn ab2_abbrev_props() {
 fn ab2_abbrev_table_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(define-abbrev-table 'neo-at5-xyz '() "doc" :enable-function #'ignore)
 (list (abbrev-table-get neo-at5-xyz :enable-function)
       (progn (abbrev-table-put neo-at5-xyz :custom-prop 42)
              (abbrev-table-get neo-at5-xyz :custom-prop)))"##,
+        expect_test::expect![[r#""OK (ignore 42)""#]],
     );
 }
 
@@ -52,9 +55,10 @@ fn ab2_abbrev_table_props() {
 fn ab2_matching_paren() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (matching-paren ?\() (matching-paren ?\)) (matching-paren ?\[)
         (matching-paren ?a))"##,
+        expect_test::expect![[r#""OK (41 40 93 nil)""#]],
     );
 }
 
@@ -62,10 +66,11 @@ fn ab2_matching_paren() {
 fn ab2_pcase_or_and_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (pcase 5 ((or 1 2 5) 'matched) (_ 'no))
       (pcase '(1 . 2) ((and `(,a . ,b) (guard (= a 1))) (list a b)) (_ 'no))
       (pcase "test" ((and (pred stringp) s (guard (> (length s) 2))) (length s))))"##,
+        expect_test::expect![[r#""OK (matched (1 2) 4)""#]],
     );
 }
 
@@ -73,9 +78,10 @@ fn ab2_pcase_or_and_deep() {
 fn ab2_pcase_seq_map_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (pcase '(1 2 3 4) ((seq a b &rest r) (list a b r)))
       (pcase '((x . 1) (y . 2)) ((map x y) (list x y))))"##,
+        expect_test::expect![[r#""ERR (error \"Unknown map pattern: (map x y)\")""#]],
     );
 }
 
@@ -83,9 +89,10 @@ fn ab2_pcase_seq_map_deep() {
 fn ab2_string_to_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (string-to-syntax "w") (string-to-syntax "-")
         (string-to-syntax "()") (string-to-syntax "\"") (syntax-class-to-char 2))"##,
+        expect_test::expect![[r#""OK ((2) (0) (4 . 41) (7) 119)""#]],
     );
 }
 
@@ -93,13 +100,14 @@ fn ab2_string_to_syntax() {
 fn ab2_syntax_after_before() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (emacs-lisp-mode)
   (insert "(foo)")
   (list (syntax-class-to-char (car (syntax-after 1)))
         (syntax-class-to-char (car (syntax-after 5)))
         (char-syntax ?\()))"##,
+        expect_test::expect![[r#""OK (40 41 40)""#]],
     );
 }
 
@@ -107,12 +115,13 @@ fn ab2_syntax_after_before() {
 fn ab2_syntax_propertize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "abc\"def\"ghi")
   (put-text-property 4 9 'syntax-table (string-to-syntax "|"))
   (list (syntax-class-to-char (car (syntax-after 4)))
         (string-to-syntax "w") (string-to-syntax ".")))"##,
+        expect_test::expect![[r#""OK (34 (2) (1))""#]],
     );
 }
 
@@ -121,7 +130,7 @@ fn ab2_syntax_propertize() {
 fn divergence_char_fold_accent_incomplete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(require 'char-fold)
 (let ((case-fold-search t))
   (list (with-temp-buffer (insert "naïve") (goto-char (point-min))
@@ -130,5 +139,6 @@ fn divergence_char_fold_accent_incomplete() {
           (and (re-search-forward (char-fold-to-regexp "cafe") nil t) t))
         (with-temp-buffer (insert "Renée") (goto-char (point-min))
           (and (re-search-forward (char-fold-to-regexp "renee") nil t) t))))"##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_marker_insertion_type_before_after() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass anchor ()
     ((label :initarg :label :accessor anchor-label :initform "")
@@ -59,6 +59,7 @@ fn combo_eieio_marker_insertion_type_before_after() {
                 (buffer-string)
                 anchor1 anchor2)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -66,7 +67,7 @@ fn combo_eieio_marker_insertion_type_before_after() {
 fn combo_eieio_multi_marker_types_insert_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass span ()
     ((name :initarg :name :accessor span-name :initform "")
@@ -127,6 +128,7 @@ fn combo_eieio_multi_marker_types_insert_delete() {
                 (buffer-string)
                 spans)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -134,7 +136,7 @@ fn combo_eieio_multi_marker_types_insert_delete() {
 fn combo_eieio_overlay_evaporate_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass region-state ()
     ((name :initarg :name :accessor rs-name :initform "")
@@ -185,6 +187,7 @@ fn combo_eieio_overlay_evaporate_with_objects() {
                 (marker-position m)
                 regions)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (void-variable ov1-live)""#]],
     );
 }
 
@@ -192,7 +195,7 @@ fn combo_eieio_overlay_evaporate_with_objects() {
 fn combo_eieio_marker_adjustment_set_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cursor-track ()
     ((id :initarg :id :accessor ct-id :initform 0)
@@ -249,6 +252,7 @@ fn combo_eieio_marker_adjustment_set_buffer() {
                 (with-current-buffer buf2 (buffer-string))))))
     (kill-buffer buf1)
     (kill-buffer buf2)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -256,7 +260,7 @@ fn combo_eieio_marker_adjustment_set_buffer() {
 fn combo_eieio_marker_overlay_textprop_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass edit-operation ()
     ((op-type :initarg :op-type :accessor eo-type :initform nil)
@@ -304,5 +308,6 @@ fn combo_eieio_marker_overlay_textprop_stress() {
                   (marker-position m)
                   ops)))
         (kill-buffer buf)))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

@@ -8,17 +8,21 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_copy_keymap_is_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(keymapp (copy-keymap (make-sparse-keymap)))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(keymapp (copy-keymap (make-sparse-keymap)))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_copy_keymap_returns_copy_not_same() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(let* ((orig (make-sparse-keymap))
                   (cpy (copy-keymap orig)))
              (not (eq orig cpy)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &o, &n);
 }
@@ -26,34 +30,49 @@ fn oracle_copy_keymap_returns_copy_not_same() {
 #[test]
 fn oracle_lsh_left() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(lsh 1 3)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(lsh 1 3)",
+        expect_test::expect![[r#""OK 8""#]],
+    );
     assert_ok_eq("8", &o, &n);
 }
 
 #[test]
 fn oracle_lsh_right() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(lsh 16 -2)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(lsh 16 -2)",
+        expect_test::expect![[r#""OK 4""#]],
+    );
     assert_ok_eq("4", &o, &n);
 }
 
 #[test]
 fn oracle_key_description_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(stringp (key-description [?\C-a]))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(stringp (key-description [?\C-a]))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_lsh_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm("(lsh 42 0)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(lsh 42 0)",
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &o, &n);
 }
 
 #[test]
 fn oracle_nreverse_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(nreverse [1 2 3])"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(nreverse [1 2 3])"#,
+        expect_test::expect![[r#""OK [3 2 1]""#]],
+    );
     assert_ok_eq("[3 2 1]", &o, &n);
 }

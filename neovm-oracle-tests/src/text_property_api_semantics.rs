@@ -25,7 +25,10 @@ fn oracle_text_property_mutator_return_values_and_empty_ranges() {
    (text-properties-at 2 s)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil nil nil nil t #(\"abcd\" 0 2 (b 2)) (b 2) nil)""#]],
+    );
 }
 
 #[test]
@@ -52,7 +55,12 @@ fn oracle_text_properties_at_end_and_range_errors() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((face bold) nil nil (args-out-of-range (4 4)) (args-out-of-range (-1 -1)) nil (error (\"Odd length text property list\")))""#
+        ]],
+    );
 }
 
 #[test]
@@ -74,7 +82,10 @@ fn oracle_remove_text_properties_odd_plist_is_noop_like_gnu() {
    (text-properties-at 0 s)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((error (\"Odd length text property list\")) nil nil)""#]],
+    );
 }
 
 #[test]
@@ -95,7 +106,10 @@ fn oracle_remove_list_of_text_properties_allows_dotted_tail_like_gnu() {
    (text-properties-at 0 s)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t (help-echo \"tip\") nil (help-echo \"tip\"))""#]],
+    );
 }
 
 #[test]
@@ -115,7 +129,10 @@ fn oracle_text_property_search_uses_eq_not_equal_like_gnu() {
    (text-property-not-all 0 3 'help-echo needle s)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil t nil 0)""#]],
+    );
 }
 
 #[test]
@@ -134,7 +151,10 @@ fn oracle_set_text_properties_reports_noop_on_unpropertized_string_like_gnu() {
    (text-properties-at 0 styled)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil t nil)""#]],
+    );
 }
 
 #[test]
@@ -151,7 +171,10 @@ fn oracle_add_face_text_property_preserves_dotted_face_list_like_gnu() {
   (get-text-property 0 'face s))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (underline bold . italic)""#]],
+    );
 }
 
 #[test]
@@ -169,7 +192,10 @@ fn oracle_add_face_text_property_append_rejects_dotted_face_list_like_gnu() {
     (error (list (car err) (cadr err) (caddr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (wrong-type-argument listp italic)""#]],
+    );
 }
 
 #[test]
@@ -191,7 +217,7 @@ fn oracle_add_face_text_property_same_face_is_noop_like_gnu() {
           (get-text-property 1 'face))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (bold bold)""#]]);
 }
 
 #[test]
@@ -215,7 +241,10 @@ fn oracle_next_previous_property_change_limit_edges() {
    (previous-property-change 2 s 1)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p t)""#]],
+    );
 }
 
 #[test]
@@ -238,7 +267,10 @@ fn oracle_buffer_text_property_positions_are_one_based() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (bold nil (face bold) nil 3 3 (args-out-of-range (0 0)))""#]],
+    );
 }
 
 #[test]
@@ -285,7 +317,12 @@ fn oracle_text_property_search_positions_are_character_based_for_multibyte_objec
       (mapcar (lambda (i) (text-properties-at i))
               (number-sequence 1 5))))))"#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 8 1 1 3 3 3 3 1 nil 0 (nil (face bold) (face bold) nil nil) (1 5 4 2 2 4 4 4 4 2 nil 1 (nil (face bold) (face bold) nil nil)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -314,7 +351,10 @@ fn oracle_text_property_change_limits_accept_markers_and_return_character_positi
      (text-property-any start limit-end 'face 'bold)
      (text-property-not-all middle limit-front 'face 'bold))))"#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 2 5 5 5 5 2 nil)""#]],
+    );
 }
 
 #[test]
@@ -349,7 +389,12 @@ fn oracle_insert_and_inherit_sticky_property_merge_matrix_matches_gnu() {
           (object-intervals (current-buffer)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (#(\"LλR\" 0 1 (front-sticky (p8 p9 pa pb pc pd pe pf) rear-nonsticky (p4 p5 p6 p7 p8 p9 pa pb) p0 L p1 L p2 L p3 L p4 L p5 L p6 L p7 L p8 L p9 L pa L pb L pc L pd L pe L pf L) 1 2 (front-sticky (p6 p7 pa pb pc pd pe pf) rear-nonsticky (p6 pa) p0 L p1 L p2 L p3 L p6 R p7 R pa R pb R pc L pd L pe L pf L) 2 3 (front-sticky (p2 p3 p6 p7 pa pb pe pf) rear-nonsticky (p1 p2 p5 p6 p9 pa pd pe) p0 R p1 R p2 R p3 R p4 R p5 R p6 R p7 R p8 R p9 R pa R pb R pc R pd R pe R pf R)) (front-sticky (p6 p7 pa pb pc pd pe pf) rear-nonsticky (p6 pa) p0 L p1 L p2 L p3 L p6 R p7 R pa R pb R pc L pd L pe L pf L) ((0 1 (front-sticky (p8 p9 pa pb pc pd pe pf) rear-nonsticky (p4 p5 p6 p7 p8 p9 pa pb) p0 L p1 L p2 L p3 L p4 L p5 L p6 L p7 L p8 L p9 L pa L pb L pc L pd L pe L pf L)) (1 2 (front-sticky (p6 p7 pa pb pc pd pe pf) rear-nonsticky (p6 pa) p0 L p1 L p2 L p3 L p6 R p7 R pa R pb R pc L pd L pe L pf L)) (2 3 (front-sticky (p2 p3 p6 p7 pa pb pe pf) rear-nonsticky (p1 p2 p5 p6 p9 pa pd pe) p0 R p1 R p2 R p3 R p4 R p5 R p6 R p7 R p8 R p9 R pa R pb R pc R pd R pe R pf R))))""#
+        ]],
+    );
 }
 
 #[test]
@@ -380,5 +425,10 @@ fn oracle_insert_and_inherit_category_front_sticky_suppresses_explicit_marker() 
     (put 'oracle-sticky-category 'front-sticky nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (#(\"LλR\" 0 1 (left L) 1 2 (category oracle-sticky-category p R left L) 2 3 (category oracle-sticky-category front-sticky (category p) p R)) (category oracle-sticky-category p R left L) ((0 1 (left L)) (1 2 (category oracle-sticky-category p R left L)) (2 3 (category oracle-sticky-category front-sticky (category p) p R))))""#
+        ]],
+    );
 }

@@ -8,30 +8,34 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx240_read_eval_reader_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (car (read-from-string "#.(+ 1 2)")) (error (cons :err (car e))))
       (condition-case e (car (read-from-string "#.(* 6 7)")) (error (cons :err (car e)))))
 "##,
+        expect_test::expect![[
+            r#""OK ((:err . invalid-read-syntax) (:err . invalid-read-syntax))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx240_read_skip_reader_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (car (read-from-string "#_skipped actual-value"))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK skipped""#]],
     );
 }
 
 #[test]
 fn div_cx240_read_record_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((result (condition-case e
                   (car (read-from-string "#s(hash-table size 10 test eq data (a 1 b 2))"))
@@ -40,13 +44,14 @@ fn div_cx240_read_record_syntax() {
         (hash-table-p result)
         (when (hash-table-p result) (hash-table-count result))))
 "##,
+        expect_test::expect![[r#""OK (#s(hash-table test eq data (a 1 b 2)) t 2)""#]],
     );
 }
 
 #[test]
 fn div_cx240_read_shared_reference() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((shared (list 1 2 3))
        (data (list shared shared shared))
@@ -57,13 +62,14 @@ fn div_cx240_read_shared_reference() {
         (eq (car read-back) (cadr read-back))
         (eq (cadr read-back) (caddr read-back))))
 "##,
+        expect_test::expect![[r#""OK (\"(#1=(1 2 3) #1# #1#)\" (1 2 3) t t)""#]],
     );
 }
 
 #[test]
 fn div_cx240_read_circular_reference() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((circular (list 1 2 3))
        (data (progn (setcdr (cddr circular) circular) circular))
@@ -75,13 +81,14 @@ fn div_cx240_read_circular_reference() {
         (caddr read-back)
         (eq read-back (cdddr read-back))))
 "##,
+        expect_test::expect![[r##""OK (\"#1=(1 2 3 . #1#)\" 1 2 3 t)""##]],
     );
 }
 
 #[test]
 fn div_cx240_read_bytecode_object() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((lex (lambda (x) (* x x)))
@@ -94,13 +101,14 @@ fn div_cx240_read_bytecode_object() {
             (funcall read-back 5)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t 25 25)""#]],
     );
 }
 
 #[test]
 fn div_cx240_read_radix_integers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
           (let ((v (car (read-from-string s))))
@@ -108,13 +116,16 @@ fn div_cx240_read_radix_integers() {
         '("#x10" "#o17" "#b1010" "#xdeadbeef"
           "#o777" "#b11111111" "1000000000000000000000"))
 "##,
+        expect_test::expect![[
+            r##""OK ((\"#x10\" 16 integer) (\"#o17\" 15 integer) (\"#b1010\" 10 integer) (\"#xdeadbeef\" 3735928559 integer) (\"#o777\" 511 integer) (\"#b11111111\" 255 integer) (\"1000000000000000000000\" 1000000000000000000000 integer))""##
+        ]],
     );
 }
 
 #[test]
 fn div_cx240_read_char_syntax_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
           (condition-case e
@@ -124,13 +135,16 @@ fn div_cx240_read_char_syntax_variants() {
         '("?A" "?\\C-a" "?\\M-a" "?\\C-M-a"
           "?\\x41" "?\\u00e9" "?\\N{LATIN SMALL LETTER E WITH ACUTE}"))
 "##,
+        expect_test::expect![[
+            r#""OK ((\"?A\" 65 t) (\"?\\\\C-a\" 1 t) (\"?\\\\M-a\" 134217825 t) (\"?\\\\C-M-a\" :err invalid-read-syntax) (\"?\\\\x41\" 65 t) (\"?\\\\u00e9\" 233 t) (\"?\\\\N{LATIN SMALL LETTER E WITH ACUTE}\" 233 t))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx240_read_string_with_all_escapes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
           (condition-case e
@@ -143,13 +157,16 @@ fn div_cx240_read_string_with_all_escapes() {
           "\"with \\u00e9 unicode\""
           "\"with \\x41 hex\""))
 "##,
+        expect_test::expect![[
+            r#""OK (\"plain\" \"with \\\"escaped\\\"\" \"with \\\\ backslash\" \"with \t tab and \n newline\" \"with é unicode\" \"with A hex\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx240_read_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((shared (list 1 2 3))
        (data (list shared shared (list :a :b)))
@@ -177,5 +194,6 @@ fn div_cx240_read_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

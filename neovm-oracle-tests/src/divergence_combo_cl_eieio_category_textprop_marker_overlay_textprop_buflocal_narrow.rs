@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_category_syntax_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cat-state ()
     ((pos :initarg :pos :accessor cat-pos :initform 0)
@@ -58,6 +58,7 @@ fn combo_eieio_category_syntax_override() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -65,7 +66,7 @@ fn combo_eieio_category_syntax_override() {
 fn combo_eieio_category_multi_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass multi-cat ()
     ((range :initarg :range :accessor mc-range :initform nil)
@@ -124,6 +125,7 @@ fn combo_eieio_category_multi_property() {
                 (overlay-start ov1) (overlay-end ov1)
                 (overlay-start ov2) (overlay-end ov2)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -131,7 +133,7 @@ fn combo_eieio_category_multi_property() {
 fn combo_eieio_category_narrow_scan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cat-scan-result ()
     ((pos :initarg :pos :accessor csr-pos :initform 0)
@@ -181,6 +183,7 @@ fn combo_eieio_category_narrow_scan() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -188,7 +191,7 @@ fn combo_eieio_category_narrow_scan() {
 fn combo_eieio_category_overlay_evaporate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cat-ov-snap ()
     ((label :initarg :label :accessor cos-label :initform "")
@@ -240,6 +243,7 @@ fn combo_eieio_category_overlay_evaporate() {
                 (marker-position m)
                 (overlay-live-p ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
     );
 }
 
@@ -247,7 +251,7 @@ fn combo_eieio_category_overlay_evaporate() {
 fn combo_eieio_category_undo_restore_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cat-undo-snap ()
     ((step :initarg :step :accessor cus-step :initform "")
@@ -300,5 +304,6 @@ fn combo_eieio_category_undo_restore_props() {
                 (overlay-start ov) (overlay-end ov)
                 (mapcar (lambda (p) (get-text-property p 'category)) '(1 6 11 16))))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

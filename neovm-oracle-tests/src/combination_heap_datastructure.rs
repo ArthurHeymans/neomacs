@@ -124,7 +124,10 @@ fn oracle_prop_heap_insert_extract_min() {
     (fmakunbound 'neovm--heap-extract-min)
     (fmakunbound 'neovm--heap-peek)
     (fmakunbound 'neovm--heap-size)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 7 (1 2 3 5 7 8 9) 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +229,12 @@ fn oracle_prop_heap_heapify() {
     (fmakunbound 'neovm--hp-sift-down)
     (fmakunbound 'neovm--hp-heapify)
     (fmakunbound 'neovm--hp-drain)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9) (1 2 3 4 5) (1 2 3 4 5) (1 1 2 3 3 4 5 5 6 9) (42) (2 7) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -305,7 +313,12 @@ fn oracle_prop_heap_sort() {
     (fmakunbound 'neovm--hs-swap)
     (fmakunbound 'neovm--hs-sift-down-max)
     (fmakunbound 'neovm--hs-heapsort)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 9 10 27 38 43 82) t (1 2 3 4 5 6 7 8 9 10) (1 2 3 4 5 6 7 8 9 10) (5 5 5 5 5) (-9 -6 -5 -4 -3 -2 -1 -1) (-9 -6 -1 -1 2 3 4 5) (42) (2 7))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -412,7 +425,12 @@ fn oracle_prop_heap_priority_queue_pairs() {
     (fmakunbound 'neovm--pq-sift-down)
     (fmakunbound 'neovm--pq-enqueue)
     (fmakunbound 'neovm--pq-dequeue)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . critical-task) (1 . also-critical) (2 . high-task) (3 . medium-task) (4 . normal-task) (5 . low-task)) t 0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -509,7 +527,12 @@ fn oracle_prop_heap_string_priority() {
     (fmakunbound 'neovm--shp-sift-down)
     (fmakunbound 'neovm--shp-insert)
     (fmakunbound 'neovm--shp-extract)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"apple\" \"avocado\" \"banana\" \"cherry\" \"date\" \"elderberry\" \"fig\") t 7)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -622,7 +645,10 @@ fn oracle_prop_heap_max_and_k_smallest() {
     (fmakunbound 'neovm--mh-insert)
     (fmakunbound 'neovm--mh-extract-max)
     (fmakunbound 'neovm--mh-k-smallest)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((9 7 4 3 2 1) (1 3 4) (1) (1 3 5 8 9) (1 1 2 3))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -737,5 +763,10 @@ fn oracle_prop_heap_merge_k_sorted_lists() {
     (fmakunbound 'neovm--mk-insert)
     (fmakunbound 'neovm--mk-extract)
     (fmakunbound 'neovm--mk-merge)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9) (1 2 3 4 5 6 7 8 9 10 12) (1 2 3 4 5 6) (5 10 15 20) (1 2 2 3 3 3 4 4 5) t)""#
+        ]],
+    );
 }

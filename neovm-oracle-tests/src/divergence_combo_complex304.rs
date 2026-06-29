@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx304_write_region_append_multiple_times() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((path (make-temp-file "neo-cx304-app")))
   (delete-file path)
@@ -23,13 +23,14 @@ fn div_cx304_write_region_append_multiple_times() {
     (delete-file path)
     content))
 "##,
+        expect_test::expect![[r#""OK \"firstsecondthird\"""#]],
     )
 }
 
 #[test]
 fn div_cx304_insert_file_contents_with_partial_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((path (make-temp-file "neo-cx304-part")))
   (with-temp-buffer
@@ -41,13 +42,14 @@ fn div_cx304_insert_file_contents_with_partial_range() {
     (delete-file path)
     (list content (length content))))
 "##,
+        expect_test::expect![[r#""OK (\"56789ABCDE\" 10)""#]],
     )
 }
 
 #[test]
 fn div_cx304_copy_file_with_permissions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((src (make-temp-file "neo-cx304-cp-src"))
        (dst (concat src "-copy")))
@@ -65,13 +67,14 @@ fn div_cx304_copy_file_with_permissions() {
     (list src-modes dst-modes (= src-modes dst-modes)
           (string= src-content dst-content))))
 "##,
+        expect_test::expect![[r#""OK (493 493 t t)""#]],
     )
 }
 
 #[test]
 fn div_cx304_rename_file_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((src (make-temp-file "neo-cx304-rn-src"))
        (dst (concat src "-renamed")))
@@ -85,13 +88,14 @@ fn div_cx304_rename_file_round_trip() {
     (delete-file dst)
     (list src-exists dst-exists dst-content)))
 "##,
+        expect_test::expect![[r#""OK (nil t \"rename test\")""#]],
     )
 }
 
 #[test]
 fn div_cx304_make_directory_recursive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((base (make-temp-file "neo-cx304-mkdir" t))
        (deep (expand-file-name "a/b/c/d" base)))
@@ -101,13 +105,14 @@ fn div_cx304_make_directory_recursive() {
     (delete-directory base t)
     created))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     )
 }
 
 #[test]
 fn div_cx304_set_file_modes_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((path (make-temp-file "neo-cx304-modes")))
   (let ((initial (file-modes path)))
@@ -118,13 +123,14 @@ fn div_cx304_set_file_modes_query() {
         (delete-file path)
         (list initial rwx rw-))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     )
 }
 
 #[test]
 fn div_cx304_file_symlink_p_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((dir (make-temp-file "neo-cx304-sym" t))
@@ -141,13 +147,16 @@ fn div_cx304_file_symlink_p_query() {
               (string= true-link true-real))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx304-symgeKmh4/real.txt\" nil t)""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx304_directory_files_recursively_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((root (make-temp-file "neo-cx304-rec" t))
        (sub (expand-file-name "sub" root)))
@@ -161,13 +170,14 @@ fn div_cx304_directory_files_recursively_pattern() {
     (list (length all-txt) (length all-files)
           (mapcar #'file-name-nondirectory all-txt))))
 "##,
+        expect_test::expect![[r#""OK (3 4 (\"a.txt\" \"c.txt\" \"d.txt\"))""#]],
     )
 }
 
 #[test]
 fn div_cx304_file_attributes_full_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx304-attr")))
   (with-temp-buffer
@@ -181,13 +191,14 @@ fn div_cx304_file_attributes_full_query() {
           (file-attribute-link-number a)
           (car (file-attribute-modification-time a)))))
 "##,
+        expect_test::expect![[r#""OK (10 \"-rw-------\" nil 1 27202)""#]],
     )
 }
 
 #[test]
 fn div_cx304_file_io_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx304-mega"))
        (data "File IO mega café 世界 test"))
@@ -213,5 +224,6 @@ fn div_cx304_file_io_with_marker_overlay_undo_narrow_mega() {
           (delete-file path)
           (list state)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     )
 }

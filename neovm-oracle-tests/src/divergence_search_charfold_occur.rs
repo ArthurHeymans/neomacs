@@ -7,11 +7,12 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_char_folding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'char-fold-to-regexp)
   (boundp 'char-fold-symmetric)
   (booleanp char-fold-symmetric))"#,
+        expect_test::expect![[r#""ERR (void-variable char-fold-symmetric)""#]],
     );
 }
 
@@ -19,12 +20,13 @@ fn divergence_char_folding() {
 fn divergence_char_fold_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((regexp (char-fold-to-regexp "e")))
   (list (stringp regexp)
         (string-match regexp "é")
         (string-match regexp "e")
         (string-match regexp "ë")))"#,
+        expect_test::expect![[r#""OK (t 0 0 0)""#]],
     );
 }
 
@@ -32,12 +34,13 @@ fn divergence_char_fold_search() {
 fn divergence_isearch_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'isearch-forward)
   (fboundp 'isearch-backward)
   (fboundp 'isearch-forward-regexp)
   (fboundp 'isearch-backward-regexp))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -45,12 +48,13 @@ fn divergence_isearch_functions() {
 fn divergence_isearch_variables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (booleanp case-fold-search)
   (booleanp search-highlight)
   (booleanp search-invisible)
   (booleanp isearch-lazy-highlight))"#,
+        expect_test::expect![[r#""OK (t t nil t)""#]],
     );
 }
 
@@ -58,13 +62,14 @@ fn divergence_isearch_variables() {
 fn divergence_occur_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'occur)
   (fboundp 'multi-occur)
   (fboundp 'how-many)
   (fboundp 'flush-lines)
   (fboundp 'keep-lines))"#,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -72,11 +77,14 @@ fn divergence_occur_functions() {
 fn divergence_keep_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "apple\nbanana\ncherry\napricot\nblueberry")
   (keep-lines "ap")
   (buffer-string))"#,
+        expect_test::expect![[
+            r#""apple\nbanana\ncherry\napricot\nblueberryOK \"apple\nbanana\ncherry\napricot\nblueberry\"""#
+        ]],
     );
 }
 
@@ -84,11 +92,14 @@ fn divergence_keep_lines() {
 fn divergence_flush_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "apple\nbanana\ncherry\napricot\nblueberry")
   (flush-lines "an")
   (buffer-string))"#,
+        expect_test::expect![[
+            r#""apple\nbanana\ncherry\napricot\nblueberryOK \"apple\nbanana\ncherry\napricot\nblueberry\"""#
+        ]],
     );
 }
 
@@ -96,10 +107,11 @@ fn divergence_flush_lines() {
 fn divergence_how_many() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "aaa bbb aaa ccc aaa")
   (how-many "aaa"))"#,
+        expect_test::expect![[r#""aaa bbb aaa ccc aaaOK 0""#]],
     );
 }
 
@@ -107,12 +119,13 @@ fn divergence_how_many() {
 fn divergence_replace_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "foo bar foo baz foo")
   (goto-char 1)
   (replace-string "foo" "XXX")
   (buffer-string))"#,
+        expect_test::expect![[r#""XXX bar XXX baz XXXOK \"XXX bar XXX baz XXX\"""#]],
     );
 }
 
@@ -120,10 +133,11 @@ fn divergence_replace_string() {
 fn divergence_query_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'query-replace)
   (fboundp 'query-replace-regexp)
   (fboundp 'map-query-replace-regexp))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }

@@ -59,7 +59,12 @@ fn oracle_prop_listalgo_merge_sorted() {
           (equal sorted (funcall 'neovm--test-merge-sorted left right))))
     (fmakunbound 'neovm--test-merge-sorted)
     (fmakunbound 'neovm--test-merge-k-sorted)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8) (1 2 2 2 3 5 5 6) (1 2 3) (4 5 6) nil (1 2 3 4 5 6 7) (1 2 3 4 5 6 7 8 9 10 11 12) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +114,12 @@ fn oracle_prop_listalgo_remove_duplicates() {
         (funcall 'neovm--test-remove-dups '(1 \"a\" 2 \"a\" 1 3)))
     (fmakunbound 'neovm--test-remove-dups)
     (fmakunbound 'neovm--test-remove-dups-naive)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5) (a) (1 2 3 4 5) nil (\"hello\" \"world\" \"foo\") t (1 \"a\" 2 3))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +169,12 @@ fn oracle_prop_listalgo_rotate() {
                  (funcall 'neovm--test-rotate
                           (funcall 'neovm--test-rotate orig 3) -3))))
     (fmakunbound 'neovm--test-rotate)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 4 5 1 2) (1 2 3 4 5) (1 2 3 4 5) (3 4 5 1 2) (5 1 2 3 4) (42) nil t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +239,12 @@ fn oracle_prop_listalgo_partition() {
             (funcall 'neovm--test-quickselect lst 8)))) ;; max
     (fmakunbound 'neovm--test-partition3)
     (fmakunbound 'neovm--test-quickselect)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((3 1 1 2 3) (4) (5 9 6 5)) ((1 3) nil (5 7 9)) (nil (5 5 5 5) nil) (nil (42) nil) t (1 5 9))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +311,12 @@ fn oracle_prop_listalgo_zip_unzip() {
     (fmakunbound 'neovm--test-zip-with)
     (fmakunbound 'neovm--test-unzip)
     (fmakunbound 'neovm--test-zip3)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . a) (2 . b) (3 . c)) ((1 . a) (2 . b)) (11 22 33) (\"a1\" \"b2\" \"c3\") (t t) ((1 a x) (2 b y) (3 c z)) nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -371,7 +396,12 @@ fn oracle_prop_listalgo_rle() {
     (fmakunbound 'neovm--test-rle-encode)
     (fmakunbound 'neovm--test-rle-decode)
     (fmakunbound 'neovm--test-rle-compact)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a . 3) (b . 2) (c . 4) (d . 1)) (a a a b b c c c c d) ((a . 1) (b . 1) (c . 1) (d . 1) (e . 1)) ((x . 6)) ((a . 2) b (c . 3) d (e . 2)) t nil ((z . 1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -450,7 +480,10 @@ fn oracle_prop_listalgo_longest_increasing_subsequence() {
         (length (funcall 'neovm--test-lis '(0 8 4 12 2 10 6 14 1 9 5 13 3 11 7 15))))
     (fmakunbound 'neovm--test-lis)
     (fmakunbound 'neovm--test-is-increasing)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 5 7 101) (1 2 3 4 5) (5) (7) (42) t 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -503,5 +536,10 @@ fn oracle_prop_listalgo_group_by_frequency() {
         (funcall 'neovm--test-frequencies '(1 2 3 4 5)))
     (fmakunbound 'neovm--test-frequencies)
     (fmakunbound 'neovm--test-group-by)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a . 4) (c . 2) (b . 2) (d . 1)) ((even 2 4 6 8 10) (odd 1 3 5 7 9)) ((\"a\" \"apple\" \"avocado\" \"apricot\") (\"b\" \"banana\" \"blueberry\") (\"c\" \"cherry\")) nil ((5 . 1) (4 . 1) (3 . 1) (2 . 1) (1 . 1)))""#
+        ]],
+    );
 }

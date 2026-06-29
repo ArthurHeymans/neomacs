@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx10_process_exit_via_signal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx10-sig" :command '("sleep" "10"))))
   (accept-process-output p 0.1)
@@ -20,13 +20,14 @@ fn div_cx10_process_exit_via_signal() {
   (accept-process-output p 1)
   (list (process-status p) (process-exit-status p)))
 "##,
+        expect_test::expect![[r#""OK (signal 9)""#]],
     );
 }
 
 #[test]
 fn div_cx10_process_contact_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx10-ci" :command '("echo" "x"))))
   (prog1 (list (consp (process-contact p))
@@ -34,13 +35,14 @@ fn div_cx10_process_contact_info() {
                (process-contact p t))
     (delete-process p)))
 "##,
+        expect_test::expect![[r#""OK (nil t t)""#]],
     );
 }
 
 #[test]
 fn div_cx10_write_region_mustbenew_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx10-mn-")))
   (condition-case e
@@ -49,36 +51,39 @@ fn div_cx10_write_region_mustbenew_nil() {
   (prog1 (with-temp-buffer (insert-file-contents f) (buffer-string))
     (ignore-errors (delete-file f))))
 "##,
+        expect_test::expect![[r#""OK \"overwrite\"""#]],
     );
 }
 
 #[test]
 fn div_cx10_coding_system_equal_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (coding-system-equal-type 'utf-8 'utf-8-unix)
       (coding-system-equal-type 'utf-8 'latin-1)
       (coding-system-equal-type 'utf-8-unix 'utf-8-dos))
 "##,
+        expect_test::expect![[r#""ERR (void-function coding-system-equal-type)""#]],
     );
 }
 
 #[test]
 fn div_cx10_find_operation_coding_system() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (find-operation-coding-system 'write-region "data" nil "/tmp/x" nil 0)
       (find-operation-coding-system 'insert-file-contents "/tmp/x"))
 "##,
+        expect_test::expect![[r#""OK ((undecided) (undecided))""#]],
     );
 }
 
 #[test]
 fn div_cx10_set_multibyte_overlay_narrow_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -94,13 +99,16 @@ fn div_cx10_set_multibyte_overlay_narrow_undo_chain() {
       (list after (marker-position m) (overlay-start ov) (overlay-end ov)
             (buffer-string)))))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"Changes to be undone are outside visible portion of buffer\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx10_encode_region_with_eol_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "café\n"))
   (list (with-temp-buffer
@@ -110,13 +118,16 @@ fn div_cx10_encode_region_with_eol_variants() {
           (insert s) (encode-coding-region 1 (point-max) 'utf-8-mac)
           (append (buffer-string) nil))))
 "##,
+        expect_test::expect![[
+            r#""OK ((99 97 102 4194243 4194217 13 10) (99 97 102 4194243 4194217 13))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx10_text_property_search_narrowed_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDEF")
@@ -130,13 +141,14 @@ fn div_cx10_text_property_search_narrowed_overlay() {
       (push (prop-match-beginning (match-data t)) results))
     (nreverse results)))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument prop-match (0 0))""#]],
     );
 }
 
 #[test]
 fn div_cx10_copy_register_insert_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx10-reg*")))
   (with-current-buffer buf (erase-buffer) (insert "register content"))
@@ -145,26 +157,30 @@ fn div_cx10_copy_register_insert_roundtrip() {
     (insert-register ?r)
     (buffer-string)))
 "##,
+        expect_test::expect![[
+            r#""ERR (wrong-type-argument integer-or-marker-p #<buffer  *neo-cx10-reg*>)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx10_cl_coerce_multibyte_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s (propertize "café" 'face 'bold))
        (lst (cl-coerce s 'list))
        (back (cl-coerce lst 'string)))
   (list (length lst) (text-properties-at 0 back)))
 "##,
+        expect_test::expect![[r#""OK (4 nil)""#]],
     );
 }
 
 #[test]
 fn div_cx10_prin1_overlay_before_after_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -175,25 +191,29 @@ fn div_cx10_prin1_overlay_before_after_strings() {
           (prin1-to-string (overlay-get ov 'after-string))
           (text-properties-at 0 (overlay-get ov 'before-string)))))
 "##,
+        expect_test::expect![[
+            r##""OK (\"#(\\\">>\\\" 0 2 (face bold))\" \"#(\\\"<<\\\" 0 2 (face italic))\" (face bold))""##
+        ]],
     );
 }
 
 #[test]
 fn div_cx10_coding_system_charset_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (coding-system-charset-list 'utf-8)
       (coding-system-charset-list 'latin-1)
       (length (coding-system-charset-list 'utf-8)))
 "##,
+        expect_test::expect![[r#""OK ((unicode) (iso-8859-1) 1)""#]],
     );
 }
 
 #[test]
 fn div_cx10_buffer_undo_list_markers_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -207,26 +227,28 @@ fn div_cx10_buffer_undo_list_markers_overlays() {
       (list (consp entry) (consp buffer-undo-list)
             (> (length buffer-undo-list) 2)))))
 "##,
+        expect_test::expect![[r#""OK (nil t t)""#]],
     );
 }
 
 #[test]
 fn div_cx10_decode_coding_string_with_offset_limit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((raw (unibyte-string 195 169 226 130 172 195 169 240 159 152 128)))
   (list (decode-coding-string raw 'utf-8)
         (length (decode-coding-string raw 'utf-8))
         (string-bytes (decode-coding-string raw 'utf-8))))
 "##,
+        expect_test::expect![[r#""OK (\"é€é😀\" 4 11)""#]],
     );
 }
 
 #[test]
 fn div_cx10_process_filter_partial_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (chunks)
   (let ((p (make-process :name "neo-cx10-pd" :command '("printf" "%s" "chunk1chunk2chunk3")
@@ -236,13 +258,14 @@ fn div_cx10_process_filter_partial_data() {
     (accept-process-output p 0.1))
   (apply #'concat (nreverse chunks)))
 "##,
+        expect_test::expect![[r#""OK \"chunk1chunk2chunk3\"""#]],
     );
 }
 
 #[test]
 fn div_cx10_set_process_filter_to_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((p (make-process :name "neo-cx10-nf" :command '("echo" "data")
@@ -264,25 +287,27 @@ fn div_cx10_set_process_filter_to_nil() {
         (while (accept-process-output p2 0)))
       (list with-filter (buffer-string)))))
 "##,
+        expect_test::expect![[r#""OK (\"FILTER:data\n\" \"nofilter\n\")""#]],
     );
 }
 
 #[test]
 fn div_cx10_encode_coding_string_empty_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (encode-coding-string "" 'utf-8)
       (decode-coding-string "" 'utf-8)
       (length (encode-coding-string "" 'utf-8)))
 "##,
+        expect_test::expect![[r#""OK (\"\" \"\" 0)""#]],
     );
 }
 
 #[test]
 fn div_cx10_string_as_multibyte_vs_make_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((raw (unibyte-string 200 201 65))
        (as-m (string-as-multibyte raw))
@@ -291,13 +316,14 @@ fn div_cx10_string_as_multibyte_vs_make_multibyte() {
         (length as-m) (length make-m)
         (string-bytes as-m) (string-bytes make-m)))
 "##,
+        expect_test::expect![[r#""OK ((4194248 4194249 65) (4194248 4194249 65) 3 3 5 5)""#]],
     );
 }
 
 #[test]
 fn div_cx10_multiple_overlay_priority_char_property_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "ABCDEFGHIJ")
@@ -312,18 +338,20 @@ fn div_cx10_multiple_overlay_priority_char_property_chain() {
           (get-char-property 8 'face)
           (get-char-property 9 'face))))
 "##,
+        expect_test::expect![[r#""OK (bold italic italic bold bold)""#]],
     );
 }
 
 #[test]
 fn div_cx10_format_mode_line_fragment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((s (format-mode-line "%b %m")))
       (list (stringp s) (> (length s) 0)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }

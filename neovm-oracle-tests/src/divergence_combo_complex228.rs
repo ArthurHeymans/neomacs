@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx228_cl_generic_method_combination_concat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -19,13 +19,14 @@ fn div_cx228_cl_generic_method_combination_concat() {
       (neo-cx228-concat-combo "hello"))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx228_cl_generic_method_combination_progn() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -38,13 +39,14 @@ fn div_cx228_cl_generic_method_combination_progn() {
         (nreverse calls)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx228_cl_generic_method_combination_and() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -56,13 +58,14 @@ fn div_cx228_cl_generic_method_combination_and() {
       (neo-cx228-and-combo "test"))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx228_cl_generic_method_combination_or() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -74,13 +77,14 @@ fn div_cx228_cl_generic_method_combination_or() {
       (neo-cx228-or-combo "test"))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx228_cl_generic_with_context_specializer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -94,13 +98,14 @@ fn div_cx228_cl_generic_with_context_specializer() {
         (list (neo-cx228-context "test"))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx228_cl_generic_dispatch_with_head_specializer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -114,13 +119,14 @@ fn div_cx228_cl_generic_dispatch_with_head_specializer() {
             (neo-cx228-head '(other . value))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK ((:keyword-head value) :other)""#]],
     );
 }
 
 #[test]
 fn div_cx228_cl_generic_methods_list_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -134,13 +140,14 @@ fn div_cx228_cl_generic_methods_list_query() {
               (= (length methods) 3))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx228_cl_generic_next_method_p_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -153,13 +160,14 @@ fn div_cx228_cl_generic_next_method_p_query() {
             (neo-cx228-next 42)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx228_cl_generic_argument_precedence_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -176,13 +184,14 @@ fn div_cx228_cl_generic_argument_precedence_order() {
             (neo-cx228-argorder 42 99)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:both-str :a-str :b-str :neither)""#]],
     );
 }
 
 #[test]
 fn div_cx228_cl_generic_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -215,5 +224,6 @@ fn div_cx228_cl_generic_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }

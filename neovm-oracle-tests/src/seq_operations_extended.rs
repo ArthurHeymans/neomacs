@@ -37,7 +37,12 @@ fn oracle_prop_seq_ext_map_indexed_and_do() {
       (lambda (name idx)
         (list :id idx :name name))
       ["alice" "bob" "carol"])))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a . 0) (b . 1) (c . 2) (d . 3) (e . 4)) ((0 9) (1 25) (2 49) (3 81)) ((\"h\" . 0) (\"e\" . 1) (\"l\" . 2) (\"l\" . 3) (\"o\" . 4)) ((1 4 9 16 25)) nil ((:id 0 :name \"alice\") (:id 1 :name \"bob\") (:id 2 :name \"carol\")))""#
+        ]],
+    );
 }
 
 #[test]
@@ -90,7 +95,12 @@ fn oracle_prop_seq_ext_iteration_short_circuit_contracts() {
                         nil))
                     '(1 2 3))
         (error (list (car err) (cadr err)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((hit 3) (1 2 3) nil nil (1 2 3) nil 3 (1 2 3) fallback nil 2 (1 2 3 4) nil 16 ((10 1) (11 2) (13 3)) (wrong-type-argument integerp))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +138,10 @@ fn oracle_prop_seq_ext_let_destructuring() {
   ;; Empty sequence
   (seq-let (a b) nil
     (list a b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 500 (120 121 122) 30 (1 2 nil nil nil) 30 (nil nil))""#]],
+    );
 }
 
 #[test]
@@ -154,7 +167,12 @@ fn oracle_prop_seq_ext_let_setq_rest_destructuring_contracts() {
     (let ((a nil) (b nil) (rest nil))
       (seq-setq (a b &rest rest) [x y z w])
       (list a b rest))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((pcase-let (((seq a b &rest rest) [1 2 3 4])) (list a b rest)) (1 2 (3 4)) (1 2 [3 4]) (97 98 \"cd\") (x y (z w)) (x y [z w]))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +204,12 @@ fn oracle_prop_seq_ext_into_and_concatenate() {
   (seq-into nil 'vector)
   ;; seq-concatenate with mixed types into list
   (seq-concatenate 'list "ab" [99 100] '(1 2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([1 2 3 4 5] (10 20 30) (104 101 108 108 111) \"hello\" (1 2 3 4 5 6) [1 2 3 4 5 6] \"hello world\" [] (97 98 99 100 1 2))""#
+        ]],
+    );
 }
 
 #[test]
@@ -231,7 +254,12 @@ fn oracle_prop_seq_ext_core_copy_reverse_remove_contracts() {
         (seq-remove-at-position '(a b c) 9)
       (error (list (car err) (cadr err))))
     (seq-remove-at-position '(a b c) -1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (a [b c] \"bc\" nil (args-out-of-range \"\") (t nil t) (t nil) (t nil) (3 2 1) [3 2 1] \"cba\" (a b d) [a c d] \"acd\" (error \"Cannot convert 42 into a sequence\") (error \"End index out of bounds: 9\") (a b a b c))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -266,7 +294,12 @@ fn oracle_prop_seq_ext_mapcat_type_and_error_contracts() {
     (condition-case err
         (seq-mapcat (lambda (x) (list x)) '(1 2) 'hash-table)
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 -1 2 -2 3 -3) [1 10 2 20 3 30] \"a-b-\" nil [] \"\" (error \"Cannot convert 1 into a sequence\") (error \"Not a sequence type name: hash-table\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +337,10 @@ fn oracle_prop_seq_ext_position_and_contains() {
     (seq-position '(10 20 30) 10)
     (seq-position '(10 20 30) 30)
     (seq-position nil 1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 nil 1 2 1 t nil t t (0 2 nil))""#]],
+    );
 }
 
 #[test]
@@ -339,7 +375,12 @@ fn oracle_prop_seq_ext_contains_obsolete_contracts() {
                       (lambda (_target _element)
                         (signal 'wrong-type-argument '(integerp bad))))
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (b nil 20 98 1 (1 2) (b ((b a) (b b))) (wrong-type-argument integerp))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -375,7 +416,12 @@ fn oracle_prop_seq_ext_set_operations() {
         (lambda (a b) (string= (downcase a) (downcase b))))
       (seq-intersection strs1 strs2
         (lambda (a b) (string= (downcase a) (downcase b)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 3 5) (2 4) (10 30) (20 40) (1 2 3) nil nil (1 2 3) nil ((\"Apple\") (\"Banana\" \"Cherry\")))""#
+        ]],
+    );
 }
 
 #[test]
@@ -408,7 +454,12 @@ fn oracle_prop_seq_ext_set_operations_order_and_type_contracts() {
                      (push (list a b) calls)
                      (string= (downcase a) (downcase b))))
         calls))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a b c d e) (a b a b) (a a c) ((1 2 3) cons) (97 97 99 97) (98 100) ((\"A\" \"b\" \"C\") ((\"A\" \"C\") (\"b\" \"C\") (\"A\" \"a\") (\"b\" \"a\") (\"A\" \"b\"))))""#
+        ]],
+    );
 }
 
 #[test]
@@ -440,7 +491,10 @@ fn oracle_prop_seq_ext_set_equal_p_contracts() {
                            (push (list a b) calls)
                            (eq a b)))
         calls))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t t t (nil ((c a) (b a))))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -478,7 +532,12 @@ fn oracle_prop_seq_ext_subseq_comprehensive() {
   (seq-subseq '(1 2 3) 0)
   ;; Single element
   (seq-subseq '(a b c d e) 2 3))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((c d e) (a b c) (d e) (d e f) (c d e) [4 5 6 7] [4 5] \"world\" \"hello\" \"de\" nil (1 2 3) (c))""#
+        ]],
+    );
 }
 
 #[test]
@@ -512,7 +571,12 @@ fn oracle_prop_seq_ext_subseq_bounds_error_contracts() {
     (condition-case err
         (seq-subseq "abc" -4)
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((error \"Start index out of bounds: 4\") (error \"Start index out of bounds: -4\") (error \"End index out of bounds: 5\") (error \"End index out of bounds: 1\") (args-out-of-range [a b c]) (args-out-of-range \"abc\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -560,7 +624,10 @@ fn oracle_prop_seq_ext_pipeline_word_frequency() {
                  frequent)
     ;; Hapax legomena (words appearing once)
     (seq-map #'car hapax)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument symbolp \"sat\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -619,5 +686,10 @@ fn oracle_prop_seq_ext_reduce_complex_accumulations() {
     runs
     ;; Zipped pairs
     pairs))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 10 55 10) 5 ((0 . 3) (1 . 4) (2 . 3)) ((4 7) (2 9) (1 8) (3 6) (5 10)) ((a . 1) (b . 2) (c . 3) (d . 4)))""#
+        ]],
+    );
 }

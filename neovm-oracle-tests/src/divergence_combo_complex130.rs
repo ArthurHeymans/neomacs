@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx130_cl_defstruct_type_list_vs_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx130-list-rec (:type list) :named)
   a b c)
@@ -27,13 +27,14 @@ fn div_cx130_cl_defstruct_type_list_vs_vector() {
         (eq (type-of lst) 'cons)
         (eq (type-of vec) 'vector)))
 "##,
+        expect_test::expect![[r#""OK (1 2 3 10 20 30 t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx130_cl_defstruct_with_included_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx130-base (:conc-name neo-cx130-b-))
   name (count :read-only t))
@@ -50,13 +51,14 @@ fn div_cx130_cl_defstruct_with_included_slots() {
         (neo-cx130-base-p d)
         (neo-cx130-derived-p b)))
 "##,
+        expect_test::expect![[r#""OK (\"alpha\" 1 \"beta\" 2 :bonus t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx130_cl_defstruct_print_function_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx130-printed
                (:conc-name neo-cx130-pr-)
@@ -70,13 +72,14 @@ fn div_cx130_cl_defstruct_print_function_override() {
         (neo-cx130-pr-name r)
         (condition-case e (setf (neo-cx130-pr-val r) 99) (error (car e)))))
 "##,
+        expect_test::expect![[r#""OK (42 \"alpha\" \"beta\" \"beta\" error)""#]],
     );
 }
 
 #[test]
 fn div_cx130_cl_defstruct_copier_independent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct neo-cx130-copy a b c)
 (let* ((orig (make-neo-cx130-copy :a 1 :b 2 :c 3))
@@ -87,13 +90,14 @@ fn div_cx130_cl_defstruct_copier_independent() {
         (eq orig copy)
         (equal orig copy)))
 "##,
+        expect_test::expect![[r#""OK (1 99 nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx130_cl_defstruct_predicate_strict() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct neo-cx130-strict a b)
 (let ((r (make-neo-cx130-strict :a 1 :b 2)))
@@ -103,13 +107,14 @@ fn div_cx130_cl_defstruct_predicate_strict() {
         (neo-cx130-strict-p :other)
         (neo-cx130-strict-p nil)))
 "##,
+        expect_test::expect![[r#""OK (t nil nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx130_cl_defstruct_with_type_vector_no_named() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx130-anon (:type vector)) a b c)
 (let ((r (make-neo-cx130-anon :a 1 :b 2 :c 3)))
@@ -121,13 +126,14 @@ fn div_cx130_cl_defstruct_with_type_vector_no_named() {
         r
         (type-of r)))
 "##,
+        expect_test::expect![[r#""OK ([99 2 3] 1 2 3 99 [99 2 3] vector)""#]],
     );
 }
 
 #[test]
 fn div_cx130_cl_print_object_custom_via_eieio() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -148,13 +154,14 @@ fn div_cx130_cl_print_object_custom_via_eieio() {
               (format "%s" inst))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx130_record_vs_cl_defstruct_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((r1 (record 'neo-cx130-tag 1 2 3))
       (r2 (vector 1 2 3)))
@@ -165,13 +172,14 @@ fn div_cx130_record_vs_cl_defstruct_print() {
         (prin1-to-string r1)
         (prin1-to-string r2)))
 "##,
+        expect_test::expect![[r#""ERR (void-function record-p)""#]],
     );
 }
 
 #[test]
 fn div_cx130_cl_defstruct_with_constructor_two_forms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx130-multi
                (:constructor neo-cx130-make-bo (a b))
@@ -183,13 +191,14 @@ fn div_cx130_cl_defstruct_with_constructor_two_forms() {
   (list (neo-cx130-m-a r1) (neo-cx130-m-b r1) (neo-cx130-m-c r1)
         (neo-cx130-m-a r2) (neo-cx130-m-b r2) (neo-cx130-m-c r2)))
 "##,
+        expect_test::expect![[r#""OK (1 2 nil 1 2 3)""#]],
     );
 }
 
 #[test]
 fn div_cx130_cl_defstruct_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx130-mega (:type list) :named)
   a b c)
@@ -216,5 +225,6 @@ fn div_cx130_cl_defstruct_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

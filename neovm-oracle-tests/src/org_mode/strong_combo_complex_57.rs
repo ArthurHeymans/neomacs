@@ -12,7 +12,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo57_sparse_tree_date_tag_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A :work:\nSCHEDULED: <2024-01-15 Mon>\n** A1 :work:\n* B :urgent:\nSCHEDULED: <2024-03-01 Fri>\n* C :home:urgent:\n")
@@ -34,13 +34,16 @@ fn combo57_sparse_tree_date_tag_combo() {
                                          (lambda (h) (substring-no-properties (org-element-property :raw-value h))))) r))
       (error (push (list :date-match-error t) r)))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:match-work+urgent (\"A\" \"B\" \"C\")) (:match-work-or-home (\"A\" \"A1\" \"B\" \"C\")) (:date-match (\"A\" \"B\" \"C\")))""#
+        ]],
     );
 }
 
 #[test]
 fn combo57_clock_report_simple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-clock)
@@ -60,13 +63,14 @@ fn combo57_clock_report_simple() {
       (push (list :clocktable-created (> (length (buffer-string)) 0)) r)
       (push (list :tables (length (org-element-map (org-element-parse-buffer) 'table #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK ((:clocktable-created t) (:tables 1))""#]],
     );
 }
 
 #[test]
 fn combo57_todo_custom_sequence_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (let ((org-todo-keywords '((sequence "TODO" "WAIT" "|" "DONE" "CANCELED")))
@@ -90,13 +94,16 @@ fn combo57_todo_custom_sequence_cycle() {
           (push (org-get-todo-state) states))
         (push (list :cycle-states (nreverse states)) r))
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:init \"TODO\") (:1 #(\"DONE\" 0 4 (org-todo-head \"TODO\"))) (:2 nil) (:3-right #(\"TODO\" 0 4 (org-todo-head \"TODO\"))) (:cycle-states (#(\"DONE\" 0 4 (org-todo-head \"TODO\")) nil #(\"TODO\" 0 4 (org-todo-head \"TODO\")))))""#
+        ]],
     );
 }
 
 #[test]
 fn combo57_babel_exports_both_results_code() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -119,13 +126,16 @@ fn combo57_babel_exports_both_results_code() {
                           (org-element-map (org-element-parse-buffer) 'src-block #'identity))) r)
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK (3 \"output text\" (1 2) (:exports-values (\":results value :exports both\" \":results output :exports results\" \":results value :exports code\")) (:result-count 0))""#
+        ]],
     );
 }
 
 #[test]
 fn combo57_export_subtree_body_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox-ascii)
@@ -147,13 +157,14 @@ fn combo57_export_subtree_body_only() {
         (push (list :html-body-only (and html-sub (not (string-match-p "<!DOCTYPE" html-sub)))) r)
         (push (list :html-has-B (and html-sub (string-match-p "Body B" html-sub))) r))
       (nreverse r))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
 #[test]
 fn combo57_element_cache_repeated_parse_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\nBody A.\n* B\nBody B.\n")
@@ -182,13 +193,16 @@ fn combo57_element_cache_repeated_parse_modify() {
     (goto-char (point-max))
     (push (list :at-eob (org-element-type (org-element-at-point))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:t1-headlines 2) (:t2-headlines 3) (:t3-headlines 4) (:t3-levels (1 1 1 2)) (:at-bob headline) (:at-eob paragraph))""#
+        ]],
     );
 }
 
 #[test]
 fn combo57_paste_subtree_level_adjust() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** A1\nBody A1.\n* B\n")
@@ -219,13 +233,16 @@ fn combo57_paste_subtree_level_adjust() {
                         (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:after-paste-level1 ((1 \"A\") (2 \"A1\") (1 \"B\") (1 \"A1\"))) (:after-paste-level2 ((1 \"A\") (2 \"B\") (2 \"A1\") (1 \"B\") (1 \"A1\"))) (:buffer \"* A\n** B\n** A1\nBody A1.\n* B\n* A1\nBody A1.\n\"))""#
+        ]],
     );
 }
 
 #[test]
 fn combo57_meta_return_context_dependent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Heading\n- item1\n- item2\n")
@@ -249,13 +266,16 @@ fn combo57_meta_return_context_dependent() {
                                     (org-element-map (org-element-parse-buffer) 'item #'identity))) r)
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:after-heading (\"New Heading\" \"Heading\")) (:after-item (\"\" \"\" \"\")) (:buffer \"* New Heading\n* Heading\n- new item\n- item1\n- item2\n\"))""#
+        ]],
     );
 }
 
 #[test]
 fn combo57_toggle_checkbox_nested_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Task [/]\n")
@@ -283,13 +303,14 @@ fn combo57_toggle_checkbox_nested_deep() {
                        (search-forward "[-] Parent")
                        (org-element-property :checkbox (org-element-at-point)))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (search-failed \"[-] Parent\")""#]],
     );
 }
 
 #[test]
 fn combo57_property_drawer_duplicate_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\n:PROPERTIES:\n:A: 1\n:A: 2\n:B: 3\n:END:\n")
@@ -304,5 +325,8 @@ fn combo57_property_drawer_duplicate_keys() {
     ;; get all properties
     (push (list :all-keys (sort (mapcar #'car (org-entry-properties nil t)) #'string-lessp)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:A-value \"2\") (:B-value \"3\") (:A-after-put \"2\") (:all-keys (\"CATEGORY\")))""#
+        ]],
     );
 }

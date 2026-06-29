@@ -30,7 +30,10 @@ fn oracle_prop_charset_advanced_charsetp_various() {
   ;; Verify the type returned by charsetp
   (eq (charsetp 'ascii) t)
   (eq (charsetp 'nonexistent-charset-xyz-999) nil))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (t t t t t t nil nil nil nil t t)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -55,7 +58,12 @@ fn oracle_prop_charset_advanced_encode_decode_roundtrip() {
            (decoded (decode-char 'unicode encoded)))
       (setq results (cons (list ch encoded decoded (= ch decoded)) results))))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((0 0 0 t) (32 32 32 t) (48 48 48 t) (65 65 65 t) (90 90 90 t) (97 97 97 t) (122 122 122 t) (126 126 126 t) (127 127 127 t) (233 233 233 t) (945 945 945 t) (20013 20013 20013 t) (128512 128512 128512 t) (128169 128169 128169 t))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +97,12 @@ fn oracle_prop_charset_advanced_char_charset_ranges() {
   ;; Emoji in supplementary plane vs BMP
   (eq (char-charset #x1F600) 'unicode)
   (eq (char-charset ?A) 'ascii))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (ascii ascii ascii ascii ascii unicode-bmp unicode-bmp unicode-bmp unicode-bmp unicode-bmp unicode-bmp unicode-bmp unicode unicode unicode t t)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +129,10 @@ fn oracle_prop_charset_advanced_max_char() {
   ;; encode-char at boundary values
   (encode-char 0 'unicode)
   (encode-char (max-char t) 'unicode))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (t t t t t t t 0 1114111)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +172,10 @@ fn oracle_prop_charset_advanced_characterp_integerp() {
   (characterp (max-char))
   (natnump (1+ (max-char)))
   (characterp (1+ (max-char))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (t t t t nil t nil t t t nil nil nil nil t t t t t nil)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +218,12 @@ fn oracle_prop_charset_advanced_unicode_block_classification() {
                         (encode-char ch 'unicode)))
                 test-chars))
     (fmakunbound 'neovm--ca-classify-char)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((65 basic-ascii ascii 65) (122 basic-ascii ascii 122) (192 latin-supplement unicode-bmp 192) (233 latin-supplement unicode-bmp 233) (945 greek unicode-bmp 945) (1044 cyrillic unicode-bmp 1044) (1488 hebrew unicode-bmp 1488) (1575 arabic unicode-bmp 1575) (12354 hiragana unicode-bmp 12354) (12459 katakana unicode-bmp 12459) (20013 cjk-unified unicode-bmp 20013) (44032 hangul unicode-bmp 44032) (128512 emoticons unicode 128512) (127769 misc-symbols unicode 127769))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +279,12 @@ fn oracle_prop_charset_advanced_multibyte_string_analysis() {
         ;; Single character
         (funcall 'neovm--ca-analyze-string "X"))
     (fmakunbound 'neovm--ca-analyze-string)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((11 11 (ascii) nil 32 119 100) (4 5 (ascii unicode-bmp) t 97 233 125) (3 6 (unicode-bmp) t 945 947 200) (3 9 (unicode-bmp) t 20013 25991 300) (3 12 (unicode) t 128512 128514 400) (4 10 (ascii unicode unicode-bmp) t 65 128512 250) (0 0 nil nil 4194303 0 0) (1 1 (ascii) nil 88 88 100))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -290,5 +319,10 @@ fn oracle_prop_charset_advanced_encode_char_membership() {
     (= ch (decode-char 'ascii (encode-char ch 'ascii))))
   (let ((ch #x1F600))
     (= ch (decode-char 'unicode (encode-char ch 'unicode)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""ERR (error \"Not an in-range integer, integral float, or cons of integers\")""#
+        ]],
+    );
 }

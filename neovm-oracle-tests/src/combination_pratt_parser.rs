@@ -66,7 +66,12 @@ fn oracle_prop_pratt_parser_tokenizer() {
         (funcall 'neovm--pp-tokenize "((1))"))
     (fmakunbound 'neovm--pp-is-digit)
     (fmakunbound 'neovm--pp-tokenize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((num . 1) (op . \"+\") (num . 2)) ((num . 3) (op . \"*\") (num . 4) (op . \"+\") (num . 5)) ((lparen . \"(\") (num . 1) (op . \"+\") (num . 2) (rparen . \")\") (op . \"*\") (num . 3)) ((num . 10) (op . \"-\") (op . \"-\") (num . 3)) ((num . 2) (op . \"^\") (num . 3) (op . \"^\") (num . 2)) ((num . 100) (op . \"%\") (num . 7)) nil ((num . 42)) ((lparen . \"(\") (lparen . \"(\") (num . 1) (rparen . \")\") (rparen . \")\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -202,7 +207,12 @@ fn oracle_prop_pratt_parser_basic_precedence() {
     (fmakunbound 'neovm--pp-prefix-bp)
     (fmakunbound 'neovm--pp-parse-expr)
     (fmakunbound 'neovm--pp-parse)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((binop \"+\" (num 1) (num 2)) (binop \"+\" (num 1) (binop \"*\" (num 2) (num 3))) (binop \"+\" (binop \"+\" (num 1) (num 2)) (num 3)) (binop \"^\" (num 2) (binop \"^\" (num 3) (num 2))) (binop \"+\" (binop \"+\" (num 1) (binop \"*\" (num 2) (num 3))) (num 4)) (num 42))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -315,7 +325,12 @@ fn oracle_prop_pratt_parser_prefix_ops() {
     (fmakunbound 'neovm--pp-prefix-bp)
     (fmakunbound 'neovm--pp-parse-expr)
     (fmakunbound 'neovm--pp-parse)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((prefix \"-\" (num 5)) (prefix \"+\" (num 3)) (binop \"+\" (num 1) (prefix \"-\" (num 2))) (prefix \"-\" (prefix \"-\" (num 4))) (binop \"*\" (prefix \"-\" (num 2)) (num 3)) (binop \"^\" (prefix \"-\" (num 2)) (num 3)) (binop \"+\" (prefix \"-\" (num 5)) (num 3)) (binop \"*\" (prefix \"-\" (binop \"+\" (num 1) (num 2))) (prefix \"-\" (num 3))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -427,7 +442,12 @@ fn oracle_prop_pratt_parser_parens() {
     (fmakunbound 'neovm--pp-prefix-bp)
     (fmakunbound 'neovm--pp-parse-expr)
     (fmakunbound 'neovm--pp-parse)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((binop \"+\" (num 1) (num 2)) (binop \"*\" (binop \"+\" (num 1) (num 2)) (num 3)) (binop \"+\" (num 1) (binop \"*\" (num 2) (num 3))) (binop \"+\" (num 1) (num 2)) (binop \"*\" (binop \"+\" (num 1) (num 2)) (binop \"+\" (num 3) (num 4))) (num 5) (prefix \"-\" (binop \"+\" (num 1) (num 2))) (binop \"+\" (binop \"*\" (binop \"+\" (num 1) (num 2)) (binop \"-\" (num 3) (num 4))) (binop \"*\" (num 5) (num 6))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -582,7 +602,10 @@ fn oracle_prop_pratt_parser_evaluate() {
     (fmakunbound 'neovm--pp-parse)
     (fmakunbound 'neovm--pp-eval-ast)
     (fmakunbound 'neovm--pp-calc)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 7 20 5 2 14 20 512 64 -2 -9 30 22 42 4)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -726,7 +749,12 @@ fn oracle_prop_pratt_parser_pretty_print() {
     (fmakunbound 'neovm--pp-parse)
     (fmakunbound 'neovm--pp-ast-to-string)
     (fmakunbound 'neovm--pp-ast-tree)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"(1 + (2 * 3))\" \"((1 + 2) * 3)\" \"((-5) + 3)\" \"(2 ^ (3 ^ 2))\" \"op:+\n  1\n  op:*\n    2\n    3\n\" \"prefix:-\n  op:+\n    1\n    2\n\" (\"2 + 3 * 4\" \"(2 + (3 * 4))\" (binop \"+\" (num 2) (binop \"*\" (num 3) (num 4)))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -867,5 +895,10 @@ fn oracle_prop_pratt_parser_modulo_combined() {
     (fmakunbound 'neovm--pp-parse)
     (fmakunbound 'neovm--pp-eval-ast)
     (fmakunbound 'neovm--pp-calc)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((binop \"+\" (binop \"%\" (num 10) (num 3)) (num 1)) 2 2 2 13 12 9 9 5 5 10 28)""#
+        ]],
+    );
 }

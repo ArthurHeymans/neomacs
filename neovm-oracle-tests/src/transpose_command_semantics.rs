@@ -26,7 +26,10 @@ fn oracle_prop_transpose_chars_eol_and_negative_arg() {
   (list eol negative))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"ab\nc\" 5) (\"acbd\" 3))""#]],
+    );
 }
 
 #[test]
@@ -54,7 +57,12 @@ fn oracle_prop_transpose_words_forward_backward_and_mark_arg_zero() {
   (list forward backward marked))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"two one three\" 8) (\"two one three\" 4) (\"gamma beta alpha\" 17 1))""#
+        ]],
+    );
 }
 
 #[test]
@@ -82,7 +90,10 @@ fn oracle_prop_transpose_lines_positive_negative_and_mark_arg_zero() {
   (list positive negative marked))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"b\na\nc\n\" 5) (\"b\na\nc\n\" 3) (\"c\nb\na\n\" 5 1))""#]],
+    );
 }
 
 #[test]
@@ -114,5 +125,10 @@ fn oracle_prop_transpose_sexps_symbols_lists_and_interactive_error() {
   (list symbols lists error-shape))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"beta alpha gamma\" 11) (\"(two) (one) (three)\" 12) no-error)""#
+        ]],
+    );
 }

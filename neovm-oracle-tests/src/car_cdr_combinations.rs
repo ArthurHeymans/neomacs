@@ -13,35 +13,62 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 fn oracle_prop_caar_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(caar '((a b) (c d)))");
-    assert_oracle_parity("(caar '((1 . 2) . (3 . 4)))");
-    assert_oracle_parity("(caar '((nil)))");
+    crate::common::assert_oracle_parity_expect(
+        "(caar '((a b) (c d)))",
+        expect_test::expect![r#""OK a""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(caar '((1 . 2) . (3 . 4)))",
+        expect_test::expect![r#""OK 1""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(caar '((nil)))",
+        expect_test::expect![r#""OK nil""#],
+    );
 }
 
 #[test]
 fn oracle_prop_cadr_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(cadr '(a b c))");
-    assert_oracle_parity("(cadr '(1 2))");
-    assert_oracle_parity("(cadr '(x))");
+    crate::common::assert_oracle_parity_expect(
+        "(cadr '(a b c))",
+        expect_test::expect![r#""OK b""#],
+    );
+    crate::common::assert_oracle_parity_expect("(cadr '(1 2))", expect_test::expect![r#""OK 2""#]);
+    crate::common::assert_oracle_parity_expect("(cadr '(x))", expect_test::expect![r#""OK nil""#]);
 }
 
 #[test]
 fn oracle_prop_cdar_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(cdar '((a b c) d))");
-    assert_oracle_parity("(cdar '((1 . 2) 3))");
+    crate::common::assert_oracle_parity_expect(
+        "(cdar '((a b c) d))",
+        expect_test::expect![r#""OK (b c)""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(cdar '((1 . 2) 3))",
+        expect_test::expect![r#""OK 2""#],
+    );
 }
 
 #[test]
 fn oracle_prop_cddr_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(cddr '(a b c d))");
-    assert_oracle_parity("(cddr '(1 2))");
-    assert_oracle_parity("(cddr '(a b . c))");
+    crate::common::assert_oracle_parity_expect(
+        "(cddr '(a b c d))",
+        expect_test::expect![r#""OK (c d)""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(cddr '(1 2))",
+        expect_test::expect![r#""OK nil""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(cddr '(a b . c))",
+        expect_test::expect![r#""OK c""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -52,11 +79,26 @@ fn oracle_prop_cddr_basic() {
 fn oracle_prop_cdr_safe() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(cdr-safe '(1 2 3))");
-    assert_oracle_parity("(cdr-safe nil)");
-    assert_oracle_parity("(cdr-safe 42)");
-    assert_oracle_parity(r#"(cdr-safe "hello")"#);
-    assert_oracle_parity("(cdr-safe '(a . b))");
+    crate::common::assert_oracle_parity_expect(
+        "(cdr-safe '(1 2 3))",
+        expect_test::expect![r#""OK (2 3)""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(cdr-safe nil)",
+        expect_test::expect![r#""OK nil""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(cdr-safe 42)",
+        expect_test::expect![r#""OK nil""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(cdr-safe "hello")"#,
+        expect_test::expect![r#""OK nil""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(cdr-safe '(a . b))",
+        expect_test::expect![r#""OK b""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -67,14 +109,20 @@ fn oracle_prop_cdr_safe() {
 fn oracle_prop_caaar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(caaar '(((deep) mid) top))");
+    crate::common::assert_oracle_parity_expect(
+        "(caaar '(((deep) mid) top))",
+        expect_test::expect![r#""OK deep""#],
+    );
 }
 
 #[test]
 fn oracle_prop_caadr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(caadr '(first (second-car rest) third))");
+    crate::common::assert_oracle_parity_expect(
+        "(caadr '(first (second-car rest) third))",
+        expect_test::expect![r#""OK second-car""#],
+    );
 }
 
 #[test]
@@ -82,8 +130,14 @@ fn oracle_prop_caddr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // caddr = third element
-    assert_oracle_parity("(caddr '(a b c d e))");
-    assert_oracle_parity("(caddr '(1 2 3))");
+    crate::common::assert_oracle_parity_expect(
+        "(caddr '(a b c d e))",
+        expect_test::expect![r#""OK c""#],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(caddr '(1 2 3))",
+        expect_test::expect![r#""OK 3""#],
+    );
 }
 
 #[test]
@@ -91,7 +145,10 @@ fn oracle_prop_cadddr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // cadddr = fourth element
-    assert_oracle_parity("(cadddr '(a b c d e))");
+    crate::common::assert_oracle_parity_expect(
+        "(cadddr '(a b c d e))",
+        expect_test::expect![r#""OK d""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +169,10 @@ fn oracle_prop_destructure_alist() {
                         (cdadr entries)
                         (car (caddr entries))
                         (cdr (caddr entries))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (name \"Alice\" age 30 role engineer)""#]],
+    );
 }
 
 #[test]
@@ -130,7 +190,7 @@ fn oracle_prop_car_cdr_tree_navigation() {
                     (caadr tree)
                     ;; Third subtree
                     (caaddr tree)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (a b c d g)""#]);
 }
 
 #[test]
@@ -144,7 +204,10 @@ fn oracle_prop_car_cdr_safe_chain() {
                         (cdr-safe (car data))
                         (cdr-safe (cadr data))
                         (car-safe (caddr data))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (a nil (1) nil c)""#],
+    );
 }
 
 #[test]
@@ -161,7 +224,10 @@ fn oracle_prop_car_cdr_build_and_navigate() {
                         (caadr s)
                         (cddr s)
                         (cdar s)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (deep nil right end (mid))""#],
+    );
 }
 
 #[test]
@@ -176,7 +242,10 @@ fn oracle_prop_nth_via_car_cdr() {
                         (eq (nth 3 lst) (cadddr lst))
                         (equal (nthcdr 2 lst) (cddr lst))
                         (equal (nthcdr 3 lst) (cdddr lst))))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
+    );
     assert_ok_eq("(t t t t t t)", &o, &n);
 }
 
@@ -211,5 +280,8 @@ fn oracle_prop_car_cdr_lambda_list_parsing() {
                            found)))
                     (list name required-args optional-args
                           (length body))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (my-func (x y) (z) 1)""#],
+    );
 }

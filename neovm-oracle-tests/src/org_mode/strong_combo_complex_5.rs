@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo5_clone() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n** Sub1\n** Sub2")
@@ -29,6 +29,7 @@ fn combo5_clone() {
     ;; verify buffer
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -39,7 +40,7 @@ fn combo5_clone() {
 #[test]
 fn combo5_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO C\n* DONE A\n* TODO B\n* DONE D")
@@ -58,6 +59,7 @@ fn combo5_sort() {
     (push (list :after-alpha-sort (org-element-map (org-element-parse-buffer) 'headline
                                     (lambda (h) (org-element-property :raw-value h)))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -68,7 +70,7 @@ fn combo5_sort() {
 #[test]
 fn combo5_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n* H2\n* H3")
@@ -97,6 +99,7 @@ fn combo5_toggle() {
                                   (lambda (e) (list (org-element-type e)
                                                     (org-element-property :raw-value e))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -107,7 +110,7 @@ fn combo5_toggle() {
 #[test]
 fn combo5_move_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** A1\n* B\n** B1\n* C\n** C1")
@@ -131,6 +134,7 @@ fn combo5_move_subtree() {
                             (lambda (h) (list (org-element-property :level h)
                                               (org-element-property :raw-value h))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -141,7 +145,7 @@ fn combo5_move_subtree() {
 #[test]
 fn combo5_narrow_show() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub")
@@ -168,6 +172,7 @@ fn combo5_narrow_show() {
     (org-reveal)
     (push (list :reveal (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -178,7 +183,7 @@ fn combo5_narrow_show() {
 #[test]
 fn combo5_list_struct() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n  - B\n  - C\n- D\n  - E\n    - F")
@@ -207,6 +212,7 @@ fn combo5_list_struct() {
                                                               (org-element-property :contents-begin i)
                                                               (org-element-property :contents-end i))))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -217,7 +223,7 @@ fn combo5_list_struct() {
 #[test]
 fn combo5_export_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((src "#+TITLE: T\n* H1\nBody *bold* /italic/\n** H2\n- a\n- b\n| x | y |\n| 1 | 2 |"))
   (let ((html (org-export-string-as src 'html t))
         (latex (org-export-string-as src 'latex t))
@@ -232,6 +238,9 @@ fn combo5_export_string() {
           (list :latex-has-table (string-match-p "\\\\begin{tabular}" latex))
           (list :ascii-has-h (string-match-p "H1" ascii))
           (list :ascii-has-bold (string-match-p "bold" ascii)))))"##,
+        expect_test::expect![[
+            r#""OK ((:html-has-title 9) (:html-has-h2 44) (:html-has-bold 418) (:html-has-table 676) (:latex-has-title nil) (:latex-has-section 0) (:latex-has-bold 41) (:latex-has-table 169) (:ascii-has-h 2) (:ascii-has-bold 19))""#
+        ]],
     );
 }
 
@@ -242,7 +251,7 @@ fn combo5_export_string() {
 #[test]
 fn combo5_map_pred() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO A\n* DONE B\n* TODO C\n* DONE D\n* WAITING E")
@@ -265,6 +274,7 @@ fn combo5_map_pred() {
                           (lambda (h) (org-element-property :raw-value h))
                           nil 'first-match)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -275,7 +285,7 @@ fn combo5_map_pred() {
 #[test]
 fn combo5_lineage() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nPara *bold /italic/ inside* text")
@@ -292,6 +302,7 @@ fn combo5_lineage() {
               chain)
         (setq p (org-element-property :parent p))))
     (list :chain (nreverse chain))))"##,
+        expect_test::expect![[r#""ERR (search-failed \"italic\")""#]],
     );
 }
 
@@ -302,7 +313,7 @@ fn combo5_lineage() {
 #[test]
 fn combo5_element_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nBody\n** H2\nSub")
@@ -315,5 +326,8 @@ fn combo5_element_props() {
           :contents-end (org-element-property :contents-end h1)
           :level (org-element-property :level h1)
           :raw-value (org-element-property :raw-value h1))))"##,
+        expect_test::expect![[
+            r#""OK (:begin 1 :end 19 :post-blank 0 :contents-begin 5 :contents-end 19 :level 1 :raw-value \"H\")""#
+        ]],
     );
 }

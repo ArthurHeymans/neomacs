@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_invis_spec_add_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass invis-spec-snap ()
     ((step :initarg :step :accessor iss-step :initform "")
@@ -70,6 +70,7 @@ fn combo_eieio_invis_spec_add_remove() {
                 (overlay-start ov2) (overlay-end ov2)
                 buffer-invisibility-spec))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -77,7 +78,7 @@ fn combo_eieio_invis_spec_add_remove() {
 fn combo_eieio_invis_spec_ellipso_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ellipsis-snap ()
     ((step :initarg :step :accessor es-step :initform "")
@@ -135,6 +136,7 @@ fn combo_eieio_invis_spec_ellipso_mode() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -142,7 +144,7 @@ fn combo_eieio_invis_spec_ellipso_mode() {
 fn combo_eieio_invis_spec_narrow_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass invis-narrow-snap ()
     ((step :initarg :step :accessor ins-step :initform "")
@@ -201,6 +203,7 @@ fn combo_eieio_invis_spec_narrow_interaction() {
                 (overlay-start ov) (overlay-end ov)
                 buffer-invisibility-spec))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -208,7 +211,7 @@ fn combo_eieio_invis_spec_narrow_interaction() {
 fn combo_eieio_invis_spec_overlay_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass invis-props-snap ()
     ((step :initarg :step :accessor ips-step :initform "")
@@ -269,6 +272,7 @@ fn combo_eieio_invis_spec_overlay_props() {
                 (overlay-start ov) (overlay-end ov)
                 (overlay-get ov 'face)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
     );
 }
 
@@ -276,7 +280,7 @@ fn combo_eieio_invis_spec_overlay_props() {
 fn combo_eieio_invis_spec_undo_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass invis-undo-snap ()
     ((step :initarg :step :accessor ius-step :initform "")
@@ -329,5 +333,6 @@ fn combo_eieio_invis_spec_undo_marker() {
               (overlay-start ov) (overlay-end ov)
               (length buffer-invisibility-spec))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument sequencep t)""#]],
     );
 }

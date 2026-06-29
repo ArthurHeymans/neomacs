@@ -68,7 +68,12 @@ fn oracle_prop_delete_region_boundary_positions() {
                                (buffer-size))
                         results)))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((begin \"DEFGHIJ\" 2 7) (middle \"ABCHIJ\" 1 6) (end \"ABCDEFG\" 3 7) (all \"\" 1 0) (empty \"ABCDEFGHIJ\" 10))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +105,10 @@ fn oracle_prop_delete_region_narrowed_buffer() {
               new-pmin new-pmax
               full-after
               (buffer-size))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"456789AB\" 5 13 \"89AB\" 5 9 \"012389ABCDEF\" 12)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +146,10 @@ fn oracle_prop_delete_region_marker_adjustment() {
       (set-marker m-after nil)
       (set-marker m-end nil)
       result)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 4 4 5 7 \"AABDEE\" 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +182,12 @@ fn oracle_prop_delete_and_extract_region_complex() {
     (list (nreverse fragments)
           (buffer-string)
           (buffer-size))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((header . \"[HEADER]\") (footer . \"[FOOTER]\") (body . \"body-content\") (empty . \"\")) \"body-content\" 12)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +215,12 @@ fn oracle_prop_delete_region_progressive_shrink() {
                     snapshots))
         (setq iteration (1+ iteration))))
     (nreverse snapshots)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 \"CDEFGHIJKLMNOP\" 14 15) (1 \"EFGHIJKLMNOP\" 12 13) (2 \"GHIJKLMNOP\" 10 11) (3 \"IJKLMNOP\" 8 9) (4 \"KLMNOP\" 6 7) (5 \"MNOP\" 4 5) (6 \"OP\" 2 3) (7 \"\" 0 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +261,12 @@ fn oracle_prop_delete_region_selective_pattern() {
           (nreverse deleted-lines)
           (buffer-string)
           (buffer-size))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 (\"DEBUG: Loading module A\" \"DEBUG: Memory usage: 128MB\" \"DEBUG: Cache hit ratio: 0.95\" \"DEBUG: Query took 12ms\") \"INFO: Application started\nINFO: Module A ready\nWARN: Disk space low\nINFO: Processing request\nERROR: Connection refused\n\" 119)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +301,12 @@ fn oracle_prop_delete_region_reverse_order() {
             (while (search-forward "-" nil t)
               (setq dash-count (1+ dash-count)))
             dash-count))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"AAA-BBB-CCC-DDD-EEE-FFF\" \"AAA--CCC--EEE-\" (\"FFF\" \"DDD\" \"BBB\") 14 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -324,5 +355,10 @@ fn oracle_prop_delete_region_cut_paste_simulation() {
                 (setq count (1+ count))
                 (forward-line 1))
               count)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"line-1: Alpha\nline-2: Bravo\nline-3: Charlie\nline-4: Delta\nline-5: Echo\n\" \"line-1: Alpha\nline-3: Charlie\nline-2: Bravo\nline-4: Delta\nline-5: Echo\n\" \"line-5: Echo\nline-1: Alpha\nline-3: Charlie\nline-2: Bravo\nline-4: Delta\n\" 5)""#
+        ]],
+    );
 }

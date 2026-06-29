@@ -47,7 +47,10 @@ fn oracle_prop_gnu_remove_yank_excluded_properties_runs_handlers_then_removes() 
             (text-properties-at 3))))))
   (list selective clear-all))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable calls)""#]],
+    );
 }
 
 #[test]
@@ -85,7 +88,10 @@ fn oracle_insert_buffer_substring_as_yank_processes_inserted_properties() {
     (kill-buffer src)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable calls)""#]],
+    );
 }
 
 #[test]
@@ -123,5 +129,10 @@ fn oracle_yank_property_handlers_match_gnu_merge_rules() {
   (list font-lock-case category-case))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((bold nil) bold nil) ((keep yes face original-face help-echo category-help custom category-custom) (face category-face help-echo original-help custom category-custom)))""#
+        ]],
+    );
 }

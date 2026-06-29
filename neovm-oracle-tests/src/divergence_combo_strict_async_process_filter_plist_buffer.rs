@@ -13,7 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_j0_process_output_via_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (collected)
   (let ((proc (make-process :name "probe-proc-out"
@@ -27,13 +27,14 @@ fn div_j0_process_output_via_filter() {
           (process-exit-status proc)
           (process-buffer proc))))
 "##,
+        expect_test::expect![[r#""OK (\"hello world\n\" exit 0 nil)""#]],
     );
 }
 
 #[test]
 fn div_j0_process_plist_get_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "probe-proc-pl"
                           :command (list shell-file-name shell-command-switch "true"))))
@@ -43,6 +44,7 @@ fn div_j0_process_plist_get_put() {
         (process-get proc 'missing)
         (plist-get (process-plist proc) 'probe-prop)))
 "##,
+        expect_test::expect![[r#""OK (42 nil 42)""#]],
     );
 }
 
@@ -55,7 +57,7 @@ fn div_j0_process_buffer_and_mark() {
     // (marker-position (process-mark proc)) is 4 in GNU (end of the 3-char
     // "hi\n" output) but 36 in Neomacs — the process mark is positioned
     // incorrectly after process output. Buffer identity and content agree.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (generate-new-buffer " *probe-proc-buf*")))
   (let ((proc (make-process :name "probe-proc-bm"
@@ -68,13 +70,16 @@ fn div_j0_process_buffer_and_mark() {
           (buffer-name (process-buffer proc))
           (with-current-buffer buf (buffer-string)))))
 "##,
+        expect_test::expect![[
+            r#""OK (t 36 \" *probe-proc-buf*\" \"hi\n\nProcess probe-proc-bm finished\n\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_j0_process_connection_type_and_contact() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p1 (make-process :name "probe-pipe"
                         :command (list shell-file-name shell-command-switch "true")
@@ -89,6 +94,7 @@ fn div_j0_process_connection_type_and_contact() {
         (car (process-contact p1))
         (car (process-contact p2))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -101,7 +107,7 @@ fn div_j0_process_stderr_separate_buffer() {
     // Neomacs writes the default "Process X finished" sentinel message INTO
     // the stdout and stderr buffers when the process exits; GNU does not
     // pollute the output buffers with the sentinel message.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((outbuf (generate-new-buffer " *probe-stderr-out*"))
       (errbuf (generate-new-buffer " *probe-stderr-err*")))
@@ -114,13 +120,16 @@ fn div_j0_process_stderr_separate_buffer() {
     (list (with-current-buffer outbuf (buffer-string))
           (with-current-buffer errbuf (buffer-string)))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"out\n\nProcess probe-stderr finished\n\" \"err\n\nProcess probe-stderr stderr finished\n\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_j0_process_name_pid_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "probe-proc-np"
                           :command (list shell-file-name shell-command-switch "true"))))
@@ -131,5 +140,6 @@ fn div_j0_process_name_pid_list() {
         (> (length (process-list)) 0)
         (memq proc (process-list))))
 "##,
+        expect_test::expect![[r#""OK (\"probe-proc-np\" t nil nil)""#]],
     );
 }

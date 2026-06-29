@@ -44,5 +44,10 @@ fn oracle_map_keymap_sorted_orders_events_and_preserves_bindings() {
         (condition-case e
             (map-keymap-sorted (lambda (key binding) nil) 42)
           (error (list (car e) (cadr e) (caddr e))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a sym-a) (b sym-b) (z sym-z)) ((1 int-1) (2 int-2) (3 int-3)) ((z sym-z) (1 int-1) (2 int-2) (a sym-a) (b sym-b)) (invalid-function 42) (wrong-type-argument keymapp 42))""#
+        ]],
+    );
 }

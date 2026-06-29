@@ -29,7 +29,12 @@ fn oracle_prop_regexp_quote_metacharacters() {
                         t nil))))
           specials))
 "####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\".\" \"\\\\.\" t) (\"*\" \"\\\\*\" t) (\"+\" \"\\\\+\" t) (\"?\" \"\\\\?\" t) (\"[\" \"\\\\[\" t) (\"]\" \"]\" t) (\"^\" \"\\\\^\" t) (\"$\" \"\\\\$\" t) (\"\\\\\" \"\\\\\\\\\" t) (\"|\" \"|\" t) (\"(\" \"(\" t) (\")\" \")\" t) (\"{\" \"{\" t) (\"}\" \"}\" t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +58,12 @@ fn oracle_prop_regexp_quote_dynamic_patterns() {
               (list term found-pos)))
           search-terms))
 "####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"hello\" 7) (\"foo.bar\" 7) (\"a+b\" 7) (\"price$\" 7) (\"[tag]\" 7) (\"c:\\\\path\" 7) (\"x|y\" 7) (\"end?\" 7) (\"star*\" 7) (\"(group)\" 7))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +100,12 @@ fn oracle_prop_manual_regexp_opt() {
                 texts))
     (fmakunbound 'neovm--rq-make-alt-pattern)))
 "####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"if x > 0 then return x\" (\"if\" \"then\" \"return\")) (\"while running for office\" (\"while\" \"for\")) (\"otherwise do nothing\" nil) (\"for each element\" (\"for\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +143,10 @@ fn oracle_prop_looking_at_vs_looking_at_p() {
               (match-string 1)
               (match-string 2))))))))
 "####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t \"hello\" \"world\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +189,10 @@ fn oracle_prop_re_search_backward_comprehensive() {
 
     (nreverse results)))
 "####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (25 25 17 17 25 25 17 17 nil 28)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +244,12 @@ fn oracle_prop_regex_syntax_highlighter() {
                "let x = 42; if x >= 10 && x != 0 { return x + 1; }")
     (fmakunbound 'neovm--rq-tokenize)))
 "####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((keyword \"let\") (identifier \"x\") (number \"42\") (keyword \"if\") (identifier \"x\") (operator \">=\") (number \"10\") (operator \"&&\") (identifier \"x\") (operator \"!=\") (number \"0\") (keyword \"return\") (identifier \"x\") (number \"1\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -268,5 +294,10 @@ fn oracle_prop_regex_structured_data_extractor() {
                "# Database config\n[database]\nhost = localhost\nport = 5432\nname = mydb\n\n# Server config\n[server]\nport = 8080\nworkers = 4\ndebug = true\n\n[logging]\nlevel = info\nfile = /var/log/app.log")
     (fmakunbound 'neovm--rq-parse-config)))
 "####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"database\" \"host\" \"localhost\") (\"database\" \"port\" \"5432\") (\"database\" \"name\" \"mydb\") (\"server\" \"port\" \"8080\") (\"server\" \"workers\" \"4\") (\"server\" \"debug\" \"true\") (\"logging\" \"level\" \"info\") (\"logging\" \"file\" \"/var/log/app.log\"))""#
+        ]],
+    );
 }

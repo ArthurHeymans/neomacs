@@ -8,13 +8,22 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 fn oracle_prop_char_to_string_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(char-to-string ?A)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(char-to-string ?A)",
+        expect_test::expect![[r#""OK \"A\"""#]],
+    );
     assert_ok_eq(r#""A""#, &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(char-to-string ?z)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(char-to-string ?z)",
+        expect_test::expect![[r#""OK \"z\"""#]],
+    );
     assert_ok_eq(r#""z""#, &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(char-to-string ?0)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(char-to-string ?0)",
+        expect_test::expect![[r#""OK \"0\"""#]],
+    );
     assert_ok_eq(r#""0""#, &o, &n);
 }
 
@@ -22,7 +31,10 @@ fn oracle_prop_char_to_string_basic() {
 fn oracle_prop_char_to_string_space() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(char-to-string ?\\s)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(char-to-string ?\\s)",
+        expect_test::expect![[r#""OK \" \"""#]],
+    );
     assert_ok_eq(r#"" ""#, &o, &n);
 }
 
@@ -30,10 +42,16 @@ fn oracle_prop_char_to_string_space() {
 fn oracle_prop_string_to_char_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(string-to-char "A")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-char "A")"#,
+        expect_test::expect![[r#""OK 65""#]],
+    );
     assert_ok_eq("65", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm(r#"(string-to-char "hello")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-char "hello")"#,
+        expect_test::expect![[r#""OK 104""#]],
+    );
     assert_ok_eq("104", &o, &n);
 }
 
@@ -41,7 +59,10 @@ fn oracle_prop_string_to_char_basic() {
 fn oracle_prop_string_to_char_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(string-to-char "")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-char "")"#,
+        expect_test::expect![[r#""OK 0""#]],
+    );
     assert_ok_eq("0", &o, &n);
 }
 
@@ -49,7 +70,10 @@ fn oracle_prop_string_to_char_empty() {
 fn oracle_prop_char_to_string_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(string-to-char (char-to-string ?X))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-to-char (char-to-string ?X))"#,
+        expect_test::expect![[r#""OK 88""#]],
+    );
     assert_ok_eq("88", &o, &n);
 }
 
@@ -72,7 +96,10 @@ fn oracle_prop_char_to_string_raw_byte_character_roundtrip_like_gnu() {
    (string-bytes unicode)
    (string-to-char unicode)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (t 2 4194176 t 2 233)""#],
+    );
 }
 
 #[test]
@@ -80,6 +107,9 @@ fn oracle_prop_char_to_string_in_concat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(concat (char-to-string ?H) (char-to-string ?i) (char-to-string ?!))"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK \"Hi!\"""#]],
+    );
     assert_ok_eq(r#""Hi!""#, &o, &n);
 }

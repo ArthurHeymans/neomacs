@@ -10,39 +10,51 @@ use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_current_global_map_returns_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(keymapp (current-global-map))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(keymapp (current-global-map))",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_current_local_map_nil_by_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(with-temp-buffer (current-local-map))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(with-temp-buffer (current-local-map))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_use_global_map_returns_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(use-global-map (current-global-map))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(use-global-map (current-global-map))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_use_local_map_returns_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) =
-        eval_oracle_and_neovm("(let ((m (make-sparse-keymap))) (use-local-map m))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((m (make-sparse-keymap))) (use-local-map m))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_global_set_key_no_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (global-set-key (kbd "C-c C-x") 'ignore)
   t)"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &oracle, &neovm);
 }
@@ -50,10 +62,11 @@ fn oracle_global_set_key_no_error() {
 #[test]
 fn oracle_local_set_key_no_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (local-set-key (kbd "C-c C-y") 'ignore)
   t)"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &oracle, &neovm);
 }
@@ -73,7 +86,10 @@ fn oracle_global_key_binding_and_unset_semantics() {
               (global-unset-key (kbd "C-c x"))
               (global-key-binding (kbd "C-c x"))))
     (use-global-map old-global-map)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (ignore nil nil nil)""#]],
+    );
     assert_ok_eq("(ignore nil nil nil)", &oracle, &neovm);
 }
 
@@ -90,13 +106,19 @@ fn oracle_local_key_binding_and_unset_semantics() {
           (local-key-binding (kbd "C-c z"))
           (local-unset-key (kbd "C-c y"))
           (local-key-binding (kbd "C-c y")))))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (ignore nil nil nil)""#]],
+    );
     assert_ok_eq("(ignore nil nil nil)", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_current_local_map_wrong_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(current-local-map 42)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(current-local-map 42)",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments current-local-map 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-number-of-arguments");
 }

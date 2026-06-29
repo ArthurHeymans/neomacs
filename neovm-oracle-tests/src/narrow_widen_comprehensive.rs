@@ -392,5 +392,5 @@ fn oracle_prop_narrow_accumulate_section_stats() {
                           sections)))))
         (setq i (1+ i))))
     (nreverse sections)))"###;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }

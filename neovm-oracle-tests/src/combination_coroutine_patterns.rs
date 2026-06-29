@@ -89,7 +89,12 @@ fn oracle_prop_coroutine_basic_generator() {
                 (funcall g :next) (funcall g :next))))
     (fmakunbound 'neovm--test-make-range-gen)
     (fmakunbound 'neovm--test-gen-collect)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 1 2 3 4) (0 3 6 9 12 15 18) (0 1 2) ((10 . t) (10 . t) (10 . t) (11 . t) (11 . t)) ((0 1 2) (0 1 2) t) nil ((0 . t) (1 . t) (nil) (nil)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +191,12 @@ fn oracle_prop_coroutine_stateful_generators() {
     (fmakunbound 'neovm--test-make-factorial-gen)
     (fmakunbound 'neovm--test-make-collatz-gen)
     (fmakunbound 'neovm--test-gen-take)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 1 1 2 3 5 8 13 21 34 55 89) (1 1 2 6 24 120 720 5040) (6 3 10 5 16 8 4 2 1) (112 27 1 9232) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +279,12 @@ fn oracle_prop_coroutine_cooperative_scheduler() {
                 (list log counter))))))
     (fmakunbound 'neovm--test-make-task)
     (fmakunbound 'neovm--test-scheduler)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 :yield A \"A-start\" 1) (1 :yield B \"B-start\" 1) (2 :yield C \"C-only\" 1) (3 :yield A \"A-mid\" 2) (4 :yield B \"B-end\" 2) (5 :yield A \"A-end\" 3)) ((0 :yield SOLO 1 1) (1 :yield SOLO 2 2) (2 :yield SOLO 3 3)) nil (((0 :yield COMPUTE 10 1) (1 :yield COMPUTE 20 2) (2 :yield COMPUTE 15 3)) 15))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +387,12 @@ fn oracle_prop_coroutine_producer_consumer() {
                 :size (funcall buf :size))))
     (fmakunbound 'neovm--test-make-buffer)
     (fmakunbound 'neovm--test-run-producer-consumer)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:produced 3 :consumed (a b c) :rejected 2 :remaining 0) (:log ((x . t) (y . t) (z . t) (nil) (nil)) :rejected t :empty t) (0 10 20 30 40) (:size 10 :full nil :contents (0 1 2 3 4 5 6 7 8 9)) (:empty t :get-empty (nil) :size 0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -460,7 +480,12 @@ fn oracle_prop_coroutine_interleaved_generators() {
     (fmakunbound 'neovm--test-make-counter-gen)
     (fmakunbound 'neovm--test-interleave)
     (fmakunbound 'neovm--test-zip-generators)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((A . 0) (B . 10) (C . 100) (A . 1) (B . 20) (C . 200) (A . 2) (B . 30)) ((even . 0) (odd . 1) (even . 2) (odd . 3) (even . 4) (odd . 5) (even . 6) (odd . 7) (even . 8) (odd . 9)) ((solo . 0) (solo . 1) (solo . 2) (solo . 3)) (((x . 1) (y . 10)) ((x . 2) (y . 20)) ((x . 3) (y . 30)) ((x . 4) (y . 40)) ((x . 5) (y . 50))) (((short . 0) (long . 0)) ((short . 1) (long . 1))) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -601,7 +626,12 @@ fn oracle_prop_coroutine_generator_pipeline() {
     (fmakunbound 'neovm--test-gen-take)
     (fmakunbound 'neovm--test-gen-chain)
     (fmakunbound 'neovm--test-gen-collect)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 4 9 16 25) (2 4 6 8) (10 20 30) (a b c 1 2 3) (4 16 36) (6 10 8 12) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -689,7 +719,12 @@ fn oracle_prop_coroutine_state_machine() {
             (list (nreverse outputs)
                   (funcall light :state)))))
     (fmakunbound 'neovm--test-make-state-machine)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((:msg \"Insert coin first\") idle (:msg \"Coin inserted\") has-coin (:msg \"Dispensing item\") dispensing (:msg \"Please take item\") idle (:msg \"Coin inserted\") (:msg \"Coin refunded\") idle ((idle select (:msg \"Insert coin first\")) (idle coin (:msg \"Coin inserted\")) (has-coin select (:msg \"Dispensing item\")) (dispensing nil (:msg \"Please take item\")) (idle coin (:msg \"Coin inserted\")) (has-coin refund (:msg \"Coin refunded\")))) (((:light green :duration 30) (:light yellow :duration 5) (:light red :duration 20) (:light green :duration 30) (:light yellow :duration 5) (:light red :duration 20)) red))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -801,5 +836,10 @@ fn oracle_prop_coroutine_gen_accumulator() {
     (fmakunbound 'neovm--test-gen-reduce)
     (fmakunbound 'neovm--test-gen-collect)
     (fmakunbound 'neovm--test-gen-enumerate)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 1 3 6 10 15) (1 1 2 6 24 120) (0 3 3 4 4 5 9 9 9) 15 \"hello world\" ((0 . a) (1 . b) (2 . c) (3 . d)) ((10 . x) (11 . y) (12 . z)) 0)""#
+        ]],
+    );
 }

@@ -6,7 +6,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx58_org_babel_confirm_execute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'org)
@@ -17,13 +17,14 @@ fn div_cx58_org_babel_confirm_execute() {
           (org-babel-execute-src-block))))
   (error (list :errored)))
 "##,
+        expect_test::expect![[r#""OK 42""#]],
     );
 }
 
 #[test]
 fn div_cx58_org_clock_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'org)
@@ -34,13 +35,14 @@ fn div_cx58_org_clock_table() {
           (org-clock-sum)))
   (error (list :errored)))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx58_org_property_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'org)
@@ -52,13 +54,14 @@ fn div_cx58_org_property_search() {
               (org-entry-get (point) "NonExistent"))))
   (error (list :errored)))
 "##,
+        expect_test::expect![[r#""OK (\"2:00\" nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx58_org_todo_state_changes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'org)
@@ -71,13 +74,14 @@ fn div_cx58_org_todo_state_changes() {
               (length (org-map-entries t)))))
   (error (list :errored)))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx58_imenu_custom_expression() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -89,13 +93,14 @@ fn div_cx58_imenu_custom_expression() {
           (list (consp index) (length index)))))
   (error (list :errored)))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx58_add_log_current_defun_with_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'add-log)
@@ -106,13 +111,14 @@ fn div_cx58_add_log_current_defun_with_class() {
         (add-log-current-defun)))
   (error (list :errored)))
 "##,
+        expect_test::expect![[r#""OK \"my-test-fn\"""#]],
     );
 }
 
 #[test]
 fn div_cx58_cl_defmethod_combination_max_with_comparison() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defclass neo-cx58-cls () ())
@@ -122,13 +128,16 @@ fn div_cx58_cl_defmethod_combination_max_with_comparison() {
   (cl-defmethod neo-cx58-fn max ((obj neo-cx58-cls)) 20)
   (list (neo-cx58-fn (neo-cx58-cls))))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"Unsupported qualifiers in function neo-cx58-fn: (max)\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx58_char_fold_search_mode_toggle_effect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (let ((search-default-mode nil))
         (list (string-match "cafe" "café")
@@ -137,13 +146,14 @@ fn div_cx58_char_fold_search_mode_toggle_effect() {
         (list (string-match "cafe" "café")
               (string-match (char-fold-to-regexp ?e) "café"))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument sequencep 101)""#]],
     );
 }
 
 #[test]
 fn div_cx58_process_kill_query_exit_flag_with_buffer_narrowed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx58-pk*")))
   (with-current-buffer buf
@@ -155,6 +165,7 @@ fn div_cx58_process_kill_query_exit_flag_with_buffer_narrowed() {
     (kill-buffer buf))
   (list (buffer-live-p buf) (process-live-p p)))
 "##,
+        expect_test::expect![[r#""ERR (void-variable p)""#]],
     );
 }
 
@@ -162,7 +173,7 @@ fn div_cx58_process_kill_query_exit_flag_with_buffer_narrowed() {
 fn div_cx58_overlay_evaporate_undo_display_marker_narrow_textprop_evaporate_env_exitcode_weak_hash_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((env-val
        (let ((process-environment (cons "NEO_CX58=v" process-environment)))
@@ -193,13 +204,14 @@ fn div_cx58_overlay_evaporate_undo_display_marker_narrow_textprop_evaporate_env_
                 (text-properties-at 1) (text-properties-at 5)
                 (current-column) (hash-table-count weak-ht)))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx58_json_xml_dom_struct_backquote_cl_loop_hash_secure_print_circle_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (cl-defstruct neo-cx58-item id text)
@@ -219,6 +231,9 @@ fn div_cx58_json_xml_dom_struct_backquote_cl_loop_hash_secure_print_circle_mega(
                   (length json-enc)))))
     (error (cons 'errored (car e)))))
 "##,
+        expect_test::expect![[
+            r#""OK ((\"café\" \"世界\") (\"café\" \"世界\") 2 \"b6fa5fbb4da664e7633bec674c5a8802919ee8b458f31853ed46fd636e788eea\" 45)""#
+        ]],
     );
 }
 
@@ -226,7 +241,7 @@ fn div_cx58_json_xml_dom_struct_backquote_cl_loop_hash_secure_print_circle_mega(
 fn div_cx58_window_split_merge_marker_overlay_textprop_display_evaporate_undo_narrow_widen_env_exitcode_timer_weak_hash_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (timer-fired)
   (run-with-timer 0 nil (lambda () (setq timer-fired :t)))
@@ -269,6 +284,7 @@ fn div_cx58_window_split_merge_marker_overlay_textprop_display_evaporate_undo_na
                   (kill-buffer buf))))
         (error (list env-val exit-code timer-fired :errored)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -276,7 +292,7 @@ fn div_cx58_window_split_merge_marker_overlay_textprop_display_evaporate_undo_na
 fn div_cx58_regex_casefold_replace_undo_superword_subword_kill_marker_overlay_narrow_display_textprop_env_exitcode_weak_hash_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((env-val
        (let ((process-environment (cons "NEO_CX58=v" process-environment)))
@@ -311,6 +327,7 @@ fn div_cx58_regex_casefold_replace_undo_superword_subword_kill_marker_overlay_na
                   (text-properties-at 1) (current-column)
                   (hash-table-count weak-ht)))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -318,7 +335,7 @@ fn div_cx58_regex_casefold_replace_undo_superword_subword_kill_marker_overlay_na
 fn div_cx58_read_eval_backquote_destructuring_lexical_cl_loop_hash_secure_print_circle_env_exitcode_weak_hash_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((env-val
        (let ((process-environment (cons "NEO_CX58=v" process-environment)))
@@ -348,5 +365,6 @@ fn div_cx58_read_eval_backquote_destructuring_lexical_cl_loop_hash_secure_print_
                   (secure-hash 'sha256 (prin1-to-string processed))
                   (hash-table-count weak-ht)))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

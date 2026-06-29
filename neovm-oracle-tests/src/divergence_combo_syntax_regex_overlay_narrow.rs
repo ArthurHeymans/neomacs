@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_syntax_mod_regex_search_narrow_overlay_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"sro\")))\n\
          (with-current-buffer buf\n\
@@ -34,6 +34,7 @@ fn combo_syntax_mod_regex_search_narrow_overlay_prop() {
          (list r1 r2 p1 p2 z1 z2\n\
          (overlay-start ov) (overlay-end ov))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -41,7 +42,7 @@ fn combo_syntax_mod_regex_search_narrow_overlay_prop() {
 fn combo_syntax_change_regex_capture_groups_with_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"scg\")))\n\
          (with-current-buffer buf\n\
@@ -61,6 +62,7 @@ fn combo_syntax_change_regex_capture_groups_with_marker() {
          (buffer-string)\n\
          (marker-position m)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -68,7 +70,7 @@ fn combo_syntax_change_regex_capture_groups_with_marker() {
 fn combo_syntax_overlay_narrow_multi_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"som\")))\n\
          (with-current-buffer buf\n\
@@ -98,6 +100,7 @@ fn combo_syntax_overlay_narrow_multi_search() {
          (overlay-start ov1)\n\
          (overlay-end ov2))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -105,7 +108,7 @@ fn combo_syntax_overlay_narrow_multi_search() {
 fn combo_syntax_undo_replace_with_overlay_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"sur\")))\n\
          (with-current-buffer buf\n\
@@ -135,6 +138,7 @@ fn combo_syntax_undo_replace_with_overlay_marker() {
          (overlay-start ov)\n\
          (overlay-end ov))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -142,7 +146,7 @@ fn combo_syntax_undo_replace_with_overlay_marker() {
 fn combo_syntax_textprop_replace_match_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"stm\")))\n\
          (with-current-buffer buf\n\
@@ -170,5 +174,6 @@ fn combo_syntax_textprop_replace_match_narrow_marker() {
          (buffer-string)\n\
          (marker-position m))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

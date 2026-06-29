@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_buflocal_marker_overlay_textprop_clone_narrow_setf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "bms")))
     (with-current-buffer buf
@@ -50,6 +50,7 @@ fn combo_buflocal_marker_overlay_textprop_clone_narrow_setf() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -57,7 +58,7 @@ fn combo_buflocal_marker_overlay_textprop_clone_narrow_setf() {
 fn combo_buflocal_marker_overlay_textprop_clone_narrow_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "bmr")))
     (with-current-buffer buf
@@ -99,6 +100,7 @@ fn combo_buflocal_marker_overlay_textprop_clone_narrow_replace() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -106,7 +108,7 @@ fn combo_buflocal_marker_overlay_textprop_clone_narrow_replace() {
 fn combo_buflocal_marker_overlay_textprop_clone_narrow_multi_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "bmo")))
     (with-current-buffer buf
@@ -152,6 +154,7 @@ fn combo_buflocal_marker_overlay_textprop_clone_narrow_multi_overlay() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -159,7 +162,7 @@ fn combo_buflocal_marker_overlay_textprop_clone_narrow_multi_overlay() {
 fn combo_buflocal_marker_overlay_textprop_clone_narrow_textprop_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "bmt")))
     (with-current-buffer buf
@@ -203,6 +206,7 @@ fn combo_buflocal_marker_overlay_textprop_clone_narrow_textprop_replace() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -210,7 +214,7 @@ fn combo_buflocal_marker_overlay_textprop_clone_narrow_textprop_replace() {
 fn combo_buflocal_marker_overlay_textprop_clone_narrow_setf_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "bmx")))
     (with-current-buffer buf
@@ -253,5 +257,6 @@ fn combo_buflocal_marker_overlay_textprop_clone_narrow_setf_replace() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

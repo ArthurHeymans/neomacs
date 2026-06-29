@@ -12,7 +12,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn strict_table_import_csv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -28,13 +28,14 @@ fn strict_table_import_csv() {
                    (push (list :cell-count (length (org-element-map (org-element-parse-buffer) 'table-cell #'identity))) r))
           (error (push (list :convert-error t) r)))
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 25)""#]],
     );
 }
 
 #[test]
 fn strict_deep_heading_nesting_15() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -51,13 +52,14 @@ fn strict_deep_heading_nesting_15() {
         (push (list :max-level (apply #'max (mapcar (lambda (h) (org-element-property :level h)) headlines))) r)
         (push (list :raw-values (mapcar (lambda (h) (substring-no-properties (org-element-property :raw-value h))) headlines)) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 16 25)""#]],
     );
 }
 
 #[test]
 fn strict_publish_basic_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-publish)
   (list
@@ -70,13 +72,14 @@ fn strict_publish_basic_config() {
                     :publishing-function org-html-publish-to-html))))
      (list :sample-keys (mapcar #'car sample)
            :sample-type (nth 0 (cdr (car sample))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 55)""#]],
     );
 }
 
 #[test]
 fn strict_org_macs_string_utils() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-macs)
   (list
@@ -93,13 +96,14 @@ fn strict_org_macs_string_utils() {
    ;; org-combine-plists basic
    (list :combine-1 (org-combine-plists '(:a 1 :b 2) '(:b 3 :c 4)))
    )))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 16 6)""#]],
     );
 }
 
 #[test]
 fn strict_speed_commands_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (list
@@ -112,13 +116,14 @@ fn strict_speed_commands_lookup() {
           (list :user-speed (length org-speed-commands-user)))
          (t :not-bound))
    )))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 6)""#]],
     );
 }
 
 #[test]
 fn strict_babel_mkdirp_header() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ob-emacs-lisp)
@@ -135,13 +140,14 @@ fn strict_babel_mkdirp_header() {
                     (org-element-property :parameters
                      (car (org-element-map (org-element-parse-buffer) 'src-block #'identity)))) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 16 25)""#]],
     );
 }
 
 #[test]
 fn strict_element_interpret_individual_subtypes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-element)
@@ -179,13 +185,14 @@ fn strict_element_interpret_individual_subtypes() {
          (substring-no-properties
           (org-element-interpret-data
            (org-element-create 'entity '(:name "alpha" :use-brackets-p t))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 80)""#]],
     );
 }
 
 #[test]
 fn strict_org_combine_plists_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-macs)
   (list
@@ -199,13 +206,14 @@ fn strict_org_combine_plists_variants() {
    (org-combine-plists nil '(:a 1 :b 2))
    ;; all nil
    (org-combine-plists nil nil)))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 13 34)""#]],
     );
 }
 
 #[test]
 fn strict_export_backend_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (list
@@ -221,13 +229,16 @@ fn strict_export_backend_creation() {
                :name (org-export-backend-name test-backend)
                :parent (org-export-backend-parent test-backend)))
      (error (list :create-error t)))))"##,
+        expect_test::expect![[
+            r#""OK ((:create-fbound t) (:created t :name test-backend :parent ascii))""#
+        ]],
     );
 }
 
 #[test]
 fn strict_org_table_relative_references() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -243,5 +254,6 @@ fn strict_org_table_relative_references() {
                    (push (list :max-val (org-table-get "@>$2" nil)) r))
           (error (push (list :recalc-error t) r)))
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 25)""#]],
     );
 }

@@ -16,7 +16,12 @@ fn oracle_prop_sort_alg_string_less_predicate() {
 
     let form = r#"(sort (list "zebra" "apple" "mango" "banana" "cherry" "apricot" "avocado")
                         'string<)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"apple\" \"apricot\" \"avocado\" \"banana\" \"cherry\" \"mango\" \"zebra\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -26,7 +31,12 @@ fn oracle_prop_sort_alg_string_less_case_sensitivity() {
     // string< is case-sensitive: uppercase < lowercase in ASCII
     let form = r#"(sort (list "banana" "Apple" "cherry" "Banana" "apple" "Cherry")
                         'string<)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Apple\" \"Banana\" \"Cherry\" \"apple\" \"banana\" \"cherry\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -56,7 +66,12 @@ fn oracle_prop_sort_alg_multi_field_comparator() {
                            ((< (nth 1 a) (nth 1 b)) nil)
                            ;; Tertiary: name ascending
                            (t (string< (nth 2 a) (nth 2 b)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"engineering\" 120000 \"Alice\") (\"engineering\" 90000 \"Bob\") (\"engineering\" 90000 \"Carol\") (\"sales\" 95000 \"Frank\") (\"sales\" 80000 \"Dave\") (\"sales\" 80000 \"Eve\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +88,12 @@ fn oracle_prop_sort_alg_stability_indexed() {
                                (9 . 5) (2 . 6) (6 . 7) (5 . 8) (3 . 9))))
                   (sort (copy-sequence data)
                         (lambda (a b) (< (car a) (car b)))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 . 1) (1 . 3) (2 . 6) (3 . 0) (3 . 9) (4 . 2) (5 . 4) (5 . 8) (6 . 7) (9 . 5))""#
+        ]],
+    );
 }
 
 #[test]
@@ -85,7 +105,12 @@ fn oracle_prop_sort_alg_stability_string_groups() {
     let form = r#"(sort (list "cat" "apple" "ant" "banana" "cherry" "avocado" "blueberry")
                         (lambda (a b)
                           (< (aref a 0) (aref b 0))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"apple\" \"ant\" \"avocado\" \"banana\" \"blueberry\" \"cat\" \"cherry\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +137,12 @@ fn oracle_prop_sort_alg_alist_by_nested_value() {
                              ((> sx sy) t)
                              ((< sx sy) nil)
                              (t (string< (symbol-name gx) (symbol-name gy))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((bob 92 . a) (eve 92 . b) (carol 85 . a) (alice 85 . b) (dave 78 . c))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +165,10 @@ fn oracle_prop_sort_alg_destructive_mutation() {
                     ;; original may have been mutated (first cons cell may point elsewhere)
                     ;; but sorted is definitely correct
                     sorted))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 5 (1 2 3 4 5))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +181,10 @@ fn oracle_prop_sort_alg_ascending_then_reverse() {
 
     let form = "(let ((data (list 3 1 4 1 5 9 2 6 5 3 5)))
                   (nreverse (sort data '<)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (9 6 5 5 5 4 3 3 2 1 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +233,12 @@ fn oracle_prop_sort_alg_elisp_merge_sort() {
           (equal my-sorted builtin-sorted)))
     (fmakunbound 'neovm--test-merge)
     (fmakunbound 'neovm--test-msort)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 3 7 9 10 15 27 38 42 43 82 99) (1 3 7 9 10 15 27 38 42 43 82 99) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -232,5 +273,10 @@ fn oracle_prop_sort_alg_group_by_consecutive() {
                          (grouped (funcall group-consecutive sorted
                                           (lambda (x) (mod x 3)))))
                     (list sorted grouped)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((9 3 6 1 7 4 10 2 8 5) ((0 9 3 6) (1 1 7 4 10) (2 2 8 5)))""#
+        ]],
+    );
 }

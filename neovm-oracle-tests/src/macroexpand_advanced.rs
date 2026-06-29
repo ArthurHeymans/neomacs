@@ -37,7 +37,12 @@ fn oracle_prop_macroexpand_adv_one_step_vs_full() {
     (fmakunbound 'neovm--mea-a)
     (fmakunbound 'neovm--mea-b)
     (fmakunbound 'neovm--mea-c)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((neovm--mea-b 10) (+ 10 1) nil (+ 1 2) (neovm--mea-c 42) (+ 42 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +71,10 @@ fn oracle_prop_macroexpand_adv_recursive_self_expansion() {
         ;; Evaluate countdown from 1
         (neovm--mea-countdown 1))
     (fmakunbound 'neovm--mea-countdown)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((5 4 3 2 1) (cons 3 (neovm--mea-countdown 2)) nil (1))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +115,12 @@ fn oracle_prop_macroexpand_adv_backquote_splice_nesting() {
         (neovm--mea-collect nil (lambda (x) x)))
     (fmakunbound 'neovm--mea-wrap)
     (fmakunbound 'neovm--mea-collect)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((let ((neovm--mea-result nil)) (setq x 1) neovm--mea-result) (1 4 9 16 25) (20 40 60) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +155,12 @@ fn oracle_prop_macroexpand_adv_env_override_chain() {
                        (neovm--mea-inner . nil))))
     (fmakunbound 'neovm--mea-outer)
     (fmakunbound 'neovm--mea-inner)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((+ (* 5 2) 100) (neovm--mea-inner (* 5 2)) (custom (* 5 2)) (replaced 5) (neovm--mea-inner 5))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -176,7 +194,10 @@ fn oracle_prop_macroexpand_adv_side_effects_during_expansion() {
           (list e1 c1 e2 c2 e3 c3)))
     (fmakunbound 'neovm--mea-counted)
     (makunbound 'neovm--mea-expand-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((+ 10 1) 1 (+ 20 2) 2 (+ 30 3) 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -217,7 +238,10 @@ fn oracle_prop_macroexpand_adv_keyword_binding_macro() {
         (neovm--mea-with-bindings a 3 b 4
           (neovm--mea-with-bindings c (+ a b) (* c c))))
     (fmakunbound 'neovm--mea-with-bindings)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((let ((x 1) (y 2)) (+ x y)) 30 84 49)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -271,7 +295,12 @@ fn oracle_prop_macroexpand_adv_anaphoric_and_macro_generator() {
     (fmakunbound 'neovm--mea-aif)
     (fmakunbound 'neovm--mea-awhen)
     (fmakunbound 'neovm--mea-def-accessor)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (10 not-found 3 nil (\"Alice\" (cdr (assq 'name some-var))) (neovm--mea-aif test-expr (progn body1 body2)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -322,5 +351,10 @@ fn oracle_prop_macroexpand_adv_dispatch_table_macro() {
           (inner (neovm--mea-dispatch 'y (x 200) (y 300) (otherwise 0)))
           (otherwise -1)))
     (fmakunbound 'neovm--mea-dispatch)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (2 -1 greeting \"three\" (let ((dispatch-val x)) (cond ((equal dispatch-val 'a) 1) ((equal dispatch-val 'b) 2) (t 0))) 300)""#
+        ]],
+    );
 }

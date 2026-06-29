@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_e5_read_hash_syntax_more() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (read "#s(foo 1 2 3)")
       (read "#&3\"abc\"")
@@ -21,13 +21,14 @@ fn div_e5_read_hash_syntax_more() {
       (condition-case err (read "#0a") (invalid-read-syntax (car err)))
       (condition-case err (read "#z1") (invalid-read-syntax (car err))))
 "##,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#&...\")""##]],
     );
 }
 
 #[test]
 fn div_e5_number_parsing_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-to-number "0x1f")
       (string-to-number "1_000")
@@ -41,13 +42,14 @@ fn div_e5_number_parsing_edges() {
       (string-to-number "inf")
       (string-to-number "0b101"))
 "##,
+        expect_test::expect![[r#""OK (0 1 5 0 0.5 1.0e+INF 42 3.14 0 0 0)""#]],
     );
 }
 
 #[test]
 fn div_e5_bitwise_bignum_negatives() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (logand -1 255)
       (logior 5 3)
@@ -61,13 +63,16 @@ fn div_e5_bitwise_bignum_negatives() {
       (ash -1 100)
       (logcount (lognot 0)))
 "##,
+        expect_test::expect![[
+            r#""OK (255 7 6 0 -1 -6 -1 0 -4 -1267650600228229401496703205376 0)""#
+        ]],
     );
 }
 
 #[test]
 fn div_e5_format_time_zone_flags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((t0 (encode-time 0 0 12 15 6 2025 0)))
   (list (format-time-string "%z" t0 0)
@@ -76,6 +81,7 @@ fn div_e5_format_time_zone_flags() {
         (format-time-string "%V" t0 0)
         (format-time-string "%G" t0 0)))
 "##,
+        expect_test::expect![[r#""OK (\"+0000\" \"000000000\" \"1749988800\" \"24\" \"2025\")""#]],
     );
 }
 
@@ -86,20 +92,21 @@ fn div_e5_format_time_colon_zone_modifier() {
     // GNU Emacs expands the ":" modifier on %z: %:z -> "+00:00",
     // %::z -> "+00:00:00", %:::z -> "+00".  Neomacs does not recognize the
     // ":" modifier and emits the spec literally.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((t0 (encode-time 0 0 12 15 6 2025 0)))
   (list (format-time-string "%:z" t0 0)
         (format-time-string "%::z" t0 0)
         (format-time-string "%:::z" t0 0)))
 "##,
+        expect_test::expect![[r#""OK (\"+00:00\" \"+00:00:00\" \"+00\")""#]],
     );
 }
 
 #[test]
 fn div_e5_floor_ceiling_1arg_and_2arg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (floor 3.7)
       (ceiling 3.2)
@@ -111,13 +118,14 @@ fn div_e5_floor_ceiling_1arg_and_2arg() {
       (round -2.5)
       (floor most-positive-fixnum 3))
 "##,
+        expect_test::expect![[r#""OK (3 4 2 -3 1 2 2 -2 0)""#]],
     );
 }
 
 #[test]
 fn div_e5_min_max_abs_mixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (max 1 2 3)
       (min 3 1 2)
@@ -129,13 +137,14 @@ fn div_e5_min_max_abs_mixed() {
       (apply #'max '(1 2 3 4))
       (max (expt 2 40) (expt 2 39))))
 "##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 10 37)""#]],
     );
 }
 
 #[test]
 fn div_e5_sxhash_determinism() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (sxhash "abc")
       (sxhash "abc")
@@ -146,5 +155,6 @@ fn div_e5_sxhash_determinism() {
       (integerp (sxhash 42))
       (integerp (sxhash-eq 42)))
 "##,
+        expect_test::expect![[r#""OK (8059383 8059383 0 0 363 15723 t t)""#]],
     );
 }

@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx210_font_spec_create_and_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((spec (font-spec :family "Monospace" :size 12 :weight 'bold :slant 'italic)))
@@ -18,13 +18,14 @@ fn div_cx210_font_spec_create_and_query() {
             (font-get spec :slant)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx210_font_entity_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'font-entity-p)
@@ -33,13 +34,14 @@ fn div_cx210_font_entity_availability() {
           (boundp 'font-encoding-alist))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx210_font_list_families() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((families (font-family-list)))
@@ -48,13 +50,14 @@ fn div_cx210_font_list_families() {
             (member "Serif" families)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx210_face_font_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (face-attribute 'default :family frame)
@@ -63,13 +66,14 @@ fn div_cx210_face_font_query() {
         (face-attribute 'default :weight frame)
         (face-attribute 'default :slant frame)))
 "##,
+        expect_test::expect![[r#""OK (\"default\" \"default\" normal normal normal)""#]],
     );
 }
 
 #[test]
 fn div_cx210_font_get_attributes_from_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((spec (font-spec :family "Courier" :foundry "ADOBE" :size 14
@@ -84,13 +88,14 @@ fn div_cx210_font_get_attributes_from_spec() {
             (font-get spec :width)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx210_internal_char_font_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'internal-char-font)
@@ -99,13 +104,14 @@ fn div_cx210_internal_char_font_query() {
           (boundp 'font-encoding-alist))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx210_font_open_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'font-open)
@@ -115,26 +121,28 @@ fn div_cx210_font_open_availability() {
           (fboundp 'font-put))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil t nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx210_face_height_attribute_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (let ((h (face-attribute 'default :height frame)))
     (list (or (integerp h) (floatp h))
           (> h 0))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx210_font_rescale_factor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (boundp 'face-font-rescale-alist)
@@ -142,13 +150,14 @@ fn div_cx210_font_rescale_factor() {
           (fboundp 'face-font))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx210_font_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((spec (font-spec :family "Monospace" :size 12 :weight 'bold)))
@@ -176,5 +185,6 @@ fn div_cx210_font_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }

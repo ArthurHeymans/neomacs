@@ -25,7 +25,12 @@ fn oracle_prop_setenv_mutates_let_bound_process_environment() {
                process-environment)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"one\" \"two\" (\"NEOMACS_ORACLE_ENV_B=two\" \"NEOMACS_ORACLE_ENV_A=one\"))""#
+        ]],
+    );
 }
 
 #[test]
@@ -44,7 +49,10 @@ fn oracle_prop_setenv_nil_creates_negative_entry() {
      (not (equal before process-environment)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil \"NEOMACS_ORACLE_ENV_NEG\" t nil)""#]],
+    );
 }
 
 #[test]
@@ -60,7 +68,10 @@ fn oracle_prop_getenv_internal_explicit_env_list_first_match_and_negative() {
    (getenv-internal "D" env)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"first\" t \"\" nil)""#]],
+    );
 }
 
 #[test]
@@ -82,7 +93,12 @@ fn oracle_prop_getenv_internal_explicit_env_list_strict_edges() {
    (getenv-internal "G" env)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"short\" \"long\" t \"value\" \"one\" \"\" \"empty-name\" t nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -108,7 +124,12 @@ fn oracle_prop_setenv_internal_mutation_and_scan_edges() {
          env)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t (\"A=new\" \"B=old\" 42 \"A=late\")) ((\"C=new\" \"A=old\" \"B=old\" 42 \"C=late\") (\"A=old\" \"B=old\" 42 \"C=late\")) ((\"A=old\" 42 \"B=late\") (\"A=old\" 42 \"B=late\")) (t (\"A\" \"B=old\" 42 \"A=late\")) ((\"A=old\" \"B=old\") (\"A=old\" \"B=old\")))""#
+        ]],
+    );
 }
 
 #[test]
@@ -125,7 +146,12 @@ fn oracle_prop_substitute_env_in_file_name_uses_lisp_environment() {
    (substitute-env-in-file-name "$NEOMACS_ORACLE_ENV_MISSING/x")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"/tmp/env-root/leaf\" \"/tmp/env-root/x\" \"$NEOMACS_ORACLE_ENV_MISSING/x\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -163,5 +189,8 @@ fn oracle_prop_with_environment_variables_scoping_edges() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 29 43)""#]],
+    );
 }

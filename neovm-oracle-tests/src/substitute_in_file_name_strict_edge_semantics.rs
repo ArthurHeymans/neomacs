@@ -42,7 +42,12 @@ fn oracle_substitute_in_file_name_env_and_embedded_absolute_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"value/end\" \"value/end\" \"$NEOMACS_ORACLE_SUBST_suffix\" \"value_suffix\" \"/end\" \"$NEOMACS_ORACLE_UNDEF_SUBST/end\" \"$NEOMACS_ORACLE_SUBST\" \"$\" \"$-literal\" \"${}\" \"${NEOMACS_ORACLE_SUBST\" \"/tail\" \"prefix/~user/tail\" \"/abs/value/tail\" (wrong-number-of-arguments (substitute-in-file-name 0)) (wrong-type-argument (stringp 42)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -72,5 +77,10 @@ fn oracle_substitute_in_file_name_handler_validation_edges() {
     (fmakunbound 'neomacs--oracle-subst-bad-handler)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument (stringp 42)) (error (\"Invalid handler in ‘file-name-handler-alist’\")) \"handled\")""#
+        ]],
+    );
 }

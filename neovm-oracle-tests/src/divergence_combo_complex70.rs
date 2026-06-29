@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx70_format_specifiers_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (format "%d" 42)
@@ -34,13 +34,16 @@ fn div_cx70_format_specifiers_matrix() {
  (format "%%")
  (format "%3$" 1 2 3))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"Format string ends in middle of format specifier\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx70_format_positional_arguments_mixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (format "%2$s %1$s" "world" "hello")
@@ -48,13 +51,14 @@ fn div_cx70_format_positional_arguments_mixed() {
  (format "%s = %2$d (or %d)" "x" 99)
  (format "%3$-10s|" "a" "b" "c"))
 "##,
+        expect_test::expect![[r#""ERR (error \"Not enough arguments for format string\")""#]],
     );
 }
 
 #[test]
 fn div_cx70_print_S_with_various_data_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (prin1-to-string 42)
@@ -72,13 +76,16 @@ fn div_cx70_print_S_with_various_data_types() {
    (aset tbl ?a :word)
    tbl))
 "##,
+        expect_test::expect![[
+            r##""OK (\"42\" \"\\\"hello\\\"\" \"(1 2 3)\" \"[1 2 3]\" \"symbol\" \"65\" \"3.14\" \"#s(hash-table test equal)\" #(\"XXX\" 1 2 (face bold)) #^[nil nil syntax-table #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil :word nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] #^^[1 0 #^^[2 0 #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil :word nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil])""##
+        ]],
     );
 }
 
 #[test]
 fn div_cx70_prin1_vs_princ_no_escape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((str "hello \"world\"")
       (lst '(a "b" c)))
@@ -88,13 +95,14 @@ fn div_cx70_prin1_vs_princ_no_escape() {
    (prin1-to-string lst)
    (princ-to-string lst)))
 "##,
+        expect_test::expect![[r#""ERR (void-function princ-to-string)""#]],
     );
 }
 
 #[test]
 fn div_cx70_print_circle_shared_and_circular() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((shared (list 1 2 3)))
   (setcdr (cddr shared) (cdr shared))
@@ -104,13 +112,14 @@ fn div_cx70_print_circle_shared_and_circular() {
    (let ((print-circle t) (print-length 3)) (prin1-to-string '(1 2 3 4 5 6 7 8 9)))
    (let ((print-level 2)) (prin1-to-string '((((deep))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx70_read_from_string_position_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
           (condition-case e
@@ -129,13 +138,16 @@ fn div_cx70_read_from_string_position_tracking() {
           "(incomplete"
           "."))
 "##,
+        expect_test::expect![[
+            r#""OK (((1 2 3) 7) (symbol 6) (\"string\" 8) (123 3) (nil 3) ([1 2 3] 7) (#s(hash-table test eq data (a 1 b 2)) 45) ((1 2 3) 7) ((1 2 . 3) 9) (:err . end-of-file) (:err . invalid-read-syntax))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx70_read_from_string_with_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
           (condition-case e
@@ -147,13 +159,14 @@ fn div_cx70_read_from_string_with_multibyte() {
           "[α β γ]"
           "hello世界"))
 "##,
+        expect_test::expect![[r#""OK (café 19990 (\"a α b\") [α β γ] hello世界)""#]],
     );
 }
 
 #[test]
 fn div_cx70_with_output_to_temp_buffer_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((temp-buffer-name "*My Temp Output*"))
   (with-output-to-temp-buffer temp-buffer-name
@@ -165,13 +178,14 @@ fn div_cx70_with_output_to_temp_buffer_capture() {
                      (kill-buffer)))))
     content))
 "##,
+        expect_test::expect![[r#""OK \"line 1\nline 2\n(1 2 3)\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx70_pp_indentation_of_nested_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((nested '(:config (:option-a "value"
                        :option-b (:nested-a 1
@@ -180,13 +194,16 @@ fn div_cx70_pp_indentation_of_nested_structures() {
   (list (pp-to-string nested)
         (length (split-string (pp-to-string nested) "\n"))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"(:config (:option-a \\\"value\\\" :option-b (:nested-a 1 :nested-b 2))\n\t :option-c (1 2 3))\n\" 3)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx70_format_message_vs_message_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (format-message "plain text")
@@ -195,13 +212,16 @@ fn div_cx70_format_message_vs_message_format() {
  (format-message "val1 `%s' val2 `%s'" "a" "b")
  (format "with `quotes' here"))
 "##,
+        expect_test::expect![[
+            r#""OK (\"plain text\" \"with ‘quotes’ here\" \"value: 42\" \"val1 ‘a’ val2 ‘b’\" \"with `quotes' here\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx70_number_to_string_with_base_via_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (number-to-string 42)
@@ -215,13 +235,16 @@ fn div_cx70_number_to_string_with_base_via_format() {
  (format "%x" -1)
  (format "%05x" 255))
 "##,
+        expect_test::expect![[
+            r#""OK (\"42\" \"-42\" \"3.14\" \"ff\" \"0xff\" \"100\" \"0100\" \"1010\" \"-1\" \"000ff\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx70_print_with_special_floats() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (condition-case e (prin1-to-string (/ 1.0 0.0)) (error (cons :err (car e))))
@@ -230,13 +253,16 @@ fn div_cx70_print_with_special_floats() {
  (condition-case e (format "%f" (/ 1.0 0.0)) (error (cons :err (car e))))
  (condition-case e (format "%d" (/ 1.0 0.0)) (error (cons :err (car e)))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"1.0e+INF\" \"-1.0e+INF\" \"-0.0e+NaN\" \"inf\" \"inf\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx70_print_read_roundtrip_with_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s (propertize "hello world" 'face 'bold))
        (printed (prin1-to-string s))
@@ -247,5 +273,8 @@ fn div_cx70_print_read_roundtrip_with_text_properties() {
         (get-text-property 6 'face read-back)
         (equal s read-back)))
 "##,
+        expect_test::expect![[
+            r##""OK (\"#(\\\"hello world\\\" 0 11 (face bold))\" #(\"hello world\" 0 11 (face bold)) bold bold t)""##
+        ]],
     );
 }

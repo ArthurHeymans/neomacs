@@ -12,7 +12,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn upstream_org_clock_into_drawer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -32,6 +32,7 @@ fn upstream_org_clock_into_drawer() {
        (goto-char (point-min))
        (let ((org-clock-into-drawer 2) (org-log-into-drawer nil))
          (org-clock-into-drawer))))))"##,
+        expect_test::expect![[r#""ERR (void-function org-clock-into-drawer)""#]],
     );
 }
 
@@ -40,7 +41,7 @@ fn upstream_org_clock_into_drawer() {
 #[test]
 fn upstream_org_list_ending() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -55,6 +56,7 @@ fn upstream_org_list_ending() {
      (with-temp-buffer (org-mode)
        (insert "- item\n  #+begin_quote\n\n\nText at column 0\n  #+end_quote\n Text")
        (goto-line 7) (org-in-item-p)))))"##,
+        expect_test::expect![[r#""OK (nil nil 1)""#]],
     );
 }
 
@@ -63,7 +65,7 @@ fn upstream_org_list_ending() {
 #[test]
 fn upstream_org_cycle_list_bullet_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -85,6 +87,7 @@ fn upstream_org_cycle_list_bullet_spec() {
      (with-temp-buffer (org-mode) (insert "+ item")
        (goto-char (point-min))
        (org-cycle-list-bullet 'previous) (buffer-string)))))"##,
+        expect_test::expect![[r#""OK (\"  + item\" \"1. item\" \"+ item\" \"- item\")""#]],
     );
 }
 
@@ -93,7 +96,7 @@ fn upstream_org_cycle_list_bullet_spec() {
 #[test]
 fn upstream_org_footnote_new() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -109,6 +112,7 @@ fn upstream_org_footnote_new() {
        (goto-char (point-max))
        (let ((org-footnote-auto-label 'anonymous))
          (org-footnote-new)) (buffer-string)))))"##,
+        expect_test::expect![[r#""OK (\"Test[fn:1]\n\n[fn:1] \n\" \"Test[fn::]\")""#]],
     );
 }
 
@@ -117,7 +121,7 @@ fn upstream_org_footnote_new() {
 #[test]
 fn upstream_org_footnote_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil)
@@ -137,6 +141,7 @@ fn upstream_org_footnote_delete() {
        (search-forward "[fn::")
        (org-footnote-delete)
        (org-trim (buffer-string))))))"##,
+        expect_test::expect![[r#""ERR (error \"Don’t know which footnote to remove\")""#]],
     );
 }
 
@@ -145,7 +150,7 @@ fn upstream_org_footnote_delete() {
 #[test]
 fn upstream_org_timer_secs_to_hms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-timer)
   (list
@@ -157,6 +162,9 @@ fn upstream_org_timer_secs_to_hms() {
    (org-timer-hms-to-secs (org-timer-secs-to-hms 30))
    (org-timer-hms-to-secs (org-timer-secs-to-hms 130))
    (org-timer-hms-to-secs (org-timer-secs-to-hms 3690))))"##,
+        expect_test::expect![[
+            r#""OK (\"0:00:30\" \"0:02:10\" \"1:01:30\" \"-1:01:30\" 30 130 3690)""#
+        ]],
     );
 }
 
@@ -165,13 +173,14 @@ fn upstream_org_timer_secs_to_hms() {
 #[test]
 fn upstream_org_timer_fix_incomplete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-timer)
   (list
    (org-timer-fix-incomplete "1:02:03")
    (org-timer-fix-incomplete "02:03")
    (org-timer-fix-incomplete "03")))"##,
+        expect_test::expect![[r#""OK (\"1:02:03\" \"0:02:03\" \"0:00:03\")""#]],
     );
 }
 
@@ -180,7 +189,7 @@ fn upstream_org_timer_fix_incomplete() {
 #[test]
 fn upstream_org_timer_change_times() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-timer)
   (let ((org-mode-hook nil))
@@ -195,6 +204,7 @@ fn upstream_org_timer_change_times() {
        (insert "\n0:00:25\n2:30:05")
        (org-timer-change-times-in-region (point-min) (point-max) "-1:30:50")
        (buffer-string)))))"##,
+        expect_test::expect![[r#""OK (\"\n1:31:15\n4:00:55\" \"\n-1:30:25\n0:59:15\")""#]],
     );
 }
 
@@ -203,7 +213,7 @@ fn upstream_org_timer_change_times() {
 #[test]
 fn upstream_org_duration_to_minutes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-duration)
   (list
@@ -215,6 +225,7 @@ fn upstream_org_duration_to_minutes() {
    (org-duration-to-minutes "2")
    (org-duration-to-minutes "")
    (floatp (org-duration-to-minutes "1:01"))))"##,
+        expect_test::expect![[r#""OK (61.0 80.5 130.0 1502.0 150.0 2.0 0.0 t)""#]],
     );
 }
 
@@ -223,7 +234,7 @@ fn upstream_org_duration_to_minutes() {
 #[test]
 fn upstream_org_duration_from_minutes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-duration)
   (list
@@ -234,6 +245,9 @@ fn upstream_org_duration_from_minutes() {
    (let ((org-duration-format '(("h" . nil) ("min" . t)))) (org-duration-from-minutes 60))
    (let ((org-duration-format '(("h" . nil) ("min" . nil)))) (org-duration-from-minutes 50))
    (let ((org-duration-format '(("h" . t) ("min" . t)))) (org-duration-from-minutes 50))))"##,
+        expect_test::expect![[
+            r#""OK (\"1:00\" \"1:01:30\" \"1:01\" \"1h\" \"1h 0min\" \"50min\" \"0h 50min\")""#
+        ]],
     );
 }
 
@@ -242,7 +256,7 @@ fn upstream_org_duration_from_minutes() {
 #[test]
 fn upstream_org_duration_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-duration)
   (list
@@ -257,6 +271,7 @@ fn upstream_org_duration_p() {
    ;; Invalid.
    (org-duration-p "3::12")
    (org-duration-p "3:2")))"##,
+        expect_test::expect![[r#""OK (0 0 0 0 0 0 0 0 nil nil)""#]],
     );
 }
 
@@ -265,7 +280,7 @@ fn upstream_org_duration_p() {
 #[test]
 fn upstream_org_colview_compile_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-colview)
   (list
@@ -281,13 +296,16 @@ fn upstream_org_colview_compile_format() {
    (org-columns-compile-format "%ITEM{+}")
    ;; With operator and printf.
    (org-columns-compile-format "%ITEM{+;%.1f}")))"##,
+        expect_test::expect![[
+            r#""OK (((\"ITEM\" \"ITEM\" nil nil nil)) ((\"ITEM\" \"ITEM\" nil nil nil) (\"TODO\" \"TODO\" nil nil nil)) ((\"ITEM\" \"ITEM\" 10 nil nil)) ((\"ITEM\" \"some title\" nil nil nil)) ((\"ITEM\" \"ITEM\" nil \"+\" nil)) ((\"ITEM\" \"ITEM\" nil \"+\" \"%.1f\")))""#
+        ]],
     );
 }
 
 #[test]
 fn upstream_org_colview_uncompile_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-colview)
   (list
@@ -303,6 +321,9 @@ fn upstream_org_colview_uncompile_format() {
    (org-columns-uncompile-format '(("ITEM" "ITEM" nil "+" nil)))
    ;; With operator and printf.
    (org-columns-uncompile-format '(("ITEM" "ITEM" nil "+" "%.1f")))))"##,
+        expect_test::expect![[
+            r#""OK (\"%ITEM\" \"%ITEM %TODO\" \"%10ITEM\" \"%ITEM(some title)\" \"%ITEM{+}\" \"%ITEM{+;%.1f}\")""#
+        ]],
     );
 }
 
@@ -311,7 +332,7 @@ fn upstream_org_colview_uncompile_format() {
 #[test]
 fn upstream_org_macro_replace_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-macro)
   (let ((org-mode-hook nil))
@@ -337,6 +358,9 @@ fn upstream_org_macro_replace_all() {
        (org-macro-initialize-templates)
        (org-macro-replace-all org-macro-templates)
        (buffer-string)))))"##,
+        expect_test::expect![[
+            r##""OK (\"#+MACRO: A B\n1 B 3\" \"#+MACRO: macro $1 $2\nsome text\" \"#+MACRO: in inner\n#+MACRO: out {{{in}}} outer\ninner outer\")""##
+        ]],
     );
 }
 
@@ -345,7 +369,7 @@ fn upstream_org_macro_replace_all() {
 #[test]
 fn upstream_org_archive_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-archive)
   (let ((org-mode-hook nil))
@@ -355,6 +379,7 @@ fn upstream_org_archive_subtree() {
       (forward-line 1)
       (org-archive-subtree)
       (buffer-substring-no-properties (point-min) (point-max)))))"##,
+        expect_test::expect![[r#""ERR (error \"No file associated to buffer\")""#]],
     );
 }
 
@@ -363,7 +388,7 @@ fn upstream_org_archive_subtree() {
 #[test]
 fn upstream_org_datetree_find_date_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-datetree)
   (let ((org-mode-hook nil)
@@ -379,6 +404,9 @@ fn upstream_org_datetree_find_date_create() {
        (insert "* 2012\n")
        (org-datetree-find-date-create '(3 29 2012))
        (org-trim (buffer-string))))))"##,
+        expect_test::expect![[
+            r#""OK (\"* 2012\n\n** 2012-03 March\n\n*** 2012-03-29 Thursday\" \"* 2012\n\n** 2012-03 March\n\n*** 2012-03-29 Thursday\")""#
+        ]],
     );
 }
 
@@ -387,7 +415,7 @@ fn upstream_org_datetree_find_date_create() {
 #[test]
 fn upstream_oc_register_processor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'oc)
   (list
@@ -405,6 +433,7 @@ fn upstream_oc_register_processor() {
      (org-cite-register-processor 'name)
      (org-cite-unregister-processor 'name)
      org-cite--processors)))"##,
+        expect_test::expect![[r#""OK (nil 1 nil)""#]],
     );
 }
 
@@ -413,7 +442,7 @@ fn upstream_oc_register_processor() {
 #[test]
 fn upstream_org_fold_hide_drawer_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-fold)
   (let ((org-mode-hook nil))
@@ -435,6 +464,7 @@ fn upstream_org_fold_hide_drawer_toggle() {
        (goto-char (point-min))
        (org-fold-hide-drawer-toggle t)
        (get-char-property (line-end-position) 'invisible)))))"##,
+        expect_test::expect![[r#""OK (org-hide-drawer nil org-hide-drawer)""#]],
     );
 }
 
@@ -443,7 +473,7 @@ fn upstream_org_fold_hide_drawer_toggle() {
 #[test]
 fn upstream_org_fold_hide_block_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-fold)
   (let ((org-mode-hook nil))
@@ -467,6 +497,7 @@ fn upstream_org_fold_hide_block_toggle() {
        (goto-char (point-min))
        (org-fold-hide-block-toggle t)
        (get-char-property (line-end-position) 'invisible)))))"##,
+        expect_test::expect![[r#""OK (org-hide-block nil org-hide-block)""#]],
     );
 }
 
@@ -475,7 +506,7 @@ fn upstream_org_fold_hide_block_toggle() {
 #[test]
 fn upstream_org_num_max_level() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-num)
   (let ((org-mode-hook nil)
@@ -486,6 +517,9 @@ fn upstream_org_num_max_level() {
       (sort (mapcar (lambda (o) (overlay-get o 'after-string))
                     (overlays-in (point-min) (point-max)))
             #'string-lessp))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"1 \" 0 2 (face org-level-1)) #(\"1.1 \" 0 4 (face org-level-2)))""#
+        ]],
     );
 }
 
@@ -494,7 +528,7 @@ fn upstream_org_num_max_level() {
 #[test]
 fn upstream_org_edit_special() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-src)
   (let ((org-mode-hook nil)
@@ -508,5 +542,8 @@ fn upstream_org_edit_special() {
       (insert "blah")
       (org-edit-src-exit)
       (buffer-string))))"##,
+        expect_test::expect![[
+            r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
+        ]],
     );
 }

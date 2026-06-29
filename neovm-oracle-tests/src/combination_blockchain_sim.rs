@@ -72,7 +72,10 @@ fn oracle_prop_combination_blockchain_block_structure_and_hash() {
     (fmakunbound 'neovm--bc-block-data)
     (fmakunbound 'neovm--bc-block-prev-hash)
     (fmakunbound 'neovm--bc-block-hash)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 \"Genesis\" t t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +139,7 @@ fn oracle_prop_combination_blockchain_chain_validation() {
     (fmakunbound 'neovm--bc2-hash)
     (fmakunbound 'neovm--bc2-make-block)
     (fmakunbound 'neovm--bc2-validate-chain)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +191,7 @@ fn oracle_prop_combination_blockchain_proof_of_work() {
                             (format "%d:%d:%s:%s:%d" 1 200 "test-data" "abcdef00" nonce)))))
     (fmakunbound 'neovm--bc3-hash)
     (fmakunbound 'neovm--bc3-mine)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -259,7 +262,10 @@ fn oracle_prop_combination_blockchain_transaction_pool() {
     (fmakunbound 'neovm--bc4-pick-txs)
     (fmakunbound 'neovm--bc4-total-fees)
     (makunbound 'neovm--bc4-pool)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 (\"tx4\" \"tx2\" \"tx5\") (20 15 8) 43 2)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -340,7 +346,10 @@ fn oracle_prop_combination_blockchain_merkle_tree() {
     (fmakunbound 'neovm--bc5-merkle-node)
     (fmakunbound 'neovm--bc5-build-merkle)
     (fmakunbound 'neovm--bc5-merkle-root)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -425,7 +434,10 @@ fn oracle_prop_combination_blockchain_fork_resolution() {
     (fmakunbound 'neovm--bc6-chain-length)
     (fmakunbound 'neovm--bc6-chain-valid-p)
     (fmakunbound 'neovm--bc6-resolve-fork)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 4 t t nil 4 t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -528,5 +540,10 @@ fn oracle_prop_combination_blockchain_full_integration() {
     (fmakunbound 'neovm--bc7-balances)
     (makunbound 'neovm--bc7-chain)
     (makunbound 'neovm--bc7-pending)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 ((\"alice\" . -80) (\"bob\" . 30) (\"charlie\" . 50)) -80 30 50 t)""#
+        ]],
+    );
 }

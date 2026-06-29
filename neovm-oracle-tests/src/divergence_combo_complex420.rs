@@ -13,11 +13,12 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx420_make_byte_code() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((bc (make-byte-code 1 "\300\207" [nil] 0)))
   (byte-code-function-p bc))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -25,7 +26,7 @@ fn div_cx420_make_byte_code() {
 #[test]
 fn div_cx420_copy_tree_circular() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lst '(a b))
        (copy (copy-tree lst)))
@@ -33,6 +34,7 @@ fn div_cx420_copy_tree_circular() {
         (car copy)
         (cadr copy)))
 "##,
+        expect_test::expect![[r#""OK (t a b)""#]],
     );
 }
 
@@ -40,7 +42,7 @@ fn div_cx420_copy_tree_circular() {
 #[test]
 fn div_cx420_define_hash_table_test() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (define-hash-table-test 'neo-cx420-test #'equal
   (lambda (x) (secure-hash 'sha256 (prin1-to-string x))))
@@ -50,6 +52,7 @@ fn div_cx420_define_hash_table_test() {
   (list (hash-table-test ht)
         (gethash "hello" ht)))
 "##,
+        expect_test::expect![[r#""OK (neo-cx420-test 1)""#]],
     );
 }
 
@@ -57,11 +60,12 @@ fn div_cx420_define_hash_table_test() {
 #[test]
 fn div_cx420_cl_destructuring_bind_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-destructuring-bind ((a &rest b) c d &key e) '((1 2 3) 4 5 :e 6)
   (list a b c d e))
 "##,
+        expect_test::expect![[r#""OK (1 (2 3) 4 5 6)""#]],
     );
 }
 
@@ -69,13 +73,14 @@ fn div_cx420_cl_destructuring_bind_nested() {
 #[test]
 fn div_cx420_cl_loop_across_in_ref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((vec [10 20 30 40])
       (lst '(1 2 3 4)))
   (list (cl-loop for v across vec collect v)
         (cl-loop for v in lst collect (* v 2))))
 "##,
+        expect_test::expect![[r#""OK ((10 20 30 40) (2 4 6 8))""#]],
     );
 }
 
@@ -83,13 +88,14 @@ fn div_cx420_cl_loop_across_in_ref() {
 #[test]
 fn div_cx420_rx_minimal_maximal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-match (rx (minimal-match (0+ any)) "b") "aabb")
       (match-string 0 "aabb")
       (string-match (rx (maximal-match (0+ any)) "b") "aabb")
       (match-string 0 "aabb"))
 "##,
+        expect_test::expect![[r#""OK (0 \"aab\" 0 \"aabb\")""#]],
     );
 }
 
@@ -97,7 +103,7 @@ fn div_cx420_rx_minimal_maximal() {
 #[test]
 fn div_cx420_pcase_cl_struct() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (cl-defstruct neo-cx420-point x y)
@@ -106,6 +112,7 @@ fn div_cx420_pcase_cl_struct() {
       ((cl-struct neo-cx420-point x y) (list x y))
       (_ nil))))
 "##,
+        expect_test::expect![[r#""OK (10 20)""#]],
     );
 }
 
@@ -113,11 +120,12 @@ fn div_cx420_pcase_cl_struct() {
 #[test]
 fn div_cx420_cl_subst_sublis() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-subst 'new 'old '(old a b (old c)))
       (cl-sublis '((old . new) (a . b)) '(old a b (old c))))
 "##,
+        expect_test::expect![[r#""OK ((new a b (new c)) (new b b (new c)))""#]],
     );
 }
 
@@ -125,13 +133,14 @@ fn div_cx420_cl_subst_sublis() {
 #[test]
 fn div_cx420_key_description_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (key-description (kbd "C-c C-f"))
       (single-key-description ?a)
       (single-key-description ?\C-a)
       (text-char-description ?\C-a))
 "##,
+        expect_test::expect![[r#""OK (\"C-c C-f\" \"a\" \"C-a\" \"^A\")""#]],
     );
 }
 
@@ -139,13 +148,14 @@ fn div_cx420_key_description_variants() {
 #[test]
 fn div_cx420_string_to_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-to-sequence "abc" 'list)
       (string-to-sequence "abc" 'vector)
       (seq-to-string '(?a ?b ?c))
       (concat '(?a ?b ?c)))
 "##,
+        expect_test::expect![[r#""ERR (void-function string-to-sequence)""#]],
     );
 }
 
@@ -153,7 +163,7 @@ fn div_cx420_string_to_sequence() {
 #[test]
 fn div_cx420_make_record_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((r (record 'neo-cx420-type 'a 'b 'c)))
   (list (recordp r)
@@ -163,6 +173,7 @@ fn div_cx420_make_record_deep() {
         (aref r 1)
         (aref r 3)))
 "##,
+        expect_test::expect![[r#""OK (t neo-cx420-type 4 neo-cx420-type a c)""#]],
     );
 }
 
@@ -170,12 +181,13 @@ fn div_cx420_make_record_deep() {
 #[test]
 fn div_cx420_merge_sequences() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'cl-lib)
   (list (merge 'list '(1 3 5) '(2 4 6) #'<)
         (merge 'vector [1 3] [2 4] #'<)))
 "##,
+        expect_test::expect![[r#""ERR (void-function merge)""#]],
     );
 }
 
@@ -183,7 +195,7 @@ fn div_cx420_merge_sequences() {
 #[test]
 fn div_cx420_cl_position_find_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lst '(a b c b a)))
   (list (cl-position 'b lst)
@@ -191,6 +203,7 @@ fn div_cx420_cl_position_find_count() {
         (cl-find 'c lst)
         (cl-count 'a lst)))
 "##,
+        expect_test::expect![[r#""OK (1 3 c 2)""#]],
     );
 }
 
@@ -198,12 +211,13 @@ fn div_cx420_cl_position_find_count() {
 #[test]
 fn div_cx420_cl_sort_stable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lst '(3 1 4 1 5 9 2 6)))
   (list (cl-sort (copy-sequence lst) #'<)
         (cl-stable-sort (copy-sequence '(3 1 4 1 5)) #'<)))
 "##,
+        expect_test::expect![[r#""OK ((1 1 2 3 4 5 6 9) (1 1 3 4 5))""#]],
     );
 }
 
@@ -211,11 +225,12 @@ fn div_cx420_cl_sort_stable() {
 #[test]
 fn div_cx420_concat_vconcat_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (concat '(a b) [c d] "ef")
       (vconcat '(1 2) [3 4] "56"))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument characterp a)""#]],
     );
 }
 
@@ -223,13 +238,14 @@ fn div_cx420_concat_vconcat_edge() {
 #[test]
 fn div_cx420_char_to_string_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-to-string ?a)
       (char-to-string ?é)
       (char-to-string ?世)
       (char-to-string #x1F600))
 "##,
+        expect_test::expect![[r#""OK (\"a\" \"é\" \"世\" \"😀\")""#]],
     );
 }
 
@@ -237,12 +253,13 @@ fn div_cx420_char_to_string_edge() {
 #[test]
 fn div_cx420_append_nconc_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (append '(1 2) '(3 4) '(5 6))
       (append '(a) nil '(b) nil '(c))
       (nconc (list 1 2) (list 3 4)))
 "##,
+        expect_test::expect![[r#""OK ((1 2 3 4 5 6) (a b c) (1 2 3 4))""#]],
     );
 }
 
@@ -250,13 +267,14 @@ fn div_cx420_append_nconc_edge() {
 #[test]
 fn div_cx420_number_to_string_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (number-to-string 0)
       (number-to-string -42)
       (number-to-string 3.14159)
       (number-to-string most-positive-fixnum))
 "##,
+        expect_test::expect![[r#""OK (\"0\" \"-42\" \"3.14159\" \"2305843009213693951\")""#]],
     );
 }
 
@@ -264,12 +282,13 @@ fn div_cx420_number_to_string_all() {
 #[test]
 fn div_cx420_string_to_number_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-to-number "")
       (string-to-number "  42  ")
       (string-to-number "abc")
       (string-to-number "0x1A"))
 "##,
+        expect_test::expect![[r#""OK (0 42 0 0)""#]],
     );
 }

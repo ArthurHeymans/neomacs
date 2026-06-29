@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_ch2_basic_record() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ch2-log ()
     ((buf-name :initarg :buf :accessor c2-buf :initform "")
@@ -75,6 +75,7 @@ fn combo_eieio_ch2_basic_record() {
               (overlay-start ov) (overlay-end ov)
               my-c2-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -82,7 +83,7 @@ fn combo_eieio_ch2_basic_record() {
 fn combo_eieio_ch2_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ch2-narrow ()
     ((buf-name :initarg :buf :accessor cn-buf :initform "")
@@ -140,6 +141,7 @@ fn combo_eieio_ch2_narrow_undo() {
               (overlay-start ov) (overlay-end ov)
               my-cn-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -147,7 +149,7 @@ fn combo_eieio_ch2_narrow_undo() {
 fn combo_eieio_ch2_overlay_interact() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ch2-ov ()
     ((buf-name :initarg :buf :accessor co-buf :initform "")
@@ -224,6 +226,7 @@ fn combo_eieio_ch2_overlay_interact() {
         (list (buffer-substring-no-properties 1 (point-max))
               (co-ec clog) (marker-position m) my-co-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -231,7 +234,7 @@ fn combo_eieio_ch2_overlay_interact() {
 fn combo_eieio_ch2_multi_handler_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass hh2-base ()
     ((buf-name :initarg :buf :accessor hb-buf :initform "")
@@ -316,6 +319,7 @@ fn combo_eieio_ch2_multi_handler_dispatch() {
               (overlay-start ov) (overlay-end ov)
               my-hb-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -323,7 +327,7 @@ fn combo_eieio_ch2_multi_handler_dispatch() {
 fn combo_eieio_ch2_before_after_pairs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ch2-paired ()
     ((buf-name :initarg :buf :accessor cp-buf :initform "")
@@ -395,5 +399,6 @@ fn combo_eieio_ch2_before_after_pairs() {
               (overlay-start ov) (overlay-end ov)
               my-cp-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }

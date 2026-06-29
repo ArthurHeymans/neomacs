@@ -44,7 +44,10 @@ fn oracle_prop_buffer_local_make_local_basic() {
           (kill-buffer buf1)
           (kill-buffer buf2)))
     (makunbound 'neovm--blv-test-1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (local-val-1 default-val t nil default-val)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +92,10 @@ fn oracle_prop_buffer_local_make_variable_buffer_local() {
             (kill-buffer buf2)
             (kill-buffer buf3))))
     (makunbound 'neovm--blv-test-2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (val-a val-b global-default t t global-default)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +138,10 @@ fn oracle_prop_buffer_local_value_reads() {
              (buffer-local-value 'neovm--blv-test-3 (nth 4 bufs)))
           (dolist (b bufs) (kill-buffer b))))
     (makunbound 'neovm--blv-test-3)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((10 20 30 40 50) 0 999 10 50)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +186,12 @@ fn oracle_prop_buffer_local_kill_local() {
                      (local-variable-p 'neovm--blv-test-4))))))
           (kill-buffer buf)))
     (makunbound 'neovm--blv-test-4)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((local-override t) (the-default nil) (second-local t) the-default nil)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +232,10 @@ fn oracle_prop_buffer_local_variable_p_types() {
             (kill-buffer buf))))
     (makunbound 'neovm--blv-test-5)
     (makunbound 'neovm--blv-test-5b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (nil t nil t nil t)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +326,12 @@ fn oracle_prop_buffer_local_settings_system() {
     (fmakunbound 'neovm--blv-set-setting)
     (fmakunbound 'neovm--blv-reset-setting)
     (fmakunbound 'neovm--blv-get-all-settings)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (2 8 80 4 4 70 4 ((neovm--blv-s-fill-col . 70) (neovm--blv-s-tab-width . 4) (neovm--blv-s-indent . 4)))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -363,7 +385,12 @@ fn oracle_prop_buffer_local_default_interaction() {
           (kill-buffer buf-local)
           (kill-buffer buf-default)))
     (makunbound 'neovm--blv-test-6)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((local-val initial initial) (local-val new-default new-default) (new-default new-default new-default) (final-default final-default final-default))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -399,5 +426,5 @@ fn oracle_prop_buffer_local_let_binding() {
                 neovm--blv-test-7))
           (kill-buffer buf)))
     (makunbound 'neovm--blv-test-7)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK buffer-val""#]);
 }

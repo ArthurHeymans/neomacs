@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_advice_before_modifies_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defun my-fn (x) (* x 10))\n\
          (define-advice my-fn (:filter-args (lambda (args)\n\
@@ -16,6 +16,9 @@ fn deficiency_advice_before_modifies_args() {
          my-fn-fa)\n\
          (list (my-fn 5)\n\
          (advice--p (ad-get 'my-fn))))",
+        expect_test::expect![[
+            r#""ERR (invalid-function (closure (t) (lambda (args) (list (1+ (car args)))) my-fn-fa))""#
+        ]],
     );
 }
 
@@ -23,7 +26,7 @@ fn deficiency_advice_before_modifies_args() {
 fn deficiency_advice_after_accesses_return() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar after-log nil)\n\
          (defun my-square (x) (* x x))\n\
@@ -33,6 +36,9 @@ fn deficiency_advice_after_accesses_return() {
          (my-square 7)\n\
          (list (my-square 3)\n\
          (nreverse after-log)))",
+        expect_test::expect![[
+            r#""ERR (error \"Unrecognized name spec ‘(push (list x (my-square--my-square x)) after-log)’\")""#
+        ]],
     );
 }
 
@@ -40,7 +46,7 @@ fn deficiency_advice_after_accesses_return() {
 fn deficiency_advice_around_wraps_original() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defun my-add (a b) (+ a b))\n\
          (define-advice my-add (:around (fn a b)\n\
@@ -48,6 +54,9 @@ fn deficiency_advice_around_wraps_original() {
          my-add-doubler)\n\
          (list (my-add 3 4)\n\
          (my-add 10 20)))",
+        expect_test::expect![[
+            r#""ERR (error \"Unrecognized name spec ‘(* 2 (funcall fn a b))’\")""#
+        ]],
     );
 }
 
@@ -55,7 +64,7 @@ fn deficiency_advice_around_wraps_original() {
 fn deficiency_advice_remove_restores_original() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defun my-test (x) (1+ x))\n\
          (define-advice my-test (:around (fn x)\n\
@@ -64,6 +73,9 @@ fn deficiency_advice_remove_restores_original() {
          (let ((advised (my-test 5)))\n\
          (advice-remove 'my-test 'my-test-multiply)\n\
          (list advised (my-test 5))))",
+        expect_test::expect![[
+            r#""ERR (error \"Unrecognized name spec ‘(* 10 (funcall fn x))’\")""#
+        ]],
     );
 }
 
@@ -71,13 +83,14 @@ fn deficiency_advice_remove_restores_original() {
 fn deficiency_advice_override_replaces() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defun my-base (x) (+ x 100))\n\
          (define-advice my-base (:override (x)\n\
          (- x 50))\n\
          my-base-override)\n\
          (list (my-base 10)))",
+        expect_test::expect![[r#""ERR (error \"Unrecognized name spec ‘(- x 50)’\")""#]],
     );
 }
 
@@ -85,7 +98,7 @@ fn deficiency_advice_override_replaces() {
 fn deficiency_multiple_advice_ordering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar advice-log nil)\n\
          (defun my-chain (x) (push 'original advice-log) x)\n\
@@ -97,6 +110,9 @@ fn deficiency_multiple_advice_ordering() {
          my-chain-after)\n\
          (my-chain 42)\n\
          (nreverse advice-log))",
+        expect_test::expect![[
+            r#""ERR (error \"Unrecognized name spec ‘(push 'before advice-log)’\")""#
+        ]],
     );
 }
 
@@ -104,12 +120,13 @@ fn deficiency_multiple_advice_ordering() {
 fn deficiency_advice_on_builtin_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (define-advice 1+ (:filter-return (ret))\n\
          (if (numberp ret) (* ret 2) ret))\n\
          (list (1+ 5)\n\
          (1+ -1)))",
+        expect_test::expect![[r#""OK (12 0)""#]],
     );
 }
 
@@ -117,7 +134,7 @@ fn deficiency_advice_on_builtin_function() {
 fn deficiency_malformed_builtin_advice_signals_invalid_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(condition-case nil\n\
          (progn\n\
          (define-advice car (:filter-return (lambda (ret)\n\
@@ -125,6 +142,7 @@ fn deficiency_malformed_builtin_advice_signals_invalid_function() {
          car-double)\n\
          (car '(5 . rest)))\n\
          (invalid-function 'invalid-function))",
+        expect_test::expect![[r#""OK invalid-function""#]],
     );
 }
 
@@ -132,7 +150,7 @@ fn deficiency_malformed_builtin_advice_signals_invalid_function() {
 fn deficiency_advice_with_closure_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar call-count 0)\n\
          (defun my-counted (x) x)\n\
@@ -144,6 +162,9 @@ fn deficiency_advice_with_closure_capture() {
          (my-counted 2)\n\
          (my-counted 3)\n\
          (list call-count (my-counted 4)))",
+        expect_test::expect![[
+            r#""ERR (error \"Unrecognized name spec ‘(setq call-count (1+ call-count))’\")""#
+        ]],
     );
 }
 
@@ -151,12 +172,13 @@ fn deficiency_advice_with_closure_capture() {
 fn deficiency_advice_named_vs_anonymous() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defun my-plain (x) x)\n\
          (advice-add 'my-plain :around\n\
          (lambda (fn x) (funcall fn (* x 2))))\n\
          (list (my-plain 5)))",
+        expect_test::expect![[r#""OK (10)""#]],
     );
 }
 
@@ -164,7 +186,7 @@ fn deficiency_advice_named_vs_anonymous() {
 fn deficiency_nested_advice_around_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar nested-log nil)\n\
          (defun my-nested (x) (push 'base nested-log) x)\n\
@@ -176,5 +198,8 @@ fn deficiency_nested_advice_around_chain() {
          my-nested-inner)\n\
          (my-nested 42)\n\
          (nreverse nested-log))",
+        expect_test::expect![[
+            r#""ERR (error \"Unrecognized name spec ‘(push 'outer nested-log)’\")""#
+        ]],
     );
 }

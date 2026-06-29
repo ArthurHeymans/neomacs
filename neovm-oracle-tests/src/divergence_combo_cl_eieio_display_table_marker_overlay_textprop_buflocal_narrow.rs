@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_display_table_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass display-snap ()
     ((step :initarg :step :accessor dsp-step :initform "")
@@ -66,6 +66,7 @@ fn combo_eieio_display_table_basic() {
                 (overlay-start ov) (overlay-end ov)
                 (if buffer-display-table t nil)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -73,7 +74,7 @@ fn combo_eieio_display_table_basic() {
 fn combo_eieio_display_table_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass dt-narrow-snap ()
     ((narrow-bounds :initarg :narrow :accessor dns-narrow :initform nil)
@@ -127,6 +128,7 @@ fn combo_eieio_display_table_narrow() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -134,7 +136,7 @@ fn combo_eieio_display_table_narrow() {
 fn combo_eieio_display_table_overlay_invisible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass dt-invis-snap ()
     ((step :initarg :step :accessor dis-step :initform "")
@@ -195,6 +197,7 @@ fn combo_eieio_display_table_overlay_invisible() {
                 (overlay-start ov) (overlay-end ov)
                 (if buffer-display-table t nil)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
     );
 }
 
@@ -202,7 +205,7 @@ fn combo_eieio_display_table_overlay_invisible() {
 fn combo_eieio_display_table_multibyte_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass dt-multi-snap ()
     ((step :initarg :step :accessor dms-step :initform "")
@@ -262,6 +265,7 @@ fn combo_eieio_display_table_multibyte_edit() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -269,7 +273,7 @@ fn combo_eieio_display_table_multibyte_edit() {
 fn combo_eieio_display_table_undo_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass dt-undo-snap ()
     ((step :initarg :step :accessor dus-step :initform "")
@@ -323,5 +327,6 @@ fn combo_eieio_display_table_undo_restore() {
               (overlay-start ov) (overlay-end ov)
               (if buffer-display-table t nil))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

@@ -11,9 +11,10 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn read_bool_vector_literal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((bv (read "#&5\"\\25\"")))
   (list (bool-vectorp bv) (length bv)))"##,
+        expect_test::expect![[r#""ERR (void-function bool-vectorp)""#]],
     );
 }
 
@@ -21,8 +22,9 @@ fn read_bool_vector_literal() {
 fn read_bytecode_literal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e (let ((f (read "#[257 \"\\300\\001\\\\\" [1+] 3]"))) (byte-code-function-p f)) (error (cons (quote ERR) (car e))))"##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -30,9 +32,10 @@ fn read_bytecode_literal() {
 fn read_circular_refs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((x (read "(#1=(a . #1#))")))
   (list (eq x (cdr x)) (car x)))"##,
+        expect_test::expect![[r#""OK (nil (a . #0))""#]],
     );
 }
 
@@ -40,8 +43,9 @@ fn read_circular_refs() {
 fn read_del_escape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (read "?\\^?") (read "?\\C-?") (= (read "?\\^?") 127) (read "?\\d"))"##,
+        expect_test::expect![[r#""OK (127 127 t 127)""#]],
     );
 }
 
@@ -49,8 +53,9 @@ fn read_del_escape() {
 fn read_hash_skip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (read "#xFF") (read "#b11") (car (read-from-string "1 #@2 ab3" 0)))"##,
+        expect_test::expect![[r#""OK (255 3 1)""#]],
     );
 }
 
@@ -58,8 +63,9 @@ fn read_hash_skip() {
 fn read_meta_combos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (read "?\\M-\\C-a") (read "?\\C-\\M-a") (= (read "?\\M-a") (+ ?a (ash 1 27))))"##,
+        expect_test::expect![[r#""OK (134217729 134217729 t)""#]],
     );
 }
 
@@ -67,9 +73,10 @@ fn read_meta_combos() {
 fn read_shared_refs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((x (read "(#1=(1 2) #1# #1#)")))
   (list (eq (nth 0 x) (nth 1 x)) (eq (nth 1 x) (nth 2 x)) (car (nth 0 x))))"##,
+        expect_test::expect![[r#""OK (t t 1)""#]],
     );
 }
 
@@ -77,8 +84,9 @@ fn read_shared_refs() {
 fn read_string_hex_unicode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (length (read "\"\\x41\\x42\"")) (read "\"\\u0041\\u0042\"") (read "\"\\U00000041\""))"##,
+        expect_test::expect![[r#""OK (2 \"AB\" \"A\")""#]],
     );
 }
 
@@ -86,7 +94,7 @@ fn read_string_hex_unicode() {
 fn coding_dos_eol_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((f (make-temp-file "neo-dos-")))
   (unwind-protect
       (progn
@@ -96,6 +104,7 @@ fn coding_dos_eol_file() {
           (let ((coding-system-for-read 'binary)) (insert-file-contents f))
           (list (buffer-size) (append (string-to-unibyte (buffer-string)) nil))))
     (delete-file f)))"##,
+        expect_test::expect![[r#""OK (9 (97 13 10 98 13 10 99 13 10))""#]],
     );
 }
 
@@ -103,9 +112,10 @@ fn coding_dos_eol_file() {
 fn find_op_coding_system() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (coding-system-base (or (find-operation-coding-system 'write-region 0 0 "test.txt") 'undecided))
         (booleanp (coding-system-p 'prefer-utf-8)))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument symbolp (undecided))""#]],
     );
 }
 
@@ -113,7 +123,7 @@ fn find_op_coding_system() {
 fn insert_file_detect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((f (make-temp-file "neo-ifd-")))
   (unwind-protect
       (progn
@@ -122,6 +132,7 @@ fn insert_file_detect() {
         (with-temp-buffer (insert-file-contents f)
           (list (buffer-string) (buffer-size))))
     (delete-file f)))"##,
+        expect_test::expect![[r#""OK (\"test ünïcödé\" 12)""#]],
     );
 }
 
@@ -129,12 +140,13 @@ fn insert_file_detect() {
 fn set_buffer_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-file-coding-system 'latin-1-unix)
   (insert "abc")
   (list (coding-system-base buffer-file-coding-system)
         (coding-system-eol-type buffer-file-coding-system)))"##,
+        expect_test::expect![[r#""OK (iso-latin-1 0)""#]],
     );
 }
 
@@ -142,7 +154,7 @@ fn set_buffer_coding() {
 fn write_read_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((f (make-temp-file "neo-wc-")))
   (unwind-protect
       (progn
@@ -152,5 +164,6 @@ fn write_read_coding() {
           (let ((coding-system-for-read 'utf-8-unix)) (insert-file-contents f))
           (list (buffer-string) buffer-file-coding-system)))
     (delete-file f)))"##,
+        expect_test::expect![[r#""OK (\"héllo\nwörld\n\" utf-8-unix)""#]],
     );
 }

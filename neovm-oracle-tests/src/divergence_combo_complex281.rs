@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx281_package_full_api_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -26,13 +26,14 @@ fn div_cx281_package_full_api_availability() {
             (boundp 'package-selected-packages)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t t t t t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx281_straight_el_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'straight)
@@ -40,13 +41,14 @@ fn div_cx281_straight_el_availability() {
           (boundp 'straight-use-package-by-default))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx281_el_get_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'el-get)
@@ -54,13 +56,14 @@ fn div_cx281_el_get_availability() {
           (boundp 'el-get-recipe-path))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx281_quelpa_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'quelpa)
@@ -68,13 +71,14 @@ fn div_cx281_quelpa_availability() {
           (boundp 'quelpa-dir))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx281_mu4e_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'mu4e)
@@ -82,13 +86,14 @@ fn div_cx281_mu4e_availability() {
           (boundp 'mu4e-mu-binary))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx281_notmuch_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'notmuch)
@@ -96,13 +101,14 @@ fn div_cx281_notmuch_availability() {
           (boundp 'notmuch-command))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx281_pdf_tools_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'pdf-tools)
@@ -111,13 +117,14 @@ fn div_cx281_pdf_tools_availability() {
           (fboundp 'pdf-view-mode))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx281_doc_view_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -127,13 +134,14 @@ fn div_cx281_doc_view_availability() {
             (boundp 'doc-view-cache-directory)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx281_org_roam_deft_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (featurep 'org-roam)
       (fboundp 'org-roam-mode)
@@ -142,13 +150,14 @@ fn div_cx281_org_roam_deft_availability() {
       (featurep 'org-brain)
       (fboundp 'org-brain-mode))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx281_package_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((avail (list (fboundp 'package-initialize)
                    (featurep 'straight)
@@ -176,5 +185,6 @@ fn div_cx281_package_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

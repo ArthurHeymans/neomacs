@@ -7,13 +7,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_timer_functions_exist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'run-at-time)
   (fboundp 'run-with-timer)
   (fboundp 'run-with-idle-timer)
   (fboundp 'cancel-timer)
   (fboundp 'cancel-function-timers))"#,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -21,13 +22,14 @@ fn divergence_timer_functions_exist() {
 fn divergence_current_idle_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'current-idle-time)
   (fboundp 'current-time)
   (fboundp 'float-time)
   (timep (current-time))
   (float-time (current-time)))"#,
+        expect_test::expect![[r#""ERR (void-function timep)""#]],
     );
 }
 
@@ -35,12 +37,13 @@ fn divergence_current_idle_time() {
 fn divergence_time_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (stringp (format-time-string "%Y-%m-%d"))
   (stringp (format-time-string "%H:%M:%S" nil t))
   (stringp (format-time-string "%s"))
   (> (length (format-time-string "%Y-%m-%d %T")) 5))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -48,12 +51,13 @@ fn divergence_time_format() {
 fn divergence_time_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let* ((t1 (current-time))
         (t2 (time-add t1 60)))
   (list (time-less-p t1 t2)
         (>= (float-time (time-subtract t2 t1)) 59)
         (time-equal-p t1 t1)))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -61,11 +65,12 @@ fn divergence_time_arithmetic() {
 fn divergence_time_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (consp (parse-time-string "2024-01-15 10:30:00"))
   (decoded-time-year (parse-time-string "2024-01-15"))
   (decoded-time-month (parse-time-string "March 15, 2024")))"#,
+        expect_test::expect![[r#""OK (t 2024 3)""#]],
     );
 }
 
@@ -73,11 +78,12 @@ fn divergence_time_parse() {
 fn divergence_encode_decode_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((encoded (encode-time 30 45 12 15 1 2024 t)))
   (list (consp encoded)
         (float-time encoded)
         (>= (float-time encoded) 0)))"#,
+        expect_test::expect![[r#""OK (t 1705322730.0 t)""#]],
     );
 }
 
@@ -85,11 +91,12 @@ fn divergence_encode_decode_time() {
 fn divergence_sleep_for_exists() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'sleep-for)
   (fboundp 'sit-for)
   (subrp (symbol-function 'sit-for)))"#,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
@@ -97,11 +104,12 @@ fn divergence_sleep_for_exists() {
 fn divergence_accept_process_output_exists() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'accept-process-output)
   (fboundp 'waiting-for-user-input-p)
   (fboundp 'input-pending-p))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -117,7 +125,7 @@ fn divergence_timer_throw_propagates_to_outer_catch() {
     // handler to the outer `catch`.  This is the core of jsonrpc-request's
     // continuation protocol (eglot/copilot/lsp): the throw that completes the
     // synchronous request comes FROM a zero-delay `(run-at-time 0 nil …)`.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case e
     (catch 'my-tag
       (run-at-time 0 nil (lambda () (throw 'my-tag 'thrown-from-timer)))
@@ -127,6 +135,7 @@ fn divergence_timer_throw_propagates_to_outer_catch() {
           (accept-process-output nil 0.05)))
       'NO-THROW-loop-finished)
   (error (cons 'ERR e)))"#,
+        expect_test::expect![[r#""OK thrown-from-timer""#]],
     );
 }
 
@@ -138,10 +147,11 @@ fn divergence_timer_jsonrpc_shape_throw_completes_wait() {
     // timer that `(throw TAG …)` and then spins in `(while t (accept-process-
     // output nil …))`.  The throw must unblock the otherwise-infinite wait by
     // propagating to the catch, yielding the thrown value.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(catch 'tag
   (run-at-time 0 nil (lambda () (throw 'tag 'done)))
   (while t (accept-process-output nil 1)))"#,
+        expect_test::expect![[r#""OK done""#]],
     );
 }
 
@@ -154,7 +164,7 @@ fn divergence_timer_error_is_caught_not_propagated() {
     // (error …)` swallows it (logging "Error running timer…").  The surrounding
     // wait loop continues and returns normally.  This guards against
     // over-correcting and propagating signals as well as throws.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(catch 'my-tag
   (run-at-time 0 nil (lambda () (error "boom from timer")))
   (let ((n 0))
@@ -162,5 +172,6 @@ fn divergence_timer_error_is_caught_not_propagated() {
       (setq n (1+ n))
       (accept-process-output nil 0.05)))
   'wait-finished-normally)"#,
+        expect_test::expect![[r#""OK wait-finished-normally""#]],
     );
 }

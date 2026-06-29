@@ -18,34 +18,69 @@ fn oracle_prop_funcall_arg_count_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // 0 args
-    assert_oracle_parity("(funcall (lambda () 'zero-args))");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda () 'zero-args))",
+        expect_test::expect![[r#""OK zero-args""#]],
+    );
     // 1 arg
-    assert_oracle_parity("(funcall (lambda (a) a) 'one)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (a) a) 'one)",
+        expect_test::expect![[r#""OK one""#]],
+    );
     // 2 args
-    assert_oracle_parity("(funcall (lambda (a b) (list a b)) 1 2)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (a b) (list a b)) 1 2)",
+        expect_test::expect![[r#""OK (1 2)""#]],
+    );
     // 3 args
-    assert_oracle_parity("(funcall (lambda (a b c) (+ a b c)) 10 20 30)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (a b c) (+ a b c)) 10 20 30)",
+        expect_test::expect![[r#""OK 60""#]],
+    );
     // 4 args
-    assert_oracle_parity("(funcall (lambda (a b c d) (* (+ a b) (+ c d))) 1 2 3 4)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (a b c d) (* (+ a b) (+ c d))) 1 2 3 4)",
+        expect_test::expect![[r#""OK 21""#]],
+    );
     // 5 args
-    assert_oracle_parity("(funcall (lambda (a b c d e) (list e d c b a)) 1 2 3 4 5)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (a b c d e) (list e d c b a)) 1 2 3 4 5)",
+        expect_test::expect![[r#""OK (5 4 3 2 1)""#]],
+    );
     // 6 args
-    assert_oracle_parity("(funcall (lambda (a b c d e f) (+ a b c d e f)) 1 2 3 4 5 6)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (a b c d e f) (+ a b c d e f)) 1 2 3 4 5 6)",
+        expect_test::expect![[r#""OK 21""#]],
+    );
     // 7 args
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(funcall (lambda (a b c d e f g) (list a (+ b c) (+ d e f g))) 1 2 3 4 5 6 7)",
+        expect_test::expect![[r#""OK (1 5 22)""#]],
     );
     // 8 args via built-in +
-    assert_oracle_parity("(funcall #'+ 1 2 3 4 5 6 7 8)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'+ 1 2 3 4 5 6 7 8)",
+        expect_test::expect![[r#""OK 36""#]],
+    );
     // 9 args
-    assert_oracle_parity("(funcall #'+ 1 2 3 4 5 6 7 8 9)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'+ 1 2 3 4 5 6 7 8 9)",
+        expect_test::expect![[r#""OK 45""#]],
+    );
     // 10 args
-    assert_oracle_parity("(funcall #'+ 1 2 3 4 5 6 7 8 9 10)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'+ 1 2 3 4 5 6 7 8 9 10)",
+        expect_test::expect![[r#""OK 55""#]],
+    );
     // 12 args via list
-    assert_oracle_parity("(funcall #'list 'a 'b 'c 'd 'e 'f 'g 'h 'i 'j 'k 'l)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'list 'a 'b 'c 'd 'e 'f 'g 'h 'i 'j 'k 'l)",
+        expect_test::expect![[r#""OK (a b c d e f g h i j k l)""#]],
+    );
     // 15 args via concat
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(funcall #'concat "a" "b" "c" "d" "e" "f" "g" "h" "i" "j" "k" "l" "m" "n" "o")"#,
+        expect_test::expect![[r#""OK \"abcdefghijklmno\"""#]],
     );
 }
 
@@ -58,7 +93,7 @@ fn oracle_prop_funcall_apply_equivalence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // funcall with explicit args should equal apply with those args as a list
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((f (lambda (a b c) (+ a b c))))
              (list (= (funcall f 10 20 30)
                        (apply f '(10 20 30)))
@@ -66,31 +101,35 @@ fn oracle_prop_funcall_apply_equivalence() {
                        (apply f 1 '(2 3)))
                    (= (funcall f 100 200 300)
                        (apply f 100 200 '(300)))))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 
     // Equivalence with &rest
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((f (lambda (&rest xs) (apply #'+ xs))))
              (list (equal (funcall f) (apply f nil))
                    (equal (funcall f 1) (apply f '(1)))
                    (equal (funcall f 1 2 3) (apply f '(1 2 3)))
                    (equal (funcall f 1 2 3 4 5) (apply f 1 2 3 '(4 5)))))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 
     // Equivalence with &optional
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((f (lambda (a &optional b c) (list a b c))))
              (list (equal (funcall f 1) (apply f '(1)))
                    (equal (funcall f 1 2) (apply f 1 '(2)))
                    (equal (funcall f 1 2 3) (apply f '(1 2 3)))))"#,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 
     // Equivalence with subrs
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list (equal (funcall #'list 1 2 3) (apply #'list '(1 2 3)))
                (equal (funcall #'+ 10 20) (apply #'+ '(10 20)))
                (equal (funcall #'cons 'a 'b) (apply #'cons '(a b)))
                (equal (funcall #'concat "x" "y") (apply #'concat '("x" "y"))))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -103,27 +142,60 @@ fn oracle_prop_apply_spreading_comprehensive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // 0 spread args + full list
-    assert_oracle_parity("(apply #'+ '(1 2 3 4 5))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ '(1 2 3 4 5))",
+        expect_test::expect![[r#""OK 15""#]],
+    );
     // 1 spread + list
-    assert_oracle_parity("(apply #'+ 100 '(1 2))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ 100 '(1 2))",
+        expect_test::expect![[r#""OK 103""#]],
+    );
     // 2 spread + list
-    assert_oracle_parity("(apply #'list 'a 'b '(c d))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'list 'a 'b '(c d))",
+        expect_test::expect![[r#""OK (a b c d)""#]],
+    );
     // 3 spread + list
-    assert_oracle_parity("(apply #'+ 1 2 3 '(4 5 6))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ 1 2 3 '(4 5 6))",
+        expect_test::expect![[r#""OK 21""#]],
+    );
     // 4 spread + list
-    assert_oracle_parity("(apply #'list 'a 'b 'c 'd '(e f))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'list 'a 'b 'c 'd '(e f))",
+        expect_test::expect![[r#""OK (a b c d e f)""#]],
+    );
     // 5 spread + empty list (all from spread)
-    assert_oracle_parity("(apply #'+ 1 2 3 4 5 '())");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ 1 2 3 4 5 '())",
+        expect_test::expect![[r#""OK 15""#]],
+    );
     // 6 spread + nil
-    assert_oracle_parity("(apply #'list 1 2 3 4 5 6 nil)");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'list 1 2 3 4 5 6 nil)",
+        expect_test::expect![[r#""OK (1 2 3 4 5 6)""#]],
+    );
     // Spread args are complex expressions
-    assert_oracle_parity("(apply #'+ (* 2 3) (+ 4 5) (- 10 3) '((+ 1 1)))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ (* 2 3) (+ 4 5) (- 10 3) '((+ 1 1)))",
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p (+ 1 1))""#]],
+    );
     // Apply with cons-constructed final arg
-    assert_oracle_parity("(apply #'list 'head (cons 'a (cons 'b nil)))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'list 'head (cons 'a (cons 'b nil)))",
+        expect_test::expect![[r#""OK (head a b)""#]],
+    );
     // Apply with append-constructed final arg
-    assert_oracle_parity("(apply #'+ (append '(1 2) '(3 4)))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ (append '(1 2) '(3 4)))",
+        expect_test::expect![[r#""OK 10""#]],
+    );
     // Apply with mapcar-constructed final arg
-    assert_oracle_parity("(apply #'+ (mapcar #'1+ '(0 1 2 3 4)))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ (mapcar #'1+ '(0 1 2 3 4)))",
+        expect_test::expect![[r#""OK 15""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -135,22 +207,44 @@ fn oracle_prop_apply_empty_and_nil_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // apply + with empty list => 0
-    assert_oracle_parity("(apply #'+ '())");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ '())",
+        expect_test::expect![[r#""OK 0""#]],
+    );
     // apply + with nil => 0
-    assert_oracle_parity("(apply #'+ nil)");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'+ nil)",
+        expect_test::expect![[r#""OK 0""#]],
+    );
     // apply list with nil => ()
-    assert_oracle_parity("(apply #'list nil)");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'list nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     // apply list with empty list => ()
-    assert_oracle_parity("(apply #'list '())");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'list '())",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     // apply concat with nil => ""
-    assert_oracle_parity("(apply #'concat nil)");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'concat nil)",
+        expect_test::expect![[r#""OK \"\"""#]],
+    );
     // apply with spread args and empty final list
-    assert_oracle_parity("(apply #'list 'a 'b 'c '())");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'list 'a 'b 'c '())",
+        expect_test::expect![[r#""OK (a b c)""#]],
+    );
     // apply with only a single-element list
-    assert_oracle_parity("(apply #'1+ '(41))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply #'1+ '(41))",
+        expect_test::expect![[r#""OK 42""#]],
+    );
     // apply with deeply nested argument construction
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(apply #'+ (let ((r nil)) (dotimes (i 10) (setq r (cons (1+ i) r))) (nreverse r)))",
+        expect_test::expect![[r#""OK 55""#]],
     );
 }
 
@@ -163,7 +257,7 @@ fn oracle_prop_funcall_apply_closures_mutable_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Counter closure called via funcall and apply
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((n 0))
              (let ((inc (lambda (&optional amount)
                           (setq n (+ n (or amount 1)))
@@ -174,10 +268,11 @@ fn oracle_prop_funcall_apply_closures_mutable_state() {
                      (apply inc '(10))
                      (apply inc nil)
                      n)))"#,
+        expect_test::expect![[r#""OK (1 2 7 17 18 18)""#]],
     );
 
     // Closure over a list, mutated via nconc
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((log nil))
              (let ((logger (lambda (&rest msgs)
                              (setq log (append log msgs))
@@ -187,10 +282,11 @@ fn oracle_prop_funcall_apply_closures_mutable_state() {
                      (apply logger '(d e f))
                      (funcall logger)
                      log)))"#,
+        expect_test::expect![[r#""OK (1 3 6 6 (a b c d e f))""#]],
     );
 
     // Closure factory: each call creates a new closure sharing state
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((state 0))
              (let ((make-adder (lambda (base)
                                  (lambda (x)
@@ -203,6 +299,7 @@ fn oracle_prop_funcall_apply_closures_mutable_state() {
                        (funcall add10 3)
                        (apply add20 '(4))
                        state))))"#,
+        expect_test::expect![[r#""OK (12 24 16 28 4)""#]],
     );
 }
 
@@ -215,44 +312,134 @@ fn oracle_prop_funcall_apply_subr_variety() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Arithmetic subrs
-    assert_oracle_parity("(funcall #'+ 1 2 3)");
-    assert_oracle_parity("(funcall #'- 10 3 2)");
-    assert_oracle_parity("(funcall #'* 2 3 4)");
-    assert_oracle_parity("(funcall #'/ 100 5 4)");
-    assert_oracle_parity("(funcall #'% 17 5)");
-    assert_oracle_parity("(funcall #'mod 17 5)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'+ 1 2 3)",
+        expect_test::expect![[r#""OK 6""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'- 10 3 2)",
+        expect_test::expect![[r#""OK 5""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'* 2 3 4)",
+        expect_test::expect![[r#""OK 24""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'/ 100 5 4)",
+        expect_test::expect![[r#""OK 5""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'% 17 5)",
+        expect_test::expect![[r#""OK 2""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'mod 17 5)",
+        expect_test::expect![[r#""OK 2""#]],
+    );
 
     // Comparison subrs
-    assert_oracle_parity("(funcall #'< 1 2 3)");
-    assert_oracle_parity("(funcall #'> 3 2 1)");
-    assert_oracle_parity("(funcall #'= 5 5 5)");
-    assert_oracle_parity("(funcall #'<= 1 1 2)");
-    assert_oracle_parity("(funcall #'>= 3 3 2)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'< 1 2 3)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'> 3 2 1)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'= 5 5 5)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'<= 1 1 2)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'>= 3 3 2)",
+        expect_test::expect![[r#""OK t""#]],
+    );
 
     // String subrs
-    assert_oracle_parity(r#"(funcall #'concat "hello" " " "world")"#);
-    assert_oracle_parity(r#"(funcall #'string-to-number "42")"#);
-    assert_oracle_parity(r#"(funcall #'substring "hello world" 6)"#);
-    assert_oracle_parity(r#"(funcall #'upcase "abc")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(funcall #'concat "hello" " " "world")"#,
+        expect_test::expect![[r#""OK \"hello world\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(funcall #'string-to-number "42")"#,
+        expect_test::expect![[r#""OK 42""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(funcall #'substring "hello world" 6)"#,
+        expect_test::expect![[r#""OK \"world\"""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        r#"(funcall #'upcase "abc")"#,
+        expect_test::expect![[r#""OK \"ABC\"""#]],
+    );
 
     // List subrs
-    assert_oracle_parity("(funcall #'cons 'a '(b c))");
-    assert_oracle_parity("(funcall #'car '(1 2 3))");
-    assert_oracle_parity("(funcall #'cdr '(1 2 3))");
-    assert_oracle_parity("(funcall #'length '(a b c d))");
-    assert_oracle_parity("(funcall #'nth 2 '(a b c d))");
-    assert_oracle_parity("(funcall #'nthcdr 2 '(a b c d))");
-    assert_oracle_parity("(funcall #'reverse '(1 2 3 4 5))");
-    assert_oracle_parity("(funcall #'append '(1 2) '(3 4) '(5))");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'cons 'a '(b c))",
+        expect_test::expect![[r#""OK (a b c)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'car '(1 2 3))",
+        expect_test::expect![[r#""OK 1""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'cdr '(1 2 3))",
+        expect_test::expect![[r#""OK (2 3)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'length '(a b c d))",
+        expect_test::expect![[r#""OK 4""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'nth 2 '(a b c d))",
+        expect_test::expect![[r#""OK c""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'nthcdr 2 '(a b c d))",
+        expect_test::expect![[r#""OK (c d)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'reverse '(1 2 3 4 5))",
+        expect_test::expect![[r#""OK (5 4 3 2 1)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'append '(1 2) '(3 4) '(5))",
+        expect_test::expect![[r#""OK (1 2 3 4 5)""#]],
+    );
 
     // Predicate subrs
-    assert_oracle_parity("(funcall #'null nil)");
-    assert_oracle_parity("(funcall #'null t)");
-    assert_oracle_parity("(funcall #'numberp 42)");
-    assert_oracle_parity("(funcall #'stringp \"hi\")");
-    assert_oracle_parity("(funcall #'symbolp 'foo)");
-    assert_oracle_parity("(funcall #'consp '(1))");
-    assert_oracle_parity("(funcall #'listp '(1 2))");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'null nil)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'null t)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'numberp 42)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'stringp \"hi\")",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'symbolp 'foo)",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'consp '(1))",
+        expect_test::expect![[r#""OK t""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall #'listp '(1 2))",
+        expect_test::expect![[r#""OK t""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -264,28 +451,32 @@ fn oracle_prop_apply_non_list_final_arg_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // apply with integer as final arg
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
              (apply #'+ 1 2 3)
            (wrong-type-argument (list 'got-error (car err))))"#,
+        expect_test::expect![[r#""OK (got-error wrong-type-argument)""#]],
     );
     // apply with string as final arg
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
              (apply #'+ "not-a-list")
            (wrong-type-argument (list 'got-error (car err))))"#,
+        expect_test::expect![[r#""OK (got-error wrong-type-argument)""#]],
     );
     // apply with symbol as final arg (not nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
              (apply #'+ 'not-a-list)
            (wrong-type-argument (list 'got-error (car err))))"#,
+        expect_test::expect![[r#""OK (got-error wrong-type-argument)""#]],
     );
     // apply with vector as final arg
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
              (apply #'+ [1 2 3])
            (wrong-type-argument (list 'got-error (car err))))"#,
+        expect_test::expect![[r#""OK (got-error wrong-type-argument)""#]],
     );
 }
 
@@ -306,7 +497,10 @@ fn oracle_prop_funcall_macro_errors() {
             (invalid-function (list 'invalid-function-caught))
             (error (list 'other-error (car err))))
         (fmakunbound 'neovm--test-fac-mac)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (invalid-function-caught)""#]],
+    );
 
     // apply with macro should also error
     let form2 = r#"(progn
@@ -317,7 +511,10 @@ fn oracle_prop_funcall_macro_errors() {
             (invalid-function (list 'invalid-function-caught))
             (error (list 'other-error (car err))))
         (fmakunbound 'neovm--test-fac-mac2)))"#;
-    assert_oracle_parity(form2);
+    crate::common::assert_oracle_parity_expect(
+        form2,
+        expect_test::expect![[r#""OK (invalid-function-caught)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -329,31 +526,39 @@ fn oracle_prop_nested_funcall_apply_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // 4-level currying
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((f (lambda (a)
                      (lambda (b)
                        (lambda (c)
                          (lambda (d) (list a b c d)))))))
              (funcall (funcall (funcall (funcall f 1) 2) 3) 4))"#,
+        expect_test::expect![[r#""OK (1 2 3 4)""#]],
     );
 
     // funcall result as arg to apply
-    assert_oracle_parity(r#"(apply #'+ (funcall #'list 1 2 3 4 5))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(apply #'+ (funcall #'list 1 2 3 4 5))"#,
+        expect_test::expect![[r#""OK 15""#]],
+    );
 
     // apply result as arg to funcall
-    assert_oracle_parity(r#"(funcall #'1+ (apply #'+ '(1 2 3 4)))"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(funcall #'1+ (apply #'+ '(1 2 3 4)))"#,
+        expect_test::expect![[r#""OK 11""#]],
+    );
 
     // Double composition
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((compose (lambda (f g) (lambda (&rest args) (funcall f (apply g args))))))
              (let ((add1-then-double (funcall compose (lambda (x) (* x 2)) #'+))
                    (double-then-add1 (funcall compose #'1+ (lambda (&rest xs) (* 2 (apply #'+ xs))))))
                (list (funcall add1-then-double 3 4)
                      (funcall double-then-add1 3 4))))"#,
+        expect_test::expect![[r#""OK (14 15)""#]],
     );
 
     // Pipeline of 5 functions
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((pipe (lambda (fns val)
                          (let ((result val))
                            (dolist (f fns result)
@@ -361,6 +566,7 @@ fn oracle_prop_nested_funcall_apply_deep() {
              (funcall pipe
                       (list #'1+ (lambda (x) (* x 3)) #'1+ (lambda (x) (- x 5)) #'abs)
                       10))"#,
+        expect_test::expect![[r#""OK 29""#]],
     );
 
     // Mutual recursion via funcall depth=20
@@ -380,7 +586,10 @@ fn oracle_prop_nested_funcall_apply_deep() {
                 (funcall 'neovm--test-fac-is-odd 21))
         (fmakunbound 'neovm--test-fac-is-even)
         (fmakunbound 'neovm--test-fac-is-odd)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t nil nil t nil t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -392,32 +601,69 @@ fn oracle_prop_funcall_rest_arg_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Pure &rest, 0 args
-    assert_oracle_parity("(funcall (lambda (&rest xs) (length xs)))");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (&rest xs) (length xs)))",
+        expect_test::expect![[r#""OK 0""#]],
+    );
     // Pure &rest, 1 arg
-    assert_oracle_parity("(funcall (lambda (&rest xs) xs) 42)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (&rest xs) xs) 42)",
+        expect_test::expect![[r#""OK (42)""#]],
+    );
     // Pure &rest, many args
-    assert_oracle_parity("(funcall (lambda (&rest xs) xs) 1 2 3 4 5 6 7 8)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (&rest xs) xs) 1 2 3 4 5 6 7 8)",
+        expect_test::expect![[r#""OK (1 2 3 4 5 6 7 8)""#]],
+    );
 
     // 1 required + &rest, 0 rest
-    assert_oracle_parity("(funcall (lambda (a &rest xs) (list a xs)) 'only)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (a &rest xs) (list a xs)) 'only)",
+        expect_test::expect![[r#""OK (only nil)""#]],
+    );
     // 1 required + &rest, many rest
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(funcall (lambda (a &rest xs) (list a (length xs) (apply #'+ xs))) 'h 1 2 3 4 5)",
+        expect_test::expect![[r#""OK (h 5 15)""#]],
     );
 
     // 2 required + &rest
-    assert_oracle_parity("(funcall (lambda (a b &rest xs) (list a b xs)) 1 2)");
-    assert_oracle_parity("(funcall (lambda (a b &rest xs) (list a b xs)) 1 2 3 4 5)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (a b &rest xs) (list a b xs)) 1 2)",
+        expect_test::expect![[r#""OK (1 2 nil)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (a b &rest xs) (list a b xs)) 1 2 3 4 5)",
+        expect_test::expect![[r#""OK (1 2 (3 4 5))""#]],
+    );
 
     // 1 required + 1 optional + &rest
-    assert_oracle_parity("(funcall (lambda (a &optional b &rest xs) (list a b xs)) 1)");
-    assert_oracle_parity("(funcall (lambda (a &optional b &rest xs) (list a b xs)) 1 2)");
-    assert_oracle_parity("(funcall (lambda (a &optional b &rest xs) (list a b xs)) 1 2 3 4)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (a &optional b &rest xs) (list a b xs)) 1)",
+        expect_test::expect![[r#""OK (1 nil nil)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (a &optional b &rest xs) (list a b xs)) 1 2)",
+        expect_test::expect![[r#""OK (1 2 nil)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (a &optional b &rest xs) (list a b xs)) 1 2 3 4)",
+        expect_test::expect![[r#""OK (1 2 (3 4))""#]],
+    );
 
     // 2 optional + &rest
-    assert_oracle_parity("(funcall (lambda (&optional a b &rest xs) (list a b xs)))");
-    assert_oracle_parity("(funcall (lambda (&optional a b &rest xs) (list a b xs)) 'x)");
-    assert_oracle_parity("(funcall (lambda (&optional a b &rest xs) (list a b xs)) 'x 'y 'z1 'z2)");
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (&optional a b &rest xs) (list a b xs)))",
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (&optional a b &rest xs) (list a b xs)) 'x)",
+        expect_test::expect![[r#""OK (x nil nil)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(funcall (lambda (&optional a b &rest xs) (list a b xs)) 'x 'y 'z1 'z2)",
+        expect_test::expect![[r#""OK (x y (z1 z2))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -429,17 +675,30 @@ fn oracle_prop_apply_spreading_with_rest() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // apply + rest: spread args contribute to both fixed and rest
-    assert_oracle_parity("(apply (lambda (a &rest xs) (cons a xs)) 'first '(second third))");
-    assert_oracle_parity("(apply (lambda (a b &rest xs) (list a b xs)) 1 2 '(3 4 5))");
-    assert_oracle_parity("(apply (lambda (a b &rest xs) (list a b xs)) 1 '(2))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply (lambda (a &rest xs) (cons a xs)) 'first '(second third))",
+        expect_test::expect![[r#""OK (first second third)""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply (lambda (a b &rest xs) (list a b xs)) 1 2 '(3 4 5))",
+        expect_test::expect![[r#""OK (1 2 (3 4 5))""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(apply (lambda (a b &rest xs) (list a b xs)) 1 '(2))",
+        expect_test::expect![[r#""OK (1 2 nil)""#]],
+    );
 
     // apply where all args come from the spread list
-    assert_oracle_parity("(apply (lambda (a b c &rest xs) (list a b c xs)) '(10 20 30 40 50))");
+    crate::common::assert_oracle_parity_expect(
+        "(apply (lambda (a b c &rest xs) (list a b c xs)) '(10 20 30 40 50))",
+        expect_test::expect![[r#""OK (10 20 30 (40 50))""#]],
+    );
 
     // apply with dynamically constructed arg list
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((args (number-sequence 1 10)))
              (apply (lambda (&rest xs) (apply #'+ xs)) args))"#,
+        expect_test::expect![[r#""OK 55""#]],
     );
 }
 
@@ -452,7 +711,7 @@ fn oracle_prop_funcall_higher_order_composition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // map + filter + reduce via funcall
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((my-filter (lambda (pred lst)
                               (let ((result nil))
                                 (dolist (x lst (nreverse result))
@@ -468,10 +727,11 @@ fn oracle_prop_funcall_higher_order_composition() {
                     (sum-evens (funcall my-reduce #'+ 0 evens))
                     (prod-odds (funcall my-reduce #'* 1 odds)))
                (list evens odds sum-evens prod-odds)))"#,
+        expect_test::expect![[r#""OK ((2 4 6 8 10) (1 3 5 7 9) 30 945)""#]],
     );
 
     // Partial application helper
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((partial (lambda (f &rest initial-args)
                             (lambda (&rest more-args)
                               (apply f (append initial-args more-args))))))
@@ -482,10 +742,11 @@ fn oracle_prop_funcall_higher_order_composition() {
                      (funcall add5 0)
                      (funcall mul3 7)
                      (funcall prefix-list 'a 'b 'c))))"#,
+        expect_test::expect![[r#""OK (15 5 21 (header a b c))""#]],
     );
 
     // Function dispatch table using alist + funcall
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((dispatch '((add . +) (sub . -) (mul . *) (div . /))))
              (let ((run-op (lambda (op &rest args)
                              (let ((fn (cdr (assq op dispatch))))
@@ -494,6 +755,7 @@ fn oracle_prop_funcall_higher_order_composition() {
                      (funcall run-op 'sub 10 3)
                      (funcall run-op 'mul 2 3 4)
                      (funcall run-op 'div 100 5 4))))"#,
+        expect_test::expect![[r#""OK (6 7 24 5)""#]],
     );
 }
 
@@ -525,7 +787,10 @@ fn oracle_prop_funcall_symbol_function_indirection() {
               (funcall #'neovm--test-fac-triple 5)
               (funcall (symbol-function 'neovm--test-fac-triple) 5)))
         (fmakunbound 'neovm--test-fac-triple)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (21 21 21 30 30 30 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -537,52 +802,59 @@ fn oracle_prop_funcall_wrong_arg_count_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Too few args to fixed-arity lambda
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
              (funcall (lambda (a b c) (+ a b c)) 1 2)
            (wrong-number-of-arguments 'too-few))"#,
+        expect_test::expect![[r#""OK too-few""#]],
     );
 
     // Too many args to fixed-arity lambda
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
              (funcall (lambda (a b) (+ a b)) 1 2 3)
            (wrong-number-of-arguments 'too-many))"#,
+        expect_test::expect![[r#""OK too-many""#]],
     );
 
     // Too few for required + optional (need at least 1)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
              (funcall (lambda (a &optional b) (list a b)))
            (wrong-number-of-arguments 'too-few))"#,
+        expect_test::expect![[r#""OK too-few""#]],
     );
 
     // Too many for required + optional (no &rest)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
              (funcall (lambda (a &optional b) (list a b)) 1 2 3)
            (wrong-number-of-arguments 'too-many))"#,
+        expect_test::expect![[r#""OK too-many""#]],
     );
 
     // funcall with non-function value
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
              (funcall 42)
            (invalid-function (list 'invalid-function (cadr err))))"#,
+        expect_test::expect![[r#""OK (invalid-function 42)""#]],
     );
 
     // funcall with void symbol
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
              (funcall 'neovm--test-fac-nonexistent-fn123)
            (void-function (list 'void (cadr err))))"#,
+        expect_test::expect![[r#""OK (void neovm--test-fac-nonexistent-fn123)""#]],
     );
 
     // apply with too few for required params
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
              (apply (lambda (a b c) (+ a b c)) '(1))
            (wrong-number-of-arguments 'too-few-apply))"#,
+        expect_test::expect![[r#""OK too-few-apply""#]],
     );
 }
 
@@ -595,7 +867,7 @@ fn oracle_prop_funcall_apply_self_application() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Factorial via self-passing
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((fact (lambda (self n)
                          (if (<= n 1) 1
                            (* n (funcall self self (1- n)))))))
@@ -604,10 +876,11 @@ fn oracle_prop_funcall_apply_self_application() {
                    (funcall fact fact 5)
                    (funcall fact fact 10)
                    (funcall fact fact 12)))"#,
+        expect_test::expect![[r#""OK (1 1 120 3628800 479001600)""#]],
     );
 
     // Fibonacci via self-passing with memoization
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((memo (make-hash-table :test 'eql)))
              (let ((fib (lambda (self n)
                           (or (gethash n memo)
@@ -618,10 +891,11 @@ fn oracle_prop_funcall_apply_self_application() {
                                 r)))))
                (mapcar (lambda (k) (funcall fib fib k))
                        '(0 1 2 3 4 5 10 15 20 25))))"#,
+        expect_test::expect![[r#""OK (0 1 1 2 3 5 55 610 6765 75025)""#]],
     );
 
     // Trampoline pattern: functions return thunks until non-function
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((trampoline (lambda (fn &rest args)
                                 (let ((result (apply fn args)))
                                   (while (functionp result)
@@ -637,6 +911,7 @@ fn oracle_prop_funcall_apply_self_application() {
                          (funcall trampoline count-down 5 0)
                          (funcall trampoline count-down 100 0))
                  (fmakunbound 'neovm--test-fac-cd))))"#,
+        expect_test::expect![[r#""OK (0 5 100)""#]],
     );
 }
 
@@ -649,7 +924,7 @@ fn oracle_prop_funcall_apply_data_structure_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Use funcall to build and query hash tables
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((ht (make-hash-table :test 'equal)))
              (let ((set-val (lambda (k v) (puthash k v ht)))
                    (get-val (lambda (k) (gethash k ht 'missing))))
@@ -661,19 +936,21 @@ fn oracle_prop_funcall_apply_data_structure_ops() {
                      (funcall get-val "score")
                      (funcall get-val "nonexistent")
                      (hash-table-count ht))))"#,
+        expect_test::expect![[r#""OK (\"Alice\" 30 95 missing 3)""#]],
     );
 
     // Use apply with vector operations
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((v [10 20 30 40 50]))
              (list (apply #'+ (append v nil))
                    (funcall #'aref v 0)
                    (funcall #'aref v 4)
                    (funcall #'length v)))"#,
+        expect_test::expect![[r#""OK (150 10 50 5)""#]],
     );
 
     // Reduce over a vector via funcall
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((vec [3 1 4 1 5 9 2 6]))
              (let ((max-val (aref vec 0))
                    (min-val (aref vec 0))
@@ -684,5 +961,6 @@ fn oracle_prop_funcall_apply_data_structure_ops() {
                    (setq min-val (funcall #'min min-val v))
                    (setq sum (funcall #'+ sum v))))
                (list max-val min-val sum)))"#,
+        expect_test::expect![[r#""OK (9 1 31)""#]],
     );
 }

@@ -28,5 +28,10 @@ fn oracle_zlib_decompress_region_validates_region_before_unibyte_buffer() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t (wrong-type-argument integer-or-marker-p \"x\") (error \"This function can be called only in unibyte buffers\") nil)""#
+        ]],
+    );
 }

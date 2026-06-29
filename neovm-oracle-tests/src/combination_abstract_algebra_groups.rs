@@ -72,7 +72,12 @@ fn oracle_prop_algebra_groups_cayley_table() {
     (fmakunbound 'neovm--grp-verify-closure)
     (fmakunbound 'neovm--grp-z-add)
     (fmakunbound 'neovm--grp-z-mul)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 1 2 3 4) (1 2 3 4 0) (2 3 4 0 1) (3 4 0 1 2) (4 0 1 2 3)) t t t (0 2 4 1 3) ((0 0 0 0 0) (0 1 2 3 4) (0 2 4 1 3) (0 3 1 4 2) (0 4 3 2 1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +141,12 @@ fn oracle_prop_algebra_groups_cyclic_generation() {
             check)))
     (fmakunbound 'neovm--grp-generate-cyclic)
     (fmakunbound 'neovm--grp-element-order)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 1 2 3 4 5 6 7 8 9 10 11) (0 2 4 6 8 10) (0 3 6 9) (0 4 8) (0 6) ((0 . 1) (1 . 12) (2 . 6) (3 . 4) (4 . 3) (5 . 12) (6 . 2) (7 . 12) (8 . 3) (9 . 4) (10 . 6) (11 . 12)) (1 5 7 11) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +232,12 @@ fn oracle_prop_algebra_groups_subgroup_lagrange() {
             (sort sizes #'<))))
     (fmakunbound 'neovm--grp-is-subgroup)
     (fmakunbound 'neovm--grp-all-cyclic-subgroups)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 0) (2 0 6) (3 0 4 8) (4 0 3 6 9) (6 0 2 4 6 8 10) (12 0 1 2 3 4 5 6 7 8 9 10 11)) t t 6 (1 2 3 4 6 12))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +335,12 @@ fn oracle_prop_algebra_groups_symmetric_s4_permutations() {
     (fmakunbound 'neovm--grp-perm-inverse)
     (fmakunbound 'neovm--grp-perm-order)
     (fmakunbound 'neovm--grp-perm-cycle-type)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ([2 3 0 1] t [3 0 1 2] t 1 4 2 3 2 (1 1 1 1) (4) (2 2) (3 1) (2 1 1) (t [2 1 3 0] [0 2 3 1]))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -414,7 +434,10 @@ fn oracle_prop_algebra_groups_dihedral_group() {
     (fmakunbound 'neovm--grp-dihedral-mul)
     (fmakunbound 'neovm--grp-dihedral-inv)
     (fmakunbound 'neovm--grp-dihedral-elements)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (8 t t t ((r . 2) (r . 3) (r . 0) t) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -498,7 +521,10 @@ fn oracle_prop_algebra_groups_center_computation() {
     (fmakunbound 'neovm--grp-d4-mul)
     (fmakunbound 'neovm--grp-center)
     (fmakunbound 'neovm--grp-commutator)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((r . 0) (r . 2)) 2 t ((0 1 2 3 4 5) nil))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -565,7 +591,12 @@ fn oracle_prop_algebra_groups_homomorphism_verification() {
                 (nreverse kernel))))))
     (fmakunbound 'neovm--grp-phi)
     (fmakunbound 'neovm--grp-prod-add)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t ((0 0 0) (1 1 1) (2 2 2) (3 3 0) (4 0 1) (5 1 2) (6 2 0) (7 3 1) (8 0 2) (9 1 0) (10 2 1) (11 3 2)) (0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -640,5 +671,10 @@ fn oracle_prop_algebra_groups_coset_decomposition() {
             (list rep0 rep1 sum-rep result-coset))))
     (fmakunbound 'neovm--grp-left-cosets)
     (fmakunbound 'neovm--grp-right-cosets)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 4 8) (1 5 9) (2 6 10) (3 7 11)) ((0 4 8) (1 5 9) (2 6 10) (3 7 11)) t 4 t (0 1 1 (1 5 9)))""#
+        ]],
+    );
 }

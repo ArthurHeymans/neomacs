@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx201_widget_create_editable_field_with_validation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -23,13 +23,16 @@ fn div_cx201_widget_create_editable_field_with_validation() {
               (widget-get w :valid-regexp))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((default :convert-widget widget-value-convert-widget :keymap (keymap (5 . widget-end-of-line) (11 . widget-kill-line) (13 . widget-field-activate) (touchscreen-begin . widget-button-click) (down-mouse-1 . widget-button-click) (down-mouse-2 . widget-button-click) (backtab . widget-backward) (S-tab . widget-backward) (27 keymap (9 . widget-complete)) (9 . widget-forward)) :format \"%v\" :help-echo \"M-TAB: complete field; RET: enter value\" :value \"\" :prompt-internal widget-field-prompt-internal :prompt-history widget-field-history :prompt-value widget-field-prompt-value :action widget-field-action :validate widget-field-validate :valid-regexp \"\" :error \"Field's value doesn't match allowed forms\" :value-create widget-field-value-create :value-set widget-field-value-set :value-delete widget-field-value-delete :value-get widget-field-value-get :match widget-field-match) \"initial\" 30 \"^[a-z]+$\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx201_widget_checkbox_toggle_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -42,13 +45,14 @@ fn div_cx201_widget_checkbox_toggle_cycle() {
               (list (widgetp chk) v1 v2 v3))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx201_widget_radio_button_choice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -61,13 +65,14 @@ fn div_cx201_widget_radio_button_choice() {
               (widget-apply rb :complete))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx201_widget_menu_choice_with_items() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -79,13 +84,16 @@ fn div_cx201_widget_menu_choice_with_items() {
               (widget-value mc))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((default :convert-widget widget-types-convert-widget :copy widget-types-copy :format \"%[%t%]: %v\" :case-fold t :tag \"choice\" :void (item :format \"invalid (%t)\n\") :value-create widget-choice-value-create :value-get widget-child-value-get :value-inline widget-child-value-inline :default-get widget-choice-default-get :mouse-down-action widget-choice-mouse-down-action :action widget-choice-action :error \"Make a choice\" :validate widget-choice-validate :match widget-choice-match :match-inline widget-choice-match-inline) :b)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx201_widget_default_format_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (boundp 'widget-push-button)
@@ -94,13 +102,14 @@ fn div_cx201_widget_default_format_query() {
           (boundp 'widget-menu-max-short))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx201_widget_field_constraints_and_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -113,13 +122,14 @@ fn div_cx201_widget_field_constraints_and_move() {
             (list at-w1 at-w2)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx201_widget_item_with_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -128,13 +138,16 @@ fn div_cx201_widget_item_with_text() {
               (widget-value it))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((default :convert-widget widget-value-convert-widget :value-create widget-item-value-create :value-delete ignore :value-get widget-value-value-get :match widget-item-match :match-inline widget-item-match-inline :action widget-item-action :format \"%t\n\") \"Static label text\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx201_widget_text_create_with_multiline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -145,13 +158,16 @@ fn div_cx201_widget_text_create_with_multiline() {
               (length (split-string (widget-value txt) "\n")))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((editable-field :format \"%{%t%}: %v\" :keymap (keymap (5 . widget-end-of-line) (13 . widget-button-press) (touchscreen-begin . widget-button-click) (down-mouse-1 . widget-button-click) (down-mouse-2 . widget-button-click) (backtab . widget-backward) (S-tab . widget-backward) (27 keymap (9 . widget-backward)) (9 . widget-forward))) \"line1\nline2\nline3\" 3)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx201_widget_apply_set_get_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -161,13 +177,14 @@ fn div_cx201_widget_apply_set_get_value() {
               (widget-apply w :complete))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx201_widget_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -195,5 +212,6 @@ fn div_cx201_widget_with_marker_overlay_undo_narrow_mega() {
                     (text-properties-at 1)))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

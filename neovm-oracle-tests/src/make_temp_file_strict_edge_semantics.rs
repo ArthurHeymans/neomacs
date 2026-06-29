@@ -67,5 +67,10 @@ fn oracle_make_temp_file_prefix_suffix_text_directory_and_error_edges() {
     (delete-directory root t)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"payload\" t t t t t (wrong-number-of-arguments ((1 . 4) 0)) (wrong-type-argument (sequencep 42)) (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((1 . 3) 4)))""#
+        ]],
+    );
 }

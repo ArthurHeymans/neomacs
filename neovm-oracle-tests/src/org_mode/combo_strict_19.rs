@@ -11,7 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn strict_org_version() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (list
@@ -21,13 +21,16 @@ fn strict_org_version() {
    :org-version-var (when (boundp 'org-version) (stringp org-version))
    :org-git-version (when (boundp 'org-git-version) (stringp org-git-version))
    ))"##,
+        expect_test::expect![[
+            r#""OK (:version-fbound t :version-string t :org-version-var t :org-git-version nil)""#
+        ]],
     );
 }
 
 #[test]
 fn strict_org_key_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (list
@@ -36,13 +39,16 @@ fn strict_org_key_bindings() {
    :struct-mode-map-bound (boundp 'orgstruct-mode-map)
    :struct++-mode-map-bound (boundp 'orgstruct++-mode-map)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:mode-map-bound t :mode-map-length 38 :struct-mode-map-bound nil :struct++-mode-map-bound nil)""#
+        ]],
     );
 }
 
 #[test]
 fn strict_org_faces_extraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-faces)
   (list
@@ -55,26 +61,30 @@ fn strict_org_faces_extraction() {
    :link-face (facep 'org-link)
    :block-begin-line-face (facep 'org-block-begin-line)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:level-1-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified nil] :level-2-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified nil] :todo-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] :done-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] :headline-done-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] :date-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] :link-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] :block-begin-line-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified t])""#
+        ]],
     );
 }
 
 #[test]
 fn strict_element_update_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
   (list
    :update-syntax-fbound (fboundp 'org-element--update-syntax)
    :parse-buffer-fbound (fboundp 'org-element-parse-buffer)
    ))"##,
+        expect_test::expect![[r#""OK (:update-syntax-fbound nil :parse-buffer-fbound t)""#]],
     );
 }
 
 #[test]
 fn strict_export_smart_quotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (list
@@ -82,26 +92,28 @@ fn strict_export_smart_quotes() {
    :smart-quotes-val (when (boundp 'org-export-with-smart-quotes)
                        org-export-with-smart-quotes)
    ))"##,
+        expect_test::expect![[r#""OK (:smart-quotes-fbound t :smart-quotes-val nil)""#]],
     );
 }
 
 #[test]
 fn strict_capture_templates_contexts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-capture)
   (list
    :templates-contexts-fbound (boundp 'org-capture-templates-contexts)
    :templates-bound (boundp 'org-capture-templates)
    ))"##,
+        expect_test::expect![[r#""OK (:templates-contexts-fbound t :templates-bound t)""#]],
     );
 }
 
 #[test]
 fn strict_agenda_write() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-agenda)
   (list
@@ -111,13 +123,16 @@ fn strict_agenda_write() {
    :tag-filter-fbound (boundp 'org-agenda-tag-filter)
    :effort-filter-fbound (boundp 'org-agenda-effort-filter)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:write-fbound t :filter-preset-fbound t :category-filter-fbound t :tag-filter-fbound t :effort-filter-fbound t)""#
+        ]],
     );
 }
 
 #[test]
 fn strict_clock_resolve() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-clock)
   (list
@@ -125,13 +140,16 @@ fn strict_clock_resolve() {
    :resolve-clocks-fbound (fboundp 'org-resolve-clocks)
    :idle-time-fbound (fboundp 'org-user-idle-seconds)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:resolve-fbound t :resolve-clocks-fbound t :idle-time-fbound t)""#
+        ]],
     );
 }
 
 #[test]
 fn strict_persist_load_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-persist)
   (list
@@ -140,13 +158,16 @@ fn strict_persist_load_all() {
    :read-fbound (fboundp 'org-persist-read)
    :write-fbound (fboundp 'org-persist-write)
    ))"##,
+        expect_test::expect![[
+            r#""OK (:load-all-fbound t :register-fbound t :read-fbound t :write-fbound t)""#
+        ]],
     );
 }
 
 #[test]
 fn strict_babel_diagram_backends() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (list
    :ob-ditaa (condition-case nil (require 'ob-ditaa) (error (featurep 'ob-ditaa)))
@@ -154,5 +175,8 @@ fn strict_babel_diagram_backends() {
    :ob-dot (condition-case nil (require 'ob-dot) (error (featurep 'ob-dot)))
    :ob-gnuplot (condition-case nil (require 'ob-gnuplot) (error (featurep 'ob-gnuplot)))
    ))"##,
+        expect_test::expect![[
+            r#""OK (:ob-ditaa ob-ditaa :ob-plantuml ob-plantuml :ob-dot ob-dot :ob-gnuplot ob-gnuplot)""#
+        ]],
     );
 }

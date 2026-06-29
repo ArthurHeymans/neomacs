@@ -186,7 +186,10 @@ fn oracle_prop_earley_parser_core() {
     (fmakunbound 'neovm--ep-complete)
     (fmakunbound 'neovm--ep-parse)
     (fmakunbound 'neovm--ep-accepted-p)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 2 2 nil nil t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -319,7 +322,10 @@ fn oracle_prop_earley_parser_recursive_grammar() {
     (fmakunbound 'neovm--ep2-complete)
     (fmakunbound 'neovm--ep2-parse)
     (fmakunbound 'neovm--ep2-ok-p)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -456,7 +462,10 @@ fn oracle_prop_earley_parser_arithmetic() {
     (fmakunbound 'neovm--ep3-complete)
     (fmakunbound 'neovm--ep3-parse)
     (fmakunbound 'neovm--ep3-ok-p)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil nil nil t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -580,7 +589,7 @@ fn oracle_prop_earley_parser_ambiguity() {
     (fmakunbound 'neovm--ep4-complete)
     (fmakunbound 'neovm--ep4-parse)
     (fmakunbound 'neovm--ep4-count-parses)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 1 1 1 1)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -726,7 +735,10 @@ fn oracle_prop_earley_parser_multi_rule() {
     (fmakunbound 'neovm--ep5-complete)
     (fmakunbound 'neovm--ep5-parse)
     (fmakunbound 'neovm--ep5-ok-p)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -848,5 +860,8 @@ fn oracle_prop_earley_parser_chart_stats() {
     (fmakunbound 'neovm--ep6-complete)
     (fmakunbound 'neovm--ep6-parse)
     (fmakunbound 'neovm--ep6-chart-stats)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 1 1 1) (2 4 6) 7 (1 0))""#]],
+    );
 }

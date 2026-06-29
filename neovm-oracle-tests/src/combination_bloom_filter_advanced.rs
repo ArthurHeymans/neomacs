@@ -58,7 +58,12 @@ fn oracle_prop_bloom_adv_multiple_hash_functions() {
                       unique))))
           keys))
     (fmakunbound 'neovm--bfa-hash)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"hello\" (229 95 245 39 228 38 203 254) 8) (\"world\" (165 43 121 143 4 82 140 83) 8) (\"bloom\" (22 60 234 48 181 99 116 235) 8) (\"filter\" (99 164 168 103 12 153 54 35) 8) (\"test\" (31 82 71 42 227 6 194 57) 8))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +160,12 @@ fn oracle_prop_bloom_adv_configurable_fp_rate() {
     (fmakunbound 'neovm--bfr-add)
     (fmakunbound 'neovm--bfr-check)
     (fmakunbound 'neovm--bfr-count-bits)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 30 0 1 29 t t) (3 90 0 0 30 t t) (5 148 0 0 30 t t) (7 175 0 0 30 t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +274,12 @@ fn oracle_prop_bloom_adv_union() {
     (fmakunbound 'neovm--bfu-check)
     (fmakunbound 'neovm--bfu-union)
     (fmakunbound 'neovm--bfu-bit-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t t t t t) (t t t t t) (nil nil nil) (nil nil nil) (18 19 34 t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -371,7 +386,10 @@ fn oracle_prop_bloom_adv_intersection() {
     (fmakunbound 'neovm--bfi-check)
     (fmakunbound 'neovm--bfi-intersect)
     (fmakunbound 'neovm--bfi-bit-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t nil nil nil nil (22 24 14 t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -460,7 +478,12 @@ fn oracle_prop_bloom_adv_spell_checker() {
     (fmakunbound 'neovm--bfsc-add)
     (fmakunbound 'neovm--bfsc-check)
     (fmakunbound 'neovm--bfsc-spellcheck)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"the\" correct 1 1) (\"quik\" misspelled 2 1) (\"brown\" correct 3 2) (\"foxx\" misspelled 4 2) (\"jumps\" correct 5 3) (\"ovr\" misspelled 6 3) (\"lazy\" correct 7 4) (\"dogg\" misspelled 8 4) (\"hello\" correct 9 5) (\"wrld\" misspelled 10 5) (\"programming\" correct 11 6) (\"languge\" misspelled 12 6) (\"xyz\" misspelled 13 6) (\"algorithm\" correct 14 7) (\"dat\" misspelled 15 7) (\"structure\" correct 16 8)) 16 8)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -564,7 +587,12 @@ fn oracle_prop_bloom_adv_fp_rate_estimation() {
     (fmakunbound 'neovm--bfe-check)
     (fmakunbound 'neovm--bfe-bit-count)
     (fmakunbound 'neovm--bfe-estimate-fp-rate)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((64 4 61 0 87 100 t) (128 4 102 0 59 100 t) (256 4 159 0 29 100 t) (512 4 169 0 6 100 t) (1024 4 179 0 0 100 t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -656,5 +684,8 @@ fn oracle_prop_bloom_adv_counting_filter() {
     (fmakunbound 'neovm--bfc-add)
     (fmakunbound 'neovm--bfc-remove)
     (fmakunbound 'neovm--bfc-check)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t t t t t) (t nil t nil t) (t t t nil t) nil nil)""#]],
+    );
 }

@@ -15,7 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_vector_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-vec"))
         (vec (vector 1 2 3 4 5)))
@@ -59,6 +59,7 @@ fn combo_vector_buffer_local_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -66,7 +67,7 @@ fn combo_vector_buffer_local_marker_overlay_undo() {
 fn combo_vconcat_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-vcon"))
         (v1 (vector 'a 'b 'c))
@@ -104,6 +105,7 @@ fn combo_vconcat_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -111,7 +113,7 @@ fn combo_vconcat_marker_overlay_undo() {
 fn combo_make_vector_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-mvec")))
     (with-current-buffer buf
@@ -151,6 +153,7 @@ fn combo_make_vector_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -158,7 +161,7 @@ fn combo_make_vector_marker_overlay_undo() {
 fn combo_vector_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-vecn"))
         (vec (vector 10 20 30 40 50)))
@@ -205,6 +208,7 @@ fn combo_vector_narrow_marker_overlay_undo() {
                                 (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -212,7 +216,7 @@ fn combo_vector_narrow_marker_overlay_undo() {
 fn combo_char_table_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-ctab"))
         (ct (make-char-table 'test-table nil)))
@@ -256,5 +260,6 @@ fn combo_char_table_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

@@ -196,7 +196,7 @@ fn oracle_prop_bci_basic_arithmetic() {
         VM_PREAMBLE = VM_PREAMBLE,
         VM_CLEANUP = VM_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +231,7 @@ fn oracle_prop_bci_dup_swap() {
         VM_PREAMBLE = VM_PREAMBLE,
         VM_CLEANUP = VM_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -298,7 +298,7 @@ fn oracle_prop_bci_branching() {
         VM_PREAMBLE = VM_PREAMBLE,
         VM_CLEANUP = VM_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -351,7 +351,7 @@ fn oracle_prop_bci_factorial() {
         VM_PREAMBLE = VM_PREAMBLE,
         VM_CLEANUP = VM_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -437,7 +437,7 @@ fn oracle_prop_bci_fibonacci() {
         VM_PREAMBLE = VM_PREAMBLE,
         VM_CLEANUP = VM_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -493,7 +493,7 @@ fn oracle_prop_bci_call_ret() {
         VM_PREAMBLE = VM_PREAMBLE,
         VM_CLEANUP = VM_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -557,5 +557,5 @@ fn oracle_prop_bci_expression_compiler() {
         VM_PREAMBLE = VM_PREAMBLE,
         VM_CLEANUP = VM_CLEANUP
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }

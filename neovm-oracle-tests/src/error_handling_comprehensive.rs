@@ -54,7 +54,12 @@ fn oracle_prop_error_comprehensive_condition_case_multi_handler_no_error() {
       (progn 1 2 3 (+ 100 200))
     (error 'err)
     (:success (list 'got res))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((no-error 30) (arith-caught arith-error) (success 42) (doubled 84) (got 300))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +123,12 @@ fn oracle_prop_error_comprehensive_signal_custom_symbols_and_data() {
     (put 'neovm--ehc-db-error 'error-message nil)
     (put 'neovm--ehc-val-error 'error-conditions nil)
     (put 'neovm--ehc-val-error 'error-message nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((app-caught neovm--ehc-db-error \"connection lost\" 4) (db-specific \"timeout\") (val-caught \"field 'email' invalid\" extra-count 4) (nil-data neovm--ehc-app-error nil) (nested-data a))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +173,12 @@ fn oracle_prop_error_comprehensive_error_vs_user_error() {
   (condition-case err
       (user-error "test message B")
     (error (error-message-string err))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((error-caught \"formatted: 42 hello\") (user-caught \"user problem: bad input\") (generic-caught-user user-error) (outer-caught error) \"test message A\" \"test message B\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -220,7 +235,12 @@ fn oracle_prop_error_comprehensive_nested_condition_case_selective() {
 
    ;; Final trace
    (nreverse trace)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (inner-handled (outer-caught number-or-marker-p) (l3 \"deep\") (rewrapped \"wrapped: arith-error\") (inner-arith outer-wta l3-caught))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -287,7 +307,12 @@ fn oracle_prop_error_comprehensive_unwind_protect_all_exit_paths() {
 
    ;; Final execution order log
    (nreverse log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((normal normal-result) error-handled thrown-value deep-handled (caught \"cleanup error\") (normal-body normal-cleanup error-body error-cleanup error-handler throw-body throw-cleanup deep-body cleanup-3 cleanup-2 cleanup-1 body-before-cleanup-err cleanup-that-errors))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -350,7 +375,12 @@ fn oracle_prop_error_comprehensive_propagation_through_call_chain() {
     (fmakunbound 'neovm--ehc-level2)
     (fmakunbound 'neovm--ehc-level2-safe)
     (fmakunbound 'neovm--ehc-level3)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((result 20) (propagated \"bottom-level error: 0\") (closure (t) (x) (condition-case err (+ (funcall 'neovm--ehc-level3 x) 10) (error (list 'caught-at-level2 (cadr err))))) (caught-at-level2 \"bottom-level error: 0\") (mapcar-error \"bottom-level error: 0\") (dolist-error \"bottom-level error: 0\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +430,10 @@ fn oracle_prop_error_comprehensive_ignore_errors() {
         (if (< y 30)
             (+ x y)
           0)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 nil 9 (nil nil) (nil 3 nil 12) \"hel\" nil nil 30)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -436,7 +469,10 @@ fn oracle_prop_error_comprehensive_with_demoted_errors() {
   ;; with-demoted-errors returns nil on error, not the error itself
   (let ((result (with-demoted-errors "Err: %S" (error "test"))))
     (list 'result result (null result))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 nil 100 nil (nil 42) (result nil t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -514,7 +550,12 @@ fn oracle_prop_error_comprehensive_recovery_state_machine() {
 
     (fmakunbound 'neovm--ehc-safe-divide)
     (fmakunbound 'neovm--ehc-try-strategies)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 division-by-zero bad-type ((ok 5) (err div0) (ok 2) (err div0) (ok 10)) (log ((try 1) (fail 1 \"not yet: attempt 1\") (try 2) (fail 2 \"not yet: attempt 2\") (try 3) (ok 3))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -558,5 +599,10 @@ fn oracle_prop_error_comprehensive_condition_case_t_handler() {
        (list sym
              (upcase msg)
              (length msg))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((caught-by-t arith-error) (caught-by-t wrong-type-argument) (caught-all error) (catch-all file-error \"no file\") (error \"MULTI-FORM HANDLER TEST\" 23))""#
+        ]],
+    );
 }

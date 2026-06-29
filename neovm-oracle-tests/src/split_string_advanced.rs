@@ -29,7 +29,12 @@ fn oracle_prop_split_string_regex_separator() {
   (split-string "a, b; c ,d;e" "[ \t]*[,;][ \t]*")
   ;; Split on word boundary approximation: transition from letter to non-letter
   (split-string "camelCaseWord" "\\(?:[a-z]\\)\\(\\)" ))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"hello\" \"world\" \"foo\" \"bar\") (\"one\" \"two\" \"three\" \"four\") (\"abc\" \"def\" \"ghi\") (\"a\" \"b\" \"c\" \"d\" \"e\") (\"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -56,7 +61,12 @@ fn oracle_prop_split_string_omit_nulls() {
   ;; No matches for separator: entire string as single element
   (split-string "noseparator" "," t)
   (split-string "noseparator" "," nil))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"\" \"a\" \"\" \"b\" \"c\" \"\") (\"a\" \"b\" \"c\") (\"hello\" \"world\") (\"\" \"\" \"hello\" \"\" \"world\" \"\" \"\") nil (\"\" \"\" \"\" \"\") (\"noseparator\") (\"noseparator\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +89,12 @@ fn oracle_prop_split_string_trim() {
   (split-string "  ,  ,hello,  ,world,  " "," t "[ \t]+")
   ;; Trim that removes everything from some pieces
   (split-string "123,456,abc,789" "," nil "[0-9]+"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"a\" \"b\" \"c\") (\"one\" \"two\" \"three\") (\"abc\" \"def\" \"ghi\") (\"hello\" \"world\") (\"\" \"\" \"abc\" \"\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +118,12 @@ fn oracle_prop_split_string_multi_char_delimiters() {
   (split-string "start...middle...end" "\\.\\.\\.")
   ;; Split on HTML-like tag
   (split-string "hello<br>world<br>again" "<br>"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"a\" \"b\" \"c\" \"d\") (\"std\" \"vector\" \"iterator\" \"value_type\") (\"first\" \"second\" \"third\") (\"line1\" \"line2\" \"line3\") (\"start\" \"middle\" \"end\") (\"hello\" \"world\" \"again\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +150,12 @@ fn oracle_prop_split_string_edge_cases() {
   (split-string "alpha,beta,gamma" "," t)
   ;; Default separator (split-string with just one arg uses whitespace)
   (split-string "  hello   world   "))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (\"\") (\"ab\") (\"\" \"\") nil nil (\"\" \"\") (\"alpha\" \"beta\" \"gamma\") (\"hello\" \"world\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +198,12 @@ fn oracle_prop_split_string_csv_parser() {
         (funcall 'neovm--test-parse-csv-row "single"))
     (fmakunbound 'neovm--test-parse-csv-field)
     (fmakunbound 'neovm--test-parse-csv-row)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"name\" \"age\" \"city\") (\"Smith\" \"42\" \"New York\") (\"plain\" \"123\" \"spaced\") (\"has \\\"quotes\\\"\" \"value\" \"end\") (\"single\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -224,5 +254,10 @@ fn oracle_prop_split_string_tokenizer() {
         (funcall 'neovm--test-tokenize "if x > 0 then y = x * 2 else y = 0"))
     (fmakunbound 'neovm--test-classify-token)
     (fmakunbound 'neovm--test-tokenize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((keyword \"let\") (ident \"x\") (operator \"=\") (number 42)) ((keyword \"fn\") (unknown \"add(a,\") (unknown \"b)\") (keyword \"return\") (ident \"a\") (operator \"+\") (ident \"b\")) ((keyword \"if\") (ident \"x\") (operator \">\") (number 0) (keyword \"then\") (ident \"y\") (operator \"=\") (ident \"x\") (operator \"*\") (number 2) (keyword \"else\") (ident \"y\") (operator \"=\") (number 0)))""#
+        ]],
+    );
 }

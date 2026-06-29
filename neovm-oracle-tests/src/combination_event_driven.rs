@@ -72,7 +72,12 @@ fn oracle_prop_event_emitter_basic() {
               (nreverse neovm--test-evem-log)))
     (makunbound 'neovm--test-evem-registry)
     (makunbound 'neovm--test-evem-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 ((counter click 4) (logger click \"logged click: (x 100 y 200)\") (key-handler keypress \"key: \\\"Enter\\\"\") (logger click \"logged click: (x 300 y 400)\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +135,12 @@ fn oracle_prop_event_bubbling() {
          (funcall bubble container "hover" nil)
          ;; Event at root (no parent to bubble to)
          (funcall bubble root "resize" nil))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((button \"button handled click\") (container \"container passed click\") (root \"root saw click\")) ((button \"button handled dangerous\") (container \"container blocked dangerous\")) ((container \"container passed hover\") (root \"root saw hover\")) ((root \"root saw resize\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +204,12 @@ fn oracle_prop_event_filtering() {
          ;; unknown event type: none match
          (funcall dispatch-event handlers
                   '(:type heartbeat :user "system" :detail nil)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((security \"SECURITY: login from alice\") (analytics \"ANALYTICS: login\") (catch-all login)) ((analytics \"ANALYTICS: page-view\") (catch-all page-view)) ((security \"SECURITY: auth-fail from eve\") (error-tracker \"ERROR: auth-fail - bad password\") (catch-all auth-fail)) ((analytics \"ANALYTICS: purchase\") (catch-all purchase)) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -252,7 +267,12 @@ fn oracle_prop_event_once_only_handlers() {
                   (nreverse neovm--test-once-log)))))
     (makunbound 'neovm--test-once-handlers)
     (makunbound 'neovm--test-once-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 1 5 ((persistent \"persistent saw event-1\") (init-once \"init-once saw event-1\") (setup-once \"setup-once saw event-1\") (persistent \"persistent saw event-2\") (persistent \"persistent saw event-3\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +357,12 @@ fn oracle_prop_event_queue_deferred() {
         (setq q (funcall eq-enqueue q '(:type refund :id "R1" :amount 50)))
         ;; Process with max-depth 10
         (funcall eq-process q 10)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((order \"O1\" (:cascade :type invoice :id \"inv-O1\" :amount 100)) (order \"O2\" (:cascade :type invoice :id \"inv-O2\" :amount 250)) (refund \"R1\" \"Refund R1: -$50\") (invoice \"inv-O1\" \"Invoice inv-O1 for $100\") (invoice \"inv-O2\" \"Invoice inv-O2 for $250\")) 5 0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -427,5 +452,10 @@ fn oracle_prop_event_middleware_chain() {
            (length (plist-get r1 :trace))
            ;; Log entry from r1
            (plist-get (plist-get r1 :final) :log-entry)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:action \"deploy\" :user \"admin\" :level critical :processed-at 1000 :priority 1 :valid t :log-entry \"[1000] deploy by admin (pri=1)\") (:action \"read\" :user \"guest\" :level info :processed-at 1000 :priority 3 :valid t :log-entry \"[1000] read by guest (pri=3)\") nil 5 \"[1000] deploy by admin (pri=1)\")""#
+        ]],
+    );
 }

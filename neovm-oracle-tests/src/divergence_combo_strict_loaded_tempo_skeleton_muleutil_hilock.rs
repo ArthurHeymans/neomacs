@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_h9_tempo_define_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (tempo-define-template "probe-tp" '("before " p " after"))
@@ -20,13 +20,14 @@ fn div_h9_tempo_define_expand() {
   (buffer-string))
 "##,
         &["tempo.el"],
+        expect_test::expect![[r#""ERR (void-variable tempo-probe-tp)""#]],
     );
 }
 
 #[test]
 fn div_h9_skeleton_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (define-skeleton probe-skel
@@ -35,13 +36,14 @@ fn div_h9_skeleton_insert() {
   (buffer-string))
 "##,
         &["skeleton.el"],
+        expect_test::expect![[r#""ERR (wrong-type-argument listp \"wrap\")""#]],
     );
 }
 
 #[test]
 fn div_h9_mule_util_string_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (string-pad "abc" 5)
       (string-pad "abc" 5 ?-)
@@ -50,6 +52,7 @@ fn div_h9_mule_util_string_ops() {
       (string-truncate-left "abcdefg" 4))
 "##,
         &["international/mule-util.el"],
+        expect_test::expect![[r#""OK (\"abc  \" \"abc--\" \"  abc\" \"abc\" \"...g\")""#]],
     );
 }
 
@@ -61,7 +64,7 @@ fn div_h9_hi_lock_highlight_error() {
     // (void-variable search-spaces-regexp) — a standard search variable that
     // Neomacs does not define. GNU Emacs defines it and proceeds. Root cause
     // isolated by div_h9_search_spaces_regexp_missing below.
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (insert "foo bar foo")
@@ -72,6 +75,7 @@ fn div_h9_hi_lock_highlight_error() {
         (get-text-property 9 'font-lock-face)))
 "##,
         &["hi-lock.el"],
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
@@ -84,23 +88,25 @@ fn div_h9_search_spaces_regexp_missing() {
     // Root cause of the hi-lock void-variable error above: the standard search
     // variable `search-spaces-regexp' is bound in GNU Emacs but void in
     // Neomacs (the related search-whitespace-regexp is present in both).
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'search-spaces-regexp)
       (boundp 'search-whitespace-regexp))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_h9_mule_util_truncate_cjk() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (truncate-string-to-width "日本語abc" 4)
       (truncate-string-to-width "日本語abc" 6 nil nil t)
       (string-width (truncate-string-to-width "日本" 1)))
 "##,
         &["international/mule-util.el"],
+        expect_test::expect![[r#""OK (\"日本\" \"日本…\" 0)""#]],
     );
 }

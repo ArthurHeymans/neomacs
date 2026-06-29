@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_buflocal_var_narrow_widen_propagation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq test-bl-narrow-xxx 'global-val)
   (make-variable-buffer-local 'test-bl-narrow-xxx)
@@ -20,6 +20,9 @@ fn divergence_buflocal_var_narrow_widen_propagation() {
     (widen)
     (let ((v2 (list test-bl-narrow-xxx (default-value 'test-bl-narrow-xxx))))
       (list v1 v2 (buffer-string))))) "#,
+        expect_test::expect![[
+            r#""ABCDEFGHIJOK ((buf-val global-val buf-val) (narrowed-val global-val) \"ABCDEFGHIJ\")""#
+        ]],
     );
 }
 
@@ -27,7 +30,7 @@ fn divergence_buflocal_var_narrow_widen_propagation() {
 fn divergence_markers_spanning_narrow_boundary_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((m1 (set-marker (make-marker) 1))
@@ -48,6 +51,9 @@ fn divergence_markers_spanning_narrow_boundary_edit() {
             (marker-position m3) (marker-position m4)
             (marker-position m5)
             (buffer-string))))) "#,
+        expect_test::expect![[
+            r#""AAAA-XXBB-CCCC-DDDD-EEEEOK ((1 6 15 20 25) 1 6 11 16 21 \"AAAA-XXBB-CCCC-DDDD-EEEE\")""#
+        ]],
     );
 }
 
@@ -55,7 +61,7 @@ fn divergence_markers_spanning_narrow_boundary_edit() {
 fn divergence_multi_buffer_markers_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "BUF1-CONTENT")
   (let ((m1 (set-marker (make-marker) 5 (current-buffer)))
@@ -75,6 +81,9 @@ fn divergence_multi_buffer_markers_switch() {
           (list p1 (buffer-string)
                 (with-current-buffer buf2 (buffer-string))
                 (kill-buffer buf2)))))) "#,
+        expect_test::expect![[
+            r#""BUF1-CONTENTOK (5 \"BUF2YYY-CONTENTXXX\" \"BUF2YYY-CONTENTXXX\" t)""#
+        ]],
     );
 }
 
@@ -82,7 +91,7 @@ fn divergence_multi_buffer_markers_switch() {
 fn divergence_save_excursion_restriction_window_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "LINE-1\nLINE-2\nLINE-3\nLINE-4\nLINE-5")
   (goto-char 15)
@@ -98,6 +107,9 @@ fn divergence_save_excursion_restriction_window_nested() {
     (list result
           (point) (point-min) (point-max)
           (buffer-string)))) "#,
+        expect_test::expect![[
+            r#""LINE-2\nLINE-3\nLINOK ((21 \"LINE-3\" \"LINE-1\nLINE-2\nLINE-3\nLINE-4\nLINE-5\") 15 8 25 \"LINE-2\nLINE-3\nLIN\")""#
+        ]],
     );
 }
 
@@ -105,7 +117,7 @@ fn divergence_save_excursion_restriction_window_nested() {
 fn divergence_buflocal_tab_width_indent_in_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq tab-width 4)
   (setq-local tab-width 8)
@@ -116,6 +128,7 @@ fn divergence_buflocal_tab_width_indent_in_narrow() {
         tab-width
         (default-value 'tab-width)
         (buffer-string))) "#,
+        expect_test::expect![[r#""ne\ttwo\tthOK (18 18 8 8 \"ne\ttwo\tth\")""#]],
     );
 }
 
@@ -123,7 +136,7 @@ fn divergence_buflocal_tab_width_indent_in_narrow() {
 fn divergence_overlay_narrow_marker_reconcile() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
   (let ((ov (make-overlay 5 9))
@@ -140,6 +153,9 @@ fn divergence_overlay_narrow_marker_reconcile() {
             (marker-position m)
             (buffer-string)
             (overlay-get ov 'face))))) "#,
+        expect_test::expect![[
+            r#""AAAAXX-BBBB-CCCC-DDDDOK ((5 11 9 \"XX-BBBB-CCC\") 5 11 9 \"AAAAXX-BBBB-CCCC-DDDD\" bold)""#
+        ]],
     );
 }
 
@@ -147,7 +163,7 @@ fn divergence_overlay_narrow_marker_reconcile() {
 fn divergence_kill_buffer_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let* ((buf (generate-new-buffer "*test-kill-mk*"))
        (m (with-current-buffer buf
             (insert "content")
@@ -157,6 +173,7 @@ fn divergence_kill_buffer_with_markers() {
         (kill-buffer buf)
         (marker-position m)
         (marker-buffer m))) "#,
+        expect_test::expect![[r#""OK (5 #<killed buffer> t nil nil)""#]],
     );
 }
 
@@ -164,7 +181,7 @@ fn divergence_kill_buffer_with_markers() {
 fn divergence_buffer_locals_list_after_multiple_setq_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq-local test-bvl1-xxx 1)
   (setq-local test-bvl2-xxx 2)
@@ -176,6 +193,9 @@ fn divergence_buffer_locals_list_after_multiple_setq_local() {
           (>= (length locals) 3)
           (kill-local-variable 'test-bvl2-xxx)
           (assq 'test-bvl2-xxx (buffer-local-variables))))) "#,
+        expect_test::expect![[
+            r#""OK ((test-bvl1-xxx . 1) (test-bvl2-xxx . 2) (test-bvl3-xxx . 3) t test-bvl2-xxx nil)""#
+        ]],
     );
 }
 
@@ -183,7 +203,7 @@ fn divergence_buffer_locals_list_after_multiple_setq_local() {
 fn divergence_undo_with_buffer_locals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq test-undo-bl-xxx 'initial)
   (make-variable-buffer-local 'test-undo-bl-xxx)
@@ -195,6 +215,7 @@ fn divergence_undo_with_buffer_locals() {
   (let ((v1 test-undo-bl-xxx))
     (primitive-undo 1 buffer-undo-list)
     (list v1 test-undo-bl-xxx (buffer-string))))) "#,
+        expect_test::expect![[r#""textmoreERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -202,7 +223,7 @@ fn divergence_undo_with_buffer_locals() {
 fn divergence_with_temp_buffer_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF")
   (let ((m (set-marker (make-marker) 10)))
@@ -213,5 +234,8 @@ fn divergence_with_temp_buffer_narrow_marker() {
           (s (buffer-string)))
       (widen)
       (list p s (marker-position m) (buffer-string))))) "#,
+        expect_test::expect![[
+            r#""OK (13 \"XXX-BBBB-CCCC-DDDD\" 13 \"AAAAXXX-BBBB-CCCC-DDDD-EEEE-FFFF\")""#
+        ]],
     );
 }

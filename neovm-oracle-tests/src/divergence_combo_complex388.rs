@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx388_window_text_pixel_dimensions_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (list (integerp (window-text-pixel-width win))
@@ -20,13 +20,14 @@ fn div_cx388_window_text_pixel_dimensions_full() {
         (integerp (window-body-height win 'pixels))
         (integerp (window-max-chars-per-line))))
 "##,
+        expect_test::expect![[r#""ERR (void-function window-text-pixel-width)""#]],
     )
 }
 
 #[test]
 fn div_cx388_window_pixel_edges_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (let ((pe (window-pixel-edges win))
@@ -36,13 +37,14 @@ fn div_cx388_window_pixel_edges_full() {
           (consp ipe) (= (length ipe) 4)
           (consp ape) (= (length ape) 4))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
     )
 }
 
 #[test]
 fn div_cx388_frame_pixel_dimensions_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (integerp (frame-pixel-width frame))
@@ -54,13 +56,14 @@ fn div_cx388_frame_pixel_dimensions_full() {
         (window-edges (selected-window))
         (window-inside-edges (selected-window))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t t (0 1 80 24) (0 1 80 23))""#]],
     )
 }
 
 #[test]
 fn div_cx388_display_info_full_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (integerp (display-pixel-width))
@@ -72,13 +75,14 @@ fn div_cx388_display_info_full_query() {
         (display-screens)
         (display-graphic-p)))
 "##,
+        expect_test::expect![[r#""OK (t t nil nil t t 1 nil)""#]],
     )
 }
 
 #[test]
 fn div_cx388_window_margins_fringes_scrollbar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (let ((fringes (window-fringes win))
@@ -87,13 +91,14 @@ fn div_cx388_window_margins_fringes_scrollbar() {
     (list (consp fringes) (consp margins)
           (integerp sb) (>= sb 0))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx388_set_window_margins_fringes_hscroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (let ((m0 (window-margins win))
@@ -111,13 +116,16 @@ fn div_cx388_set_window_margins_fringes_hscroll() {
             (window-margins win)
             (window-fringes win)))))
 "##,
+        expect_test::expect![[
+            r#""OK ((nil) (0 0 nil nil) (12 . 4) (0 0 nil nil) 5 (nil) (0 0 nil nil))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx388_window_start_end_set_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx388-ws*")))
   (with-current-buffer buf
@@ -132,13 +140,14 @@ fn div_cx388_window_start_end_set_query() {
       (kill-buffer buf)
       (list (integerp start) (integerp end) (> end start) (> start2 start))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     )
 }
 
 #[test]
 fn div_cx388_posn_at_point_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "first line\nsecond line\nthird line\n")
@@ -151,13 +160,14 @@ fn div_cx388_posn_at_point_query() {
           (posn-area posn)
           (posn-object posn))))
 "##,
+        expect_test::expect![[r#""OK (nil (0 . 0) nil nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx388_window_dedicated_and_vscroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (set-window-vscroll win 10 t)
@@ -171,13 +181,14 @@ fn div_cx388_window_dedicated_and_vscroll() {
           (let ((ded-false (window-dedicated-p win)))
             (list v1 v2 ded-before ded-true ded-false)))))))
 "##,
+        expect_test::expect![[r#""OK (0 0 nil t nil)""#]],
     )
 }
 
 #[test]
 fn div_cx388_window_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (set-window-parameter win 'neo-cx388-mega :win-val)
@@ -210,5 +221,6 @@ fn div_cx388_window_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (void-function window-text-pixel-width)""#]],
     )
 }

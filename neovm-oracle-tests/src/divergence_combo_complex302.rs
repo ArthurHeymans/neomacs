@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx302_char_table_parent_inheritance_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((parent (make-char-table 'neo-cx302-parent :parent-default))
        (child (make-char-table 'neo-cx302-child :child-default)))
@@ -24,13 +24,14 @@ fn div_cx302_char_table_parent_inheritance_override() {
         (char-table-p child)
         (eq (char-table-parent child) parent)))
 "##,
+        expect_test::expect![[r#""OK (:in-child :child-default :child-default :in-parent t t)""#]],
     )
 }
 
 #[test]
 fn div_cx302_char_table_range_chains_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'neo-cx302-range nil)))
   (set-char-table-range ct nil :default)
@@ -46,13 +47,16 @@ fn div_cx302_char_table_range_chains_variants() {
         (char-table-range ct ?!)
         (aref ct ?a)))
 "##,
+        expect_test::expect![[
+            r#""OK (:default :lower :upper :digit :underscore :default :lower)""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx302_char_table_extra_slots_lifecycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((ct (make-char-table 'neo-cx302-extra nil 4)))
@@ -66,13 +70,14 @@ fn div_cx302_char_table_extra_slots_lifecycle() {
             (char-table-extra-slot ct 3)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
     )
 }
 
 #[test]
 fn div_cx302_map_char_table_collect_counts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'neo-cx302-map nil)))
   (set-char-table-range ct '(?a . ?e) :vowel-or-low)
@@ -89,13 +94,14 @@ fn div_cx302_map_char_table_collect_counts() {
     (sort counts (lambda (a b)
                    (string< (symbol-name (car a)) (symbol-name (car b)))))))
 "##,
+        expect_test::expect![[r#""OK ((:special . 1) (:vowel-or-low . 1) (:vowel-or-up . 1))""#]],
     )
 }
 
 #[test]
 fn div_cx302_syntax_table_per_buffer_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx302-st-a*"))
       (buf-b (get-buffer-create " *neo-cx302-st-b*")))
@@ -111,13 +117,14 @@ fn div_cx302_syntax_table_per_buffer_switch() {
     (kill-buffer buf-b)
     (list at-a at-b)))
 "##,
+        expect_test::expect![[r#""OK (119 46)""#]],
     )
 }
 
 #[test]
 fn div_cx302_category_table_define_and_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((ct (make-category-table)))
@@ -132,13 +139,14 @@ fn div_cx302_category_table_define_and_modify() {
             (category-set-mnemonics (char-category-set ?a ct))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
     )
 }
 
 #[test]
 fn div_cx302_char_table_default_via_nil_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'neo-cx302-def :initial)))
   (aset ct ?a :override)
@@ -149,26 +157,28 @@ fn div_cx302_char_table_default_via_nil_range() {
         (aref ct ? )
         (char-table-range ct nil)))
 "##,
+        expect_test::expect![[r#""OK (:override :initial :initial :initial :initial :initial)""#]],
     )
 }
 
 #[test]
 fn div_cx302_char_table_subtype_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'neo-cx302-subtype nil)))
   (list (char-table-p ct)
         (char-table-subtype ct)
         (eq (char-table-subtype ct) 'neo-cx302-subtype)))
 "##,
+        expect_test::expect![[r#""OK (t neo-cx302-subtype t)""#]],
     )
 }
 
 #[test]
 fn div_cx302_char_table_default_value_inherited() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((parent (make-char-table 'neo-cx302-p :p-default))
        (child (make-char-table 'neo-cx302-c nil)))
@@ -179,13 +189,16 @@ fn div_cx302_char_table_default_value_inherited() {
         (aref child ?a)
         (aref parent ?a)))
 "##,
+        expect_test::expect![[
+            r#""OK (:p-default :p-default :override-child :override-child :p-default)""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx302_char_table_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'neo-cx302-mega :default)))
   (aset ct ?a :letter)
@@ -215,5 +228,8 @@ fn div_cx302_char_table_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"Changes to be undone are outside visible portion of buffer\")""#
+        ]],
     )
 }

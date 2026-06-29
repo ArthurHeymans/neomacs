@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_insert_delete_replacement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"The quick brown fox\")
   (goto-char 5)
@@ -18,6 +18,7 @@ fn divergence_insert_delete_replacement() {
   (goto-char 5)
   (insert \" slow\")
   (buffer-string)) ",
+        expect_test::expect![[r#""The  slowquick brown foxOK \"The  slowquick brown fox\"""#]],
     );
 }
 
@@ -25,7 +26,7 @@ fn divergence_insert_delete_replacement() {
 fn divergence_buffer_substring_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (put-text-property 1 5 'face 'bold)
@@ -36,6 +37,7 @@ fn divergence_buffer_substring_props() {
         (get-text-property 6 'face)
         (get-text-property 8 'face)
         (get-text-property 10 'face))) ",
+        expect_test::expect![[r#""ABCDEFGHIJOK (bold bold nil italic italic nil)""#]],
     );
 }
 
@@ -43,7 +45,7 @@ fn divergence_buffer_substring_props() {
 fn divergence_replace_match_backref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"hello world\")
   (goto-char 1)
@@ -54,6 +56,7 @@ fn divergence_replace_match_backref() {
         (match-end 1)
         (match-beginning 2)
         (match-end 2))) ",
+        expect_test::expect![[r#""hello worldOK (\"hello\" \"world\" 1 6 7 12)""#]],
     );
 }
 
@@ -61,7 +64,7 @@ fn divergence_replace_match_backref() {
 fn divergence_narrow_edit_widen() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (narrow-to-region 3 7)
@@ -70,6 +73,7 @@ fn divergence_narrow_edit_widen() {
   (list (buffer-string) (point-min) (point-max))
   (widen)
   (list (buffer-string) (point-min) (point-max))) ",
+        expect_test::expect![[r#""ABxyCDEFGHIJOK (\"ABxyCDEFGHIJ\" 1 13)""#]],
     );
 }
 
@@ -77,7 +81,7 @@ fn divergence_narrow_edit_widen() {
 fn divergence_overlay_layered_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (put-text-property 1 11 'face 'default)
@@ -92,6 +96,7 @@ fn divergence_overlay_layered_props() {
           (overlay-get ov1 'priority)
           (overlay-get ov2 'priority)
           (length (overlays-in 1 11))))) ",
+        expect_test::expect![[r#""ABCDEFGHIJOK (bold italic 1 10 2)""#]],
     );
 }
 
@@ -99,7 +104,7 @@ fn divergence_overlay_layered_props() {
 fn divergence_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"AAA\")
   (undo-boundary)
@@ -111,6 +116,7 @@ fn divergence_undo_chain() {
     (let ((s2 (buffer-string)))
       (primitive-undo 1 buffer-undo-list)
       (list s1 s2 (buffer-string)))))) ",
+        expect_test::expect![[r#""AAABBBCCCERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -118,7 +124,7 @@ fn divergence_undo_chain() {
 fn divergence_marker_after_multiple_edits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((m (make-marker)))
@@ -132,6 +138,7 @@ fn divergence_marker_after_multiple_edits() {
         (insert \"XYZ\")
         (list p1 p2 (marker-position m)
               (buffer-string)))))) ",
+        expect_test::expect![[r#""123CDEFGHXYZIJOK (8 6 6 \"123CDEFGHXYZIJ\")""#]],
     );
 }
 
@@ -139,7 +146,7 @@ fn divergence_marker_after_multiple_edits() {
 fn divergence_textprop_after_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"foo bar baz\")
   (put-text-property 1 12 'test-prop 'original)
@@ -151,6 +158,9 @@ fn divergence_textprop_after_replace() {
         (get-text-property 5 'test-prop)
         (get-text-property 9 'test-prop)
         (get-text-property 12 'test-prop))) ",
+        expect_test::expect![[
+            r#""foo quux bazOK (#(\"foo quux baz\" 0 4 (test-prop original) 8 12 (test-prop original)) original nil original original)""#
+        ]],
     );
 }
 
@@ -158,7 +168,7 @@ fn divergence_textprop_after_replace() {
 fn divergence_case_change_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"hello WORLD\")
   (narrow-to-region 1 5)
@@ -168,6 +178,7 @@ fn divergence_case_change_operations() {
     (let ((s2 (buffer-string)))
       (downcase-region 7 12)
       (list s1 s2 (buffer-string)))))) ",
+        expect_test::expect![[r#""HELLo worldERR (invalid-read-syntax \")\" 9 38)""#]],
     );
 }
 
@@ -175,11 +186,12 @@ fn divergence_case_change_operations() {
 fn divergence_rectangle_extract() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGH\\nIJKLMNOP\\nQRSTUVWX\")
   (list (extract-rectangle 2 4)
         (length (extract-rectangle 2 4))
         (extract-rectangle 1 3))) ",
+        expect_test::expect![[r#""ABCDEFGH\nIJKLMNOP\nQRSTUVWXOK ((\"BC\") 1 (\"AB\"))""#]],
     );
 }

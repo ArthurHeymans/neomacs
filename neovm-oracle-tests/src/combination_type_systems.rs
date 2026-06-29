@@ -30,7 +30,12 @@ fn oracle_prop_type_predicates_comprehensive() {
            (keywordp v) (natnump v) (characterp v)
            (arrayp v) (hash-table-p v)))
    values))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((integer t nil t nil nil nil nil nil nil t nil nil nil t t nil nil) (float nil t t nil nil nil nil nil nil t nil nil nil nil nil nil nil) (string nil nil nil t nil nil nil nil t t nil nil nil nil nil t nil) (symbol nil nil nil nil t nil nil nil nil t nil nil nil nil nil nil nil) (symbol nil nil nil nil t nil nil t t t t t nil nil nil nil nil) (symbol nil nil nil nil t nil nil nil nil t nil t nil nil nil nil nil) (cons nil nil nil nil nil t nil t t nil nil nil nil nil nil nil nil) (vector nil nil nil nil nil nil t nil t t nil nil nil nil nil t nil) (hash-table nil nil nil nil nil nil nil nil nil t nil nil nil nil nil nil t) (symbol nil nil nil nil t nil nil nil nil t nil nil t nil nil nil nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +90,12 @@ fn oracle_prop_type_dispatch_cond() {
         (funcall 'neovm--describe-type '(a . b))
         (funcall 'neovm--describe-type (make-hash-table)))
     (fmakunbound 'neovm--describe-type)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"nil-value\" \"boolean-true\" \"int:42\" \"float:3.14\" \"string[5]:short\" \"string[24]:a long str...\" \"keyword::test\" \"symbol:foo\" \"vector[3]\" \"list[4]\" \"dotted-pair\" \"hash-table[0]\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +165,12 @@ fn oracle_prop_tagged_union_simulation() {
     (fmakunbound 'neovm--make-list-val)
     (fmakunbound 'neovm--match-val)
     (fmakunbound 'neovm--val-type)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (int str pair list-val \"Int(42)\" \"Str(\\\"hello\\\")\" \"Pair(Int(42), Str(\\\"hello\\\"))\" \"List[Int(42), Str(\\\"hello\\\"), Pair(Int(42), Str(\\\"hello\\\"))]\" \"Pair(Pair(Int(1), Int(2)), Str(\\\"end\\\"))\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +234,12 @@ fn oracle_prop_polymorphic_dispatch_table() {
            ;; Missing method
            (funcall 'neovm--dispatch table (cons 'circle 5) 'perimeter))))
     (fmakunbound 'neovm--dispatch)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"circle(r=5)\" \"rect(4x6)\" \"tri(b=3,h=8)\") (78.53975 24 12.0) \"no-method:perimeter for:circle\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -274,7 +294,12 @@ fn oracle_prop_coercion_chain_roundtrip() {
          (string-to-number "")
          (string-to-number "42abc")
          (string-to-number "  42"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"42\" 42 \"42\" t) (\"0\" 0 \"0\" t) (\"-7\" -7 \"-7\" t) (\"100\" 100 \"100\" t)) ((\"3.14\" 3.14 \"3.14\" t) (\"0.001\" 0.001 \"0.001\" t) (\"-99.5\" -99.5 \"-99.5\" t)) ((0 \"0\" 0 t) (1 \"1\" 1 t) (-1 \"-1\" -1 t) (42 \"42\" 42 t) (1000 \"1000\" 1000 t) (-500 \"-500\" -500 t)) ((1.0 \"1.0\" t) (0.5 \"0.5\" t) (-2.5 \"-2.5\" t) (100.0 \"100.0\" t)) (65 \"A\" 65 t) (hello \"hello\" hello t) (0 0 42 42))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -354,5 +379,10 @@ fn oracle_prop_type_safe_container() {
     (fmakunbound 'neovm--typed-items)
     (fmakunbound 'neovm--typed-count)
     (fmakunbound 'neovm--typed-find)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (ok ok ok type-error type-error (3 2 1) 3 ok ok type-error (\"world\" \"hello\") 2 3 \"hello\")""#
+        ]],
+    );
 }

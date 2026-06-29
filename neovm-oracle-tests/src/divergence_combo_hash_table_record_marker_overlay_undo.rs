@@ -15,7 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_hash_table_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-htbl"))
         (ht (make-hash-table :test 'equal)))
@@ -61,6 +61,7 @@ fn combo_hash_table_buffer_local_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -68,7 +69,7 @@ fn combo_hash_table_buffer_local_marker_overlay_undo() {
 fn combo_record_overlay_marker_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-rec")))
     (with-current-buffer buf
@@ -109,6 +110,7 @@ fn combo_record_overlay_marker_textprop_undo() {
                                  (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -116,7 +118,7 @@ fn combo_record_overlay_marker_textprop_undo() {
 fn combo_hash_table_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-htn"))
         (ht (make-hash-table :test 'equal)))
@@ -167,6 +169,7 @@ fn combo_hash_table_narrow_marker_overlay_undo() {
                                 (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -174,7 +177,7 @@ fn combo_hash_table_narrow_marker_overlay_undo() {
 fn combo_maphash_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-maph"))
         (ht (make-hash-table :test 'equal)))
@@ -213,6 +216,7 @@ fn combo_maphash_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -220,7 +224,7 @@ fn combo_maphash_marker_overlay_undo() {
 fn combo_clrhash_remhash_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-clrh"))
         (ht (make-hash-table :test 'equal)))
@@ -261,5 +265,6 @@ fn combo_clrhash_remhash_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

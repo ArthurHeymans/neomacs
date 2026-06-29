@@ -15,7 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_defstruct_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defstruct combo--point x y)
   (let ((buf (generate-new-buffer " combo-ds")))
@@ -54,6 +54,7 @@ fn combo_defstruct_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (void-function defstruct)""#]],
     );
 }
 
@@ -61,7 +62,7 @@ fn combo_defstruct_marker_overlay_undo() {
 fn combo_record_type_of_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-rec"))
         (rec (record 'my-type 'data '(a b c))))
@@ -100,6 +101,7 @@ fn combo_record_type_of_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored)))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -107,7 +109,7 @@ fn combo_record_type_of_marker_overlay_undo() {
 fn combo_defstruct_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defstruct combo--config name value)
   (let ((buf (generate-new-buffer " combo-dsbl")))
@@ -148,6 +150,7 @@ fn combo_defstruct_buffer_local_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (void-function defstruct)""#]],
     );
 }
 
@@ -155,7 +158,7 @@ fn combo_defstruct_buffer_local_marker_overlay_undo() {
 fn combo_defstruct_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defstruct combo--item id label)
   (let ((buf (generate-new-buffer " combo-dsnar")))
@@ -200,6 +203,7 @@ fn combo_defstruct_narrow_marker_overlay_undo() {
                                 (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (void-function defstruct)""#]],
     );
 }
 
@@ -207,7 +211,7 @@ fn combo_defstruct_narrow_marker_overlay_undo() {
 fn combo_defstruct_multi_instance_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defstruct combo--node name children)
   (let ((buf (generate-new-buffer " combo-dsmi")))
@@ -251,5 +255,6 @@ fn combo_defstruct_multi_instance_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (void-function defstruct)""#]],
     );
 }

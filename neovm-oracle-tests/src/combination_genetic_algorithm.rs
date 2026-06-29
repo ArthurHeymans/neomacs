@@ -82,7 +82,12 @@ fn oracle_prop_ga_chromosome_and_fitness() {
     (fmakunbound 'neovm--ga-fitness)
     (fmakunbound 'neovm--ga-make-random-chromosome)
     (fmakunbound 'neovm--ga-chrom-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 8 0 8 8 8 10 (1 0 1 1 0 1 0 0) (1 1 1 1 0 1 1 0 1 1) t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +171,10 @@ fn oracle_prop_ga_tournament_selection() {
     (fmakunbound 'neovm--ga2-fitness)
     (fmakunbound 'neovm--ga2-tournament)
     (fmakunbound 'neovm--ga2-select)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 8 3 6 8 5 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +278,12 @@ fn oracle_prop_ga_crossover_and_mutation() {
     (fmakunbound 'neovm--ga3-crossover)
     (fmakunbound 'neovm--ga3-mutate)
     (fmakunbound 'neovm--ga3-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 1 1 1 1 1 1 1) (0 0 0 0 0 0 0 0)) ((0 0 0 0 1 1 1 1) (1 1 1 1 0 0 0 0)) ((1 1 1 1 0 0 0 0) (0 0 0 0 1 1 1 1)) ((1 1 0 0 1 1 1 1) (0 0 1 1 0 0 0 0)) (1 1 1 1 0 0 0 0) (0 0 0 0 1 1 1 1) (0 0 1 1 0 1 0 0) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -370,7 +383,10 @@ fn oracle_prop_ga_population_management() {
     (fmakunbound 'neovm--ga4-stats)
     (fmakunbound 'neovm--ga4-hamming)
     (fmakunbound 'neovm--ga4-diversity)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((6 3 40 10) t t t t 30 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -542,7 +558,10 @@ fn oracle_prop_ga_full_evolution() {
     (fmakunbound 'neovm--ga5-mutate)
     (fmakunbound 'neovm--ga5-evolve-gen)
     (fmakunbound 'neovm--ga5-best-fitness)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 (6 6 8 8 8 8 8 8) 8 t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -631,7 +650,10 @@ fn oracle_prop_ga_roulette_selection() {
     (fmakunbound 'neovm--ga6-fitness)
     (fmakunbound 'neovm--ga6-cumulative-fitness)
     (fmakunbound 'neovm--ga6-roulette)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 1 3 6 10) 10 (0 7 4 2 7) 20 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -730,5 +752,10 @@ fn oracle_prop_ga_advanced_crossover_operators() {
     (fmakunbound 'neovm--ga7-two-point-crossover)
     (fmakunbound 'neovm--ga7-uniform-crossover)
     (fmakunbound 'neovm--ga7-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 1 0 0 1 1 0 0) (0 0 1 1 0 0 1 1)) ((0 0 0 0 0 0 0 0) (1 1 1 1 1 1 1 1)) ((1 1 1 1 0 0 0 0) (0 0 0 0 1 1 1 1)) (1 0 1 0 0 1 0 1) (1 1 1 1 0 0 0 0) (0 0 0 0 1 1 1 1) t)""#
+        ]],
+    );
 }

@@ -25,7 +25,10 @@ fn oracle_with_demoted_errors_macro_rewrite_edges() {
   (with-demoted-errors)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+    );
 }
 
 #[test]
@@ -51,5 +54,10 @@ fn oracle_warning_wrapper_interpreter_values_and_expansion() {
                    (+ 3 4)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((b a) (b a) (d c b a) (d c b a) (progn (list 1 2) (+ 3 4)))""#
+        ]],
+    );
 }

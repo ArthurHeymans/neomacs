@@ -41,7 +41,10 @@ fn oracle_prop_wcb_comp_preserve_restore_current_buffer() {
                (with-current-buffer buf-b (buffer-string)))))))
     (kill-buffer buf-a)
     (kill-buffer buf-b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t \"AAA\" \"BBB\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +84,7 @@ fn oracle_prop_wcb_comp_deeply_nested_four_levels() {
             (eq (current-buffer) b1))))
     (kill-buffer b1) (kill-buffer b2)
     (kill-buffer b3) (kill-buffer b4)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK t""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +118,10 @@ fn oracle_prop_wcb_comp_interaction_with_set_buffer() {
                   (eq (current-buffer) orig)))))
     (kill-buffer buf-a)
     (kill-buffer buf-b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t t \"bbb\") t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +155,12 @@ fn oracle_prop_wcb_comp_with_temp_buffer_inside() {
                       ;; Original is preserved after everything
                       ))))))
     (kill-buffer buf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"outer-content\" (\"temp-content\" nil) t \"outer-content\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +200,10 @@ fn oracle_prop_wcb_comp_buffer_local_variable_access() {
            (local-variable-p 'neovm--test-var-wcbc))))
     (kill-buffer buf-a)
     (kill-buffer buf-b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (value-a value-b 100 200 (999 200) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -233,7 +247,10 @@ fn oracle_prop_wcb_comp_point_mark_preservation() {
            (buffer-substring 1 8))))
     (kill-buffer buf-a)
     (kill-buffer buf-b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 8 12 14 (1 8) \"Hell\" \"Goodbye\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -277,7 +294,12 @@ fn oracle_prop_wcb_comp_narrowing_context_isolation() {
                (list wide (point-min) (point-max)))))))
     (kill-buffer buf-a)
     (kill-buffer buf-b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"456789AB\" \"cdefg\" (5 13) (3 8) (\"0123456789ABCDEF\" \"cdefg\") (\"abcdefghijklmnop\" 1 17))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +338,12 @@ fn oracle_prop_wcb_comp_error_handling_restores_buffer() {
                         (with-current-buffer buf2 (buffer-string)))))
              (kill-buffer buf2)))))
     (kill-buffer buf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((caught \"deliberate error\") t \"before-error\" (t \"inner\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +385,12 @@ fn oracle_prop_wcb_comp_generated_buffer_names() {
                    (setq all-unique nil))))
              all-unique))))
     (dolist (b bufs) (when (buffer-live-p b) (kill-buffer b)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t 5 (\"buf-0\" \"buf-1\" \"buf-2\" \"buf-3\" \"buf-4\") t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -404,7 +436,12 @@ fn oracle_prop_wcb_comp_buffer_state_isolation() {
             (with-current-buffer b2 (buffer-modified-p))))))
     (kill-buffer b1)
     (kill-buffer b2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\" \"one\" (\"one\" \"two\") (\"\" \"two\") (0 3) (t nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -444,5 +481,8 @@ fn oracle_prop_wcb_comp_save_excursion_interaction() {
                  (goto-char 1)
                  (buffer-substring 1 4)))))))
     (kill-buffer buf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 (\"efghij\" t) \"abc\")""#]],
+    );
 }

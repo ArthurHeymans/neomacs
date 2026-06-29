@@ -8,7 +8,10 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_prop_sequencep_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(sequencep '(1 2 3))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(sequencep '(1 2 3))",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
@@ -16,7 +19,10 @@ fn oracle_prop_sequencep_list() {
 fn oracle_prop_sequencep_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(sequencep nil)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(sequencep nil)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
@@ -24,7 +30,10 @@ fn oracle_prop_sequencep_nil() {
 fn oracle_prop_sequencep_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(sequencep [1 2 3])");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(sequencep [1 2 3])",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
@@ -32,7 +41,10 @@ fn oracle_prop_sequencep_vector() {
 fn oracle_prop_sequencep_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(sequencep "hello")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(sequencep "hello")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
@@ -40,7 +52,10 @@ fn oracle_prop_sequencep_string() {
 fn oracle_prop_sequencep_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(sequencep 42)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(sequencep 42)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -48,7 +63,10 @@ fn oracle_prop_sequencep_integer() {
 fn oracle_prop_sequencep_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(sequencep 'foo)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(sequencep 'foo)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -56,6 +74,9 @@ fn oracle_prop_sequencep_symbol() {
 fn oracle_prop_sequencep_hash_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(sequencep (make-hash-table))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(sequencep (make-hash-table))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }

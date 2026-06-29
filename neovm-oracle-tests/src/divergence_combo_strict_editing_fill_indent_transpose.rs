@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_edt_fill_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "The quick brown fox jumps over the lazy dog and keeps running on.")
@@ -19,13 +19,16 @@ fn div_edt_fill_region_basic() {
     (fill-region (point-min) (point-max))
     (buffer-string)))
 "##,
+        expect_test::expect![[
+            r#""OK \"The quick brown fox\njumps over the lazy\ndog and keeps\nrunning on.\"""#
+        ]],
     );
 }
 
 #[test]
 fn div_edt_fill_paragraph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "aaa bbb ccc ddd eee fff ggg hhh iii jjj")
@@ -34,13 +37,14 @@ fn div_edt_fill_paragraph() {
     (fill-paragraph)
     (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK \"aaa bbb ccc ddd\neee fff ggg hhh\niii jjj\"""#]],
     );
 }
 
 #[test]
 fn div_edt_comment_region_uncomment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "alpha\nbeta\n")
@@ -52,13 +56,14 @@ fn div_edt_comment_region_uncomment() {
     (uncomment-region (point-min) (point-max))
     (list commented (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK (\"// alpha\n// beta\n\" \"alpha\nbeta\n\")""#]],
     );
 }
 
 #[test]
 fn div_edt_indent_region_custom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "foo\nbar\nbaz\n")
@@ -67,13 +72,14 @@ fn div_edt_indent_region_custom() {
     (indent-region 1 (point-max))
     (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK \"    foo\n    bar\n    baz\n\"""#]],
     );
 }
 
 #[test]
 fn div_edt_transpose_words_and_sexps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (with-temp-buffer
@@ -93,13 +99,16 @@ fn div_edt_transpose_words_and_sexps() {
    (transpose-lines 1)
    (buffer-string)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"beta alpha gamma\n\" \"(aaa) (bbb)\n\" \"20\n10\n30\n\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_edt_just_one_space_and_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (with-temp-buffer
@@ -118,13 +127,14 @@ fn div_edt_just_one_space_and_cycle() {
    (cycle-spacing -1)
    (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK (\"a b    c\" \"xy   z\" \"x y   z\")""#]],
     );
 }
 
 #[test]
 fn div_edt_format_message_and_prompt() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format-message "Type `%s' to quit." "C-g")
       (format-message "`quoted' and 'apostrophe'")
@@ -132,13 +142,16 @@ fn div_edt_format_message_and_prompt() {
       (format-prompt "Save file" nil)
       (format-prompt "Proceed" nil))
 "##,
+        expect_test::expect![[
+            r#""OK (\"Type ‘C-g’ to quit.\" \"‘quoted’ and ’apostrophe’\" \"Continue (default y): \" \"Save file: \" \"Proceed: \")""#
+        ]],
     );
 }
 
 #[test]
 fn div_edt_forward_sentence_and_paragraph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "First sentence.  Second one.\n\nSecond paragraph here.\n\n")
@@ -148,13 +161,14 @@ fn div_edt_forward_sentence_and_paragraph() {
     (forward-paragraph 1)
     (list after-sentence (point))))
 "##,
+        expect_test::expect![[r#""OK (16 30)""#]],
     );
 }
 
 #[test]
 fn div_edt_sort_fields_and_columns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (with-temp-buffer
@@ -166,26 +180,28 @@ fn div_edt_sort_fields_and_columns() {
    (sort-columns nil 1 (point-max))
    (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK (\"1 bar\n2 baz\n3 foo\n\" \"aaa 1\nbbb 2\nccc 3\n\")""#]],
     );
 }
 
 #[test]
 fn div_edt_align_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "a = 1\nfoo = 2\nlongername = 3\n")
   (align-regexp (point-min) (point-max) "\\(\\s-*\\)=")
   (buffer-string))
 "##,
+        expect_test::expect![[r#""OK \"a\t\t= 1\nfoo\t\t= 2\nlongername\t= 3\n\"""#]],
     );
 }
 
 #[test]
 fn div_edt_current_column_and_move_to_column_with_tab() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abc\tdef")
@@ -194,5 +210,6 @@ fn div_edt_current_column_and_move_to_column_with_tab() {
     (move-to-column 6)
     (list c0 (current-column) (point))))
 "##,
+        expect_test::expect![[r#""OK (11 8 5)""#]],
     );
 }

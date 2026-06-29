@@ -28,7 +28,10 @@ fn oracle_prop_generator_basic_iteration_and_end_value() {
     (nreverse out)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 1 2 3 (end done))""#]],
+    );
 }
 
 #[test]
@@ -57,7 +60,12 @@ fn oracle_prop_generator_sent_values_and_independent_iterators() {
        (iter-end-of-sequence (list 'end-b (cdr err)))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (ask-first ask-second (end-a (alpha beta)) ask-first ask-second (end-b (one two)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -83,7 +91,12 @@ fn oracle_prop_generator_yield_from_and_iter_do_return_value() {
       (list (nreverse values) done))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((parent-start child-1 child-2 (child-result child-done)) parent-done)""#
+        ]],
+    );
 }
 
 #[test]
@@ -114,5 +127,10 @@ fn oracle_prop_generator_close_runs_cleanup_and_then_ends() {
          (iter-end-of-sequence (list 'end (cdr err))))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (first (entered) (cleanup entered) (cleanup entered) (end nil))""#
+        ]],
+    );
 }

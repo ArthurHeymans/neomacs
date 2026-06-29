@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx251_profiler_cpu_start_stop_sample() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -21,13 +21,14 @@ fn div_cx251_profiler_cpu_start_stop_sample() {
               (fboundp 'profiler-find-profile))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx251_profiler_memory_start_stop_sample() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -39,13 +40,14 @@ fn div_cx251_profiler_memory_start_stop_sample() {
               (fboundp 'profiler-report))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     );
 }
 
 #[test]
 fn div_cx251_trace_function_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -56,13 +58,14 @@ fn div_cx251_trace_function_availability() {
             (fboundp 'untrace-all)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx251_backtrace_frame_extraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (frames)
   (let* ((inner (lambda (x) (push (list :inner x) frames)))
@@ -71,13 +74,16 @@ fn div_cx251_backtrace_frame_extraction() {
     (funcall outer 42))
   (nreverse frames))
 "##,
+        expect_test::expect![[
+            r#""OK ((:outer-enter 42) (:mid-enter 42) (:inner 42) (:mid-exit 42) (:outer-exit 42))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx251_mapbacktrace_in_signal_handler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (bt-frames)
   (condition-case e
@@ -91,13 +97,14 @@ fn div_cx251_mapbacktrace_in_signal_handler() {
   (list (consp bt-frames)
         (> (length bt-frames) 0)))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx251_debug_on_entry_setup_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((debug-on-error nil))
@@ -107,13 +114,14 @@ fn div_cx251_debug_on_entry_setup_cleanup() {
       :ran)
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK :ran""#]],
     )
 }
 
 #[test]
 fn div_cx251_backtrace_buffer_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'backtrace)
       (fboundp 'debug)
@@ -121,13 +129,14 @@ fn div_cx251_backtrace_buffer_availability() {
       (boundp 'debug-on-quit)
       (boundp 'debug-ignored-errors))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx251_profiler_log_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -139,13 +148,14 @@ fn div_cx251_profiler_log_functions() {
             (boundp 'profiler-memory-log)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx251_ert_should_error_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -155,13 +165,16 @@ fn div_cx251_ert_should_error_dispatch() {
             (condition-case err (should-error (+ 1 1)) (error :no-error))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((error \"boom\") (wrong-type-argument integerp \"x\") :no-error)""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx251_profiler_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((bt-frames nil))
@@ -194,5 +207,6 @@ fn div_cx251_profiler_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     )
 }

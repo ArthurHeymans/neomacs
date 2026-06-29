@@ -29,5 +29,10 @@ fn oracle_file_acl_no_acl_build_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil nil nil nil (wrong-number-of-arguments (file-acl 0)) (wrong-number-of-arguments (file-acl 2)))""#
+        ]],
+    );
 }

@@ -10,8 +10,9 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_
 fn oracle_prop_closure_primitives_are_consistent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list (fboundp 'closurep) (fboundp 'make-closure) (fboundp 'make-interpreted-closure))",
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -19,7 +20,10 @@ fn oracle_prop_closure_primitives_are_consistent() {
 fn oracle_prop_closurep_on_common_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(list (closurep 1) (closurep 'x) (closurep '(lambda (x) x)))");
+    crate::common::assert_oracle_parity_expect(
+        "(list (closurep 1) (closurep 'x) (closurep '(lambda (x) x)))",
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
+    );
 }
 
 #[test]
@@ -27,7 +31,8 @@ fn oracle_prop_make_interpreted_closure_basic_callable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((f (make-interpreted-closure '(x) '((+ x 1)) nil))) (list (closurep f) (funcall f 41)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (t 42)""#]]);
     assert_ok_eq("(t 42)", &oracle, &neovm);
 }
 
@@ -36,22 +41,34 @@ fn oracle_prop_make_interpreted_closure_lexenv_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // LEXENV argument should provide a lexical binding for `x`.
-    assert_oracle_parity("(let ((f (make-interpreted-closure '() '(x) '((x . 9))))) (funcall f))");
+    crate::common::assert_oracle_parity_expect(
+        "(let ((f (make-interpreted-closure '() '(x) '((x . 9))))) (funcall f))",
+        expect_test::expect![[r#""OK 9""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_make_closure_invalid_argument_shape_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(condition-case err (make-closure nil) (error (car err)))");
-    assert_oracle_parity("(condition-case err (make-closure 1 2 3) (error (car err)))");
+    crate::common::assert_oracle_parity_expect(
+        "(condition-case err (make-closure nil) (error (car err)))",
+        expect_test::expect![[r#""OK wrong-type-argument""#]],
+    );
+    crate::common::assert_oracle_parity_expect(
+        "(condition-case err (make-closure 1 2 3) (error (car err)))",
+        expect_test::expect![[r#""OK wrong-type-argument""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_oclosure_macros_presence_matches_oracle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(list (fboundp 'oclosure-define) (fboundp 'oclosure-lambda))");
+    crate::common::assert_oracle_parity_expect(
+        "(list (fboundp 'oclosure-define) (fboundp 'oclosure-lambda))",
+        expect_test::expect![[r#""OK (t t)""#]],
+    );
 }
 
 #[test]
@@ -66,7 +83,7 @@ fn oracle_prop_oclosure_define_creates_callable_type_and_accessor() {
         (condition-case nil
             (not (null (cl--find-class 'neovm-oracle-oclosure-define-test)))
           (error nil))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t)""#]]);
 }
 
 #[test]
@@ -76,7 +93,10 @@ fn oracle_prop_oclosure_macroexpand_when_available() {
     // In this minimal harness these may be unavailable; when available,
     // macroexpand should still match between oracle and neovm.
     let form = "(if (and (fboundp 'oclosure-lambda) (fboundp 'macroexpand)) (macroexpand '(oclosure-lambda neovm--oc-test (self) self)) 'oclosure-unavailable)";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (error \"Unknown class: nil\")""#]],
+    );
 }
 
 proptest! {

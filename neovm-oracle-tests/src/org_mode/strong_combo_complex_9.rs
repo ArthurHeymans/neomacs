@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo9_map_pred() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO A\n* DONE B\n* TODO C\n* DONE D\n* WAITING E")
@@ -34,6 +34,7 @@ fn combo9_map_pred() {
                           (lambda (h) (org-element-property :raw-value h))
                           nil 'first-match)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -44,7 +45,7 @@ fn combo9_map_pred() {
 #[test]
 fn combo9_lineage() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nPara *bold /italic/ inside* text")
@@ -61,6 +62,7 @@ fn combo9_lineage() {
               chain)
         (setq p (org-element-property :parent p))))
     (list :chain (nreverse chain))))"##,
+        expect_test::expect![[r#""ERR (search-failed \"italic\")""#]],
     );
 }
 
@@ -71,7 +73,7 @@ fn combo9_lineage() {
 #[test]
 fn combo9_element_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nBody\n** H2\nSub")
@@ -84,6 +86,9 @@ fn combo9_element_props() {
           :contents-end (org-element-property :contents-end h1)
           :level (org-element-property :level h1)
           :raw-value (org-element-property :raw-value h1))))"##,
+        expect_test::expect![[
+            r#""OK (:begin 1 :end 19 :post-blank 0 :contents-begin 5 :contents-end 19 :level 1 :raw-value \"H\")""#
+        ]],
     );
 }
 
@@ -94,7 +99,7 @@ fn combo9_element_props() {
 #[test]
 fn combo9_cache() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nBody")
@@ -115,6 +120,7 @@ fn combo9_cache() {
     (let ((s (org-element-cache-status)))
       (push (list :after-reset (plist-get s :size)) r))
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -125,7 +131,7 @@ fn combo9_cache() {
 #[test]
 fn combo9_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\nBody\n** H2\nSub\n*** H3\nDeep")
@@ -151,6 +157,7 @@ fn combo9_indent() {
         (forward-line))
       (push (list :buffer-indents (nreverse indents)) r))
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -161,7 +168,7 @@ fn combo9_indent() {
 #[test]
 fn combo9_lint() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nSCHEDULED: <invalid>\nBody [[broken]]")
@@ -171,6 +178,7 @@ fn combo9_lint() {
     ;; verify buffer unchanged
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -181,7 +189,7 @@ fn combo9_lint() {
 #[test]
 fn combo9_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO C\n* DONE A\n* TODO B\n* DONE D")
@@ -200,6 +208,7 @@ fn combo9_sort() {
     (push (list :after-alpha-sort (org-element-map (org-element-parse-buffer) 'headline
                                     (lambda (h) (org-element-property :raw-value h)))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -210,7 +219,7 @@ fn combo9_sort() {
 #[test]
 fn combo9_clone() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n** Sub1\n** Sub2")
@@ -228,6 +237,7 @@ fn combo9_clone() {
     ;; verify buffer
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -238,7 +248,7 @@ fn combo9_clone() {
 #[test]
 fn combo9_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n* H2\n* H3")
@@ -267,6 +277,7 @@ fn combo9_toggle() {
                                   (lambda (e) (list (org-element-type e)
                                                     (org-element-property :raw-value e))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -277,7 +288,7 @@ fn combo9_toggle() {
 #[test]
 fn combo9_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** A1\n* B\n** B1\n* C\n** C1")
@@ -301,5 +312,6 @@ fn combo9_move() {
                             (lambda (h) (list (org-element-property :level h)
                                               (org-element-property :raw-value h))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }

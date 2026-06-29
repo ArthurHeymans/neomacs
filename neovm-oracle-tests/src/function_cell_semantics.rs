@@ -31,7 +31,12 @@ fn oracle_function_cell_fset_and_fmakunbound_lifecycle() {
       (fmakunbound 'neomacs--oracle-fcell-basic))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil nil t t t (called 7) neomacs--oracle-fcell-basic nil nil (void-function (neomacs--oracle-fcell-basic)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -54,7 +59,12 @@ fn oracle_fmakunbound_protects_nil_and_t() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((setting-constant (nil)) (setting-constant (t)) (setting-constant (nil)) nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -79,7 +89,12 @@ fn oracle_fset_rejects_cyclic_function_indirection() {
       (fmakunbound sym))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((cyclic-function-indirection (neomacs--oracle-fcell-c)) nil nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -107,5 +122,8 @@ fn oracle_indirect_function_follows_symbol_chain_and_stops_at_nil() {
         (fmakunbound sym)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t neomacs--oracle-fcell-leaf nil nil)""#]],
+    );
 }

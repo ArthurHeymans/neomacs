@@ -22,7 +22,12 @@ fn oracle_prop_rx_to_string_core_forms() {
    (rx-to-string '(seq (syntax word) (not (syntax whitespace))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\\\\(?:\\\\`\\\\(?:cat\\\\|dog\\\\)[[:digit:]]+\\\\'\\\\)\" \"\\\\(?:\\\\_<[_[:word:]-]+\\\\_>\\\\)\" \"\\\\(?:\\\\(?2:[[:alpha:]]+\\\\):\\\\2\\\\)\" \"\\\\(?:[^a-c][^z-a]*?\\\\)\" \"\\\\(?:\\\\w\\\\S-\\\\)\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -41,7 +46,12 @@ fn oracle_prop_rx_macro_expansion_and_match_behavior() {
      (string-match re "abc-"))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\\\\`\\\\([[:alpha:]]+\\\\)-\\\\([[:digit:]]+\\\\)\\\\'\" 0 \"abc\" \"123\" nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -63,7 +73,10 @@ fn oracle_prop_rx_let_and_rx_let_eval_definitions() {
        (rx-to-string 'runtime-chars)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (error \"Cannot redefine built-in rx name ‘hex’\")""#]],
+    );
 }
 
 #[test]
@@ -94,7 +107,12 @@ fn oracle_prop_rx_let_rest_and_binding_error_contracts() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"a\\\\.b\\\\(?:[0-9]+\\\\)\" (error \"rx ‘literal’ form with non-string argument\") (\"\\\\<[[:alpha:]]+-[[:digit:]]+\\\\>\" \"{\\\\<x\\\\>}\") (error \"Cannot redefine built-in rx name ‘any’\") (wrong-type-argument listp))""#
+        ]],
+    );
 }
 
 #[test]
@@ -118,5 +136,10 @@ fn oracle_prop_rx_define_and_error_signaling() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\\\\(?:\\\\<[[:word:]]+\\\\>\\\\)\" \"\\\\(?:<h1>\\\\)\" \"\\\\<[[:word:]]+\\\\>:<h1>\" (error \"Expanding rx def ‘oracle-rx-tag’: too few arguments (got 0, need 1)\") (error \"Unknown rx form ‘unknown-rx-form’\"))""#
+        ]],
+    );
 }

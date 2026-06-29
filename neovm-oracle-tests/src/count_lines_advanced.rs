@@ -36,7 +36,10 @@ fn oracle_prop_count_lines_between_positions() {
                       ;; Reversed args should also work (count-lines handles both orders)
                       (setq results (cons (count-lines 15 3) results))
                       (nreverse results)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 1 1 3 1 0 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -54,7 +57,7 @@ fn oracle_prop_count_lines_empty_buffer() {
                       (point-min)
                       (point-max)
                       (= (point-min) (point-max))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 1 1 t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +87,7 @@ fn oracle_prop_count_lines_trailing_newline() {
                       (insert "no-newline-at-all")
                       (setq results (cons (count-lines (point-min) (point-max)) results)))
                     (nreverse results))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (3 3 3 1 1)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +117,10 @@ fn oracle_prop_line_number_at_pos_various() {
                       (goto-char 9)
                       (setq results (cons (line-number-at-pos) results))
                       (nreverse results)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 2 3 4 6 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +158,10 @@ fn oracle_prop_line_number_at_pos_absolute() {
                                     (line-number-at-pos (point-max) t))))
                             (widen)
                             (list no-narrow narrowed-results))))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t t t) (1 4 3 6))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +220,10 @@ fn oracle_prop_line_number_at_pos_narrowed_multiple() {
                                         (line-number-at-pos (point-max) t))
                                       all-results))))
                       (nreverse all-results)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 7 5 11) (1 7 15 21) (1 2 1 2))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +281,12 @@ fn oracle_prop_count_lines_build_line_index() {
                 (list idx (nreverse checks)
                       (count-lines (point-min) (point-max))))))
         (fmakunbound 'neovm--test-build-line-index)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r##""OK (((1 1 12 11 \"#!/bin/bash\") (2 13 31 18 \"echo \\\"hello world\\\"\") (3 32 32 0 \"\") (4 33 42 9 \"# comment\") (5 43 49 6 \"exit 0\")) ((1 0 1) (2 1 2) (3 2 3) (4 3 4) (5 4 5)) 5)""##
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -310,5 +327,10 @@ fn oracle_prop_count_lines_constructed_content() {
                         (list total first-half second-half
                               (nreverse cross-checks)
                               (nreverse lines)))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (10 5 6 ((1 1 0) (3 2 1) (6 3 2) (10 4 3) (15 5 4) (21 6 5) (28 7 6) (36 8 7) (45 9 8) (55 10 9)) (\"a\" \"bb\" \"ccc\" \"dddd\" \"eeeee\" \"ffffff\" \"ggggggg\" \"hhhhhhhh\" \"iiiiiiiii\" \"jjjjjjjjjj\"))""#
+        ]],
+    );
 }

@@ -53,7 +53,12 @@ fn oracle_prop_while_multiple_termination_conditions() {
                                 'reason reason
                                 'remaining-len (length remaining))
                           results)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((sum 100 count 4 reason sum-limit remaining-len 2) (sum 105 count 6 reason sum-limit remaining-len 4) (sum 30 count 2 reason negative remaining-len 3) (sum 36 count 8 reason count-limit remaining-len 4) (sum 0 count 0 reason exhausted remaining-len 0) (sum 200 count 1 reason exhausted remaining-len 0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +96,10 @@ fn oracle_prop_dolist_result_form_complex_aggregation() {
     (when (or (null max-val) (> v max-val))
       (setq max-val v))
     (aset histogram v (1+ (aref histogram v)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable v)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +132,10 @@ fn oracle_prop_dotimes_result_form_sieve() {
           (while (<= j limit)
             (aset sieve j nil)
             (setq j (+ j i))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +180,12 @@ fn oracle_prop_dolist_destructuring_via_let() {
         'class-avg (/ total-avg (length students))
         'top (nreverse top-students)
         'bottom (nreverse bottom-students)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (results ((\"Alice\" avg 89.0 best english pass t) (\"Bob\" avg 82.66666666666667 best english pass t) (\"Carol\" avg 94.33333333333333 best english pass t) (\"Dave\" avg 65.0 best english pass nil) (\"Eve\" avg 90.0 best science pass t)) class-avg 84.2 top (\"Carol\" \"Eve\") bottom (\"Dave\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +219,12 @@ fn oracle_prop_dotimes_foreach_with_index() {
         'odd (nreverse odd-items)
         'pairs (nreverse pairs)
         'total len))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (indexed ((0 alpha) (1 beta) (2 gamma) (3 delta) (4 epsilon) (5 zeta) (6 eta) (7 theta)) even (alpha gamma epsilon eta) odd (beta delta zeta theta) pairs ((alpha beta) (beta gamma) (gamma delta) (delta epsilon) (epsilon zeta) (zeta eta) (eta theta)) total 8)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -266,7 +287,10 @@ fn oracle_prop_nested_dolist_dotimes_cartesian() {
         (setq result (cons (concat (mapcar #'char-to-string (nreverse chars)))
                            result))))
     (nreverse result)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument characterp \"H\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +356,12 @@ fn oracle_prop_while_reduce_fold() {
          (funcall 'neovm--foldr #'cons nil '(only))))
     (fmakunbound 'neovm--foldl)
     (fmakunbound 'neovm--foldr)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (55 3628800 10 (e d c b a) \"start-a-b-c\" (a b c d e) 3 42 (only))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -398,7 +427,10 @@ fn oracle_prop_while_stack_calculator() {
        ;; Empty
        (funcall 'neovm--rpn-eval nil))
     (fmakunbound 'neovm--rpn-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((7) (4) (50) (25) (4) (8 3) (45) nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -444,5 +476,8 @@ fn oracle_prop_dotimes_edge_cases() {
         (dotimes (j 3
                   (setq matrix (cons (nreverse row) matrix)))
           (setq row (cons (+ (* i 10) j) row)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
+    );
 }

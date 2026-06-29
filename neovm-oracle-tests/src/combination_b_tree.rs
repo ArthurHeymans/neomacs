@@ -93,7 +93,10 @@ fn oracle_prop_btree_search_basic() {
     (fmakunbound 'neovm--bt-children)
     (fmakunbound 'neovm--bt-leaf-p)
     (fmakunbound 'neovm--bt-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t nil nil nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -259,7 +262,10 @@ fn oracle_prop_btree_insert_with_splitting() {
     (fmakunbound 'neovm--bt2-insert-impl)
     (fmakunbound 'neovm--bt2-insert)
     (fmakunbound 'neovm--bt2-inorder)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10) (10 20) (10 20 30) (5 10 15 20 30) nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -382,7 +388,10 @@ fn oracle_prop_btree_inorder_traversal_sorted() {
     (fmakunbound 'neovm--bt3-ins-impl)
     (fmakunbound 'neovm--bt3-insert)
     (fmakunbound 'neovm--bt3-inorder)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7) (1 2 3 4 5 6 7) (1 2 3 4 5 6 7) t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -492,7 +501,12 @@ fn oracle_prop_btree_bulk_insert_sorted() {
     (fmakunbound 'neovm--bt4-insert)
     (fmakunbound 'neovm--bt4-inorder)
     (fmakunbound 'neovm--bt4-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5 10 15 25 27 30 35 50 55 60 65 75 85 90 95) t 15 t nil nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -607,7 +621,12 @@ fn oracle_prop_btree_range_query() {
     (fmakunbound 'neovm--bt5-ins-impl)
     (fmakunbound 'neovm--bt5-insert)
     (fmakunbound 'neovm--bt5-range)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((30 40 50 60) (10 20 30) (90 100) nil nil (50) (10 20 30 40 50 60 70 80 90 100))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -728,5 +747,10 @@ fn oracle_prop_btree_height_and_structure() {
     (fmakunbound 'neovm--bt6-height)
     (fmakunbound 'neovm--bt6-count)
     (fmakunbound 'neovm--bt6-all-leaf-depths)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 1 2 2 2 2 3 3 3 3 3 3 3 3 4) (1 2 3 4 5 6 7 8 9 10 11 12 13 14 15) 3 3 t (8) t)""#
+        ]],
+    );
 }

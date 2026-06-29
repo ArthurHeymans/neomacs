@@ -82,7 +82,10 @@ fn oracle_prop_optimization_gradient_descent_1d() {
     (fmakunbound 'neovm--opt-gd1-grad)
     (fmakunbound 'neovm--opt-gd1-step)
     (fmakunbound 'neovm--opt-gd1-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 10000) (2964 1001) 21 t t 600 5400)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +161,10 @@ fn oracle_prop_optimization_gradient_descent_2d() {
     (fmakunbound 'neovm--opt-gd2-grad-y)
     (fmakunbound 'neovm--opt-gd2-step)
     (fmakunbound 'neovm--opt-gd2-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((500 500 10600) (329 204 525) t 525 (2 40))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +257,10 @@ fn oracle_prop_optimization_simulated_annealing() {
     (fmakunbound 'neovm--opt-sa-neighbor)
     (fmakunbound 'neovm--opt-sa-accept)
     (fmakunbound 'neovm--opt-sa-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((504 500 747 1110) t 3000 500 (416 . 1973744620) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +341,12 @@ fn oracle_prop_optimization_hill_climbing_restarts() {
     (fmakunbound 'neovm--opt-hc-prng)
     (fmakunbound 'neovm--opt-hc-climb)
     (fmakunbound 'neovm--opt-hc-restarts)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (701 10000 5 ((1081 (701 10000 39)) (533 (693 10000 17)) (269 (699 10000 44)) (1461 (701 10000 77)) (356 (696 10000 35))) (700 10000 71) (700 10000 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +404,12 @@ fn oracle_prop_optimization_binary_search() {
          (funcall 'neovm--opt-bs-f 1000)))
     (fmakunbound 'neovm--opt-bs-f)
     (fmakunbound 'neovm--opt-bs-ternary)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (509 300 30 ((0 1000 333 667 578 578) (333 1000 555 778 330 1072) (333 778 481 630 303 469)) t t 2800 300 2800)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -456,7 +475,10 @@ fn oracle_prop_optimization_golden_section_search() {
          (funcall 'neovm--opt-gs-f 8000)))
     (fmakunbound 'neovm--opt-gs-f)
     (fmakunbound 'neovm--opt-gs-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((4031 2000 20) nil t (4031 2000 16) 18000 2000 18000)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -542,7 +564,10 @@ fn oracle_prop_optimization_newtons_method() {
     (fmakunbound 'neovm--opt-nr-step)
     (fmakunbound 'neovm--opt-nr-run)
     (fmakunbound 'neovm--opt-nr-optim-step)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((3001 t 5) (3001 t) (-3001 t) 5000 5000 5000 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -678,5 +703,10 @@ fn oracle_prop_optimization_nelder_mead_2d() {
     (fmakunbound 'neovm--opt-nm-contract)
     (fmakunbound 'neovm--opt-nm-step)
     (fmakunbound 'neovm--opt-nm-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((195 . 296) 0 t (1300 1800 800) (0 . 250) ((0 . 500) 800))""#
+        ]],
+    );
 }

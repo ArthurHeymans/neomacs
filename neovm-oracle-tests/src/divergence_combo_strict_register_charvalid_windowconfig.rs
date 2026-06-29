@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_k0_register_various_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((register-alist nil))
   (set-register ?a 42)
@@ -22,13 +22,14 @@ fn div_k0_register_various_types() {
         (length register-alist)
         (car (assq ?a register-alist))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 2)""#]],
     );
 }
 
 #[test]
 fn div_k0_register_point_and_increment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((register-alist nil))
   (with-temp-buffer
@@ -40,13 +41,16 @@ fn div_k0_register_point_and_increment() {
           (marker-position (get-register ?p))
           (get-register ?a))))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"The mark is not set now, so there is no region\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_k0_char_validity_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-valid-p ?a)
       (char-valid-p 0)
@@ -58,13 +62,14 @@ fn div_k0_char_validity_edges() {
       max-char
       min-char)
 "##,
+        expect_test::expect![[r#""ERR (void-function char-valid-p)""#]],
     );
 }
 
 #[test]
 fn div_k0_window_frame_configuration_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((wc (current-window-configuration))
       (fc (current-frame-configuration)))
@@ -73,13 +78,14 @@ fn div_k0_window_frame_configuration_objects() {
         (compare-window-configurations wc wc)
         (compare-window-configurations wc (current-window-configuration))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_k0_decode_char_charset_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (decode-char 'eight-bit 128)
       (decode-char 'eight-bit 255)
@@ -90,5 +96,8 @@ fn div_k0_decode_char_charset_edges() {
       (decode-char 'unicode #x1F600)
       (encode-char #x1F600 'unicode))
 "##,
+        expect_test::expect![[
+            r#""OK (4194176 4194303 nil unicode-bmp unicode-bmp unicode-bmp 128512 128512)""#
+        ]],
     );
 }

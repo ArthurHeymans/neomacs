@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_buffer_swap_text_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "bs1"))
         (b2 (generate-new-buffer "bs2")))
@@ -46,6 +46,7 @@ fn combo_buffer_swap_text_marker_overlay() {
         (list s1 s2 mp1 mp2 os1 oe1 os2 oe2 k1 k2)))
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-swap-text 2)""#]],
     );
 }
 
@@ -53,7 +54,7 @@ fn combo_buffer_swap_text_marker_overlay() {
 fn combo_buffer_swap_text_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "su1"))
         (b2 (generate-new-buffer "su2")))
@@ -86,6 +87,7 @@ fn combo_buffer_swap_text_undo() {
               (marker-position m2))))
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-swap-text 2)""#]],
     );
 }
 
@@ -93,7 +95,7 @@ fn combo_buffer_swap_text_undo() {
 fn combo_buffer_swap_text_overlay_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "sn1"))
         (b2 (generate-new-buffer "sn2")))
@@ -126,6 +128,7 @@ fn combo_buffer_swap_text_overlay_narrow() {
         (list mp1 os1 oe1 s1 s2 k1 k2)))
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-swap-text 2)""#]],
     );
 }
 
@@ -133,7 +136,7 @@ fn combo_buffer_swap_text_overlay_narrow() {
 fn combo_buffer_swap_text_clone() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "sc1"))
         (b2 (generate-new-buffer "sc2")))
@@ -162,6 +165,7 @@ fn combo_buffer_swap_text_clone() {
         (list mp1 os1 oe1 s1 s2 k1 k2)))
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-swap-text 2)""#]],
     );
 }
 
@@ -169,7 +173,7 @@ fn combo_buffer_swap_text_clone() {
 fn combo_buffer_swap_text_multi_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "sm1"))
         (b2 (generate-new-buffer "sm2")))
@@ -200,5 +204,6 @@ fn combo_buffer_swap_text_multi_prop() {
         (list mp1 os1 oe1 s1 s2 k1 p1)))
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments put-text-property 6)""#]],
     );
 }

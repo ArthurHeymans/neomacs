@@ -108,7 +108,12 @@ fn oracle_prop_abstract_machine_register() {
              (r3 (funcall 'neovm--test-rm-run sum-prog)))
         (list r1 r2 r3))
     (fmakunbound 'neovm--test-rm-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 120 1 0 0 0 0 0) 26 t) ((21 34 0 21 1 0 0 0) 56 t) ((0 55 1 0 0 0 0 0) 46 t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +224,10 @@ fn oracle_prop_abstract_machine_secd() {
              (r4 (funcall 'neovm--test-secd-run prog4 '((3 7)))))
         (list r1 r2 r3 r4))
     (fmakunbound 'neovm--test-secd-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((56 8) (10 7) (6 7) (16 6))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -355,7 +363,10 @@ fn oracle_prop_abstract_machine_stack_with_locals() {
              (r2 (funcall 'neovm--test-sm-run sumsq-prog 4)))
         (list r1 r2))
     (fmakunbound 'neovm--test-sm-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -458,7 +469,12 @@ fn oracle_prop_abstract_machine_turing() {
     (fmakunbound 'neovm--test-tm-write)
     (fmakunbound 'neovm--test-tm-lookup)
     (fmakunbound 'neovm--test-tm-run)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((q0 0 0 (1 1 1)) (q0 0 0 (1 0 1 1)) (q-right 0 0 (1 1 1 1 1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -616,7 +632,12 @@ fn oracle_prop_abstract_machine_cek() {
     (fmakunbound 'neovm--test-cek-step)
     (fmakunbound 'neovm--test-cek-apply-cont)
     (fmakunbound 'neovm--test-cek-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((42 3) (7 7) (25 15) (10 12) (56 16) (42 6) (99 6) (7 17))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -717,5 +738,10 @@ fn oracle_prop_abstract_machine_compiler_to_register() {
     (fmakunbound 'neovm--test-comp-compile)
     (fmakunbound 'neovm--test-comp-rm-run)
     (fmakunbound 'neovm--test-comp-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((42 42 42 t) ((+ 3 4) 7 7 t) ((* 5 6) 30 30 t) ((- 10 3) 7 7 t) ((+ (* 2 3) (* 4 5)) 26 26 t) ((* (+ 1 2) (- 10 4)) 18 18 t) ((+ (+ 1 2) (+ 3 (+ 4 5))) 15 15 t))""#
+        ]],
+    );
 }

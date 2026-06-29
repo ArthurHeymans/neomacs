@@ -269,7 +269,7 @@ fn oracle_prop_secd2_basic_arithmetic() {
         preamble = secd_machine_preamble(),
         cleanup = secd_machine_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +306,7 @@ fn oracle_prop_secd2_env_and_list_ops() {
         preamble = secd_machine_preamble(),
         cleanup = secd_machine_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -350,7 +350,7 @@ fn oracle_prop_secd2_conditional() {
         preamble = secd_machine_preamble(),
         cleanup = secd_machine_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -392,7 +392,7 @@ fn oracle_prop_secd2_function_application() {
         preamble = secd_machine_preamble(),
         cleanup = secd_machine_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -428,7 +428,7 @@ fn oracle_prop_secd2_compile_and_run() {
         preamble = secd_machine_preamble(),
         cleanup = secd_machine_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -489,7 +489,7 @@ fn oracle_prop_secd2_factorial_iterative() {
         preamble = secd_machine_preamble(),
         cleanup = secd_machine_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -548,5 +548,5 @@ fn oracle_prop_secd2_fibonacci_generated() {
         preamble = secd_machine_preamble(),
         cleanup = secd_machine_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }

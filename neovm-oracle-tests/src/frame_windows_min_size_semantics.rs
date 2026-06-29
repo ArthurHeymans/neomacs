@@ -21,5 +21,8 @@ fn oracle_frame_windows_min_size_matches_loaded_window_el() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (8 10 5 10 (error \"not-frame is not a live frame\"))""#]],
+    );
 }

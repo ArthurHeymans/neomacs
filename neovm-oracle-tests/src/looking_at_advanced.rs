@@ -30,7 +30,10 @@ fn oracle_prop_looking_at_nested_groups_quantifiers() {
                             (match-string 4)
                             (match-beginning 0)
                             (match-end 0))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t \"192.168.1.42\" \"192\" \"168\" \"1\" \"42\" 1 13)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +64,12 @@ fn oracle_prop_looking_at_vs_looking_at_p_match_data() {
                               (match-string 0)
                               (match-string 1)
                               (match-string 2)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"alpha-999\" \"alpha\" \"999\" t \"alpha-999\" \"alpha\" \"999\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +113,12 @@ fn oracle_prop_looking_at_multiple_positions() {
                                                 (if (looking-at "[!]+") 'punct 'no))
                                           results))
                       (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 ws no no) (3 no dig no) (6 no no alpha) (9 no no punct))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +146,12 @@ fn oracle_prop_looking_at_char_classes_alternation() {
                                             (when matched (match-string 1)))
                                       results)))))
                     (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"let x = 42;\" t \"x\") (\"const Y = 99;\" t \"Y\") (\"var foo = 0;\" t \"foo\") (\"if (true)\" nil nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -167,7 +185,12 @@ fn oracle_prop_looking_at_anchors_and_shy_groups() {
                                         (match-string 1))
                                   results))
                       (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((bol-at-start t) (second-line t) (third-match \"third line\" \"line\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -229,7 +252,12 @@ fn oracle_prop_looking_at_lexer_scanner() {
                                   (setq tokens (cons tok tokens)))))
                             (nreverse tokens)))
                       (fmakunbound 'neovm--test-lex-classify)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((keyword . \"fn\") (ident . \"add\") (punct . \"(\") (ident . \"x\") (punct . \",\") (ident . \"y\") (punct . \")\") (punct . \"{\") (keyword . \"return\") (ident . \"x\") (punct . \"+\") (ident . \"y\") (punct . \";\") (punct . \"}\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +291,10 @@ fn oracle_prop_looking_at_lookahead_without_moving() {
                                         results))))
                         (forward-line 1))
                       (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"apple\" big) (\"banana\" big) (\"cherry\" small))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -299,5 +330,8 @@ fn oracle_prop_looking_at_with_narrowing() {
                           (list before-narrow
                                 after-narrow-match m0 m1 m2
                                 sees-header sees-footer)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t \"data-section\" \"data\" \"section\" nil nil)""#]],
+    );
 }

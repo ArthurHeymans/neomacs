@@ -10,22 +10,40 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_prop_sort_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(sort (list 4 1 3 2) '<)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(sort (list 4 1 3 2) '<)",
+        expect_test::expect![[r#""OK (1 2 3 4)""#]],
+    );
     assert_ok_eq("(1 2 3 4)", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(sort (list 9 7 5 3 1) '>)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(sort (list 9 7 5 3 1) '>)",
+        expect_test::expect![[r#""OK (9 7 5 3 1)""#]],
+    );
     assert_ok_eq("(9 7 5 3 1)", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(sort nil '<)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(sort nil '<)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(sort (list 42) '<)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(sort (list 42) '<)",
+        expect_test::expect![[r#""OK (42)""#]],
+    );
     assert_ok_eq("(42)", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(sort (list 2 2 2 2) '<)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(sort (list 2 2 2 2) '<)",
+        expect_test::expect![[r#""OK (2 2 2 2)""#]],
+    );
     assert_ok_eq("(2 2 2 2)", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(sort (list 5 -3 0 8 -1) '<)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(sort (list 5 -3 0 8 -1) '<)",
+        expect_test::expect![[r#""OK (-3 -1 0 5 8)""#]],
+    );
     assert_ok_eq("(-3 -1 0 5 8)", &o, &n);
 }
 
@@ -33,7 +51,10 @@ fn oracle_prop_sort_basics() {
 fn oracle_prop_sort_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(sort (list "cherry" "apple" "banana") 'string<)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(sort (list "cherry" "apple" "banana") 'string<)"#,
+        expect_test::expect![[r#""OK (\"apple\" \"banana\" \"cherry\")""#]],
+    );
     assert_ok_eq(r#"("apple" "banana" "cherry")"#, &o, &n);
 }
 
@@ -41,13 +62,15 @@ fn oracle_prop_sort_strings() {
 fn oracle_prop_sort_keyword_arguments() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         "(sort (list (cons 2 'b) (cons 1 'a) (cons 3 'c)) :key 'car :lessp '<)",
+        expect_test::expect![[r#""OK ((1 . a) (2 . b) (3 . c))""#]],
     );
     assert_ok_eq("((1 . a) (2 . b) (3 . c))", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         "(sort (list (cons 2 'b) (cons 1 'a) (cons 3 'c)) :key 'car :lessp '< :reverse t)",
+        expect_test::expect![[r#""OK ((3 . c) (2 . b) (1 . a))""#]],
     );
     assert_ok_eq("((3 . c) (2 . b) (1 . a))", &o, &n);
 }

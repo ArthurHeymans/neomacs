@@ -42,7 +42,12 @@ fn oracle_prop_eval2_dynamic_form_construction() {
                                                               var-names)))))
                          (progn-result (eval progn-form)))
                     (list results nested-result progn-result))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((+ . 13) (- . 7) (* . 30) (max . 10) (min . 3)) 20 (10 20 30))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +75,10 @@ fn oracle_prop_eval2_dynamic_scoping_side_effects() {
                                  (r5 (eval 'neovm--ev2-counter)))
                             (list r1 r2 r3 r4 r5)))
                       (makunbound 'neovm--ev2-counter)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (101 202 202 999 202)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +118,10 @@ fn oracle_prop_eval2_backquote_construction() {
                       (list r1 r2 r3 r4 r5
                             ;; Verify form structure
                             form1 form3)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (15 (5 10 15) 55 105 big (+ 5 10) (+ 5 20 30))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -141,7 +152,12 @@ fn oracle_prop_eval2_nested_eval_levels() {
                                            (quote " ")
                                            (quote "world"))))))
                     (list r1 r2 r3 r4 r5 r6))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 (+ 3 4) (+ 5 6) neovm--ev2-dynamic-val (1 2 3) \"hello world\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +203,10 @@ fn oracle_prop_eval2_constructed_binding_forms() {
                     (unwind-protect
                         (list r1 r2 r3 r4)
                       (fmakunbound 'neovm--ev2-square)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10 20 30 60) (5 10 15) 15 49)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +257,10 @@ fn oracle_prop_eval2_dispatch_table() {
                                   commands)))
                     (list r-add r-sub r-mul r-pow r-mod r-avg r-unk
                           batch-results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable arg1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +308,12 @@ fn oracle_prop_eval2_error_propagation() {
                          (r8 (funcall safe-eval
                                       '(if t (+ 1 "bad") 'ok))))
                     (list r1 r2 r3 r4 r5 r6 r7 r8))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok 6) (void-var neovm--ev2-nonexistent-var) (void-fn neovm--ev2-nonexistent-fn) (type-error number-or-marker-p) (arith-error) (arith-error) (arith-error) (type-error number-or-marker-p))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -341,5 +368,10 @@ fn oracle_prop_eval2_eval_vs_funcall() {
                                 e-map f-map (equal e-map f-map)))
                       (fmakunbound 'neovm--ev2-adder)
                       (fmakunbound 'neovm--ev2-formatter)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (7 7 t \"Bob is 25\" \"Bob is 25\" t 23 23 t t 49 49 t (2 4 6) (2 4 6) t)""#
+        ]],
+    );
 }

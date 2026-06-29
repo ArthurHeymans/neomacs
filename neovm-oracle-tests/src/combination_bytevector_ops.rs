@@ -49,7 +49,12 @@ fn oracle_prop_bytevector_string_bytes_aref() {
     ;; Comparison
     (string= s1 s3)
     (string< s2 s1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 5 5 0 104 111 65 69 72 t t t (104 101 108 108 111) t t nil t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -141,7 +146,12 @@ fn oracle_prop_bytevector_build_binary() {
     (fmakunbound 'neovm--test-unpack-uint16-be)
     (fmakunbound 'neovm--test-pack-uint32-be)
     (fmakunbound 'neovm--test-unpack-uint32-be)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 127 128 255) 0 256 65535 ((18 52 86 120) 305419896) (t t t t t t t) (1000 2000 3000))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -236,7 +246,10 @@ fn oracle_prop_bytevector_xor_rotate() {
     (fmakunbound 'neovm--test-rotate-byte-left)
     (fmakunbound 'neovm--test-rotate-byte-right)
     (fmakunbound 'neovm--test-rotate-bytes)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 0 0 0) (t t) 3 12 255 192 128 t (t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -311,7 +324,12 @@ fn oracle_prop_bytevector_checksum() {
     (fmakunbound 'neovm--test-fletcher16)
     (fmakunbound 'neovm--test-adler32)
     (fmakunbound 'neovm--test-crc8)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (0 24929 8279 6752 t t 1 6422626 300286872 0 192 244 t (21816 608044340 76))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -419,7 +437,12 @@ fn oracle_prop_bytevector_hex_conversion() {
     (fmakunbound 'neovm--test-bytes-to-hex)
     (fmakunbound 'neovm--test-hex-to-bytes)
     (fmakunbound 'neovm--test-hex-dump)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"00\" \"ff\" \"abcd\" \"48656c6c6f\" (\"Hello\" t) (\"007f80ff2a63\" t) \"\" ((0 \"48 65 6c 6c 6f 2c 20 57\" \"Hello, W\") (8 \"6f 72 6c 64 21\" \"orld!\")) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -524,7 +547,12 @@ fn oracle_prop_bytevector_base64_like() {
           (list encoded (string= binary decoded))))
     (fmakunbound 'neovm--test-b64-encode)
     (fmakunbound 'neovm--test-b64-decode)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"TWFu\" \"TWE=\" \"TQ==\" \"\" \"SGVsbG8sIFdvcmxkIQ==\" ((\"\" \"\" t) (\"a\" \"YQ==\" t) (\"ab\" \"YWI=\" t) (\"abc\" \"YWJj\" t) (\"abcd\" \"YWJjZA==\" t) (\"Hello!\" \"SGVsbG8h\" t) (\"The quick brown fox\" \"VGhlIHF1aWNrIGJyb3duIGZveA==\" t)) (\"AAF/gP7/\" t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -628,7 +656,12 @@ fn oracle_prop_bytevector_pattern_search() {
     (fmakunbound 'neovm--test-byte-find)
     (fmakunbound 'neovm--test-byte-find-all)
     (fmakunbound 'neovm--test-byte-replace)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (2 8 nil (0 4 10) (2 6 12) \"XXBBXXBBCCXXBB\" \"AAYAAYCCAAY\" \"a---b---c---d\" \"AABBAABBCCAABB\" 0 2)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -707,5 +740,10 @@ fn oracle_prop_bytevector_histogram() {
           (= total (length s))))
     (fmakunbound 'neovm--test-byte-histogram)
     (fmakunbound 'neovm--test-byte-entropy)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((99 . 4) (98 . 3) (97 . 2)) ((0 . 3) (1 . 2) (2 . 1)) nil ((88 . 10)) 400 0 100 t)""#
+        ]],
+    );
 }

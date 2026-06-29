@@ -36,7 +36,10 @@ fn oracle_prop_save_restriction_comp_preserves_narrowing_on_normal_exit() {
           (= before-min (point-min))
           (= before-max (point-max)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 15 \"EFGHIJKLMN\" 5 15 \"EFGHIJKLMN\" t t)""#]],
+    );
 }
 
 #[test]
@@ -58,7 +61,10 @@ fn oracle_prop_save_restriction_comp_preserves_on_error() {
     (list orig-str (buffer-string)
           (equal orig-str (buffer-string)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"World\" \"World\" t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +103,12 @@ fn oracle_prop_save_restriction_comp_narrow_various_ranges() {
       (setq results (cons (list 'single-char (buffer-string)) results)))
     (nreverse results)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((normal \"2345\" 3 7) (swapped \"2345\" 3 7) (empty \"\" 5 5 t) (full \"0123456789\") (single-char \"4\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +135,10 @@ fn oracle_prop_save_restriction_comp_widen_reveals_full_buffer() {
     (list narrow-view wide-view re-narrow
           (string= narrow-view re-narrow))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"BBB\" \"AAA-BBB-CCC-DDD-EEE\" \"BBB\" t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +173,12 @@ fn oracle_prop_save_restriction_comp_triple_nested() {
     (setq log (cons (list 'back-to-0 (buffer-string)) log))
     (nreverse log)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((initial 1 21) (level1 \"0123456789ABCDEFG\") (level2 \"23456789A\") (level3 \"1234\") (back-to-2 \"23456789A\") (back-to-1 \"0123456789ABCDEFG\") (back-to-0 \"0123456789ABCDEFGHIJ\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +211,12 @@ fn oracle_prop_save_restriction_comp_with_save_excursion() {
     (setq results (cons (list 'after-restriction (point-min) (point-max) (buffer-string)) results))
     (nreverse results)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((inside-excursion 32) (after-widen 1 44 32) (after-excursion 11 1 44) (after-restriction 11 32 \"Line two.\nLine three.\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +250,12 @@ fn oracle_prop_save_restriction_comp_point_clamped_by_narrowing() {
       (setq results (cons (list 'forward-line moved (point)) results)))
     (nreverse results)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((after-goto-max 12) (after-goto-min 5) (forward-3 8 55) (forward-line 0 12))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +292,10 @@ fn oracle_prop_save_restriction_comp_insert_delete_affects_bounds() {
   ;; Full buffer after widen
   (buffer-string))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"AAABCCCXXXDDDEEE\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -293,7 +325,10 @@ fn oracle_prop_save_restriction_comp_point_min_max_transitions() {
     (setq log (cons (list (point-min) (point-max)) log))
     (nreverse log)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 27) (5 20) (3 10) (1 27) (5 20) (1 27))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +358,10 @@ fn oracle_prop_save_restriction_comp_buffer_narrowed_p() {
     (setq results (cons (buffer-narrowed-p) results))
     (nreverse results)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil t nil t t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -364,7 +402,12 @@ fn oracle_prop_save_restriction_comp_markers_through_narrow_widen() {
       (setq results (cons (list 'widened (buffer-string)) results))
       (nreverse results))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((before 5 15) (narrowed 5 15) (after-insert 5 18 \"CD***EFGHI\") (restored 5 18 1 24) (widened \"ABCD***EFGHIJKLMNOPQRST\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -397,7 +440,10 @@ fn oracle_prop_save_restriction_comp_csv_field_extraction() {
       (setq fields (cons (buffer-string) fields)))
     (nreverse fields)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"Alice\" \"30\" \"Engineer\" \"Seattle\")""#]],
+    );
 }
 
 #[test]
@@ -424,5 +470,10 @@ fn oracle_prop_save_restriction_comp_nested_narrow_with_replace() {
     ;; Full buffer intact
     (buffer-string)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK \"HEADER: skip this\napple banana cherry. dog elephant fox. grape hazel ivy.\nFOOTER: skip this too\n\"""#
+        ]],
+    );
 }

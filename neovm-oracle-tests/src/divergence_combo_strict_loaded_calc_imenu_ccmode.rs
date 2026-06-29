@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_i5_calc_eval_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (calc-eval "(2+3)*4")
       (calc-eval "sqrt(16)")
@@ -21,13 +21,16 @@ fn div_i5_calc_eval_arithmetic() {
       (calc-eval "100! / 99!"))
 "##,
         &["calc/calc.el"],
+        expect_test::expect![[
+            r#""OK (\"20\" \"4\" \"1024\" \"5.66666666667\" \"6.66666666667\" \"100\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_i5_calc_eval_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (calc-eval "sin(0)")
       (calc-eval "ln(exp(1))")
@@ -36,13 +39,14 @@ fn div_i5_calc_eval_functions() {
       (calc-eval "fib(10)"))
 "##,
         &["calc/calc.el"],
+        expect_test::expect![[r#""OK (\"0\" \"1.\" \"6\" \"30 choose\" \"fib(10)\")""#]],
     );
 }
 
 #[test]
 fn div_i5_imenu_index_elisp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -51,13 +55,14 @@ fn div_i5_imenu_index_elisp() {
     (sort (mapcar (lambda (e) (if (consp e) (car e) e)) index) #'string<)))
 "##,
         &["imenu.el"],
+        expect_test::expect![[r#""OK (\"*Rescan*\" \"Variables\" \"bar\" \"foo\")""#]],
     );
 }
 
 #[test]
 fn div_i5_cc_mode_indent_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (c-mode)
@@ -66,5 +71,6 @@ fn div_i5_cc_mode_indent_region() {
   (buffer-string))
 "##,
         &["progmodes/cc-mode.el", "progmodes/cc-engine.el"],
+        expect_test::expect![[r#""OK \"int main() {\n  if (x) {\n    return 0;\n  }\n}\n\"""#]],
     );
 }

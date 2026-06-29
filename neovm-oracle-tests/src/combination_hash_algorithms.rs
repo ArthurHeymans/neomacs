@@ -59,7 +59,10 @@ fn oracle_prop_hash_algo_two_sum() {
                            (nth (cadr indices) nums)))
             nil)))
     (fmakunbound 'neovm--test-two-sum)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 1) (1 2) (0 1) nil (2 4) (1 4) (6 7) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +114,12 @@ fn oracle_prop_hash_algo_anagram_grouping() {
                          '("eat" "tea" "tan" "ate" "nat" "bat"))))
     (fmakunbound 'neovm--test-sort-string)
     (fmakunbound 'neovm--test-group-anagrams)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"ate\" \"eat\" \"tea\") (\"bat\") (\"nat\" \"tan\")) ((\"a\" \"a\") (\"b\" \"b\") (\"c\")) ((\"abc\") (\"def\") (\"ghi\")) ((\"abc\" \"bac\" \"bca\" \"cab\")) nil ((\"enlist\" \"inlets\" \"listen\" \"silent\") (\"hello\") (\"world\")) 3)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +207,10 @@ fn oracle_prop_hash_algo_lru_cache() {
     (fmakunbound 'neovm--test-lru-get)
     (fmakunbound 'neovm--test-lru-put)
     (fmakunbound 'neovm--test-lru-keys)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((c) 10 20 30) (a c b) ((d) 10 nil 30 40) (e d c) 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +294,12 @@ fn oracle_prop_hash_algo_frequency_encoding() {
     (fmakunbound 'neovm--test-freq-to-sorted)
     (fmakunbound 'neovm--test-assign-codes)
     (fmakunbound 'neovm--test-encode)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((97 . 5) (98 . 2) (114 . 2) (99 . 1) (100 . 1)) ((97 . \"0\") (98 . \"10\") (99 . \"1110\") (100 . \"11110\") (114 . \"110\")) \"010110011100111100101100\" (11 24) 1 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -344,7 +360,12 @@ fn oracle_prop_hash_algo_nested_duplicate_detection() {
                  '((x (y z)) (a (y z)) (x (y z)))))
     (fmakunbound 'neovm--test-walk)
     (fmakunbound 'neovm--test-find-duplicates)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"(1 2)\" . 3) (\"(2)\" . 3) (\"(3 4)\" . 2) (\"(4)\" . 2)) ((\"((a b) c)\" . 2) (\"(a b)\" . 3) (\"(b)\" . 3) (\"(c)\" . 2)) nil ((\"[1 2]\" . 2)) ((\"((y z))\" . 3) (\"(x (y z))\" . 2) (\"(y z)\" . 3) (\"(z)\" . 3)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -454,5 +475,10 @@ fn oracle_prop_hash_algo_set_operations() {
     (fmakunbound 'neovm--test-set-intersection)
     (fmakunbound 'neovm--test-set-sym-diff)
     (fmakunbound 'neovm--test-set-subset-p)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9) (4 5 6) (1 2 3 7 8 9) t nil t (1 2 3 4 5 6) nil nil t)""#
+        ]],
+    );
 }

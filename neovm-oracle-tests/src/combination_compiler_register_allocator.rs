@@ -110,7 +110,12 @@ fn oracle_prop_combination_regalloc_liveness_defuse() {
     (fmakunbound 'neovm--ra-extract-defs)
     (fmakunbound 'neovm--ra-extract-uses)
     (fmakunbound 'neovm--ra-liveness))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 (nil (a) (a b) (a c) (d)) ((a) (a b) (a c) (d) nil) nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +182,10 @@ fn oracle_prop_combination_regalloc_interference_graph() {
           total-edges))
 
     (fmakunbound 'neovm--ra-build-interference))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((a b c) (b a) (c a)) 3 (b c) nil 4)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +286,10 @@ fn oracle_prop_combination_regalloc_graph_coloring() {
     (fmakunbound 'neovm--ra-degree)
     (fmakunbound 'neovm--ra-remove-node)
     (fmakunbound 'neovm--ra-color-graph))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil t t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +345,12 @@ fn oracle_prop_combination_regalloc_spill_cost() {
           (< (cdr (assq 'd costs)) (cdr (assq 'b costs)))))
 
     (fmakunbound 'neovm--ra-spill-cost))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a . 150) (d . 200) (c . 366) (e . 2500) (b . 15000)) a t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -424,7 +440,10 @@ fn oracle_prop_combination_regalloc_coalescing() {
 
     (fmakunbound 'neovm--ra-interferes-p)
     (fmakunbound 'neovm--ra-coalesce))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((a . b)) nil ((a . b)) nil ((a . b)) 2)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -510,7 +529,12 @@ fn oracle_prop_combination_regalloc_split_everywhere() {
 
     (fmakunbound 'neovm--ra-split-everywhere)
     (fmakunbound 'neovm--ra-count-spill-ops))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((load a) (spill a) (load b) (reload a) (add c a b) (reload a) (mul d c a) (ret d)) (1 2) (1 1) (1 1) 8 7 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -586,5 +610,8 @@ fn oracle_prop_combination_regalloc_assignment_verification() {
 
     (fmakunbound 'neovm--ra-verify-assignment)
     (fmakunbound 'neovm--ra-min-registers))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil ((a b 0) (c d 1)) 2 3 t)""#]],
+    );
 }

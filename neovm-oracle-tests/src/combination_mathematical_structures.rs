@@ -99,7 +99,12 @@ fn oracle_prop_math_rational_arithmetic() {
     (fmakunbound 'neovm--test-rat-div)
     (fmakunbound 'neovm--test-rat-equal)
     (fmakunbound 'neovm--test-rat-to-string)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 . 4) (2 . 3) (-2 . 3) (5 . 6) (3 . 4) (1 . 3) (1 . 3) (3 . 2) (0 . 1) (13 . 12) (1 . 1) \"5/6\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +184,12 @@ fn oracle_prop_math_complex_arithmetic() {
     (fmakunbound 'neovm--test-cx-conjugate)
     (fmakunbound 'neovm--test-cx-magnitude-sq)
     (fmakunbound 'neovm--test-cx-to-string)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((4 . 2) (2 . 6) (11 . -2) (-1 . 0) (3 . -4) ((25 . 0) t) 25 t t \"3+4i\" \"1-2i\" (-4 . 0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -308,7 +318,12 @@ fn oracle_prop_math_polynomial_operations() {
     (fmakunbound 'neovm--test-poly-mul)
     (fmakunbound 'neovm--test-poly-eval)
     (fmakunbound 'neovm--test-poly-to-string)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 3 3) (-2 -1 2 1) (1 2 1) 17 8 (3 6) 2 1 \"1 + 2x + 3x^2\" \"2 + x\" \"-1 + x^2\" t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -425,7 +440,12 @@ fn oracle_prop_math_permutation_group() {
     (fmakunbound 'neovm--test-perm-apply)
     (fmakunbound 'neovm--test-perm-order)
     (fmakunbound 'neovm--test-perm-cycles)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t (b a c d) (c a b d) 2 3 4 1 ((0 1)) ((0 1 2)) ((0 1 2 3)) nil (t [0 2 1 3] [2 1 0 3]))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -529,7 +549,12 @@ fn oracle_prop_math_set_theory() {
     (fmakunbound 'neovm--test-set-symmetric-diff)
     (fmakunbound 'neovm--test-power-set)
     (fmakunbound 'neovm--test-cartesian-product)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 3 5 7) (2 3 5 8) (1 2 3 5 7 8) (3 5) (1 7) (2 8) (1 2 7 8) (8 (0 1 1 1 2 2 2 3)) ((1 . a) (1 . b) (2 . a) (2 . b)) t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -626,7 +651,12 @@ fn oracle_prop_math_interval_arithmetic() {
     (fmakunbound 'neovm--test-iv-intersect)
     (fmakunbound 'neovm--test-iv-union-hull)
     (fmakunbound 'neovm--test-iv-subset)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((4 . 13) (-7 . 2) (3 . 40) (-16 . 16) (-10 . 10) t nil t t (3 . 5) nil (1 . 20) 4 10 t nil t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -775,5 +805,8 @@ fn oracle_prop_math_matrix_operations() {
     (fmakunbound 'neovm--test-mat-transpose)
     (fmakunbound 'neovm--test-mat-det)
     (fmakunbound 'neovm--test-mat-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((1 2) (3 4)) -2 0 13 ((1 3) (2 4)) t ((2 4) (6 8)))""#]],
+    );
 }

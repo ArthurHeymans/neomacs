@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_g4_cl_generic_basic_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (cl-defgeneric probe-gen-1 (x))
@@ -22,13 +22,14 @@ fn div_g4_cl_generic_basic_dispatch() {
         (probe-gen-1 "ab")
         (probe-gen-1 '(1))))
 "##,
+        expect_test::expect![[r#""OK (10 \"AB\" (fallback (1)))""#]],
     );
 }
 
 #[test]
 fn div_g4_cl_generic_qualifiers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (cl-defgeneric probe-gen-2 (x))
@@ -37,13 +38,14 @@ fn div_g4_cl_generic_qualifiers() {
   (cl-defmethod probe-gen-2 ((x number)) (push 'primary log))
   (list (probe-gen-2 5) (nreverse log)))
 "##,
+        expect_test::expect![[r#""OK ((primary after) (before primary after))""#]],
     );
 }
 
 #[test]
 fn div_g4_cl_generic_call_next_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (cl-defgeneric probe-gen-3 (x))
@@ -52,13 +54,14 @@ fn div_g4_cl_generic_call_next_method() {
   (cl-defmethod probe-gen-3 ((x number)) 'big-number)
   (list (probe-gen-3 5) (probe-gen-3 100)))
 "##,
+        expect_test::expect![[r#""ERR (void-function call-next-method)""#]],
     );
 }
 
 #[test]
 fn div_g4_cl_generic_eql_specializer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (cl-defgeneric probe-gen-4 (x))
@@ -70,13 +73,14 @@ fn div_g4_cl_generic_eql_specializer() {
         (probe-gen-4 :other)
         (probe-gen-4 7)))
 "##,
+        expect_test::expect![[r#""OK (matched-special matched-42 fallback fallback)""#]],
     );
 }
 
 #[test]
 fn div_g4_cl_generic_multiple_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (cl-defgeneric probe-gen-5 (a b))
@@ -87,5 +91,6 @@ fn div_g4_cl_generic_multiple_dispatch() {
         (probe-gen-5 "a" "b")
         (probe-gen-5 1 "b")))
 "##,
+        expect_test::expect![[r#""OK (num-num str-str fallback)""#]],
     );
 }

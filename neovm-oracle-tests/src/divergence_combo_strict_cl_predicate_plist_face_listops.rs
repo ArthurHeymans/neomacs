@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_g1_cl_every_some_reduce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-every #'numberp '(1 2 3))
       (cl-every #'numberp '(1 a 3))
@@ -21,26 +21,28 @@ fn div_g1_cl_every_some_reduce() {
       (cl-reduce #'+ '(1 2 3 4))
       (cl-subsetp '(1 2) '(1 2 3)))
 "##,
+        expect_test::expect![[r#""OK (t nil t t t 10 t)""#]],
     );
 }
 
 #[test]
 fn div_g1_plist_advanced() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (plist-member '(:a 1 :b 2) :b)
       (lax-plist-put (copy-tree '(a 1 b 2)) 'c 3)
       (plist-put (copy-tree '(:a 1)) :b 2)
       (plist-put (copy-tree '(:a 1 :b 2)) :a 99))
 "##,
+        expect_test::expect![[r#""OK ((:b 2) (a 1 b 2 c 3) (:a 1 :b 2) (:a 99 :b 2))""#]],
     );
 }
 
 #[test]
 fn div_g1_add_face_text_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -51,13 +53,14 @@ fn div_g1_add_face_text_property() {
         (get-text-property 1 'font-lock-face)
         (text-properties-at 2)))
 "##,
+        expect_test::expect![[r#""OK (bold bold italic (face bold))""#]],
     );
 }
 
 #[test]
 fn div_g1_list_tail_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (butlast '(1 2 3 4))
       (nthcdr 2 '(1 2 3 4))
@@ -65,13 +68,14 @@ fn div_g1_list_tail_ops() {
       (nbutlast (list 1 2 3 4))
       (safe-length (make-list 1000 'x)))
 "##,
+        expect_test::expect![[r#""OK ((1 2 3) (3 4) (2 3) (1 2 3) 1000)""#]],
     );
 }
 
 #[test]
 fn div_g1_cl_find_count_mismatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-find 3 '(1 2 3 4))
       (cl-position-if #'oddp '(2 4 5 6))
@@ -80,13 +84,14 @@ fn div_g1_cl_find_count_mismatch() {
       (cl-mismatch "abc" "abd" :end 2)
       (cl-mismatch "abc" "abd"))
 "##,
+        expect_test::expect![[r#""ERR (error \"Bad keyword argument :end\")""#]],
     );
 }
 
 #[test]
 fn div_g1_assq_delq_member_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (assq-delete-all 'b '((a . 1) (b . 2) (c . 3)))
       (delq 'b '(a b c b a))
@@ -95,5 +100,6 @@ fn div_g1_assq_delq_member_variants() {
       (memq 'b '(a b c))
       (memql 2 '(1 2 3)))
 "##,
+        expect_test::expect![[r#""OK (((a . 1) (c . 3)) (a c a) (a c a) (b c) (b c) (2 3))""#]],
     );
 }

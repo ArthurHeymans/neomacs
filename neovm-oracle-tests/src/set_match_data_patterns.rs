@@ -54,7 +54,12 @@ fn oracle_prop_set_match_data_explicit_positions() {
             results)
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5 10 nil nil) (0 20 0 5 6 12 13 20) nil (1 2 nil nil) (1000 2000 1000 1500 1500 2000))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -94,7 +99,12 @@ fn oracle_prop_match_data_after_success_and_failure() {
         (push (equal (match-data) orig) results))
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 6 0 3 3 6) (0 5 0 1 2 3 4 5) (3 6 3 6) t (10 20 12 18) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +164,12 @@ fn oracle_prop_match_beginning_end_comprehensive() {
             results)
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 5 0 1 1 2 2 3 3 4 4 5) (0 7 0 3 3 7 4 7) (0 3 0 3 nil nil nil nil) (0 4 nil nil 0 4) (6 11 6 11))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +227,12 @@ fn oracle_prop_match_string_all_groups_and_edge_cases() {
               results))
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"John Doe, age 30\" \"John\" \"Doe\" \"30\") (\"hello\" \"hello\" nil) (\"error: line 42\" \"error\" \"42\") (\"abcdefghij\" \"abc\" \"def\" \"ghij\") (\"aa\" \"aa\" 0 2))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -252,7 +272,7 @@ fn oracle_prop_save_match_data_with_set_match_data() {
                   restored-g1-beg restored-g2-end
                   still-g1-beg
                   (equal outer-md restored-md)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +326,12 @@ fn oracle_prop_match_data_multi_group_nested_alternation() {
               results))
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"outer inner\" \"outer inner\" \"inner\" 0 11 6 11) (\"cat\" nil nil) (nil \"dog\" nil) ((\"a\" \"1\") (\"b\" \"2\") (\"c\" \"3\") (\"d\" \"4\")) (0 0 0 0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +398,12 @@ fn oracle_prop_match_data_custom_replace_function() {
       ;; Cleanup
       (fmakunbound 'test--transform-replace)
       (fmakunbound 'test--word-num-transform))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"FOO:20 BAR:40 BAZ:60\" \"ITEM:10\" \"no matches here\" (0 4 \"test\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -421,5 +451,8 @@ fn oracle_prop_match_data_markers_vs_integers() {
               ;; match-beginning always returns integer
               (integerp str-b0)
               (integerp buf-b0))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 11 0 5 6 11 1 12 1 6 7 12 t t t t)""#]],
+    );
 }

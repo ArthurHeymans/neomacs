@@ -18,5 +18,8 @@ fn oracle_prop_with_restriction_label_restores_stack_and_widen_behavior() {
                             (progn (widen) (list (point-min) (point-max)))
                             (progn (without-restriction :label 'tag
                                      (list (point-min) (point-max)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 5 (1 7) 2 5 (2 5) (1 7))""#]],
+    );
 }

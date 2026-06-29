@@ -17,7 +17,7 @@ fn oracle_prop_indirect_function_direct() {
     // indirect-function on a lambda returns the lambda itself
     let form = r#"(let ((f (lambda (x) (* x x))))
                     (eq f (indirect-function f)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK t""#]]);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn oracle_prop_indirect_function_symbol() {
                         (list (functionp (indirect-function 'neovm--test-indf-a))
                               (funcall (indirect-function 'neovm--test-indf-a) 10))
                       (fmakunbound 'neovm--test-indf-a)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t 11)""#]]);
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn oracle_prop_indirect_function_alias_chain() {
                       (fmakunbound 'neovm--test-chain-a)
                       (fmakunbound 'neovm--test-chain-b)
                       (fmakunbound 'neovm--test-chain-c)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (10 10 10)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +66,8 @@ fn oracle_prop_symbol_function_lambda() {
                     (unwind-protect
                         (funcall (symbol-function 'neovm--test-sf) 3 4)
                       (fmakunbound 'neovm--test-sf)))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 7""#]]);
     assert_ok_eq("7", &o, &n);
 }
 
@@ -78,7 +79,7 @@ fn oracle_prop_symbol_function_builtin() {
     let form = r#"(list (functionp (symbol-function '+))
                         (functionp (symbol-function 'car))
                         (functionp (symbol-function 'cons)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +99,7 @@ fn oracle_prop_fboundp_basic() {
                             (list before after)))
                       (when (fboundp 'neovm--test-fbp)
                         (fmakunbound 'neovm--test-fbp))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil)""#]]);
 }
 
 #[test]
@@ -109,7 +110,7 @@ fn oracle_prop_fboundp_builtins() {
                         (fboundp 'car)
                         (fboundp 'mapcar)
                         (fboundp 'neovm--nonexistent-fn-xyz-987))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t nil)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +131,7 @@ fn oracle_prop_defalias_basic() {
                                   (indirect-function 'neovm--test-original)))
                       (fmakunbound 'neovm--test-alias)
                       (fmakunbound 'neovm--test-original)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (11 11 t)""#]]);
 }
 
 #[test]
@@ -143,7 +144,10 @@ fn oracle_prop_defalias_to_lambda() {
                     (unwind-protect
                         (funcall 'neovm--test-da-lambda "hello" "world")
                       (fmakunbound 'neovm--test-da-lambda)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"hello-world\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +179,10 @@ fn oracle_prop_indirect_function_dispatch_table() {
                       (fmakunbound 'neovm--test-op-add)
                       (fmakunbound 'neovm--test-op-mul)
                       (fmakunbound 'neovm--test-op-sub)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (7 12 7 nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +210,10 @@ fn oracle_prop_indirect_function_advice_wrapper() {
                                 (r2 (funcall 'neovm--test-base-fn 3)))
                             (list r1 r2 (nreverse log)))
                         (fmakunbound 'neovm--test-base-fn))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (25 9 ((call 5) (result 25) (call 3) (result 9)))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -241,5 +251,8 @@ fn oracle_prop_indirect_function_conditional_dispatch() {
                       (fmakunbound 'neovm--test-format-int)
                       (fmakunbound 'neovm--test-format-str)
                       (fmakunbound 'neovm--test-format-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"42\" \"\\\"hello\\\"\" \"(a b c)\" \"0\")""#]],
+    );
 }

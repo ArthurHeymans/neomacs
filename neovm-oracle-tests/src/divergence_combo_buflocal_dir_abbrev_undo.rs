@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_buffer_local_chain_across_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar my-shared-counter 0)\n\
          (let ((buf1 (generate-new-buffer \"bl1\"))\n\
@@ -29,6 +29,7 @@ fn deficiency_buffer_local_chain_across_switch() {
          (kill-buffer buf1)\n\
          (kill-buffer buf2)\n\
          (kill-buffer buf3)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -36,7 +37,7 @@ fn deficiency_buffer_local_chain_across_switch() {
 fn deficiency_default_directory_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ddb\")))\n\
          (with-current-buffer buf\n\
@@ -49,6 +50,7 @@ fn deficiency_default_directory_buffer_ops() {
          (get-text-property 6 'field)\n\
          (stringp dir)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -56,7 +58,7 @@ fn deficiency_default_directory_buffer_ops() {
 fn deficiency_abbrev_expansion_undo_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"aeu\"))\n\
          (table (make-abbrev-table)))\n\
@@ -81,6 +83,7 @@ fn deficiency_abbrev_expansion_undo_props() {
          (buffer-string)\n\
          (get-text-property 1 'abbrev))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -88,7 +91,7 @@ fn deficiency_abbrev_expansion_undo_props() {
 fn deficiency_fill_region_undo_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"fru\")))\n\
          (with-current-buffer buf\n\
@@ -112,6 +115,7 @@ fn deficiency_fill_region_undo_with_props() {
          (get-text-property 1 'para)\n\
          (count-lines 1 (point-max))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -119,7 +123,7 @@ fn deficiency_fill_region_undo_with_props() {
 fn deficiency_justify_text_undo_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"jtu\")))\n\
          (with-current-buffer buf\n\
@@ -141,6 +145,7 @@ fn deficiency_justify_text_undo_props() {
          (get-text-property 12 'line)\n\
          (get-text-property 32 'line))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 32 49)""#]],
     );
 }
 
@@ -148,7 +153,7 @@ fn deficiency_justify_text_undo_props() {
 fn deficiency_multiple_buf_local_vars_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar my-buf-mode 'normal)\n\
          (defvar my-buf-depth 0)\n\
@@ -179,6 +184,7 @@ fn deficiency_multiple_buf_local_vars_undo() {
          (get-text-property 1 'field)\n\
          (get-text-property 10 'field)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -186,7 +192,7 @@ fn deficiency_multiple_buf_local_vars_undo() {
 fn deficiency_with_temp_buffer_props_isolation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"wtp\"))\n\
          (result nil))\n\
@@ -200,6 +206,9 @@ fn deficiency_with_temp_buffer_props_isolation() {
          (push (list (buffer-string) (get-text-property 1 'location)) result))\n\
          (kill-buffer buf)\n\
          (nreverse result)))",
+        expect_test::expect![[
+            r#""OK ((#(\"INNER BUFFER\" 0 12 (location inner)) inner) (#(\"OUTER BUFFER\" 0 12 (location outer)) outer))""#
+        ]],
     );
 }
 
@@ -207,7 +216,7 @@ fn deficiency_with_temp_buffer_props_isolation() {
 fn deficiency_generate_new_buffer_unique_names() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((bufs nil)\n\
          (names nil))\n\
@@ -224,6 +233,9 @@ fn deficiency_generate_new_buffer_unique_names() {
          names))\n\
          (dolist (b bufs) (kill-buffer b))\n\
          (nreverse names)))",
+        expect_test::expect![[
+            r#""OK ((\"test-4\" #(\"Buffer 4\" 0 8 (idx 4)) 4) (\"test-3\" #(\"Buffer 3\" 0 8 (idx 3)) 3) (\"test-2\" #(\"Buffer 2\" 0 8 (idx 2)) 2) (\"test-1\" #(\"Buffer 1\" 0 8 (idx 1)) 1) (\"test-0\" #(\"Buffer 0\" 0 8 (idx 0)) 0))""#
+        ]],
     );
 }
 
@@ -231,7 +243,7 @@ fn deficiency_generate_new_buffer_unique_names() {
 fn deficiency_get_buffer_create_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf1 (get-buffer-create \" *test-hidden*\"))\n\
          (buf2 (get-buffer-create \"test-visible\")))\n\
@@ -250,6 +262,7 @@ fn deficiency_get_buffer_create_props() {
          (kill-buffer buf1)\n\
          (kill-buffer buf2)\n\
          result)))",
+        expect_test::expect![[r#""OK (\" *test-hidden*\" \"test-visible\" hidden shown 0)""#]],
     );
 }
 
@@ -257,7 +270,7 @@ fn deficiency_get_buffer_create_props() {
 fn deficiency_buffer_swap_text_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf1 (generate-new-buffer \"bs1\"))\n\
          (buf2 (generate-new-buffer \"bs2\")))\n\
@@ -274,5 +287,6 @@ fn deficiency_buffer_swap_text_undo() {
          (with-current-buffer buf2 (get-text-property 1 'source))))\n\
          (kill-buffer buf1)\n\
          (kill-buffer buf2)))",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-swap-text 2)""#]],
     );
 }

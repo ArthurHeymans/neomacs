@@ -50,7 +50,12 @@ fn oracle_prop_rfs_patterns_all_basic_types() {
   (car (read-from-string "?a"))
   (car (read-from-string "?\\n"))
   (car (read-from-string "?\\t")))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (0 1 -1 42 999999 -999999 0.0 3.14159 -2.718 10000000000.0 0.0015 -6.022e+23 \"\" \"hello world\" \"line1\nline2\" \"tab\there\" \"quote \\\"inside\\\"\" \"backslash \\\\\" foo my-variable nil t a/b :test :equal :my-keyword 97 10 9)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +95,12 @@ fn oracle_prop_rfs_patterns_compound_types() {
   (car (read-from-string "(a [1 2] b)"))
   ;; Vector containing list
   (car (read-from-string "[(a b) (c d)]")))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3) (a b c d e) nil ((1 2) (3 4) (5 6)) (a (b (c (d)))) (1 \"two\" three 4.0 :five) (a . b) (1 . 2) (1 2 . 3) ((a . 1) (b . 2) (c . 3)) [] [1 2 3] [a b c] [[1 2] [3 4]] [1 \"two\" three] (((((deep))))) (a [1 2] b) [(a b) (c d)])""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +142,12 @@ fn oracle_prop_rfs_patterns_position_tracking() {
          (r3 (read-from-string s (cdr r2))))
     (list (car r1) (car r2) (car r3)
           (cdr r1) (cdr r2) (cdr r3))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (2 5 5 5 5 4 7 2 5 (aaa . 3) (bbb . 7) (ccc . 11) 10 \"hello\" (a b) 4 5 (alpha beta gamma 5 10 16))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +183,10 @@ fn oracle_prop_rfs_patterns_quoted_forms() {
   (car (read-from-string "'(a . b)"))
   ;; Hash notation
   (car (read-from-string "#t")))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#t\")""##]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -233,7 +251,12 @@ fn oracle_prop_rfs_patterns_sequential_tokenizer() {
     (fmakunbound 'neovm--rfs-tokenize)
     (fmakunbound 'neovm--rfs-token-values)
     (fmakunbound 'neovm--rfs-token-positions)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5) (42 \"hello\" (a b) [1 2] :key 3.14 nil t) (2 5 8) ((define x 10) (+ x 1) (* x x)) ('a 'b '(1 2) #'car) (10 20 30) ((only-one)) nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -317,7 +340,12 @@ fn oracle_prop_rfs_patterns_config_parser() {
     (fmakunbound 'neovm--rfs-parse-config)
     (fmakunbound 'neovm--rfs-config-get)
     (fmakunbound 'neovm--rfs-config-merge)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"my-app\" 8080 t 4 :info \"default-val\" 9090 9090 nil \"my-app\" 4 30 5 6 ((server host \"localhost\") (database host \"db.local\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -365,7 +393,12 @@ fn oracle_prop_rfs_patterns_error_handling() {
     (car (read-from-string "42"))
     (car (read-from-string "(a b c)"))
     (car (read-from-string "\"hello\""))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((caught end-of-file) (caught end-of-file) (caught end-of-file) (caught end-of-file) (caught end-of-file) (caught invalid-read-syntax) (42 2) (caught args-out-of-range) (42 (a b c) \"hello\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -453,5 +486,8 @@ fn oracle_prop_rfs_patterns_sexp_evaluator() {
     (fmakunbound 'neovm--rfs-seval)
     (fmakunbound 'neovm--rfs-eval-string)
     (fmakunbound 'neovm--rfs-eval-all)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 20 7 26 94 -42 55 9 1 5 (3 12 5) 33 42)""#]],
+    );
 }

@@ -42,7 +42,10 @@ fn oracle_prop_progn_comprehensive_return_patterns() {
   ;; Deeply nested progn — 5 levels
   (progn (progn (progn (progn (progn 'deep))))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil 42 nil e (3 4 5) z 6 60 \"3\" deep)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +88,12 @@ fn oracle_prop_prog1_comprehensive_return_semantics() {
     ;; Trace proves body forms ran
     (nreverse trace)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (solo 42 nil (100 50) 10 inner-first caught-in-prog1 (after-lambda))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +132,12 @@ fn oracle_prop_prog2_comprehensive_return_semantics() {
     ;; Complete log
     (nreverse log)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (second compute 42 nil 230 inner-second (p2-setup p2-compute p2-cleanup complex-setup complex-cleanup))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +183,10 @@ fn oracle_prop_prog_forms_with_let_binding() {
             (setq opened nil)))
     (list result opened)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (21 (initial mutated) (3 13 3) (10 15 15) (15 nil))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +239,12 @@ fn oracle_prop_prog_forms_with_condition_case() {
     (arith-error
      (prog1 'error-captured 'handler-cleanup))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((caught 2) prog1-first-error prog1-body-error prog2-first-error prog2-second-error prog2-body-error after error-captured)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +277,10 @@ fn oracle_prop_prog_complex_accumulation() {
           (nreverse acc)           ;; (1 2 3 4 5 marker done)
           result)))))              ;; 6 (length at time of prog2's second form)
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3) (1 2 3 4 5 marker done) 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +315,10 @@ fn oracle_prop_prog_as_function_arguments() {
       ((progn t)   'branch-t)
       (t           'fallthrough))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (60 3 (head . tail) 113 56 branch-t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +347,10 @@ fn oracle_prop_prog1_swap_idiom() {
       ;; After: a=alpha, b=gamma, c=beta, tmp=beta
       (list after-swap (list a b c) tmp))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((beta alpha gamma) (alpha gamma beta) beta)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +396,12 @@ fn oracle_prop_prog_forms_with_catch_throw() {
             (setq cleaned t))))
       cleaned)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (thrown (thrown-with 42) from-first from-body after-inner-catch (bail t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -415,7 +450,10 @@ fn oracle_prop_prog_forms_in_defun_bodies() {
     (fmakunbound 'neovm--test-pppc-logged-compute)
     (fmakunbound 'neovm--test-pppc-transform)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (old new 30 (start end) (36 25 16 9 4))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -461,7 +499,10 @@ fn oracle_prop_progn_implicit_in_special_forms() {
                n)
              10)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 20 13 150 \"hello\" 21)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -491,5 +532,10 @@ fn oracle_prop_prog_evaluation_order_guarantees() {
                   (setq order (cons 'p2-body2 order)))))
         (list r1 r2 r3 (nreverse order))))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (progn-result p1-val p2-val (pn1 pn2 pn3 p1-first p1-body1 p1-body2 p2-first p2-second p2-body1 p2-body2))""#
+        ]],
+    );
 }

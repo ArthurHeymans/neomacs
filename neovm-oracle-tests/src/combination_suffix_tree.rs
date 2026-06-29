@@ -100,7 +100,12 @@ fn oracle_prop_suffix_trie_construction() {
     (fmakunbound 'neovm--st-build)
     (fmakunbound 'neovm--st-count-nodes)
     (fmakunbound 'neovm--st-count-ends)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((nodes 7 ends 3) (nodes 4 ends 3) (nodes 8 ends 4) (nodes 2 ends 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -176,7 +181,10 @@ fn oracle_prop_suffix_trie_substring_search() {
     (fmakunbound 'neovm--st2-insert)
     (fmakunbound 'neovm--st2-build)
     (fmakunbound 'neovm--st2-search)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t nil nil nil nil t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +278,12 @@ fn oracle_prop_suffix_trie_longest_repeated() {
     (fmakunbound 'neovm--st3-build)
     (fmakunbound 'neovm--st3-branching-children)
     (fmakunbound 'neovm--st3-longest-repeated)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 . \"\") (0 . \"\") (0 . \"\") (0 . \"\") (4 . \"issi\") (0 . \"\") (0 . \"\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -361,7 +374,10 @@ fn oracle_prop_suffix_trie_suffix_counting() {
     (fmakunbound 'neovm--st4-build)
     (fmakunbound 'neovm--st4-count-suffixes)
     (fmakunbound 'neovm--st4-pattern-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 2 2 1 2 1 0 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -466,7 +482,10 @@ fn oracle_prop_suffix_trie_wildcard_matching() {
     (fmakunbound 'neovm--st5-build)
     (fmakunbound 'neovm--st5-wildcard-match)
     (fmakunbound 'neovm--st5-has-match)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t t t nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -565,5 +584,10 @@ fn oracle_prop_suffix_trie_longest_common_substring() {
     (fmakunbound 'neovm--st6-build)
     (fmakunbound 'neovm--st6-match-length)
     (fmakunbound 'neovm--st6-lcs)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((4 . \"nana\") (4 . \"abcd\") (0 . \"\") (5 . \"hello\") (0 . \"\") (0 . \"\") (1 . \"a\") (4 . \"abcx\"))""#
+        ]],
+    );
 }

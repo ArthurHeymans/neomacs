@@ -42,7 +42,10 @@ fn oracle_prop_marker_make_and_lifecycle() {
                   moved-pos
                   after-pos after-buf
                   (marker-position m))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil 5 t 10 nil nil 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +92,10 @@ fn oracle_prop_marker_copy_with_insertion_type_variants() {
        (marker-insertion-type c2)
        (marker-insertion-type c3)
        (marker-insertion-type c4)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 7 5 5 7 5 9 9 nil t nil nil t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +135,10 @@ fn oracle_prop_marker_set_insertion_type_dynamic() {
                   (marker-position m)
                   (marker-insertion-type m)
                   (buffer-string))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil 3 t 4 4 nil \"AByzxCDE\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +172,10 @@ fn oracle_prop_marker_insert_before_markers_vs_insert() {
         (list after-insert-nil after-insert-t
               after-ibm-nil after-ibm-t
               (buffer-string))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 5 8 8 \"AB11C22DE\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +217,12 @@ fn oracle_prop_marker_multiple_tracking_complex_edits() {
                                   (marker-position m5))))
             (list init after-del after-ins after-del2
                   (buffer-string))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 3 5 7 9) (1 3 3 5 7) (1 6 6 8 10) (1 3 3 5 7) \"Z1456789\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +260,12 @@ fn oracle_prop_marker_survive_delete_insert_sequences() {
                   (marker-position m-fox)
                   (marker-position m-jumps)
                   (buffer-string))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5 11 15 19 \"the quick red fox jumps over the lazy dog\") (5 15 19 23 \"the slow lazy red fox jumps over the lazy dog\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +306,10 @@ fn oracle_prop_marker_across_narrowing() {
                 after-insert-narrowed
                 after-widen
                 (buffer-string)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((3 8 14) 5 12 (3 8 17) (3 8 17) \"ABCDEFGxxxHIJKLMNOP\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -322,7 +347,10 @@ fn oracle_prop_marker_position_clamping() {
                 (list clamped-high clamped-low
                       at-min at-max neg-pos
                       clamped-narrow)))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 1 1 6 1 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +397,12 @@ fn oracle_prop_marker_gap_tracking() {
         (list initial-spans
               final-spans
               (buffer-string))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 9) (10 18) (19 29) (30 39)) ((1 9) (10 28) (29 29) (29 38)) \"line one\nINSERTED: line two\nline four\n\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -406,5 +439,8 @@ fn oracle_prop_marker_insert_before_markers_multiple() {
              (list (marker-position m1) (marker-position m2)
                    (marker-position m3) (marker-position m4))))
         (list after-regular after-ibm (buffer-string))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((3 3 5 5) (7 7 7 7) \"AB11ZZCDE\")""#]],
+    );
 }

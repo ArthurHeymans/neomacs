@@ -25,7 +25,10 @@ fn oracle_prop_coding_system_p_standard_systems() {
   (coding-system-p 'no-such-coding-system-xyz)
   (coding-system-p nil)
   (coding-system-p 42))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t nil t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +51,12 @@ fn oracle_prop_coding_system_base_variants() {
   (coding-system-base 'raw-text-unix)
   (coding-system-base 'undecided)
   (coding-system-base 'undecided-unix))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (utf-8 utf-8 utf-8 utf-8 iso-latin-1 raw-text raw-text undecided undecided)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +81,10 @@ fn oracle_prop_coding_system_eol_type_all_variants() {
     (if (vectorp eol)
         (list 'vector (length eol))
       eol)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 1 2 (vector 3) 0 (vector 3))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +108,10 @@ fn oracle_prop_coding_system_aliases_membership() {
     ;; latin-1 aliases
     (let ((l1-aliases (coding-system-aliases 'latin-1)))
       (consp l1-aliases))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +140,10 @@ fn oracle_prop_coding_system_plist_detailed_inspection() {
     ;; Verify plist is a proper list with even length
     (= 0 (% (length utf8-pl) 2))
     (= 0 (% (length raw-pl) 2))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (utf-8 raw-text t t utf-8 raw-text t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -146,14 +163,20 @@ fn oracle_prop_check_coding_system_valid_and_errors() {
   (check-coding-system 'undecided)
   (check-coding-system 'utf-8-unix)
   (check-coding-system nil))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (utf-8 latin-1 raw-text undecided utf-8-unix nil)""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_check_coding_system_error_on_invalid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(check-coding-system 'totally-bogus-coding-xyz)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(check-coding-system 'totally-bogus-coding-xyz)",
+        expect_test::expect![[r#""ERR (coding-system-error totally-bogus-coding-xyz)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "coding-system-error");
 }
 
@@ -185,7 +208,7 @@ fn oracle_prop_coding_system_priority_list_structure() {
       all-valid)
     ;; Length is positive
     (> (length (coding-system-priority-list)) 0)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +239,12 @@ fn oracle_prop_coding_metadata_roundtrip_consistency() {
                     (eq (plist-get pl :name) base))
                   results))))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((utf-8 t t t t) (latin-1 t t t t) (raw-text t t t t) (undecided t t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -242,5 +270,10 @@ fn oracle_prop_coding_metadata_classification_table() {
         (setq type-counts (cons (cons ctype 1) type-counts)))))
   ;; Sort by count descending for deterministic output
   (sort type-counts (lambda (a b) (> (cdr a) (cdr b)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((utf-8 . 4) (undecided . 2) (raw-text . 2) (charset . 1))""#
+        ]],
+    );
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_overlay_marker_textprop_buflocal_narrow_clone_setf_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "onc")))
     (with-current-buffer buf
@@ -51,6 +51,7 @@ fn combo_overlay_marker_textprop_buflocal_narrow_clone_setf_replace_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -58,7 +59,7 @@ fn combo_overlay_marker_textprop_buflocal_narrow_clone_setf_replace_undo() {
 fn combo_overlay_marker_textprop_buflocal_narrow_clone_replace_setf_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "onr")))
     (with-current-buffer buf
@@ -101,6 +102,7 @@ fn combo_overlay_marker_textprop_buflocal_narrow_clone_replace_setf_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -108,7 +110,7 @@ fn combo_overlay_marker_textprop_buflocal_narrow_clone_replace_setf_undo() {
 fn combo_overlay_marker_textprop_buflocal_narrow_clone_multi_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ono")))
     (with-current-buffer buf
@@ -155,6 +157,7 @@ fn combo_overlay_marker_textprop_buflocal_narrow_clone_multi_overlay_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -162,7 +165,7 @@ fn combo_overlay_marker_textprop_buflocal_narrow_clone_multi_overlay_undo() {
 fn combo_overlay_marker_textprop_buflocal_narrow_clone_textprop_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ont")))
     (with-current-buffer buf
@@ -206,6 +209,7 @@ fn combo_overlay_marker_textprop_buflocal_narrow_clone_textprop_replace_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -213,7 +217,7 @@ fn combo_overlay_marker_textprop_buflocal_narrow_clone_textprop_replace_undo() {
 fn combo_overlay_marker_textprop_buflocal_narrow_clone_setf_replace_undo_2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "onx")))
     (with-current-buffer buf
@@ -256,5 +260,6 @@ fn combo_overlay_marker_textprop_buflocal_narrow_clone_setf_replace_undo_2() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

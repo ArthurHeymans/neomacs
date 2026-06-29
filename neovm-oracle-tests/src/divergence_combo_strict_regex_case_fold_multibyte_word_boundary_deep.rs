@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_r9_regex_case_fold_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (let ((case-fold-search t))
   (list (string-match-p "café" "CAFÉ")
@@ -19,13 +19,14 @@ fn div_r9_regex_case_fold_multibyte() {
         (string-match-p "\\ca+" "ABCdef")
         (string-match-p "naïve" "NAÏVE")))
 "####,
+        expect_test::expect![[r#""OK (0 0 0 0 0)""#]],
     );
 }
 
 #[test]
 fn div_r9_word_boundary_cjk_and_char_fold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (let ((char-fold-mode t))
   (list (string-match-p "\\bword\\b" "a word here")
@@ -34,13 +35,14 @@ fn div_r9_word_boundary_cjk_and_char_fold() {
         (string-match-p (char-fold-to-regexp "a") "å")
         (string-match-p (char-fold-to-regexp "n") "ñ")))
 "####,
+        expect_test::expect![[r#""OK (2 \"\\\\(?:e\u{301}\\\\|é\\\\)\" 11 0 0)""#]],
     );
 }
 
 #[test]
 fn div_r9_regex_backreference_case_fold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (let ((case-fold-search t))
   (list (and (string-match "\\(foo\\)\\1" "FOOfoo") (match-string 1))
@@ -48,13 +50,14 @@ fn div_r9_regex_backreference_case_fold() {
         (and (string-match "\\(.\\)\\1" "aa") (match-string 1))
         (and (string-match "\\(.\\)\\1" "AA") (match-string 1))))
 "####,
+        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 3)""#]],
     );
 }
 
 #[test]
 fn div_r9_regex_alternation_precedence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r####"
 (let ((s "abc"))
   (list (and (string-match "a\\|b" s) (match-string 0 s))
@@ -63,5 +66,6 @@ fn div_r9_regex_alternation_precedence() {
         (and (string-match "\\(a\\|b\\)c" s) (match-string 0 s))
         (and (string-match "a\\(?:b\\|c\\)" s) (match-string 0 s))))
 "####,
+        expect_test::expect![[r#""OK (\"a\" \"ab\" \"a\" \"bc\" \"ab\")""#]],
     );
 }

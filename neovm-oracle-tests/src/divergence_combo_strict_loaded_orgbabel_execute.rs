@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_p3_org_babel_elisp_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load(
         r##"
 (with-temp-buffer
   (org-mode)
@@ -23,7 +23,7 @@ fn div_p3_org_babel_elisp_block() {
 #[test]
 fn div_p3_org_babel_results() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load(
         r##"
 (with-temp-buffer
   (org-mode)
@@ -38,7 +38,7 @@ fn div_p3_org_babel_results() {
 #[test]
 fn div_p3_org_babel_variables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load(
         r##"
 (with-temp-buffer
   (org-mode)

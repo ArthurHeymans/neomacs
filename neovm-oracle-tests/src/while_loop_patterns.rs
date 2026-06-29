@@ -50,7 +50,12 @@ fn oracle_prop_while_loop_multi_accumulator() {
         'deposits deposit-count
         'withdrawals withdraw-count
         'large-txns (nreverse large-txns)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (balance 500 max 1550 min 0 deposits 4 withdrawals 4 large-txns ((deposit 500 500) (deposit 1000 1550) (withdraw 750 800) (withdraw 400 500)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +111,10 @@ fn oracle_prop_while_loop_catch_throw_exit() {
              (setq cells (cdr cells))))
          (setq rows (cdr rows)))
        'not-found))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((at 2 3) not-found 21)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +144,12 @@ fn oracle_prop_while_loop_nested_combinations() {
       (setq i-list (cdr i-list))))
   (list 'count (length combos)
         'combos (nreverse combos)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (count 10 combos ((a b c) (a b d) (a b e) (a c d) (a c e) (a d e) (b c d) (b c e) (b d e) (c d e)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +192,12 @@ fn oracle_prop_while_loop_complex_conditions() {
                           (setq lst (cdr lst))
                           (setq i (1+ i)))
                         result))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (sum 30 steps 5 remaining-head 3 evals-count 11 last-evals ((check-sum 6) (check-even 8) (check-sum 12) (check-even 10) (check-sum 20) (check-even 3)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +252,12 @@ fn oracle_prop_while_loop_do_while_simulation() {
                 (when (= b 0) (setq continue nil))))
             (setq results (cons (list pair a steps) results))))))
     (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . 1) (5 . 8) (7 . 8) (8 . 8) (15 . 16) (16 . 16) (17 . 32) (100 . 128) (1024 . 1024)) ((0 0) (5 5) (42 4 2) (100 1 0 0) (9999 9 9 9 9) (12345 1 2 3 4 5)) (((48 18) 6 3) ((100 75) 25 2) ((17 13) 1 3) ((0 5) 5 1) ((12 12) 12 1) ((1071 462) 21 3)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -287,7 +310,12 @@ fn oracle_prop_while_loop_foreach_with_index() {
         (setq averages (cons (/ (float sum) window-size) averages)))
       (setq idx (1+ idx)))
     (nreverse averages)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 . apple) (1 . banana) (2 . cherry) (3 . date) (4 . elderberry)) ((name . \"Alice\") (age . 30) (city . \"Paris\") (country . \"France\")) (20.0 30.0 40.0 50.0 60.0 70.0))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -352,7 +380,12 @@ fn oracle_prop_while_loop_infinite_with_catch_exit() {
        (funcall 'neovm--wlp-process-events
                 '(increment bogus decrement fizz quit)))
     (fmakunbound 'neovm--wlp-process-events)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((counter 2 status stopped ticks 5 log ((1 inc 1) (2 inc 2) (3 inc 3) (4 dec 2) (5 quit))) (counter 2 status running ticks 5 log ((1 inc 1) (2 inc 2) (3 reset 0) (4 inc 1) (5 inc 2))) (counter 0 status stopped ticks 1 log ((1 quit))) (counter 0 status running ticks 0 log nil) (counter 0 status stopped ticks 5 log ((1 inc 1) (2 unknown bogus) (3 dec 0) (4 unknown fizz) (5 quit))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -412,5 +445,10 @@ fn oracle_prop_while_loop_pagerank_iteration() {
     (list 'converged converged
           'iterations iterations
           'rankings result)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (converged t iterations 12 rankings ((c 0.39754204999713316) (a 0.3879107424975632) (b 0.21454720750530354)))""#
+        ]],
+    );
 }

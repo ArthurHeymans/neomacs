@@ -52,5 +52,10 @@ fn oracle_inotify_public_lifecycle_and_error_semantics() {
            (inotify-rm-watch (cons 0 0))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t nil (file-notify-error \"Invalid descriptor \" \"No such file or directory\" 0) (wrong-type-argument stringp 0) (file-notify-error \"Could not add watch for file\" \"No such file or directory\" \"/tmp/neomacs-oracle-inotify-missing-path\") (file-notify-error \"Unknown aspect\" \"Invalid argument\" neomacs-unknown-aspect) (file-notify-error \"Unknown aspect\" \"Invalid argument\" isdir) (file-notify-error \"Unknown aspect\" \"Invalid argument\" q-overflow) ((file-notify-error \"Invalid descriptor \" \"Invalid argument\" -1 . 0) (file-notify-error \"Invalid descriptor \" \"Invalid argument\" 0 . -1) (file-notify-error \"Invalid descriptor \" \"Invalid argument\" 0 . \"id\") (file-notify-error \"Invalid descriptor \" \"Invalid argument\" \"wd\" . 0) (file-notify-error \"Invalid descriptor \" \"Invalid argument\" 0 0)) (t t t t t nil t t))""#
+        ]],
+    );
 }

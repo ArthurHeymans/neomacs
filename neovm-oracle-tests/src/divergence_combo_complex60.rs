@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx60_char_property_search_overlay_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx60-cps*")))
   (with-current-buffer buf
@@ -30,13 +30,14 @@ fn div_cx60_char_property_search_overlay_priority() {
           (delete-overlay ov)))))
   (kill-buffer buf))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
 #[test]
 fn div_cx60_text_property_not_all_and_any_ranges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdefghijklmnopqrstuvwxyz")
@@ -52,13 +53,14 @@ fn div_cx60_text_property_not_all_and_any_ranges() {
         (next-single-property-change 6 'p)
         (previous-single-property-change 26 'p)))
 "##,
+        expect_test::expect![[r#""OK (1 10 20 1 nil 6 10 20)""#]],
     );
 }
 
 #[test]
 fn div_cx60_font_lock_append_prepend_keep_face_merger() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "The quick brown fox")
@@ -72,13 +74,14 @@ fn div_cx60_font_lock_append_prepend_keep_face_merger() {
         (get-text-property 15 'face)
         (get-text-property 17 'face)))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument buffer-or-string-p t)""#]],
     );
 }
 
 #[test]
 fn div_cx60_sticky_front_rear_insertion_split_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -96,13 +99,16 @@ fn div_cx60_sticky_front_rear_insertion_split_merge() {
         (get-text-property 8 'p)
         (get-text-property 9 'p)))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"abcdXefYghij\" 2 4 (p core rear-nonsticky t front-sticky nil) 5 7 (p core rear-nonsticky t front-sticky nil)) core nil core nil nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx60_remove_add_text_props_interval_merge_after_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -117,13 +123,14 @@ fn div_cx60_remove_add_text_props_interval_merge_after_delete() {
         (get-text-property 3 'q)
         (next-property-change 1)))
 "##,
+        expect_test::expect![[r#""OK (#(\"0126789\" 0 3 (q b p a) 3 6 (q d p c)) 7 a b a b 4)""#]],
     );
 }
 
 #[test]
 fn div_cx60_with_silent_modifications_undo_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (hooks undo-records)
   (setq hooks nil)
@@ -142,13 +149,14 @@ fn div_cx60_with_silent_modifications_undo_hooks() {
         (list silent-count loud-count undo-records
               (buffer-string) hooks)))))
 "##,
+        expect_test::expect![[r#""OK (0 1 (3) \"beforeMUTEDafter\" (:change))""#]],
     );
 }
 
 #[test]
 fn div_cx60_combine_change_calls_hook_cadence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (with-temp-buffer
@@ -164,13 +172,14 @@ fn div_cx60_combine_change_calls_hook_cadence() {
       (insert "YY"))
     (list (nreverse calls) (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK (((3 8 4)) \"ABXYYEFGHIJ\")""#]],
     );
 }
 
 #[test]
 fn div_cx60_overlay_priority_overlap_face_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDEF")
@@ -190,13 +199,16 @@ fn div_cx60_overlay_priority_overlap_face_merge() {
         (delete-overlay lo)
         (delete-overlay hi)))))
 "##,
+        expect_test::expect![[
+            r#""OK (bold italic italic (#<overlay in no buffer> #<overlay in no buffer>) 2)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx60_char_property_overlay_rear_advance_on_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -212,13 +224,14 @@ fn div_cx60_char_property_overlay_rear_advance_on_insert() {
       (insert "R")          ; at overlay end, rear-advance nil → end grows
       (list s1 e1 (overlay-start ov) (overlay-end ov) (buffer-string)))))
 "##,
+        expect_test::expect![[r#""OK (3 6 3 7 \"ZabQRcdef\")""#]],
     );
 }
 
 #[test]
 fn div_cx60_next_property_change_across_text_only_with_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdefghijklmnopqrstuvwxyz")
@@ -233,13 +246,14 @@ fn div_cx60_next_property_change_across_text_only_with_overlay() {
           (next-single-char-property-change 13 'face)
           (next-single-char-property-change 20 'face))))
 "##,
+        expect_test::expect![[r#""OK (3 8 10 13 15 27)""#]],
     );
 }
 
 #[test]
 fn div_cx60_set_text_properties_empty_value_vs_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -253,13 +267,14 @@ fn div_cx60_set_text_properties_empty_value_vs_remove() {
         (get-text-property 8 'face)
         (next-single-property-change 1 'face)))
 "##,
+        expect_test::expect![[r#""OK (bold nil nil italic italic 3)""#]],
     );
 }
 
 #[test]
 fn div_cx60_property_search_forward_backward_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -278,13 +293,14 @@ fn div_cx60_property_search_forward_backward_types() {
                 (if bwd (prop-match-end bwd))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil 13 17)""#]],
     );
 }
 
 #[test]
 fn div_cx60_text_property_overlay_undo_replace_marker_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -315,13 +331,14 @@ fn div_cx60_text_property_overlay_undo_replace_marker_narrow_mega() {
             (get-text-property 1 'face)
             (point-min) (point-max)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }
 
 #[test]
 fn div_cx60_buffer_text_properties_via_buffer_substring_less_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -337,13 +354,16 @@ fn div_cx60_buffer_text_properties_via_buffer_substring_less_props() {
             (get-text-property 9 'face)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (#(\"bcdefghijklmno\" 1 6 (face bold) 8 13 (face italic)) \"bcdefghijklmno\" 14 14 nil bold nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx60_field_property_and_constrain_to_field() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "field-one\tfield-two\tfield-three")
@@ -360,5 +380,6 @@ fn div_cx60_field_property_and_constrain_to_field() {
         (get-text-property 11 'field)
         (get-text-property 20 'field)))
 "##,
+        expect_test::expect![[r#""OK (20 10 10 1 10 #(\"field-tw\" 0 8 (field b)) a b c)""#]],
     );
 }

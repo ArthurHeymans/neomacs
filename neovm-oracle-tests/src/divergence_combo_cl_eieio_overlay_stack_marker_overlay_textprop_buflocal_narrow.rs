@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_overlay_stack_priority_invisible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ov-stack-snap ()
     ((step :initarg :step :accessor oss-step :initform "")
@@ -100,6 +100,7 @@ fn combo_eieio_overlay_stack_priority_invisible() {
                 (overlay-start ov4) (overlay-end ov4)
                 my-counter buffer-invisibility-spec))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -107,7 +108,7 @@ fn combo_eieio_overlay_stack_priority_invisible() {
 fn combo_eieio_overlay_stack_face_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ov-face-snap ()
     ((step :initarg :step :accessor ofs-step :initform "")
@@ -183,6 +184,7 @@ fn combo_eieio_overlay_stack_face_merge() {
                 (overlay-start ov2) (overlay-end ov2)
                 my-face-log))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -190,7 +192,7 @@ fn combo_eieio_overlay_stack_face_merge() {
 fn combo_eieio_overlay_stack_delete_reinsert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ov-del-snap ()
     ((step :initarg :step :accessor ods-step :initform "")
@@ -271,6 +273,7 @@ fn combo_eieio_overlay_stack_delete_reinsert() {
               (length snaps) (marker-position m)
               (overlay-live-p ov1) (overlay-live-p ov2) (overlay-live-p ov3))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
     );
 }
 
@@ -278,7 +281,7 @@ fn combo_eieio_overlay_stack_delete_reinsert() {
 fn combo_eieio_overlay_stack_reorder_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ov-reorder-snap ()
     ((step :initarg :step :accessor ors-step :initform "")
@@ -358,6 +361,7 @@ fn combo_eieio_overlay_stack_reorder_props() {
               (overlay-start ov3) (overlay-end ov3)
               my-reorder-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -365,7 +369,7 @@ fn combo_eieio_overlay_stack_reorder_props() {
 fn combo_eieio_overlay_stack_nested_edit_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ov-chain-snap ()
     ((step :initarg :step :accessor ocs-step :initform "")
@@ -453,5 +457,6 @@ fn combo_eieio_overlay_stack_nested_edit_undo_chain() {
               (overlay-start ov2) (overlay-end ov2)
               (length my-chain-log))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

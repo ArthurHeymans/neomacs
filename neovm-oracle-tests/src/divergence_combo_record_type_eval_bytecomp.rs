@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_record_type_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-rec-xxx (:type list)) a b c)
   (let ((r (make-test-rec-xxx :a 1 :b 2 :c 3)))
@@ -22,6 +22,7 @@ fn divergence_cl_record_type_basic() {
           (= (test-rec-xxx-a r) 99)
           (test-rec-xxx-b r)
           (= (test-rec-xxx-b r) 2)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 14 39)""##]],
     );
 }
 
@@ -29,7 +30,7 @@ fn divergence_cl_record_type_basic() {
 fn divergence_eval_defun_with_closure_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-edc-state-xxx 0)
   (let ((test-edc-state-xxx 100))
@@ -44,6 +45,7 @@ fn divergence_eval_defun_with_closure_capture() {
             (= test-edc-state-xxx 0)
             (symbol-value 'test-edc-state-xxx)
             (= (symbol-value 'test-edc-state-xxx) 0))))) "#,
+        expect_test::expect![[r#""OK (0 t 200 nil 200 nil 200 nil)""#]],
     );
 }
 
@@ -51,7 +53,7 @@ fn divergence_eval_defun_with_closure_capture() {
 fn divergence_macro_expansion_nested_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defmacro test-nme-xxx (op &rest args)
     (list op (cons 'list args)))
@@ -64,6 +66,7 @@ fn divergence_macro_expansion_nested_eval() {
                '(+ (list 10 20)))
         (eval (macroexpand '(test-nme-xxx + 10 20)))
         (= (eval (macroexpand '(test-nme-xxx + 10 20))) 30))) #"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p (1 2 3 4 5))""#]],
     );
 }
 
@@ -71,7 +74,7 @@ fn divergence_macro_expansion_nested_eval() {
 fn divergence_lambda_in_eval_with_dynvar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-led-xxx 'outer)
   (let ((fn (eval '(lambda () test-led-xxx))))
@@ -86,6 +89,7 @@ fn divergence_lambda_in_eval_with_dynvar() {
           (eq (funcall fn) 'outer)
           test-led-xxx
           (eq test-led-xxx 'outer)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 14 39)""##]],
     );
 }
 
@@ -93,7 +97,7 @@ fn divergence_lambda_in_eval_with_dynvar() {
 fn divergence_closure_let_binding_evaluation_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-lbe-log-xxx nil)
   (let ((fns nil))
@@ -107,6 +111,7 @@ fn divergence_closure_let_binding_evaluation_order() {
           (= (length test-lbe-log-xxx) 5)
           (= (car test-lbe-log-xxx) 5)
           (= (car (last test-lbe-log-xxx)) 1)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 13 50)""##]],
     );
 }
 
@@ -114,7 +119,7 @@ fn divergence_closure_let_binding_evaluation_order() {
 fn divergence_record_vector_accessor_compatibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-rva-xxx (:type vector)) x y z)
   (let ((r (make-test-rva-xxx :x 10 :y 20 :z 30)))
@@ -127,6 +132,7 @@ fn divergence_record_vector_accessor_compatibility() {
           (aset r 1 99)
           (aref r 1) (= (aref r 1) 99)
           (test-rva-xxx-y r) (= (test-rva-xxx-y r) 99)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 12 59)""##]],
     );
 }
 
@@ -134,7 +140,7 @@ fn divergence_record_vector_accessor_compatibility() {
 fn divergence_defalias_and_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-da-original-xxx (x) (+ x 1))
   (defalias 'test-da-alias-xxx 'test-da-original-xxx)
@@ -147,6 +153,7 @@ fn divergence_defalias_and_funcall() {
         (fboundp 'test-da-alias-xxx)
         (fboundp 'test-da-original-xxx)
         (functionp 'test-da-alias-xxx))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 12 42)""##]],
     );
 }
 
@@ -154,7 +161,7 @@ fn divergence_defalias_and_funcall() {
 fn divergence_advised_closure_in_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-acie-xxx (x) (* x 2))
   (advice-add 'test-acie-xxx :filter-return
@@ -170,6 +177,7 @@ fn divergence_advised_closure_in_eval() {
                           (lambda (r) (+ r 100)))
           (test-acie-xxx 5)
           (= (test-acie-xxx 5) 10)))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 15 39)""##]],
     );
 }
 
@@ -177,7 +185,7 @@ fn divergence_advised_closure_in_eval() {
 fn divergence_defvar_vs_defconst_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-dvc-var-xxx 10)
   (defconst test-dvc-const-xxx 20)
@@ -191,6 +199,7 @@ fn divergence_defvar_vs_defconst_eval() {
         (constantp 'test-dvc-const-xxx)
         (special-variable-p 'test-dvc-var-xxx)
         (special-variable-p 'test-dvc-const-xxx))) #"#,
+        expect_test::expect![[r#""ERR (void-function constantp)""#]],
     );
 }
 
@@ -198,7 +207,7 @@ fn divergence_defvar_vs_defconst_eval() {
 fn divergence_function_interactive_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-fis-xxx (a b) (interactive "nA: \nnB: ") (+ a b))
   (list (commandp 'test-fis-xxx)
@@ -207,5 +216,6 @@ fn divergence_function_interactive_spec() {
         (equal (interactive-form 'test-fis-xxx) '(interactive "nA: \nnB: "))
         (funcall 'test-fis-xxx 3 4)
         (= (funcall 'test-fis-xxx 3 4) 7))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 8 45)""##]],
     );
 }

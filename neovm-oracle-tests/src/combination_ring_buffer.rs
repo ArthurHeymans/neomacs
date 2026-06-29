@@ -118,7 +118,10 @@ fn oracle_prop_ring_buffer_core_operations() {
     (fmakunbound 'neovm--rb-pop)
     (fmakunbound 'neovm--rb-peek)
     (fmakunbound 'neovm--rb-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil 0 3 nil nil 10 (10 20 30) 10 2 20 (20 30))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +196,10 @@ fn oracle_prop_ring_buffer_overflow_overwrite() {
     (fmakunbound 'neovm--rb-push)
     (fmakunbound 'neovm--rb-peek)
     (fmakunbound 'neovm--rb-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t (1 2 3) 1 (2 3 4) 2 3 (4 5 6) 4 (7 8 9) 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +284,10 @@ fn oracle_prop_ring_buffer_capacity_one() {
     (fmakunbound 'neovm--rb-pop)
     (fmakunbound 'neovm--rb-peek)
     (fmakunbound 'neovm--rb-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil (alpha) t (beta) beta t gamma (5) 1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +369,10 @@ fn oracle_prop_ring_buffer_interleaved_push_pop() {
     (fmakunbound 'neovm--rb-push)
     (fmakunbound 'neovm--rb-pop)
     (fmakunbound 'neovm--rb-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((a b c) (a b (c)) (c d e f g) (c d e (f g h i) 4))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -452,7 +464,12 @@ fn oracle_prop_ring_buffer_empty_pop_and_cycles() {
     (fmakunbound 'neovm--rb-push)
     (fmakunbound 'neovm--rb-pop)
     (fmakunbound 'neovm--rb-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((empty-pop nil t) (cycle1-full (10 20 30) t) (cycle1-drain 10 20 30 t) (cycle2-partial (40 50)) (cycle2-mixed 40 (50 60 70) 3))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -525,7 +542,12 @@ fn oracle_prop_ring_buffer_large_sequential() {
     (fmakunbound 'neovm--rb-push)
     (fmakunbound 'neovm--rb-pop)
     (fmakunbound 'neovm--rb-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((12 13 14 15 16 17 18 19) 8 (12 13 14 15) (16 17 18 19) (16 17 18 19 100 101 102 103) 8)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -593,5 +615,10 @@ fn oracle_prop_ring_buffer_mixed_types() {
     (fmakunbound 'neovm--rb-push)
     (fmakunbound 'neovm--rb-pop)
     (fmakunbound 'neovm--rb-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((42 \"hello\" symbol (1 2 3)) (symbol (1 2 3) nil t) ((symbol symbol) ((1 2 3) cons) (nil symbol) (t symbol)) 0)""#
+        ]],
+    );
 }

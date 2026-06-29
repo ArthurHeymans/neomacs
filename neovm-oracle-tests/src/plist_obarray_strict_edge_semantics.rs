@@ -7,28 +7,40 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 #[test]
 fn oracle_plist_get_present() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(plist-get '(a 1 b 2 c 3) 'b)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(plist-get '(a 1 b 2 c 3) 'b)"#,
+        expect_test::expect![[r#""OK 2""#]],
+    );
     assert_ok_eq("2", &o, &n);
 }
 
 #[test]
 fn oracle_plist_get_missing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(plist-get '(a 1 b 2) 'x)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(plist-get '(a 1 b 2) 'x)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_plist_put_new_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(plist-get (plist-put '(a 1) 'b 2) 'b)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(plist-get (plist-put '(a 1) 'b 2) 'b)"#,
+        expect_test::expect![[r#""OK 2""#]],
+    );
     assert_ok_eq("2", &o, &n);
 }
 
 #[test]
 fn oracle_plist_put_overwrites() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(plist-get (plist-put '(a 1 b 2) 'b 99) 'b)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(plist-get (plist-put '(a 1 b 2) 'b 99) 'b)"#,
+        expect_test::expect![[r#""OK 99""#]],
+    );
     assert_ok_eq("99", &o, &n);
 }
 
@@ -79,42 +91,60 @@ fn oracle_plist_put_member_predicate_and_malformed_tail_edges() {
     (nreverse calls))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((\"a\" 9 \"b\" 2) (\"a\" 9 \"b\" 2)) ((\"a\" 1 \"b\" 2) (\"a\" 1 \"b\" 2)) ((wrong-type-argument (plistp (a 1 b . bad))) ((a x) (b x))) ((b . bad) ((a b) (b b))) ((wrong-type-argument (plistp (a 1 b . bad))) ((a x))))""#
+        ]],
+    );
 }
 
 #[test]
 fn oracle_plist_member_found() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(plist-member '(a 1 b 2 c 3) 'b)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(plist-member '(a 1 b 2 c 3) 'b)"#,
+        expect_test::expect![[r#""OK (b 2 c 3)""#]],
+    );
     assert_ok_eq("(b 2 c 3)", &o, &n);
 }
 
 #[test]
 fn oracle_plist_member_not_found() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(plist-member '(a 1 b 2) 'x)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(plist-member '(a 1 b 2) 'x)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_intern_same_name_same_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(eq (intern "xyz-test") (intern "xyz-test"))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(eq (intern "xyz-test") (intern "xyz-test"))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_intern_soft_nonexistent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(intern-soft "no-such-sym-99999")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(intern-soft "no-such-sym-99999")"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_mapatoms_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (defvar neovm--test-ma-count 0) (mapatoms (lambda (_s) (setq neovm--test-ma-count (1+ neovm--test-ma-count))) obarray) (> neovm--test-ma-count 0))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &o, &n);
 }

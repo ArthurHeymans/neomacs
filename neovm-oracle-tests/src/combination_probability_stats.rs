@@ -98,7 +98,12 @@ fn oracle_prop_stats_descriptive() {
     (fmakunbound 'neovm--stat-stddev)
     (fmakunbound 'neovm--stat-median)
     (fmakunbound 'neovm--stat-mode)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:mean 6.416666666666667 :variance 11.909722222222223 :stddev 3.451046540141443 :median 7.0 :mode (7 3) :single-mean 42.0 :two-median 15.0 :uniform-variance 0.0 :variance-zero t :sym-mean-eq-median t :sd-squared-near-var t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +188,12 @@ Uses integer C(n,k) and float p."
     (fmakunbound 'neovm--stat-factorial)
     (fmakunbound 'neovm--stat-choose)
     (fmakunbound 'neovm--stat-binom-pmf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:pascal-5 (1 5 10 10 5 1) :pascal-10 (1 10 45 120 210 252 210 120 45 10 1) :sum-5 32 :sum-5-correct t :sum-10-correct t :pmf-5-of-10 0.24609375 :total-pmf-near-1 t :c-0-0 1 :c-5-0 1 :c-5-5 1 :c-5-6 0 :symmetry t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -250,7 +260,12 @@ fn oracle_prop_stats_poisson() {
     (fmakunbound 'neovm--stat-factorial)
     (fmakunbound 'neovm--stat-poisson-pmf)
     (fmakunbound 'neovm--stat-poisson-cdf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:pmf-values (0.049787068367863944 0.14936120510359183 0.22404180765538775 0.22404180765538775 0.16803135574154082 0.10081881344492448 0.05040940672246225 0.02160403145248382 0.008101511794681432) :sum-pmf 0.9961970079383241 :cdf-8 0.9961970079383241 :cdf-8-near-1 t :cdf-20-near-1 t :p-1-0 0.36787944117144233 :p-1-0-is-e-inv t :p-1-1 0.36787944117144233 :p1-0-eq-p1-1 t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -326,7 +341,12 @@ fn oracle_prop_stats_zscore_percentile() {
     (fmakunbound 'neovm--stat-zscore)
     (fmakunbound 'neovm--stat-zscores)
     (fmakunbound 'neovm--stat-percentile)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:zscores (-1.4506241932805972 -1.1959933508430456 -0.941362508405494 -0.6018547184887584 -0.3472238760512067 -0.09259303361365506 0.0771608613447127 0.5015455987406321 0.9259303361365515 1.350315073532471 1.7746998109283905) :z-mean-near-0 t :z-sd-near-1 t :p25 18.0 :p50 28.0 :p75 40.0 :p0-is-min t :p100-is-max t :percentile-order t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -389,7 +409,12 @@ fn oracle_prop_stats_correlation() {
          :constant-r r-const))
     (fmakunbound 'neovm--stat-mean)
     (fmakunbound 'neovm--stat-correlation)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:perfect-positive 1.0 :perfect-positive-is-1 t :perfect-negative -1.0 :perfect-negative-is-neg1 t :random-r 0.34545454545454546 :random-abs-lt-1 t :self-correlation 1.0 :self-is-1 t :constant-r 0.0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -446,7 +471,12 @@ fn oracle_prop_stats_chi_square() {
          ;; Skewed should be large
          :skewed-significant (> chi2-skewed 11.07)))
     (fmakunbound 'neovm--stat-chi-square)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:chi2-fair 1.0 :chi2-perfect 0.0 :perfect-is-zero t :chi2-skewed 300.0 :chi2-coin 1.0 :df-die 5 :df-coin 1 :fair-not-significant t :skewed-significant t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -520,5 +550,10 @@ fn oracle_prop_stats_fisher_yates_shuffle() {
     (fmakunbound 'neovm--stat-lcg-next)
     (fmakunbound 'neovm--stat-shuffle)
     (makunbound 'neovm--stat-rng-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:shuffled1 (10 9 4 1 8 3 2 5 6 7) :shuffled2 (10 9 4 1 8 3 2 5 6 7) :deterministic t :preserves-elements t :shuffled3 (5 6 4 8 2 9 10 3 7 1) :different-seed-differs t :single (42) :pair (2 1) :length-preserved t)""#
+        ]],
+    );
 }

@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_overlay_invisible_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "VISIBLE-HIDDEN-VISIBLE-HIDDEN-VISIBLE")
   (put-text-property 1 7 'vis 'show)
@@ -36,6 +36,9 @@ fn divergence_overlay_invisible_undo() {
               (overlay-get ov1 'invisible)
               (overlay-get ov2 'invisible)
               (overlay-get ov-all 'wrap))))))) "#,
+        expect_test::expect![[
+            r#""SHOWN-HIDDEN-VISIBLE-HIDDEN-VISIBLEERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -43,7 +46,7 @@ fn divergence_overlay_invisible_undo() {
 fn divergence_overlay_face_priority_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (put-text-property 1 4 'style 'plain)
@@ -79,6 +82,7 @@ fn divergence_overlay_face_priority_undo() {
               (overlay-get ov4 'face) (eq (overlay-get ov4 'face) 'bold-italic)
               (overlay-get ov5 'face) (eq (overlay-get ov5 'face) 'highlight)
               (get-text-property 1 'style) (eq (get-text-property 1 'style) 'plain))))))) "#,
+        expect_test::expect![[r#""AAAA-XXXBBBB-ZZZZ-DDDD-EEEEERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -86,7 +90,7 @@ fn divergence_overlay_face_priority_undo() {
 fn divergence_overlay_evaporation_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "KEEP-DELETE-KEEP-DELETE-KEEP")
   (put-text-property 1 4 'zone 'keep)
@@ -114,6 +118,9 @@ fn divergence_overlay_evaporation_undo() {
               (get-text-property 6 'zone) (eq (get-text-property 6 'zone) 'delete)
               (get-text-property 13 'zone) (eq (get-text-property 13 'zone) 'keep)
               (overlay-get ov-keep 'grp) (eq (overlay-get ov-keep 'grp) 'keep))))))) "#,
+        expect_test::expect![[
+            r#""KEEP--KEEP-DELETE-KEEPERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 17 24)""#
+        ]],
     );
 }
 
@@ -121,7 +128,7 @@ fn divergence_overlay_evaporation_undo() {
 fn divergence_overlay_modification_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
   (put-text-property 1 4 'blk 1)
@@ -151,6 +158,9 @@ fn divergence_overlay_modification_hooks() {
               (get-text-property 1 'blk) (= (get-text-property 1 'blk) 1)
               (get-text-property 6 'blk) (= (get-text-property 6 'blk) 2)
               (overlay-get ov 'modification-hooks))))))) "#,
+        expect_test::expect![[
+            r#""AAAA-QQXXXX-CCCC-DDDDERR (wrong-number-of-arguments (closure ((mod-count . 1)) (ov beg end pre-len) (setq mod-count (+ mod-count 1))) 5)""#
+        ]],
     );
 }
 
@@ -158,7 +168,7 @@ fn divergence_overlay_modification_hooks() {
 fn divergence_overlay_insert_behind_front() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAAAAAAA")
   (put-text-property 1 9 'flat t)
@@ -181,6 +191,7 @@ fn divergence_overlay_insert_behind_front() {
               (= (marker-position m) 5)
               (get-text-property 1 'flat) (eq (get-text-property 1 'flat) t)
               (overlay-get ov 'point) (eq (overlay-get ov 'point) 'boundary))))))) "#,
+        expect_test::expect![[r#""BBBBXXXAAAAAERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -188,7 +199,7 @@ fn divergence_overlay_insert_behind_front() {
 fn divergence_overlay_priority_stack_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 50 ?Z))
   (let ((ovs nil))
@@ -218,6 +229,9 @@ fn divergence_overlay_priority_stack_undo() {
                 (string= (buffer-string) (make-string 50 ?Z))
                 all-ok
                 (= (marker-position m) 6))))))) "#,
+        expect_test::expect![[
+            r#""YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYZZERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -225,7 +239,7 @@ fn divergence_overlay_priority_stack_undo() {
 fn divergence_overlay_intangible_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "BEFORE-INTANGIBLE-AFTER")
   (put-text-property 1 6 'part 'before)
@@ -250,6 +264,7 @@ fn divergence_overlay_intangible_undo() {
               (get-text-property 8 'part) (eq (get-text-property 8 'part) 'intangible)
               (overlay-get ov 'intangible)
               (overlay-get ov-all 'scope))))))) "#,
+        expect_test::expect![[r#""CHANGED-INTANGIBLE-AFTERERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -257,7 +272,7 @@ fn divergence_overlay_intangible_undo() {
 fn divergence_nested_overlays_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "OUTER-INNER-CORE-INNER-OUTER")
   (put-text-property 1 5 'level 'outer)
@@ -291,6 +306,9 @@ fn divergence_nested_overlays_undo() {
             (overlay-get ov-outer 'depth) (= (overlay-get ov-outer 'depth) 1)
             (overlay-get ov-inner 'depth) (= (overlay-get ov-inner 'depth) 2)
             (overlay-get ov-core 'depth) (= (overlay-get ov-core 'depth) 3))))) "#,
+        expect_test::expect![[
+            r#""OUTER-QQINNER-XXXX-INNER-OUTERERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -298,7 +316,7 @@ fn divergence_nested_overlays_undo() {
 fn deficiency_overlay_textprop_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 100 ?A))
   (dotimes (i 10)
@@ -316,6 +334,9 @@ fn deficiency_overlay_textprop_interaction() {
     (list all-match
           (= (length (overlays-in 1 100)) 10)
           (= (buffer-size) 100)))) "#,
+        expect_test::expect![[
+            r#""AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOK (t t t)""#
+        ]],
     );
 }
 
@@ -323,7 +344,7 @@ fn deficiency_overlay_textprop_interaction() {
 fn deficiency_overlay_merge_split() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 30 ?M))
   (put-text-property 1 30 'section 'whole)
@@ -347,5 +368,8 @@ fn deficiency_overlay_merge_split() {
             (overlay-get ov1 'part) (= (overlay-get ov1 'part) 1)
             (overlay-get ov2 'part) (= (overlay-get ov2 'part) 2)
             (overlay-get ov3 'part) (= (overlay-get ov3 'part) 3))))) "#,
+        expect_test::expect![[
+            r#""MMMMMMMMMMXXXMMMMMMMMMMMMMMMMMMMMOK (t t t nil whole t nil nil t 1 t 2 t 3 t)""#
+        ]],
     );
 }

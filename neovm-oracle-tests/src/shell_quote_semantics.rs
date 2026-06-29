@@ -25,5 +25,10 @@ fn oracle_prop_gnu_subr_shell_quote_argument_posix_contracts() {
        "two\\\\slashes"
        "tab\tchar"
        "ümlaut"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"\" \"''\" \"''\") (\"plain\" \"plain\" \"plain\") (\"has space\" \"has\\\\ space\" \"has\\\\ space\") (\"quote'single\" \"quote\\\\'single\" \"quote\\\\'single\") (\"dollar$semi;pipe|\" \"dollar\\\\$semi\\\\;pipe\\\\|\" \"dollar\\\\$semi\\\\;pipe\\\\|\") (\"line\nbreak\" \"line'\n'break\" \"line'\n'break\") (\"[glob]*?\" \"\\\\[glob\\\\]\\\\*\\\\?\" \"\\\\[glob\\\\]\\\\*\\\\?\") (\"back\\\\slash\" \"back\\\\\\\\slash\" \"back\\\\\\\\slash\") (\"two\\\\\\\\slashes\" \"two\\\\\\\\\\\\\\\\slashes\" \"two\\\\\\\\\\\\\\\\slashes\") (\"tab\tchar\" \"tab\\\\\tchar\" \"tab\\\\\tchar\") (\"ümlaut\" \"\\\\ümlaut\" \"\\\\ümlaut\"))""#
+        ]],
+    );
 }

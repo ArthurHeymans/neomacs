@@ -135,7 +135,12 @@ fn oracle_prop_disjoint_set_core_operations() {
     (fmakunbound 'neovm--ds-find)
     (fmakunbound 'neovm--ds-union)
     (fmakunbound 'neovm--ds-same-set-p)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (init (nil nil t) within (t t t t t t) across (nil nil nil nil nil) merged (t t nil) all (t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +251,12 @@ fn oracle_prop_disjoint_set_path_compression_verification() {
     (fmakunbound 'neovm--ds2-union-simple)
     (fmakunbound 'neovm--ds2-parent)
     (fmakunbound 'neovm--ds2-depth)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (depths-before (0 1 1 1 1 1 1 1) parent-8-after 1 depth-8-after 1 depths-after (0 1 1 1 1 1 1 1) all-flat t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +352,12 @@ fn oracle_prop_disjoint_set_union_by_rank() {
     (fmakunbound 'neovm--ds3-union)
     (fmakunbound 'neovm--ds3-rank)
     (fmakunbound 'neovm--ds3-root)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (init-ranks (0 0 0 0 0 0 0 0) root-12 1 rank-after-12 1 root-1234 1 rank-1234 2 rank-after-merge 2 connected t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -428,7 +443,12 @@ fn oracle_prop_disjoint_set_component_counting() {
     (fmakunbound 'neovm--ds4-find)
     (fmakunbound 'neovm--ds4-union)
     (fmakunbound 'neovm--ds4-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (initial (1 2 3 4 5 6 7 8) after-pairs (7 6 5 4) after-quads 2 final 1 after-redundant 1)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -544,7 +564,12 @@ fn oracle_prop_disjoint_set_kruskal_mst() {
     (fmakunbound 'neovm--ds5-same-p)
     (fmakunbound 'neovm--ds5-sort-edges)
     (fmakunbound 'neovm--ds5-kruskal)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((mst-edges ((1 A B) (2 B C) (4 C D)) total-weight 7 num-edges 1) (total 13 edges 1) (total 6 is-full nil) (total 6 edges 1 not-spanning t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -652,7 +677,12 @@ fn oracle_prop_disjoint_set_equivalence_classes() {
     (fmakunbound 'neovm--ds6-union)
     (fmakunbound 'neovm--ds6-classes)
     (fmakunbound 'neovm--ds6-class-size)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (classes ((1 10) (2 5 7 11) (3 6 9 12) (4 8)) num-classes 4 size-multiples-of-3 4 size-multiples-of-4 2 size-primes 4 size-remaining 2 total 12)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -737,5 +767,8 @@ fn oracle_prop_disjoint_set_mixed_key_types() {
     (fmakunbound 'neovm--ds7-find)
     (fmakunbound 'neovm--ds7-union)
     (fmakunbound 'neovm--ds7-same-p)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t nil nil nil t t t nil nil t t)""#]],
+    );
 }

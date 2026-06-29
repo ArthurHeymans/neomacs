@@ -62,7 +62,12 @@ fn oracle_prop_algebra_cyclic_group() {
     (fmakunbound 'neovm--alg-zn-inv)
     (fmakunbound 'neovm--alg-zn-identity)
     (fmakunbound 'neovm--alg-zn-order)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t ((0 . 1) (1 . 7) (2 . 7) (3 . 7) (4 . 7) (5 . 7) (6 . 7)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +156,10 @@ fn oracle_prop_algebra_permutation_group_s3() {
     (fmakunbound 'neovm--alg-perm-inverse)
     (fmakunbound 'neovm--alg-perm-identity)
     (fmakunbound 'neovm--alg-perm-equal)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -229,7 +237,10 @@ fn oracle_prop_algebra_cosets_lagrange() {
     (fmakunbound 'neovm--alg-z12-op)
     (fmakunbound 'neovm--alg-left-coset)
     (fmakunbound 'neovm--alg-all-cosets)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t 3 ((0 3 6 9) (1 4 7 10) (2 5 8 11)) t 4)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +320,12 @@ fn oracle_prop_algebra_ring_operations() {
     (fmakunbound 'neovm--alg-ring-add)
     (fmakunbound 'neovm--alg-ring-mul)
     (fmakunbound 'neovm--alg-ring-neg)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t t ((2 . 3) (3 . 2) (3 . 4) (4 . 3)) ((1 . 1) (5 . 5)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -416,7 +432,10 @@ fn oracle_prop_algebra_polynomial_ring() {
     (fmakunbound 'neovm--alg-poly-mul)
     (fmakunbound 'neovm--alg-poly-eval)
     (fmakunbound 'neovm--alg-poly-degree)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((5 7 3) (4 13 22 15) (1 0 -2 0 1) 17 19 t t 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -470,7 +489,10 @@ fn oracle_prop_algebra_group_homomorphism() {
                       (length kernel)
                       (length image)))))))
     (fmakunbound 'neovm--alg-phi)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t (0 4 8) (0 1 2 3) t t 3 4)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -544,5 +566,8 @@ fn oracle_prop_algebra_modular_exponentiation_euler() {
     (fmakunbound 'neovm--alg-mod-pow)
     (fmakunbound 'neovm--alg-gcd)
     (fmakunbound 'neovm--alg-euler-totient)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (8 t t (1 2 4 7 8 11 13 14) 1 4 13)""#]],
+    );
 }

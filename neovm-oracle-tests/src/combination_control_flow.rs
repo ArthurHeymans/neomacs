@@ -41,7 +41,10 @@ fn oracle_prop_cf_nested_condition_case_different_errors() {
       (funcall try-eval (lambda () (symbol-value 'neovm--unbound-xyz-var)))
       ;; Wrong type -> outer handler (skip inner and middle)
       (funcall try-eval (lambda () (car 42))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (((inner)) ((middle)) ((outer)))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +83,10 @@ fn oracle_prop_cf_catch_throw_deep_recursion() {
             (funcall 'neovm--test-tree-find tree 99 0)
             'not-found)))
     (fmakunbound 'neovm--test-tree-find)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((found-at-depth 16) (found-at-depth 1) not-found)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +117,10 @@ fn oracle_prop_cf_unwind_protect_cleanup_ordering() {
     (error nil))
   ;; Log should show: body-start, then cleanups 3, 2, 1
   (nreverse cleanup-log))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (body-start cleanup-3 cleanup-2 cleanup-1)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +158,10 @@ fn oracle_prop_cf_state_machine_transition_table() {
   (list state
         (apply #'string (nreverse collected))
         i))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (done \"hello\\\"world\" 16)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +197,12 @@ fn oracle_prop_cf_cooperative_scheduling() {
   (list (nreverse log)
         task-a-state
         task-b-state))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((A 1) (B 9) (A 2) (B 8) (A 3) (B 7) (A 4) (B 6) (A 5) (B 5) (A 6) (B 4) (A 7) (B 3) (A 8) (B 2)) 8 2)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +262,10 @@ fn oracle_prop_cf_error_retry_with_counter() {
         (nreverse results))
     (fmakunbound 'neovm--test-flaky-op)
     (makunbound 'neovm--test-attempt-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t (success 3) 2) (nil nil 5) (t (success 1) 0))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -287,7 +307,12 @@ fn oracle_prop_cf_prog1_preserving_value() {
             (setq a 'inner-side))
         (setq b 'outer-side))
       (list a b))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 20 30) (40 50) ((popped 10 remaining 4) (popped 20 remaining 3) (popped 30 remaining 2)) 42 (inner-side outer-side))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -352,7 +377,12 @@ fn oracle_prop_cf_exception_safe_resource_management() {
     (fmakunbound 'neovm--test-with-transaction)
     (makunbound 'neovm--test-txn-log)
     (makunbound 'neovm--test-txn-data)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (ok (rolled-back \"abort!\") (rolled-back \"outer fails after inner succeeds\") 42 (begin commit begin rollback begin begin commit rollback))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -394,7 +424,10 @@ fn oracle_prop_cf_coroutine_pipeline() {
                               ;; Type error abort
                               (r3 (funcall pipeline "bad" stages)))
                           (list r1 r2 r3)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (60 (overflow 120) (error \"not a number\"))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -434,7 +467,10 @@ fn oracle_prop_cf_trampoline_mutual_recursion() {
                  (funcall 'neovm--test-collatz-bounce 12 0)))
     (fmakunbound 'neovm--test-trampoline)
     (fmakunbound 'neovm--test-collatz-bounce)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((done 0) (done 8) (done 111) (done 9))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -471,5 +507,8 @@ fn oracle_prop_cf_cps_with_dynamic_binding() {
         (nreverse results))
     (fmakunbound 'neovm--test-cps-fact-tracked)
     (makunbound 'neovm--test-max-depth)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 1 0) (1 1 1) (5 120 5) (8 40320 8))""#]],
+    );
 }

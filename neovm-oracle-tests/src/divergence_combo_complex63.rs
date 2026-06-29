@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx63_make_local_variable_with_setq_default_kill_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx63-lv*")))
   (with-current-buffer buf
@@ -30,13 +30,14 @@ fn div_cx63_make_local_variable_with_setq_default_kill_buffer() {
             (default-boundp 'neo-cx63-counter)
             (default-value 'neo-cx63-counter)))))
 "##,
+        expect_test::expect![[r#""OK (100 5 5 t 5)""#]],
     );
 }
 
 #[test]
 fn div_cx63_buffer_local_hooks_with_depth_and_permanent_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (with-temp-buffer
@@ -53,13 +54,14 @@ fn div_cx63_buffer_local_hooks_with_depth_and_permanent_local() {
       (let ((after-kill (nreverse calls)))
         (list first-run after-kill)))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 4) 5)""#]],
     );
 }
 
 #[test]
 fn div_cx63_setq_default_does_not_overwrite_existing_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx63-shared 1)
 (let ((buf-a (get-buffer-create " *neo-cx63-a*"))
@@ -76,13 +78,14 @@ fn div_cx63_setq_default_does_not_overwrite_existing_local() {
     (kill-buffer buf-b)
     (list a-val b-val default)))
 "##,
+        expect_test::expect![[r#""OK (100 200 7)""#]],
     );
 }
 
 #[test]
 fn div_cx63_frame_parameters_get_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (let ((name (frame-parameter frame 'name))
@@ -95,13 +98,14 @@ fn div_cx63_frame_parameters_get_set() {
             (frame-parameter frame 'neo-cx63-custom-param)
             (terminal-name (frame-terminal frame))))))
 "##,
+        expect_test::expect![[r#""OK (\"F1\" dark nil \"hello\" nil \"initial_terminal\")""#]],
     );
 }
 
 #[test]
 fn div_cx63_window_parameters_get_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (set-window-parameter win 'neo-cx63-param :value)
@@ -113,13 +117,16 @@ fn div_cx63_window_parameters_get_set() {
     (list got num (assq 'neo-cx63-param all) (assq 'neo-cx63-num all)
           (window-parameter win 'neo-cx63-param))))
 "##,
+        expect_test::expect![[
+            r#""OK (:value 42 (neo-cx63-param . :value) (neo-cx63-num . 42) nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx63_buffer_local_value_in_indirect_buffer_inherits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((base (get-buffer-create " *neo-cx63-base*")))
   (with-current-buffer base
@@ -137,13 +144,14 @@ fn div_cx63_buffer_local_value_in_indirect_buffer_inherits() {
         (kill-buffer base)
         (list base-val ind-val ind-val-2 base-val-2)))))
 "##,
+        expect_test::expect![[r#""ERR (void-variable neo-cx63-shared)""#]],
     );
 }
 
 #[test]
 fn div_cx63_local_variable_p_and_local_variable_alias() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((buf (get-buffer-create " *neo-cx63-alias*")))
@@ -162,13 +170,14 @@ fn div_cx63_local_variable_p_and_local_variable_alias() {
             (kill-buffer buf))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx63_kill_buffer_hook_and_buffer_list_update() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx63-kill*"))
       (fired nil))
@@ -179,13 +188,14 @@ fn div_cx63_kill_buffer_hook_and_buffer_list_update() {
     (let ((in-list-after (memq buf (buffer-list))))
       (list fired in-list-before in-list-after))))
 "##,
+        expect_test::expect![[r#""OK ((:kill) (#<killed buffer>) nil)""#]],
     );
 }
 
 #[test]
 fn div_cx63_buffer_local_face_remapping() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((before (buffer-local-value 'face-remapping-alist (current-buffer))))
@@ -196,13 +206,16 @@ fn div_cx63_buffer_local_face_remapping() {
             (assq 'bold face-remapping-alist)
             (assq 'default face-remapping-alist)))))
 "##,
+        expect_test::expect![[
+            r#""OK (nil ((default :height 2.0) (bold :foreground \"red\")) (bold :foreground \"red\") (default :height 2.0))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx63_default_toplevel_value_and_buffer_local_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((buf (get-buffer-create " *neo-cx63-tl*")))
@@ -217,13 +230,14 @@ fn div_cx63_default_toplevel_value_and_buffer_local_state() {
               (default-toplevel-value 'neo-cx63-tl-var))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:local :default :default :default)""#]],
     );
 }
 
 #[test]
 fn div_cx63_buffer_locals_marker_overlay_undo_textprop_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (add-hook 'after-change-functions
@@ -254,5 +268,6 @@ fn div_cx63_buffer_locals_marker_overlay_undo_textprop_narrow_mega() {
                 (buffer-string)
                 (buffer-local-value 'neo-cx63-edge (current-buffer)))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

@@ -12,18 +12,21 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_face_make_face_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((f (make-face 'neo-face-x)))
   (list (facep f) (facep 'neo-face-x) (face-name f) (integerp (face-id f))))
 "#,
+        expect_test::expect![[
+            r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] \"neo-face-x\" t)""#
+        ]],
     );
 }
 
 #[test]
 fn div_face_set_attribute_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((f (make-face 'neo-face-y)))
   (set-face-attribute f nil :foreground "red" :weight 'bold :slant 'italic)
@@ -31,13 +34,14 @@ fn div_face_set_attribute_query() {
         (face-attribute f :weight)
         (face-attribute f :slant)))
 "#,
+        expect_test::expect![[r#""OK (\"red\" bold italic)""#]],
     );
 }
 
 #[test]
 fn div_face_defface_attribute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (progn
   (defface neo-defface-x '((t :foreground "blue" :weight bold)) "doc")
@@ -45,13 +49,16 @@ fn div_face_defface_attribute() {
         (face-attribute 'neo-defface-x :foreground)
         (face-attribute 'neo-defface-x :weight)))
 "#,
+        expect_test::expect![[
+            r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] \"blue\" bold)""#
+        ]],
     );
 }
 
 #[test]
 fn div_face_inheritance_resolves() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (progn
   (defface neo-parent-face '((t :foreground "green")) "doc")
@@ -60,25 +67,27 @@ fn div_face_inheritance_resolves() {
         (face-attribute 'neo-child-face :weight)
         (face-attribute 'neo-child-face :inherit)))
 "#,
+        expect_test::expect![[r#""OK (unspecified bold neo-parent-face)""#]],
     );
 }
 
 #[test]
 fn div_face_bold_italic_underline_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((f (make-face 'neo-biu-face)))
   (set-face-attribute f nil :weight 'bold :slant 'italic :underline t)
   (list (face-bold-p f) (face-italic-p f) (face-underline-p f)))
 "#,
+        expect_test::expect![[r#""OK ((bold extra-bold ultra-bold) (italic oblique) t)""#]],
     );
 }
 
 #[test]
 fn div_face_default_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (face-attribute 'default :foreground)
       (face-attribute 'default :background)
@@ -86,85 +95,103 @@ fn div_face_default_attributes() {
       (face-attribute 'bold :weight)
       (face-attribute 'italic :slant))
 "#,
+        expect_test::expect![[
+            r#""OK (\"unspecified-fg\" \"unspecified-bg\" normal bold italic)""#
+        ]],
     );
 }
 
 #[test]
 fn div_face_all_attributes_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((f (make-face 'neo-all-attr)))
   (set-face-attribute f nil :foreground "red" :weight 'bold)
   (face-all-attributes f (selected-frame)))
 "#,
+        expect_test::expect![[
+            r#""OK ((:family . unspecified) (:foundry . unspecified) (:width . unspecified) (:height . unspecified) (:weight . bold) (:slant . unspecified) (:underline . unspecified) (:overline . unspecified) (:extend . unspecified) (:strike-through . unspecified) (:box . unspecified) (:inverse-video . unspecified) (:foreground . \"red\") (:background . unspecified) (:stipple . unspecified) (:inherit . unspecified))""#
+        ]],
     );
 }
 
 #[test]
 fn div_face_documentation_builtins() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (face-documentation 'bold)
       (face-documentation 'default)
       (face-documentation 'highlight))
 "#,
+        expect_test::expect![[
+            r#""OK (\"Basic bold face.\" \"Basic default face.\" \"Basic face for highlighting.\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_face_list_count_and_known_faces() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (facep 'default) (facep 'bold) (facep 'region)
       (facep 'font-lock-keyword-face)
       (length (face-list)))
 "#,
+        expect_test::expect![[
+            r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] 195)""#
+        ]],
     );
 }
 
 #[test]
 fn div_color_defined_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list (color-defined-p \"red\") (color-defined-p \"blue\") (color-defined-p \"nonexistent\") (color-defined-p \"#ff0000\") (color-defined-p \"#000000\"))",
+        expect_test::expect![[r#""OK (t t nil t t)""#]],
     );
 }
 
 #[test]
 fn div_color_values_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list (color-values \"red\") (color-values \"#00ff00\") (color-values \"black\") (color-values \"white\"))",
+        expect_test::expect![[r#""OK ((65535 0 0) (0 65535 0) (0 0 0) (65535 65535 65535))""#]],
     );
 }
 
 #[test]
 fn div_color_rgb_hex_distance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list (color-rgb-to-hex 1 0 0) (color-rgb-to-hex 0.5 0.5 0.5) (color-distance \"red\" \"blue\") (color-distance \"#000000\" \"#ffffff\"))",
+        expect_test::expect![[r##""OK (\"#ffff00000000\" \"#7fff7fff7fff\" 327669 589805)""##]],
     );
 }
 
 #[test]
 fn div_color_defined_colors_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (length (defined-colors))
       (member "red" (defined-colors))
       (member "black" (defined-colors)))
 "#,
+        expect_test::expect![[
+            r#""OK (8 (\"red\" \"green\" \"yellow\" \"blue\" \"magenta\" \"cyan\" \"white\") (\"black\" \"red\" \"green\" \"yellow\" \"blue\" \"magenta\" \"cyan\" \"white\"))""#
+        ]],
     );
 }
 
 #[test]
 fn div_face_unspecified_and_reset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((f (make-face 'neo-unspec-face)))
   (list (eq (face-attribute f :foreground) 'unspecified)
@@ -172,5 +199,6 @@ fn div_face_unspecified_and_reset() {
         (set-face-attribute f nil :foreground nil)
         (eq (face-attribute f :foreground) 'unspecified)))
 "#,
+        expect_test::expect![[r#""OK (t t nil t)""#]],
     );
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx317_narrow_widen_point_min_max_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -18,13 +18,14 @@ fn div_cx317_narrow_widen_point_min_max_round_trip() {
         (widen)
         (point-min) (point-max)))
 "##,
+        expect_test::expect![[r#""OK (1 27 nil 5 20 nil 1 27)""#]],
     )
 }
 
 #[test]
 fn div_cx317_save_restriction_restores_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDEF")
@@ -37,13 +38,14 @@ fn div_cx317_save_restriction_restores_bounds() {
     (list narrowed-min narrowed-max
           (point-min) (point-max))))
 "##,
+        expect_test::expect![[r#""OK (5 10 5 10)""#]],
     )
 }
 
 #[test]
 fn div_cx317_narrow_then_motion_respects_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -57,13 +59,14 @@ fn div_cx317_narrow_then_motion_respects_bounds() {
         (forward-line 0)
         (point)))
 "##,
+        expect_test::expect![[r#""ERR (end-of-buffer)""#]],
     )
 }
 
 #[test]
 fn div_cx317_narrow_with_marker_position_relative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDEF0123456789")
@@ -73,13 +76,14 @@ fn div_cx317_narrow_with_marker_position_relative() {
           (point-min) (point-max)
           (buffer-substring (point-min) (point-max)))))
 "##,
+        expect_test::expect![[r#""OK (15 5 20 \"456789ABCDEF012\")""#]],
     )
 }
 
 #[test]
 fn div_cx317_save_excursion_across_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx317-a*"))
       (buf-b (get-buffer-create " *neo-cx317-b*")))
@@ -96,13 +100,14 @@ fn div_cx317_save_excursion_across_buffers() {
   (kill-buffer buf-a)
   (kill-buffer buf-b))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     )
 }
 
 #[test]
 fn div_cx317_exchange_point_and_mark_in_narrowed_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -114,13 +119,14 @@ fn div_cx317_exchange_point_and_mark_in_narrowed_region() {
           (= p-before (mark))
           (= m-before (point)))))
 "##,
+        expect_test::expect![[r#""OK (8 2 2 8 t t)""#]],
     )
 }
 
 #[test]
 fn div_cx317_save_excursion_persists_point_across_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -133,13 +139,14 @@ fn div_cx317_save_excursion_persists_point_across_undo() {
       (undo))
     (list p-before (point) (buffer-string))))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     )
 }
 
 #[test]
 fn div_cx317_count_lines_with_narrowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "line1\nline2\nline3\nline4\nline5\n")
@@ -149,13 +156,14 @@ fn div_cx317_count_lines_with_narrowing() {
         (widen)
         (count-lines (point-min) (point-max))))
 "##,
+        expect_test::expect![[r#""OK (5 nil 2 nil 5)""#]],
     )
 }
 
 #[test]
 fn div_cx317_what_line_and_line_number_at_pos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "line1\nline2\nline3\nline4\n")
@@ -167,13 +175,14 @@ fn div_cx317_what_line_and_line_number_at_pos() {
         (line-beginning-position)
         (line-end-position)))
 "##,
+        expect_test::expect![[r#""OK (\"Line 3\" 3 0 13 18)""#]],
     )
 }
 
 #[test]
 fn div_cx317_narrow_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -205,5 +214,6 @@ fn div_cx317_narrow_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

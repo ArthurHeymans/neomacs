@@ -58,7 +58,12 @@ fn oracle_run_mode_hooks_delayed_order_and_after_hooks() {
       (makunbound 'neovm--rmh-d))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((nil (neovm--rmh-c neovm--rmh-d) t t) nil (change-major-mode-after-body a b c d after-change-major-mode after-hook-1 after-hook-2) nil nil nil t)""#
+        ]],
+    );
 }
 
 #[test]
@@ -81,5 +86,10 @@ fn oracle_delay_mode_hooks_macroexpansion_and_dynamic_scope() {
            (assq 'delay-mode-hooks (buffer-local-variables))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((progn (make-local-variable 'delay-mode-hooks) (let ((delay-mode-hooks t)) (list delay-mode-hooks))) nil ((t t (delay-mode-hooks . t)) nil t (delay-mode-hooks)))""#
+        ]],
+    );
 }

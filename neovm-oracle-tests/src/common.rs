@@ -582,6 +582,14 @@ fn assert_neovm_oracle_parity(neovm: &str, oracle: &str, form: &str) {
     );
 }
 
+// Store inline oracle values in a Rust-debug representation. This keeps exact
+// newlines, tabs, quotes, and trailing spaces testable without putting literal
+// trailing whitespace or conflict-marker-looking lines in source files.
+fn inline_expect_payload(value: &str) -> String {
+    let source_safe = value.replace('\0', "\\0").replace('\r', "\\r");
+    format!("{source_safe:?}")
+}
+
 // ---------------------------------------------------------------------------
 // Public parity assertions
 // ---------------------------------------------------------------------------
@@ -627,17 +635,17 @@ fn assert_oracle_parity_expect_with_runners<N, O>(
     match OracleMode::from_env() {
         OracleMode::Snapshot => {
             let neovm = run_neomacs().expect("neomacs binary eval should run");
-            expected.assert_eq(&neovm);
+            expected.assert_eq(&inline_expect_payload(&neovm));
         }
         OracleMode::Verify => {
             let oracle = run_oracle().expect("oracle eval should run");
             let neovm = run_neomacs().expect("neomacs binary eval should run");
-            expected.assert_eq(&oracle);
+            expected.assert_eq(&inline_expect_payload(&oracle));
             assert_neovm_oracle_parity(&neovm, &oracle, form);
         }
         OracleMode::Refresh => {
             let oracle = run_oracle().expect("oracle eval should run");
-            expected.assert_eq(&oracle);
+            expected.assert_eq(&inline_expect_payload(&oracle));
         }
         OracleMode::Live => {
             let oracle = run_oracle().expect("oracle eval should run");
@@ -751,6 +759,36 @@ pub(crate) fn eval_oracle_and_neovm(form: &str) -> (String, String) {
     let neovm = run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
     let oracle = run_oracle_eval(form).expect("oracle eval should run");
     (oracle, neovm)
+}
+
+pub(crate) fn eval_oracle_and_neovm_expect(
+    form: &str,
+    expected: expect_test::Expect,
+) -> (String, String) {
+    ensure_nonempty_form(form).expect("form should not be empty");
+
+    match OracleMode::from_env() {
+        OracleMode::Snapshot => {
+            let neovm =
+                run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
+            expected.assert_eq(&inline_expect_payload(&neovm));
+            (neovm.clone(), neovm)
+        }
+        OracleMode::Verify => {
+            let oracle = run_oracle_eval(form).expect("oracle eval should run");
+            let neovm =
+                run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
+            expected.assert_eq(&inline_expect_payload(&oracle));
+            assert_neovm_oracle_parity(&neovm, &oracle, form);
+            (oracle, neovm)
+        }
+        OracleMode::Refresh => {
+            let oracle = run_oracle_eval(form).expect("oracle eval should run");
+            expected.assert_eq(&inline_expect_payload(&oracle));
+            (oracle.clone(), oracle)
+        }
+        OracleMode::Live => eval_oracle_and_neovm(form),
+    }
 }
 
 pub(crate) fn assert_ok_eq(expected_payload: &str, oracle: &str, neovm: &str) {

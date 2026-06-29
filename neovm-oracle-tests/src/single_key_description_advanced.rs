@@ -39,7 +39,12 @@ fn oracle_prop_skd_printable_characters() {
   (single-key-description ?{)
   (single-key-description ?}))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r##""OK (\"a\" \"z\" \"A\" \"Z\" \"0\" \"9\" \"!\" \"@\" \"#\" \"~\" \"/\" \"\\\\\" \"SPC\" \".\" \",\" \"-\" \"=\" \"[\" \"]\" \"{\" \"}\")""##
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +78,12 @@ fn oracle_prop_skd_control_characters() {
   ;; C-@ is NUL
   (single-key-description ?\C-@))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"C-a\" \"C-b\" \"C-c\" \"C-d\" \"C-e\" \"C-g\" \"C-h\" \"TAB\" \"C-j\" \"C-k\" \"C-l\" \"RET\" \"C-n\" \"C-o\" \"C-x\" \"C-z\" \"DEL\" \"C-@\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +114,12 @@ fn oracle_prop_skd_meta_combinations() {
   (single-key-description (event-convert-list '(super meta ?f)))
   (single-key-description (event-convert-list '(hyper meta ?h))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"M-a\" \"M-z\" \"M-x\" \"M-0\" \"M-9\" \"M-!\" \"C-M-a\" \"C-M-x\" \"C-M-z\" \"C-M-@\" \"M-SPC\" \"M-A\" \"C-M-S-z\" \"M-s-f\" \"H-M-h\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +157,12 @@ fn oracle_prop_skd_no_angles_parameter() {
   (single-key-description ?\C-x t)
   (single-key-description ?\M-a t))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"<tab>\" \"<return>\" \"<backspace>\" \"<escape>\" \"<f1>\" \"<f12>\" \"<home>\" \"<end>\" \"tab\" \"return\" \"backspace\" \"escape\" \"f1\" \"f12\" \"home\" \"end\" \"a\" \"C-x\" \"M-a\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +195,12 @@ fn oracle_prop_skd_super_hyper_modifiers() {
     (equal (single-key-description k1)
            (single-key-description k2))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"s-a\" \"s-x\" \"s-1\" \"H-a\" \"H-x\" \"H-1\" \"C-s-a\" \"H-M-z\" \"C-H-M-S-s-q\" t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -266,7 +291,12 @@ fn oracle_prop_skd_keymap_legend_builder() {
     (fmakunbound 'neovm--skd-build-legend)
     (fmakunbound 'neovm--skd-count-bindings)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t 7 (\"C-s\" \"C-f\" \"C-g\" \"M-x\" \"q\" \"/\" \"n\" \"p\") 113 57 nil \"=== Editor Bindings ===\n  /             search-forward\n  C-f           find-file\n  C-g           keyboard-quit\n  C-s           save-buffer\n  n             next-line\n  p             previous-line\n  q             quit\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -332,5 +362,10 @@ fn oracle_prop_skd_batch_categorize_keys() {
     (fmakunbound 'neovm--skd-categorize-key)
     (fmakunbound 'neovm--skd-batch-describe)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 ((compound \"C-M-a\" \"C-M-x\" \"C-M-z\") (meta \"M-a\" \"M-x\" \"M-z\") (control \"C-a\" \"C-x\" \"C-z\") (plain \"0\" \"9\" \"a\" \"z\")) t)""#
+        ]],
+    );
 }

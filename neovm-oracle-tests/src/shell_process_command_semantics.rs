@@ -23,7 +23,10 @@ fn oracle_prop_gnu_call_process_shell_command_contracts() {
      (point))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 \"Acmd:one two threeA\" 19)""#]],
+    );
 }
 
 #[test]
@@ -40,7 +43,10 @@ fn oracle_prop_gnu_process_file_shell_command_contracts() {
      (point))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 \"pf:alpha beta\" 14)""#]],
+    );
 }
 
 #[test]
@@ -54,5 +60,8 @@ fn oracle_prop_gnu_call_process_shell_command_mixes_stderr_when_requested() {
    (buffer-string)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 \"outerr\")""#]],
+    );
 }

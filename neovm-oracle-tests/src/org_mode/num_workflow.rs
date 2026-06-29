@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_num_skip_property_comment_tags_update_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-num)
@@ -63,6 +63,9 @@ fn org_num_skip_property_comment_tags_update_combo() {
                 org-num--invalid-flag
                 (buffer-substring-no-properties
                  (point-min) (point-max))))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"* Alpha\n** Beta\n*** Leaf\n** COMMENT Hidden\n*** Hidden child\n** Tagged :skip:\n*** Tagged child\n** Property\n:PROPERTIES:\n:UNNUMBERED: t\n:END:\n*** Property child\n* Omega\n\" 1 nil \"[1] \" bold) (\"** Beta\n*** Leaf\n** COMMENT Hidden\n*** Hidden child\n** Tagged :skip:\n*** Tagged child\n** Property\n:PROPERTIES:\n:UNNUMBERED: t\n:END:\n*** Property child\n* Omega\n\" 2 nil \"[1.1] \" bold) (\"*** Leaf\n** COMMENT Hidden\n*** Hidden child\n** Tagged :skip:\n*** Tagged child\n** Property\n:PROPERTIES:\n:UNNUMBERED: t\n:END:\n*** Property child\n* Omega\n\" 3 nil \"[1.1.1] \" bold) (\"** COMMENT Hidden\n*** Hidden child\n** Tagged :skip:\n*** Tagged child\n** Property\n:PROPERTIES:\n:UNNUMBERED: t\n:END:\n*** Property child\n* Omega\n\" 2 t \"\" nil) (\"*** Hidden child\n** Tagged :skip:\n*** Tagged child\n** Property\n:PROPERTIES:\n:UNNUMBERED: t\n:END:\n*** Property child\n* Omega\n\" 3 nil \"\" nil) (\"** Tagged :skip:\n*** Tagged child\n** Property\n:PROPERTIES:\n:UNNUMBERED: t\n:END:\n*** Property child\n* Omega\n\" 2 t \"\" nil) (\"*** Tagged child\n** Property\n:PROPERTIES:\n:UNNUMBERED: t\n:END:\n*** Property child\n* Omega\n\" 3 nil \"\" nil) (\"** Property\n:PROPERTIES:\n:UNNUMBERED: t\n:END:\n*** Property child\n* Omega\n\" 2 t \"\" nil) (\"*** Property child\n* Omega\n\" 3 nil \"\" nil) (\"* Omega\n\" 1 nil \"[2] \" bold)) ((\"* Alpha\n** Beta\n*** Inserted\n*** Leaf\n** COMMENT Hidden\n*** Hidden child\n** Tagged\" 1 nil \"[1] \" bold) (\"** Beta\n*** Inserted\n*** Leaf\n** COMMENT Hidden\n*** Hidden child\n** Tagged\" 2 nil \"[1.1] \" bold) (\"*** Inserted\n*** Leaf\n** COMMENT Hidden\n*** Hidden child\n** Tagged\" 3 nil \"[1.1.1] \" bold) (\"*** Leaf\n** COMMENT Hidden\n*** Hidden child\n** Tagged\" 3 nil \"[1.1.2] \" bold) (\"** COMMENT Hidden\n*** Hidden child\n** Tagged\" 2 t \"\" nil) (\"*** Hidden child\n** Tagged\" 3 nil \"\" nil) (\"** Tagged\" 2 nil \"[1.2] \" bold) (\"\n\" 3 nil \"[1.2.1] \" bold) (\"\n*** Tagged child\n\" 2 t \"\" nil) (\"\n*** Tagged child\n** Property\n:PROPERTIES:\n:UNNUMBERED: t\n:END:\n\" 3 nil \"\" nil) (\"\n*** Tagged child\n** Property\n:PROPERTIES:\n:UNNUMBERED: t\n:END:\n*** Property child\n\" 1 nil \"[2] \" bold)) nil \"* Alpha\n** Beta\n*** Inserted\n*** Leaf\n** COMMENT Hidden\n*** Hidden child\n** Tagged\n*** Tagged child\n** Property\n:PROPERTIES:\n:UNNUMBERED: t\n:END:\n*** Property child\n* Omega\n\")""#
+        ]],
     );
 }
 
@@ -70,7 +73,7 @@ fn org_num_skip_property_comment_tags_update_combo() {
 fn org_num_odd_levels_and_footnotes_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-num)
@@ -100,6 +103,9 @@ fn org_num_odd_levels_and_footnotes_combo() {
                        (or (overlay-get ov 'after-string) "")))
                 out))
         (nreverse out)))))"##,
+        expect_test::expect![[
+            r#""OK ((\"* Top\n*** Odd child\n***** Odd grandchild\n* Footnotes\n[fn:1] Footnote text.\n* Tail\n\" 1 nil \"1 \") (\"*** Odd child\n***** Odd grandchild\n* Footnotes\n[fn:1] Footnote text.\n* Tail\n\" 2 nil \"1.1 \") (\"***** Odd grandchild\n* Footnotes\n[fn:1] Footnote text.\n* Tail\n\" 3 nil \"1.1.1 \") (\"* Footnotes\n[fn:1] Footnote text.\n* Tail\n\" 1 t \"\") (\"* Tail\n\" 1 nil \"2 \"))""#
+        ]],
     );
 }
 
@@ -107,7 +113,7 @@ fn org_num_odd_levels_and_footnotes_combo() {
 fn org_num_mode_toggle_clear_reenable_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-num)
@@ -140,6 +146,9 @@ fn org_num_mode_toggle_clear_reenable_combo() {
                         org-num--overlays)
                 (buffer-substring-no-properties
                  (point-min) (point-max))))))))"##,
+        expect_test::expect![[
+            r#""OK (((1 3 \"1|\") (5 8 \"1-1|\") (10 12 \"2|\")) (nil nil) ((\"* A\n** B\n* C\n** D\n\" \"1|\") (\"** B\n* C\n** D\n\" \"1-1|\") (\"* C\n** D\n\" \"2|\") (\"** D\n\" \"2-1|\")) \"* A\n** B\n* C\n** D\n\")""#
+        ]],
     );
 }
 
@@ -147,7 +156,7 @@ fn org_num_mode_toggle_clear_reenable_combo() {
 fn org_num_narrow_mutate_promote_refresh_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-num)
@@ -225,6 +234,7 @@ fn org_num_narrow_mutate_promote_refresh_combo() {
         (list (nreverse states)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""ERR (void-variable states)""#]],
     );
 }
 
@@ -232,7 +242,7 @@ fn org_num_narrow_mutate_promote_refresh_combo() {
 fn org_num_face_skip_cleanup_archive_footnotes_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-num)
@@ -314,6 +324,7 @@ fn org_num_face_skip_cleanup_archive_footnotes_combo() {
                       (overlays-in (point-min) (point-max)))
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""ERR (void-variable states)""#]],
     );
 }
 
@@ -321,7 +332,7 @@ fn org_num_face_skip_cleanup_archive_footnotes_combo() {
 fn org_num_folded_subtree_cut_paste_renumber_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -420,5 +431,6 @@ fn org_num_folded_subtree_cut_paste_renumber_combo() {
         (list (nreverse states)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""ERR (void-variable states)""#]],
     );
 }

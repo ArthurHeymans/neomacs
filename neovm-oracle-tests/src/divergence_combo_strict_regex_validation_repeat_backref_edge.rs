@@ -19,7 +19,7 @@ fn div_r5_regex_repeat_interval_edge_validation() {
     // says "Regular expression too big", GNU says "Invalid content of \\{\\}".
     // a\\{0,0\\}, a\\{,3\\}, a\\{0\\} agree (0 = valid, no match). Backreference
     // to non-existent groups also agrees (batch 101 test 2).
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case err (string-match "a\\{0,0\\}" "text") (invalid-regexp (cadr err)) (error 'other))
       (condition-case err (string-match "a\\{,3\\}" "text") (invalid-regexp (cadr err)) (error 'other))
@@ -28,18 +28,24 @@ fn div_r5_regex_repeat_interval_edge_validation() {
       (condition-case err (string-match "a\\{5,3\\}" "text") (invalid-regexp (cadr err)) (error 'other))
       (condition-case err (string-match "a\\{999999\\}" "text") (invalid-regexp (cadr err)) (error 'other)))
 "##,
+        expect_test::expect![[
+            r#""OK (0 0 0 \"Invalid content of \\\\{\\\\}\" \"Invalid content of \\\\{\\\\}\" \"Invalid content of \\\\{\\\\}\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_r5_regex_backref_to_nonexistent_group() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case err (string-match "\\1" "text") (invalid-regexp (cadr err)) (error 'other))
       (condition-case err (string-match "\\3" "text") (invalid-regexp (cadr err)) (error 'other))
       (condition-case err (string-match "\\(a\\)\\2" "text") (invalid-regexp (cadr err)) (error 'other))
       (condition-case err (string-match "\\(a\\)\\1" "a") (invalid-regexp (cadr err)) (error 'other)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"Invalid back reference\" \"Invalid back reference\" \"Invalid back reference\" nil)""#
+        ]],
     );
 }

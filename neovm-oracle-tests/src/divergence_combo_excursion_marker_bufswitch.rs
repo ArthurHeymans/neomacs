@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_save_excursion_marker_after_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((m (copy-marker 10 t)))
@@ -28,6 +28,9 @@ fn divergence_save_excursion_marker_after_edit() {
           (eq (get-text-property 13 'zone) 'c)
           (= (buffer-size) 28)
           (length (overlays-in 5 8))))) "#,
+        expect_test::expect![[
+            r#""AAAAXXX-BBBB-CCCC-DDDD-EEEEOK (28 nil 13 t #(\"AAAAXXX-BBBB-CCCC-DDDD-EEEE\" 0 3 (zone a) 12 16 (zone c)) a t c t nil 1)""#
+        ]],
     );
 }
 
@@ -35,7 +38,7 @@ fn divergence_save_excursion_marker_after_edit() {
 fn divergence_buffer_switch_with_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (current-buffer))
         (buf2 (generate-new-buffer " test-bs-xxx")))
@@ -60,6 +63,7 @@ fn divergence_buffer_switch_with_narrow_undo() {
             (string= (with-current-buffer buf1 (buffer-string)) "BUF1-CONTENT")
             (eq (with-current-buffer buf2 (get-text-property 1 'src)) 'buf2)
             (kill-buffer buf2))))) "#,
+        expect_test::expect![[r#""XX-CONTENERR (args-out-of-range 1 1)""#]],
     );
 }
 
@@ -67,7 +71,7 @@ fn divergence_buffer_switch_with_narrow_undo() {
 fn divergence_save_restriction_overlay_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF")
   (let ((ov (make-overlay 10 14)))
@@ -87,6 +91,7 @@ fn divergence_save_restriction_overlay_edit() {
               (overlay-get ov 'tag)
               (get-text-property 7 'zone)
               (eq (get-text-property 7 'zone) 'b))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -94,7 +99,7 @@ fn divergence_save_restriction_overlay_edit() {
 fn divergence_save_excursion_through_multiple_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (current-buffer))
         (buf2 (generate-new-buffer " test-se1-xxx"))
@@ -124,6 +129,7 @@ fn divergence_save_excursion_through_multiple_buffers() {
               (string= (with-current-buffer buf3 (buffer-string)) "THREE")
               (kill-buffer buf2)
               (kill-buffer buf3))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -131,7 +137,7 @@ fn divergence_save_excursion_through_multiple_buffers() {
 fn divergence_marker_across_buffer_kill_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "MAIN-CONTENT")
   (let ((m1 (copy-marker 5 t))
@@ -156,6 +162,7 @@ fn divergence_marker_across_buffer_kill_undo() {
             (eq (get-text-property 5 'part) 'mid)
             (buffer-string)
             (string= (buffer-string) "MAIN-CONTENT")))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -163,7 +170,7 @@ fn divergence_marker_across_buffer_kill_undo() {
 fn divergence_temp_buffer_undo_isolation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "OUTER")
   (let ((outer-undo buffer-undo-list))
@@ -176,6 +183,7 @@ fn divergence_temp_buffer_undo_isolation() {
           (string= (buffer-string) "OUTER")
           (eq buffer-undo-list outer-undo)
           (= (buffer-size) 5)))) "#,
+        expect_test::expect![[r#""OUTEROK (\"OUTER\" t t t)""#]],
     );
 }
 
@@ -183,7 +191,7 @@ fn divergence_temp_buffer_undo_isolation() {
 fn divergence_save_excursion_with_narrow_and_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((m (copy-marker 15 t)))
@@ -201,6 +209,9 @@ fn divergence_save_excursion_with_narrow_and_marker() {
           (= (point-min) 5)
           (= (point-max) 20)
           (get-text-property 7 'zone)))) "#,
+        expect_test::expect![[
+            r#""-BBBB-CCCC-DDDDOK (22 nil \"-BBBB-CCCC-DDDD\" 17 t nil nil nil)""#
+        ]],
     );
 }
 
@@ -208,7 +219,7 @@ fn divergence_save_excursion_with_narrow_and_marker() {
 fn divergence_overlay_in_killed_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " test-oik-xxx")))
     (with-current-buffer buf
@@ -223,6 +234,7 @@ fn divergence_overlay_in_killed_buffer() {
                 (eq data 'test)
                 (null (buffer-name buf))
                 (not (buffer-live-p buf))))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -230,7 +242,7 @@ fn divergence_overlay_in_killed_buffer() {
 fn divergence_buffer_locals_with_temp_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-blt-xxx 0)
   (make-variable-buffer-local 'test-blt-xxx)
@@ -244,6 +256,7 @@ fn divergence_buffer_locals_with_temp_buffer() {
               (= v2 99)
               test-blt-xxx
               (= test-blt-xxx 42))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -251,7 +264,7 @@ fn divergence_buffer_locals_with_temp_buffer() {
 fn divergence_switch_buffer_preserves_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (current-buffer))
         (buf2 (generate-new-buffer " test-sbo-xxx")))
@@ -278,5 +291,6 @@ fn divergence_switch_buffer_preserves_overlays() {
             (with-current-buffer buf2 (get-text-property 1 'label))
             (eq (with-current-buffer buf2 (get-text-property 1 'label)) 'second)
             (kill-buffer buf2)))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

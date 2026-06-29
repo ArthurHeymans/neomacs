@@ -11,28 +11,37 @@ fn oracle_prop_while_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // counter accumulation
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         "(let ((i 0) (sum 0)) (while (< i 5) (setq sum (+ sum i) i (1+ i))) sum)",
+        expect_test::expect![[r#""OK 10""#]],
     );
     assert_ok_eq("10", &o, &n);
 
     // zero iterations
-    let (o, n) = eval_oracle_and_neovm("(let ((x 99)) (while nil (setq x 0)) x)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((x 99)) (while nil (setq x 0)) x)",
+        expect_test::expect![[r#""OK 99""#]],
+    );
     assert_ok_eq("99", &o, &n);
 
     // single iteration
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         "(let ((done nil) (count 0)) (while (not done) (setq count (1+ count) done t)) count)",
+        expect_test::expect![[r#""OK 1""#]],
     );
     assert_ok_eq("1", &o, &n);
 
     // while returns nil
-    let (o, n) = eval_oracle_and_neovm("(while nil)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(while nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 
     // list consumption
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         "(let ((xs '(10 20 30)) (total 0)) (while xs (setq total (+ total (car xs)) xs (cdr xs))) total)",
+        expect_test::expect![[r#""OK 60""#]],
     );
     assert_ok_eq("60", &o, &n);
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_invisible_overlay_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass visibility-zone ()
     ((name :initarg :name :accessor vz-name :initform "")
@@ -60,6 +60,7 @@ fn combo_eieio_invisible_overlay_navigation() {
                 (buffer-string)
                 my-vzs))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -67,7 +68,7 @@ fn combo_eieio_invisible_overlay_navigation() {
 fn combo_eieio_invisible_multiple_layers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass hide-layer ()
     ((layer-name :initarg :layer-name :accessor hl-name :initform "")
@@ -116,6 +117,7 @@ fn combo_eieio_invisible_multiple_layers() {
                 (buffer-string)
                 my-layers))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -123,7 +125,7 @@ fn combo_eieio_invisible_multiple_layers() {
 fn combo_eieio_invisible_narrow_visible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-vis ()
     ((narrow-range :initarg :narrow-range :accessor nv-range :initform nil)
@@ -173,6 +175,7 @@ fn combo_eieio_invisible_narrow_visible() {
                 (buffer-string)
                 my-nvs))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -180,7 +183,7 @@ fn combo_eieio_invisible_narrow_visible() {
 fn combo_eieio_intangible_forward_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass skip-zone ()
     ((label :initarg :label :accessor sz-label :initform "")
@@ -226,6 +229,7 @@ fn combo_eieio_intangible_forward_char() {
                 (buffer-string)
                 my-sz))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -233,7 +237,7 @@ fn combo_eieio_intangible_forward_char() {
 fn combo_eieio_invisible_undo_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass invisible-snap ()
     ((step :initarg :step :accessor is-step :initform "")
@@ -277,5 +281,6 @@ fn combo_eieio_invisible_undo_restore() {
                 (buffer-string)
                 my-snaps))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

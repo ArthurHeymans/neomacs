@@ -28,5 +28,8 @@ fn oracle_prop_gnu_subr_cxxr_nested_car_cdr_contracts() {
              (cadr '(a . b))
              (caar 42)
              (caddr '(a . b))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
+    );
 }

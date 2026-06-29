@@ -14,7 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_letrec_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-letrec")))
     (with-current-buffer buf
@@ -46,6 +46,7 @@ fn combo_letrec_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -53,7 +54,7 @@ fn combo_letrec_marker_overlay_undo() {
 fn combo_cl_flet_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'cl-lib)
   (let ((buf (generate-new-buffer " combo-clf")))
@@ -87,6 +88,7 @@ fn combo_cl_flet_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -94,7 +96,7 @@ fn combo_cl_flet_marker_overlay_undo() {
 fn combo_cl_macrolet_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'cl-lib)
   (let ((buf (generate-new-buffer " combo-clml")))
@@ -129,6 +131,7 @@ fn combo_cl_macrolet_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -136,7 +139,7 @@ fn combo_cl_macrolet_marker_overlay_undo() {
 fn combo_cl_symbol_macrolet_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'cl-lib)
   (let ((buf (generate-new-buffer " combo-clsm")))
@@ -170,6 +173,7 @@ fn combo_cl_symbol_macrolet_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -177,7 +181,7 @@ fn combo_cl_symbol_macrolet_marker_overlay_undo() {
 fn combo_letrec_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-lrn")))
     (with-current-buffer buf
@@ -217,5 +221,6 @@ fn combo_letrec_narrow_marker_overlay_undo() {
                                 (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

@@ -390,7 +390,7 @@ fn oracle_prop_expr_compiler_parse_arithmetic() {
         prelude = compiler_prelude(),
         cleanup = compiler_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -435,7 +435,7 @@ fn oracle_prop_expr_compiler_constant_folding() {
         prelude = compiler_prelude(),
         cleanup = compiler_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -476,7 +476,7 @@ fn oracle_prop_expr_compiler_codegen() {
         prelude = compiler_prelude(),
         cleanup = compiler_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -521,7 +521,7 @@ fn oracle_prop_expr_compiler_vm_execution() {
         prelude = compiler_prelude(),
         cleanup = compiler_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -577,7 +577,7 @@ fn oracle_prop_expr_compiler_variables() {
         prelude = compiler_prelude(),
         cleanup = compiler_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -662,5 +662,5 @@ fn oracle_prop_expr_compiler_end_to_end() {
         prelude = compiler_prelude(),
         cleanup = compiler_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }

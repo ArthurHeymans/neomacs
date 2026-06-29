@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_defstruct_shared_accessors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (coord (:constructor make-coord (x y))) x y)
   (defclass point-3d ()
@@ -71,6 +71,7 @@ fn combo_eieio_defstruct_shared_accessors() {
                 (buffer-string)
                 my-coord my-point)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range 21 33)""#]],
     );
 }
 
@@ -78,7 +79,7 @@ fn combo_eieio_defstruct_shared_accessors() {
 fn combo_eieio_defstruct_type_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (range (:constructor make-range (start end))) start end)
   (defclass bounded-region ()
@@ -135,6 +136,7 @@ fn combo_eieio_defstruct_type_predicates() {
                 (buffer-string)
                 my-range my-region)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range 22 24)""#]],
     );
 }
 
@@ -142,7 +144,7 @@ fn combo_eieio_defstruct_type_predicates() {
 fn combo_eieio_defstruct_copy_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (snapshot (:constructor make-snapshot (label data)))
     label data)
@@ -200,6 +202,7 @@ fn combo_eieio_defstruct_copy_merge() {
                 (buffer-string)
                 snap1 snap2 state)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -207,7 +210,7 @@ fn combo_eieio_defstruct_copy_merge() {
 fn combo_eieio_defstruct_nested_with_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (metric-val (:constructor make-metric-val (name value unit)))
     name value unit)
@@ -264,6 +267,7 @@ fn combo_eieio_defstruct_nested_with_class() {
                 (buffer-string)
                 my-obs)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range 36 45)""#]],
     );
 }
 
@@ -271,7 +275,7 @@ fn combo_eieio_defstruct_nested_with_class() {
 fn combo_eieio_defstruct_record_type_of() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (entry (:type list) :named) key value)
   (defclass container ()
@@ -325,5 +329,6 @@ fn combo_eieio_defstruct_record_type_of() {
                 (buffer-string)
                 my-container)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

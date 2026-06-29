@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_buflocal_closure_advice_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-bcav-xxx nil)
   (make-local-variable 'test-bcav-xxx)
@@ -30,6 +30,7 @@ fn divergence_buflocal_closure_advice_chain() {
             (equal r1 '(advised (modified from-let) modified))
             (equal r2 '(advised (again from-let) again))
             (equal (test-bcaf-xxx) '(again from-let)))))) "#,
+        expect_test::expect![[r#""ERR (void-function advice--cdar)""#]],
     );
 }
 
@@ -37,7 +38,7 @@ fn divergence_buflocal_closure_advice_chain() {
 fn divergence_buflocal_marker_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-local-variable 'test-bmu-xxx)
   (setq test-bmu-xxx "original")
@@ -64,6 +65,7 @@ fn divergence_buflocal_marker_undo_chain() {
             (eq (get-text-property 1 'part) 'first)
             (get-text-property 5 'part)
             (eq (get-text-property 5 'part) 'second))))) "#,
+        expect_test::expect![[r#""oriINSERTEDginalERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -71,7 +73,7 @@ fn divergence_buflocal_marker_undo_chain() {
 fn divergence_keymap_closure_advice_interact() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-kca-result-xxx nil)
   (let ((counter 0))
@@ -92,6 +94,7 @@ fn divergence_keymap_closure_advice_interact() {
             test-kca-result-xxx
             (eq test-kca-result-xxx 'before-called)
             (where-is-internal 'test-kcaf-xxx map))))) "#,
+        expect_test::expect![[r#""OK (t 1 1 nil 2 2 nil ([f5]))""#]],
     );
 }
 
@@ -99,7 +102,7 @@ fn divergence_keymap_closure_advice_interact() {
 fn divergence_buflocal_overlay_textprop_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-local-variable 'test-boat-state-xxx)
   (setq test-boat-state-xxx 'ready)
@@ -126,6 +129,7 @@ fn divergence_buflocal_overlay_textprop_advice() {
               (get-text-property 8 'type)
               (eq (get-text-property 8 'type) 'value)
               (buffer-string))))))) "#,
+        expect_test::expect![[r#""STATUS-HEREERR (invalid-read-syntax \")\" 26 35)""#]],
     );
 }
 
@@ -133,7 +137,7 @@ fn divergence_buflocal_overlay_textprop_advice() {
 fn divergence_closure_overwrite_with_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((val 'alpha))
     (defun test-cowf-xxx () val)
@@ -151,6 +155,9 @@ fn divergence_closure_overwrite_with_advice() {
             (eq r1 'alpha)
             (eq r2 'beta)
             (eq (test-cowf-xxx) 'beta))))) "#,
+        expect_test::expect![[
+            r#""ERR (wrong-number-of-arguments (closure ((val . alpha)) nil val) 1)""#
+        ]],
     );
 }
 
@@ -158,7 +165,7 @@ fn divergence_closure_overwrite_with_advice() {
 fn divergence_buflocal_regex_match_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-local-variable 'test-brmo-pattern-xxx)
   (setq test-brmo-pattern-xxx "KEY[0-9]+")
@@ -184,6 +191,9 @@ fn divergence_buflocal_regex_match_overlay() {
             (eq (overlay-get ov 'zone) 'search)
             (= (overlay-start ov) 1)
             (= (overlay-end ov) 24))))) "#,
+        expect_test::expect![[
+            r#""abc KEY123 def KEY456 ghiOK (((5 11 \"KEY123\" nil) (16 22 \"KEY456\" nil)) t t t nil nil search t t t)""#
+        ]],
     );
 }
 
@@ -191,7 +201,7 @@ fn divergence_buflocal_regex_match_overlay() {
 fn divergence_undo_buflocal_marker_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-local-variable 'test-ubmc-data-xxx)
   (setq test-ubmc-data-xxx "PREFIX-MIDDLE-SUFFIX")
@@ -231,6 +241,7 @@ fn divergence_undo_buflocal_marker_complex() {
               (eq (get-text-property 7 'section) 'mid)
               (overlay-get ov 'region)
               (eq (overlay-get ov 'region) 'middle))))))) "#,
+        expect_test::expect![[r#""ZZ-MIDDERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -238,7 +249,7 @@ fn divergence_undo_buflocal_marker_complex() {
 fn divergence_advice_let_binding_scope() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-albs-xxx 'global)
   (defun test-albsf-xxx () test-albs-xxx)
@@ -254,6 +265,9 @@ fn divergence_advice_let_binding_scope() {
               (test-albsf-xxx)
               (equal r1 '(around global local-override))
               (equal r2 '(around outer-let local-override))))))) "#,
+        expect_test::expect![[
+            r#""OK ((around local-override local-override) (around local-override local-override) nil (around local-override local-override) nil nil)""#
+        ]],
     );
 }
 
@@ -261,7 +275,7 @@ fn divergence_advice_let_binding_scope() {
 fn divergence_keymap_inheritance_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-kia-result-xxx nil)
   (defun test-kiaf-xxx () (setq test-kia-result-xxx 'parent-called))
@@ -282,6 +296,7 @@ fn divergence_keymap_inheritance_advice() {
             (null b4)
             (command-remapping 'test-kiaf-xxx)
             test-kia-result-xxx)))) "#,
+        expect_test::expect![[r#""OK (t t t t nil nil)""#]],
     );
 }
 
@@ -289,7 +304,7 @@ fn divergence_keymap_inheritance_advice() {
 fn divergence_buflocal_kill_buffer_preserve() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (generate-new-buffer " test-bkbp1-xxx"))
         (buf2 (generate-new-buffer " test-bkbp2-xxx")))
@@ -318,5 +333,6 @@ fn divergence_buflocal_kill_buffer_preserve() {
                   (get-text-property 1 'src))
                 'buf2)
             (buffer-local-value 'test-bkbp-xxx buf2)))))) "#,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 28 57)""#]],
     );
 }

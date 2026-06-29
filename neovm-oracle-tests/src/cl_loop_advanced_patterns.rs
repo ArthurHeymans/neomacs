@@ -457,5 +457,10 @@ fn oracle_prop_cl_loop_adv_deep_destructuring() {
              for rank from 1
              when (>= score 90)
              collect (format "#%d %s (%d)" rank name score))))"##;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r##""OK (300 (3 7 20 300) ((1 2 3 6) (4 5 6 15) (7 8 9 24)) ((a c) (d f) (g i)) (\"#1 Alice (95)\" \"#3 Carol (92)\"))""##
+        ]],
+    );
 }

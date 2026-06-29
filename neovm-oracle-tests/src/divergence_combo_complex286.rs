@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx286_cl_typep_satisfies_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep 4 '(satisfies evenp))
       (cl-typep 5 '(satisfies evenp))
@@ -16,13 +16,14 @@ fn div_cx286_cl_typep_satisfies_predicates() {
       (cl-typep "abc" '(satisfies stringp))
       (cl-typep 42 '(satisfies stringp)))
 "##,
+        expect_test::expect![[r#""OK (t nil t t nil)""#]],
     )
 }
 
 #[test]
 fn div_cx286_cl_typep_member_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep 'a '(member a b c))
       (cl-typep 'd '(member a b c))
@@ -30,13 +31,14 @@ fn div_cx286_cl_typep_member_type() {
       (cl-typep 100 '(member 1 2 42 99))
       (cl-typep :kw '(member :a :b :kw)))
 "##,
+        expect_test::expect![[r#""OK (t nil t nil t)""#]],
     )
 }
 
 #[test]
 fn div_cx286_cl_typep_integer_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep 5 '(integer 0 10))
       (cl-typep 11 '(integer 0 10))
@@ -45,13 +47,14 @@ fn div_cx286_cl_typep_integer_range() {
       (cl-typep -1 '(integer 0))
       (cl-typep (expt 2 128) '(integer 0)))
 "##,
+        expect_test::expect![[r#""OK (t nil t t nil t)""#]],
     )
 }
 
 #[test]
 fn div_cx286_cl_typep_or_and_not() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep "x" '(or string integer))
       (cl-typep 42 '(or string integer))
@@ -61,13 +64,14 @@ fn div_cx286_cl_typep_or_and_not() {
       (cl-typep "x" '(not integer))
       (cl-typep 42 '(not integer)))
 "##,
+        expect_test::expect![[r#""OK (t t nil nil t t nil)""#]],
     )
 }
 
 #[test]
 fn div_cx286_cl_typep_cons_and_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (cl-typep '(1 . 2) '(cons integer integer))
@@ -77,13 +81,14 @@ fn div_cx286_cl_typep_cons_and_vector() {
           (cl-typep (vector 1 2) '(vector integer integer)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     )
 }
 
 #[test]
 fn div_cx286_cl_typep_float_and_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep 3.14 'float)
       (cl-typep 42 'float)
@@ -94,13 +99,14 @@ fn div_cx286_cl_typep_float_and_number() {
       (cl-typep (expt 2 128) 'integer)
       (cl-typep (expt 2 128) 'bignums))
 "##,
+        expect_test::expect![[r#""ERR (void-variable 1/3)""#]],
     )
 }
 
 #[test]
 fn div_cx286_cl_typep_with_eieio_classes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -116,13 +122,14 @@ fn div_cx286_cl_typep_with_eieio_classes() {
               (cl-typep d 'standard-object))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     )
 }
 
 #[test]
 fn div_cx286_cl_typep_array_and_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep [1 2 3] 'array)
       (cl-typep "abc" 'array)
@@ -132,13 +139,14 @@ fn div_cx286_cl_typep_array_and_sequence() {
       (cl-typep '(1 2 3) 'sequence)
       (cl-typep 42 'sequence))
 "##,
+        expect_test::expect![[r#""OK (t t nil t t t nil)""#]],
     )
 }
 
 #[test]
 fn div_cx286_cl_check_type_with_message() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (cl-check-type 42 integer) (error :no-error))
       (condition-case e (cl-check-type "x" integer) (error (car e)))
@@ -146,13 +154,14 @@ fn div_cx286_cl_check_type_with_message() {
       (condition-case e (cl-check-type 11 (integer 0 10)) (error (car e)))
       (condition-case e (cl-check-type "x" string) (error :no-error)))
 "##,
+        expect_test::expect![[r#""OK (nil wrong-type-argument nil wrong-type-argument nil)""#]],
     )
 }
 
 #[test]
 fn div_cx286_cl_typep_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '("str" 42 (1 . 2) [1 2 3] nil sym 3.14 1/3)))
   (with-temp-buffer
@@ -176,5 +185,6 @@ fn div_cx286_cl_typep_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

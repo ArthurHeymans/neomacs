@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx57_diff_mode_parse_hunks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -21,13 +21,14 @@ fn div_cx57_diff_mode_parse_hunks() {
             (next-single-property-change (point-min) 'face)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t diff-header nil 5)""#]],
     );
 }
 
 #[test]
 fn div_cx57_smerge_mode_parse_conflict() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -37,13 +38,14 @@ fn div_cx57_smerge_mode_parse_conflict() {
             (condition-case e2 (smerge-get-current) (error :no-conflict))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil :no-conflict)""#]],
     );
 }
 
 #[test]
 fn div_cx57_electric_quote_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -52,13 +54,14 @@ fn div_cx57_electric_quote_mode() {
       (buffer-string))
   (error (list :errored)))
 "##,
+        expect_test::expect![[r#""OK \"It's a 'test' string\"""#]],
     );
 }
 
 #[test]
 fn div_cx57_org_table_formula() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'org)
@@ -70,13 +73,14 @@ fn div_cx57_org_table_formula() {
         (buffer-string)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"| 1 | 2 |\n| 3 | 4 |\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx57_project_current() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'project)
@@ -85,13 +89,14 @@ fn div_cx57_project_current() {
             (fboundp 'project-prompt-project-dir)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx57_xref_backend_api() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'xref)
@@ -100,13 +105,14 @@ fn div_cx57_xref_backend_api() {
             (fboundp 'xref-backend-functions)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx57_saveplace_save_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'saveplace)
@@ -114,13 +120,14 @@ fn div_cx57_saveplace_save_restore() {
             (fboundp 'save-place-to-alist)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx57_savehist_save_minibuffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     );
@@ -137,13 +144,14 @@ fn div_cx57_recentf_basic() {
             (boundp 'recentf-max-saved-items)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments condition-case 1)""#]],
     );
 }
 
 #[test]
 fn div_cx57_desktop_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'desktop)
@@ -152,13 +160,14 @@ fn div_cx57_desktop_basic() {
             (fboundp 'desktop-read)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx57_enriched_text_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'enriched)
@@ -168,36 +177,39 @@ fn div_cx57_enriched_text_mode() {
         (list (buffer-string) (text-properties-at 0) (text-properties-at 14))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (errored . args-out-of-range)""#]],
     );
 }
 
 #[test]
 fn div_cx57_treesit_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'treesit-parser-create)
       (fboundp 'treesit-node-type)
       (featurep 'treesit))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx57_eglot_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'eglot)
       (boundp 'eglot-mode))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx57_org_src_block_execute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"
 (condition-case e
     (progn (require 'org)
@@ -213,7 +225,7 @@ fn div_cx57_org_src_block_execute() {
 #[test]
 fn div_cx57_org_export_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'org)
@@ -228,13 +240,16 @@ fn div_cx57_org_export_ascii() {
             :no-output))))
   (error (list :errored)))
 "##,
+        expect_test::expect![[
+            r#""OK \"Table of Contents\n_________________\n\n1. Heading\n.. 1. Sub\n\n\n1 Heading\n=========\n\n1.1 Sub\n~~~~~~~\n\n  Text here\n\"""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx57_glasses_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -245,13 +260,14 @@ fn div_cx57_glasses_mode() {
       (point))
   (error (list :errored)))
 "##,
+        expect_test::expect![[r#""OK 18""#]],
     );
 }
 
 #[test]
 fn div_cx57_so_long_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'so-long)
@@ -261,13 +277,14 @@ fn div_cx57_so_long_mode() {
       :completed)
   (error (list :errored)))
 "##,
+        expect_test::expect![[r#""OK :completed""#]],
     );
 }
 
 #[test]
 fn div_cx57_longlines_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -276,6 +293,7 @@ fn div_cx57_longlines_mode() {
       (buffer-string))
   (error (list :not-available)))
 "##,
+        expect_test::expect![[r#""OK (:not-available)""#]],
     );
 }
 
@@ -283,7 +301,7 @@ fn div_cx57_longlines_mode() {
 fn div_cx57_subword_superword_kill_undo_marker_overlay_narrow_display_textprop_evaporate_env_exitcode_coding_timer_weak_hash_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (timer-fired)
   (run-with-timer 0 nil (lambda () (setq timer-fired :t)))
@@ -321,5 +339,6 @@ fn div_cx57_subword_superword_kill_undo_marker_overlay_narrow_display_textprop_e
                       (hash-table-count weak-ht)))))
         (error (list env-val exit-code timer-fired :errored)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

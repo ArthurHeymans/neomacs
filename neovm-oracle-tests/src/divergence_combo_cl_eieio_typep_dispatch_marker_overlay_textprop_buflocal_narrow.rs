@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_typep_hierarchy_dispatch_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tp-base ()
     ((val :initarg :val :accessor tv :initform 0)
@@ -90,6 +90,7 @@ fn combo_eieio_typep_hierarchy_dispatch_edit() {
               (overlay-start ov2) (overlay-end ov2)
               my-tp-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -97,7 +98,7 @@ fn combo_eieio_typep_hierarchy_dispatch_edit() {
 fn combo_eieio_typep_dispatch_method_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass shape ()
     ((name :initarg :name :accessor sh-name :initform "")
@@ -182,6 +183,7 @@ fn combo_eieio_typep_dispatch_method_edit() {
               (overlay-start ov) (overlay-end ov)
               my-sh-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -189,7 +191,7 @@ fn combo_eieio_typep_dispatch_method_edit() {
 fn combo_eieio_typep_change_class_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass animal ()
     ((name :initarg :name :accessor an-name :initform "")
@@ -264,6 +266,7 @@ fn combo_eieio_typep_change_class_edit() {
               (overlay-start ov) (overlay-end ov)
               my-an-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -271,7 +274,7 @@ fn combo_eieio_typep_change_class_edit() {
 fn combo_eieio_typep_overlay_marker_lifecycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass node ()
     ((id :initarg :id :accessor nd-id :initform 0)
@@ -348,6 +351,7 @@ fn combo_eieio_typep_overlay_marker_lifecycle() {
               (marker-position m)
               my-nd-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -355,7 +359,7 @@ fn combo_eieio_typep_overlay_marker_lifecycle() {
 fn combo_eieio_typep_predicate_with_slots_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass scored-item ()
     ((label :initarg :label :accessor si-label :initform "")
@@ -462,5 +466,6 @@ fn combo_eieio_typep_predicate_with_slots_undo() {
               (overlay-start ov) (overlay-end ov)
               my-si-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }

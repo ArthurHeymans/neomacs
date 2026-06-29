@@ -28,7 +28,10 @@ fn oracle_make_composed_keymap_lookup_order_and_nil_bindings() {
      (lookup-key empty-maps [?a])
      (lookup-key empty-maps [?c])
      (keymapp composed))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (map2-a map1-b nil nil parent-a parent-c t)""#]],
+    );
 }
 
 #[test]
@@ -47,5 +50,8 @@ fn oracle_make_composed_keymap_single_map_and_parent_shape() {
      (keymapp (cadr composed))
      (eq (caddr composed) 'keymap)
      (equal (cdddr composed) (cdr parent))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 14 46)""#]],
+    );
 }

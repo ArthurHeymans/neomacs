@@ -41,7 +41,10 @@ fn oracle_run_hook_wrapped_function_value_and_stop_result() {
       (nreverse log)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil (nil nil))""#]],
+    );
 }
 
 #[test]
@@ -75,5 +78,10 @@ fn oracle_run_hook_wrapped_local_t_splices_global_and_ignores_global_t() {
       (makunbound 'neovm--rhw-hook))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil ((local 7) (global-a 7) (global-b 7) (after-global 7)))""#
+        ]],
+    );
 }

@@ -30,7 +30,10 @@ fn oracle_prop_let_star2_deep_dependency_chain() {
                           (= d (- (* c b) a))
                           (= e (/ (+ d c) (- b a)))
                           (= f (mod d (+ a b)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 6 8 46 13 6 81 20 t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +65,12 @@ fn oracle_prop_let_star2_destructure_nested_alists() {
                     (list name street city zip
                           top-score avg-score passing
                           (format "%s, %s %d" street city zip)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Alice\" \"123 Main\" \"Springfield\" 62701 100 90.4 4 \"123 Main, Springfield 62701\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +106,12 @@ fn oracle_prop_let_star2_shadow_restore() {
                        (list (= after-x 100)
                              (= after-y 200)
                              (= after-z 300)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((before 100 200) (inner (200 400 200)) (after 100 200 300) (t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +139,10 @@ fn oracle_prop_let_star2_computed_bindings() {
                                                    (lambda (x) (+ x 1))))
                          (composed-results (mapcar inc-then-double nums)))
                     (list pair doubled total composed-results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((hello . world) (2 4 6 8 10) 30 (4 6 8 10 12))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +186,12 @@ fn oracle_prop_let_star2_accumulator_pipeline() {
                           (mapcar #'car top3)
                           formatted
                           above-mean))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (6 4 (\"Alice\" \"Eve\" \"Carol\") (\"Alice: 95\" \"Eve: 91\" \"Carol: 88\") 3)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -206,7 +227,12 @@ fn oracle_prop_let_star2_side_effects_in_bindings() {
                             pos1 pos2 pos3
                             total-len
                             line-count)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello\" \"Hello World\" \"Hello, Beautiful World\" \">>> Hello, Beautiful World\" 6 12 17 26 1)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +264,10 @@ fn oracle_prop_let_star2_nested_cross_scope_closures() {
                             (funcall combine)
                             ;; Verify add-x still works
                             (funcall add-x 100))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (10 15 150 (20 300) (5.0 75.0) 175 110)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -282,5 +311,8 @@ fn oracle_prop_let_star2_condition_case_in_bindings() {
                     (list r1 r2 r3
                           n1 n2 total
                           nested-result))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 (div-by-zero 10) 9 42 0 45 250)""#]],
+    );
 }

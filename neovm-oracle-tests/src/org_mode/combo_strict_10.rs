@@ -11,7 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn strict_collect_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -26,13 +26,14 @@ fn strict_collect_keywords() {
        (list :filetags (org-collect-keywords '("FILETAGS")))
        ;; collect non-existent
        (list :bogus (org-collect-keywords '("BOGUS"))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 14 59)""#]],
     );
 }
 
 #[test]
 fn strict_tag_string_to_alist_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (list
@@ -48,13 +49,14 @@ fn strict_tag_string_to_alist_roundtrip() {
    ;; tags sort
    (let ((tags '("c" "a" "b")))
      (list :sorted (sort (copy-sequence tags) #'string-lessp))))))"##,
+        expect_test::expect![[r#""ERR (user-error \"Invalid tag token: :startgroup\")""#]],
     );
 }
 
 #[test]
 fn strict_priority_to_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (list
@@ -71,13 +73,14 @@ fn strict_priority_to_value() {
      (list :default-priority (when (boundp 'org-default-priority) org-default-priority)
            :highest (when (boundp 'org-highest-priority) org-highest-priority)
            :lowest (when (boundp 'org-lowest-priority) org-lowest-priority))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp 65)""#]],
     );
 }
 
 #[test]
 fn strict_set_regexps_and_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -97,13 +100,14 @@ fn strict_set_regexps_and_options() {
                   :not-done-keywords (when (boundp 'org-not-done-keywords) org-not-done-keywords)
                   :num-flag (when (boundp 'org-export-with-section-numbers) org-export-with-section-numbers)))
         (error (list :error "org-set-regexps-and-options failed")))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 71)""#]],
     );
 }
 
 #[test]
 fn strict_insert_heading_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -140,13 +144,14 @@ fn strict_insert_heading_variants() {
         ;; headline count
         (push (list :total-headlines (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 36 25)""#]],
     );
 }
 
 #[test]
 fn strict_emphasize_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -178,13 +183,14 @@ fn strict_emphasize_region() {
           (push (list :bold-count bolds) r)
           (push (list :italic-count italics) r))
         (nreverse r))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 25)""#]],
     );
 }
 
 #[test]
 fn strict_today_current_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (list
@@ -205,13 +211,14 @@ fn strict_today_current_time() {
           (ft (org-2ft ts)))
      (list :org-2ft-numberp (numberp ft)
            :org-2ft-positive (> ft 0))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 20 42)""#]],
     );
 }
 
 #[test]
 fn strict_file_contents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((tmp-file (make-temp-file "org-test-" nil ".txt")))
@@ -223,13 +230,14 @@ fn strict_file_contents() {
          (let ((contents (org-file-contents tmp-file)))
            (list (length (split-string contents "\n"))))
        (error "error")))))"##,
+        expect_test::expect![[r#""OK ((4))""#]],
     );
 }
 
 #[test]
 fn strict_log_state_settings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-mode-hook nil))
@@ -246,13 +254,14 @@ fn strict_log_state_settings() {
                   :extract (org-extract-log-state-settings
                             (org-entry-get nil "LOGGING"))))
         (error (list :error t)))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 16 36)""#]],
     );
 }
 
 #[test]
 fn strict_latex_packages() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (list
@@ -271,5 +280,6 @@ fn strict_latex_packages() {
           (let ((header (org-format-latex-header "" "" "")))
             (list :header-nonempty (> (length header) 0))))
          (t :not-available)))))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
     );
 }

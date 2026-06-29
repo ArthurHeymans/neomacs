@@ -58,7 +58,12 @@ fn oracle_prop_railroad_terminal_nonterminal() {
            (funcall 'neovm--rr-node-width '(terminal "abcdef"))))
     (fmakunbound 'neovm--rr-render-node)
     (fmakunbound 'neovm--rr-node-width)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"--[ if ]-->\" \"--[ + ]-->\" \"--[ 123 ]-->\" \"--< expr >-->\" \"--< statement >-->\" \"------>\" 10 13 t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +116,12 @@ fn oracle_prop_railroad_sequence() {
         (funcall 'neovm--rrs-render-sequence nil))
     (fmakunbound 'neovm--rrs-render-node)
     (fmakunbound 'neovm--rrs-render-sequence)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"--[ if ]--< expr >-->\" \"--[ while ]--[ ( ]--< cond >-->\" \"--[ return ]-->\" \"--[ for ]--[ ( ]--< init >--[ ; ]--< cond >--[ ; ]--< step >--[ ) ]-->\" \"---->\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +187,12 @@ fn oracle_prop_railroad_choice() {
     (fmakunbound 'neovm--rrc-render-node)
     (fmakunbound 'neovm--rrc-pad-to)
     (fmakunbound 'neovm--rrc-render-choice)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"--+-[ + ]-+-->\" \"  +-[ - ]-+\") (\"--+-[ int ]   -+-->\" \"  +-[ float ] -+\" \"  +-[ string ]-+\") (\"--+-[ null ]-+-->\" \"  +-< expr >-+\") (\"--+-[ only ]-+-->\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +263,12 @@ fn oracle_prop_railroad_optional_repetition() {
     (fmakunbound 'neovm--rro-render-optional)
     (fmakunbound 'neovm--rro-render-one-or-more)
     (fmakunbound 'neovm--rro-render-zero-or-more)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"--+-< expr >-+-->\" \"  +----     -+\") (\"--+-[ else ]-+-->\" \"  +----     -+\") (\"---[ digit ]-+-->\" \"  +-----------+\" \"    (loop)   \") (\"--+-< stmt >-+-+-->\" \"  |           | \" \"  +-----     -+-+\" \"     (loop)  \") (\"---[ a ]-+-->\" \"  +-------+\" \"    (loop)\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -347,7 +367,12 @@ fn oracle_prop_railroad_full_ascii_art() {
         (funcall 'neovm--rrf-render
                  '(choice (terminal "true") (terminal "false") (nonterminal "expr"))))
     (fmakunbound 'neovm--rrf-render)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"--[ if ][ ( ]< expr >[ ) ]-->\") (\"--+-[ + ]-+-->\" \"  +-[ - ]-+\" \"  +-[ * ]-+\") (\"--+-[ else ]-+-->\" \"  +----------+\") (\"--[ if ][ ( ]< expr >[ ) ]< stmt >-->\") (\"--+-[ true ] -+-->\" \"  +-[ false ]-+\" \"  +-< expr > -+\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -448,7 +473,12 @@ fn oracle_prop_railroad_arithmetic_grammar() {
     (fmakunbound 'neovm--rrg-define-grammar)
     (fmakunbound 'neovm--rrg-render-rule)
     (fmakunbound 'neovm--rrg-stats)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 10 7 3) ((\"  expr:\" \"  --< term >--[ + ]--[ - ]-->\") (\"  term:\" \"  --< factor >--[ * ]--[ / ]-->\") (\"  factor:\" \"  --[ NUMBER ]--[ ( ]--< expr >--[ ) ]-->\")) ((expr \"Expression: term followed by additive operations\") (term \"Term: factor followed by multiplicative operations\") (factor \"Factor: number or parenthesized expression\")) (expr term factor) ((expr (\"term\")) (term (\"factor\")) (factor (\"expr\"))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -517,5 +547,10 @@ fn oracle_prop_railroad_width_and_centering() {
     (fmakunbound 'neovm--rrw-render)
     (fmakunbound 'neovm--rrw-center)
     (fmakunbound 'neovm--rrw-box)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"    ab    \" \"  x  \" \"hello\" \"toolong\" (\"-----------------\" \"|     [ x ]     |\" \"| [ long_name ] |\" \"|   < expr >    |\" \"-----------------\") (\"---------\" \"| [ a ] |\" \"| [ b ] |\" \"| [ c ] |\" \"---------\") (\"---------------\" \"| < program > |\" \"---------------\") (6 9 14 5))""#
+        ]],
+    );
 }

@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx36_occur_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -18,13 +18,14 @@ fn div_cx36_occur_basic() {
           (kill-buffer buf))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK 3""#]],
     );
 }
 
 #[test]
 fn div_cx36_package_version_split_join() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'package)
@@ -33,13 +34,14 @@ fn div_cx36_package_version_split_join() {
             (package-version-join (package-version-split "2.0.5"))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (errored . void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx36_subword_movement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -52,13 +54,14 @@ fn div_cx36_subword_movement() {
         (list p1 (point))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (6 10)""#]],
     );
 }
 
 #[test]
 fn div_cx36_page_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((page-delimiter "\f"))
   (with-temp-buffer
@@ -68,13 +71,14 @@ fn div_cx36_page_navigation() {
           (forward-page 1)
           (buffer-substring (point) (point-max)))))
 "##,
+        expect_test::expect![[r#""OK (nil nil \"page3\n\")""#]],
     );
 }
 
 #[test]
 fn div_cx36_thingatpt_list_sexp_deeper() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -85,13 +89,14 @@ fn div_cx36_thingatpt_list_sexp_deeper() {
         (bounds-of-thing-at-point 'list)
         (bounds-of-thing-at-point 'sexp)))
 "##,
+        expect_test::expect![[r#""OK (\"(a b)\" \"b\" (12 . 17) (15 . 16))""#]],
     );
 }
 
 #[test]
 fn div_cx36_which_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -101,13 +106,14 @@ fn div_cx36_which_function() {
       (which-function))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (errored . void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx36_imenu_index() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -117,13 +123,14 @@ fn div_cx36_imenu_index() {
         (list (consp index) (length index))))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (errored . void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx36_add_log_current_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'add-log)
@@ -134,13 +141,14 @@ fn div_cx36_add_log_current_defun() {
         (add-log-current-defun)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"neo-cx36-fn\"""#]],
     );
 }
 
 #[test]
 fn div_cx36_table_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn (require 'table)
@@ -149,13 +157,16 @@ fn div_cx36_table_insert() {
         (buffer-string)))
   (error (cons 'errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK #(\"+-----+-----+-----+\n|     |     |     |\n+-----+-----+-----+\n|     |     |     |\n+-----+-----+-----+\n\" 21 22 (table-valign nil table-justify nil keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 22 25 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 25 26 (table-valign nil table-justify nil keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 26 27 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 27 32 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 32 33 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 33 38 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 38 39 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 61 66 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 66 67 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 67 72 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 72 73 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 73 78 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 78 79 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx36_char_syntax_in_syntax_table_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((st (make-syntax-table)))
   (modify-syntax-entry ?@ "_" st)
@@ -167,13 +178,14 @@ fn div_cx36_char_syntax_in_syntax_table_override() {
       (forward-word 1)
       (list (point) (char-syntax ?@) (char-syntax ?%)))))
 "##,
+        expect_test::expect![[r#""OK (4 95 46)""#]],
     );
 }
 
 #[test]
 fn div_cx36_overlay_evaporate_undo_text_prop_marker_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -189,13 +201,14 @@ fn div_cx36_overlay_evaporate_undo_text_prop_marker_combo() {
       (list evap (overlayp ov) (overlay-start ov) (overlay-end ov)
             (marker-position m) (text-properties-at 1)))))
 "##,
+        expect_test::expect![[r#""OK ((t 1 nil) t nil nil 1 nil)""#]],
     );
 }
 
 #[test]
 fn div_cx36_coding_system_decode_string_then_re_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((decoded (decode-coding-string (unibyte-string 99 97 102 195 169) 'utf-8)))
   (with-temp-buffer
@@ -204,13 +217,14 @@ fn div_cx36_coding_system_decode_string_then_re_search() {
     (re-search-forward "caf\\(.\\)" nil t)
     (list (match-string 1) (match-end 0))))
 "##,
+        expect_test::expect![[r#""OK (\"é\" 5)""#]],
     );
 }
 
 #[test]
 fn div_cx36_process_output_buffer_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx36-pm*")))
   (with-current-buffer buf
@@ -223,13 +237,16 @@ fn div_cx36_process_output_buffer_with_markers() {
                    (with-current-buffer buf (buffer-string)))
         (kill-buffer buf)))))
 "##,
+        expect_test::expect![[
+            r#""OK (3 \"header\nappended\n\nProcess neo-cx36-pm finished\n\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx36_format_c_concat_then_string_bytes_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s1 (format "%c%c" ?H ?i))
        (s2 (format "%c%c" #x3042 #x4e2d))
@@ -238,13 +255,14 @@ fn div_cx36_format_c_concat_then_string_bytes_chain() {
   (list (length cat) (string-bytes cat) split
         (mapcar #'length split)))
 "##,
+        expect_test::expect![[r#""OK (5 9 (\"Hi\" \"あ中\") (2 2))""#]],
     );
 }
 
 #[test]
 fn div_cx36_set_buffer_multibyte_then_char_syntax_then_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "café世界")
@@ -254,25 +272,27 @@ fn div_cx36_set_buffer_multibyte_then_char_syntax_then_restore() {
       (set-buffer-multibyte t)
       (list cs1 cs2 (char-syntax (aref (buffer-string) 3))))))
 "##,
+        expect_test::expect![[r#""OK (119 119 119)""#]],
     );
 }
 
 #[test]
 fn div_cx36_cl_loop_for_across_vector_with_index() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-loop for x across [10 20 30 40]
          for i from 0
          collect (cons i x))
 "##,
+        expect_test::expect![[r#""OK ((0 . 10) (1 . 20) (2 . 30) (3 . 40))""#]],
     );
 }
 
 #[test]
 fn div_cx36_undo_redo_cycle_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -285,26 +305,28 @@ fn div_cx36_undo_redo_cycle_consistency() {
     (condition-case nil (while t (redo) (push (buffer-string) states)) (error))
     (nreverse states)))
 "##,
+        expect_test::expect![[r#""OK (\"A\" \"AB\" \"ABC\" \"AB\" \"AB\")""#]],
     );
 }
 
 #[test]
 fn div_cx36_coding_system_base_aliases_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (coding-system-base 'utf-8-unix)
       (coding-system-base 'utf-8-dos)
       (coding-system-base 'utf-8-mac)
       (eq (coding-system-base 'utf-8-unix) (coding-system-base 'utf-8-dos)))
 "##,
+        expect_test::expect![[r#""OK (utf-8 utf-8 utf-8 t)""#]],
     );
 }
 
 #[test]
 fn div_cx36_buffer_string_with_text_props_then_prin1_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "café世界")
@@ -317,13 +339,14 @@ fn div_cx36_buffer_string_with_text_props_then_prin1_read() {
           (text-properties-at 3 back)
           (equal sub back))))
 "##,
+        expect_test::expect![[r#""OK ((face bold) (face italic) t)""#]],
     );
 }
 
 #[test]
 fn div_cx36_process_exit_code_exit_zero_vs_nonzero_clean() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (call-process "sh" nil nil nil "-c" "exit 0")
       (call-process "sh" nil nil nil "-c" "exit 5")
@@ -331,13 +354,14 @@ fn div_cx36_process_exit_code_exit_zero_vs_nonzero_clean() {
         (accept-process-output p 2)
         (process-exit-status p)))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx36_window_start_end_stable_after_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx36-ws*")))
   (with-current-buffer buf
@@ -349,5 +373,6 @@ fn div_cx36_window_start_end_stable_after_operations() {
       (set-window-buffer (selected-window) (get-buffer-create "*scratch*"))
       (kill-buffer buf)))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

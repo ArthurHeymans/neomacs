@@ -56,7 +56,12 @@ fn oracle_prop_pattern_observer() {
     (list current-value
           (length watchers)
           (nreverse log))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (-5 2 ((counter change-count 0) (logger 0 -> 10) (counter change-count 2) (logger 10 -> 20) (counter change-count 4) (logger 20 -> -5)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +93,10 @@ fn oracle_prop_pattern_strategy_sort_filter() {
                                 (lambda (a b)
                                   (< (abs (- a 5)) (abs (- b 5)))))))
         (list evens big dist-sorted)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 4 6 8 10) (10 9 8 7 6) (5 4 6 3 7 8 2 1 9 10))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +135,12 @@ fn oracle_prop_pattern_builder_list() {
     (setcdr tail (list (cdr sub-sentinel))))
   ;; Return everything after the sentinel
   (cdr sentinel))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (alpha beta gamma delta epsilon (div3 3) (div3 6) (div3 9) (0 1 4 9))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +185,10 @@ fn oracle_prop_pattern_memoized_fibonacci() {
     (makunbound 'neovm--test-fib-cache)
     (makunbound 'neovm--test-fib-hits)
     (makunbound 'neovm--test-fib-misses)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 1 1 5 55 610 6765) (hits 24 misses 21) 21)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +240,10 @@ fn oracle_prop_pattern_decorator_wrapping() {
         ;; This should hit the cache (no extra log entries for inner call)
         (funcall decorated 3 4)
         (length (nreverse call-log))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (25 169 25 6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +289,12 @@ fn oracle_prop_pattern_pipeline_composition() {
     (setq current (funcall stage current))
     (setq snapshots (cons current snapshots)))
   (nreverse snapshots))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9 10) (1 4 9 16 25 36 49 64 81 100) (25 36 49 64 81 100) (25 61 110 174 255 355) ((0 . 25) (1 . 61) (2 . 110) (3 . 174) (4 . 255) (5 . 355)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +323,7 @@ fn oracle_prop_pattern_topological_sort() {
                    node graph visited result))
         (car result))
     (fmakunbound 'neovm--test-topo-visit)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (a c b d)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -350,7 +374,12 @@ fn oracle_prop_pattern_lazy_filtered_generator() {
                      (lambda (entry) (symbolp (cadr entry)))
                      fb)))
     (funcall take-n filtered 8)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((3 fizz) (5 buzz) (6 fizz) (9 fizz) (10 buzz) (12 fizz) (15 fizzbuzz) (18 fizz))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -385,5 +414,5 @@ fn oracle_prop_pattern_command_with_undo() {
                       (funcall undo)
                       (funcall undo)
                       (list before-undo state undo-stack))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (17 5 (0))""#]]);
 }

@@ -15,7 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_move_to_column_current_column_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-mcc")))
     (with-current-buffer buf
@@ -54,6 +54,7 @@ fn combo_move_to_column_current_column_marker_overlay_undo() {
                                       (get-text-property 11 'grp))))
                   (kill-buffer buf)
                   (list after restored)))))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -61,7 +62,7 @@ fn combo_move_to_column_current_column_marker_overlay_undo() {
 fn combo_indent_to_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-it")))
     (with-current-buffer buf
@@ -97,6 +98,7 @@ fn combo_indent_to_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -104,7 +106,7 @@ fn combo_indent_to_marker_overlay_undo() {
 fn combo_tab_width_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-tw")))
     (with-current-buffer buf
@@ -142,6 +144,7 @@ fn combo_tab_width_marker_overlay_undo() {
                                     (get-text-property 11 'grp))))
                 (kill-buffer buf)
                 (list after restored))))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -149,7 +152,7 @@ fn combo_tab_width_marker_overlay_undo() {
 fn combo_column_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-coln")))
     (with-current-buffer buf
@@ -193,6 +196,7 @@ fn combo_column_narrow_marker_overlay_undo() {
                                     (get-text-property 21 'sect))))
                 (kill-buffer buf)
                 (list after restored)))))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -200,7 +204,7 @@ fn combo_column_narrow_marker_overlay_undo() {
 fn combo_column_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-colbl")))
     (with-current-buffer buf
@@ -242,5 +246,6 @@ fn combo_column_buffer_local_marker_overlay_undo() {
                                     (get-text-property 11 'grp))))
                 (kill-buffer buf)
                 (list after restored)))))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

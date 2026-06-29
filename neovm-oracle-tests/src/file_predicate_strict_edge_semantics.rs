@@ -66,7 +66,12 @@ fn oracle_file_predicates_symlink_and_missing_targets() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t t nil \"plain\" \"subdir\" \"missing\" t t t t nil nil nil nil nil nil nil t (wrong-number-of-arguments (file-exists-p 0)) (wrong-type-argument (stringp 42)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -121,5 +126,10 @@ fn oracle_file_predicates_dispatch_after_default_directory_expansion() {
     (makunbound 'neomacs--oracle-file-predicate-calls)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t ((file-exists-p \"/oracle-predicate-root/child\")) nil t ((file-readable-p \"/oracle-predicate-root/child\")) nil t ((file-writable-p \"/oracle-predicate-root/child\")) nil t ((file-executable-p \"/oracle-predicate-root/child\")) nil t ((file-accessible-directory-p \"/oracle-predicate-root/child/\")) nil t ((file-directory-p \"/oracle-predicate-root/child\")) nil t ((file-regular-p \"/oracle-predicate-root/child\")) nil \"target\" ((file-symlink-p \"/oracle-predicate-root/child\")))""#
+        ]],
+    );
 }

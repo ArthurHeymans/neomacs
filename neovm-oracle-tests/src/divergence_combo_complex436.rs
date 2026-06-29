@@ -10,11 +10,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx436_org_bibtex_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-bibtex)
   (list (fboundp 'org-bibtex-headline)
         (fboundp 'org-bibtex-fleshout)))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-bibtex\")""#
+        ]],
     );
 }
 
@@ -22,10 +25,13 @@ fn div_cx436_org_bibtex_ops() {
 #[test]
 fn div_cx436_org_eshell_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-eshell)
   (list (boundp 'org-eshell-store-link-functions))))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-eshell\")""#
+        ]],
     );
 }
 
@@ -33,11 +39,12 @@ fn div_cx436_org_eshell_ops() {
 #[test]
 fn div_cx436_org_feed_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-feed)
   (list (fboundp 'org-feed-update)
         (fboundp 'org-feed-goto-inbox)))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -45,10 +52,13 @@ fn div_cx436_org_feed_ops() {
 #[test]
 fn div_cx436_org_gnus_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-gnus)
   (list (boundp 'org-gnus-store-link-functions))))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-gnus\")""#
+        ]],
     );
 }
 
@@ -56,11 +66,14 @@ fn div_cx436_org_gnus_ops() {
 #[test]
 fn div_cx436_org_info_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-info)
   (list (fboundp 'org-info-store-link)
         (fboundp 'org-info-open)))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-info\")""#
+        ]],
     );
 }
 
@@ -68,10 +81,13 @@ fn div_cx436_org_info_ops() {
 #[test]
 fn div_cx436_org_irc_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-irc)
   (list (boundp 'org-irc-store-link-functions))))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-irc\")""#
+        ]],
     );
 }
 
@@ -79,11 +95,12 @@ fn div_cx436_org_irc_ops() {
 #[test]
 fn div_cx436_org_mouse_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-mouse)
   (list (boundp 'org-mouse-features)
         (fboundp 'org-mouse-do-remotely)))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -91,11 +108,12 @@ fn div_cx436_org_mouse_ops() {
 #[test]
 fn div_cx436_org_pcomplete_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-pcomplete)
   (list (boundp 'pcomplete-org-setup)
         (fboundp 'org-pcomplete-initialize)))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
@@ -103,11 +121,14 @@ fn div_cx436_org_pcomplete_ops() {
 #[test]
 fn div_cx436_org_sudoku_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-sudoku)
   (list (fboundp 'org-sudoku-create)
         (fboundp 'org-sudoku-solve)))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-sudoku\")""#
+        ]],
     );
 }
 
@@ -115,10 +136,13 @@ fn div_cx436_org_sudoku_ops() {
 #[test]
 fn div_cx436_org_w3m_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-w3m)
   (list (boundp 'org-w3m-store-link-functions))))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-w3m\")""#
+        ]],
     );
 }
 
@@ -126,10 +150,13 @@ fn div_cx436_org_w3m_ops() {
 #[test]
 fn div_cx436_org_wl_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-wl)
   (list (boundp 'org-wl-store-link-functions)))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-wl\")""#
+        ]],
     );
 }
 
@@ -137,11 +164,12 @@ fn div_cx436_org_wl_ops() {
 #[test]
 fn div_cx436_org_protocol_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-protocol)
   (list (fboundp 'org-protocol-check-filename-for-protocol)
         (fboundp 'org-protocol-create)))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
@@ -149,11 +177,14 @@ fn div_cx436_org_protocol_ops() {
 #[test]
 fn div_cx436_org_choose_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-choose)
   (list (fboundp 'org-choose-mark)
         (fboundp 'org-choose-reject)))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-choose\")""#
+        ]],
     );
 }
 
@@ -161,10 +192,13 @@ fn div_cx436_org_choose_ops() {
 #[test]
 fn div_cx436_org_checklist_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-checklist)
   (list (fboundp 'org-checklist)))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-checklist\")""#
+        ]],
     );
 }
 
@@ -172,11 +206,14 @@ fn div_cx436_org_checklist_ops() {
 #[test]
 fn div_cx436_org_collector_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-collector)
   (list (fboundp 'org-collect-todos)
         (boundp 'org-collect-allow-prop)))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-collector\")""#
+        ]],
     );
 }
 
@@ -184,10 +221,13 @@ fn div_cx436_org_collector_ops() {
 #[test]
 fn div_cx436_org_toc_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-toc)
   (list (fboundp 'org-toc-show)
         (fboundp 'org-toc-recenter)))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-toc\")""#
+        ]],
     );
 }

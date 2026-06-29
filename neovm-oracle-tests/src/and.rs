@@ -10,7 +10,10 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_prop_and_short_circuit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(let ((x 0)) (and nil (setq x 1)) x)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((x 0)) (and nil (setq x 1)) x)",
+        expect_test::expect![[r#""OK 0""#]],
+    );
     assert_ok_eq("0", &oracle, &neovm);
 }
 

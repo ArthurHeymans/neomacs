@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_m0_extract_and_string_rectangle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
         (insert "aaaa\nbbbb\ncccc\n")
@@ -21,13 +21,14 @@ fn div_m0_extract_and_string_rectangle() {
         (string-rectangle 2 9 "XY")
         (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK ((\"aa\" \"bb\") \"aXYa\nbXYb\ncccc\n\")""#]],
     );
 }
 
 #[test]
 fn div_m0_delete_and_apply_rectangle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((del (with-temp-buffer
              (insert "aaaa\nbbbb\ncccc\n")
@@ -41,13 +42,14 @@ fn div_m0_delete_and_apply_rectangle() {
         2 9))
     (list del (nreverse log))))
 "##,
+        expect_test::expect![[r#""OK (\"aa\nbb\ncccc\n\" ((1 3) (1 3)))""#]],
     );
 }
 
 #[test]
 fn div_m0_rectangle_corners_and_clear() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
         (insert "abcdefg\nabcdefg\nabcdefg\n")
@@ -58,13 +60,14 @@ fn div_m0_rectangle_corners_and_clear() {
         (copy-rectangle-as-kill 2 8)
         (car-safe kill-ring)))
 "##,
+        expect_test::expect![[r#""OK (\"a   efg\nabcdefg\nabcdefg\n\" nil)""#]],
     );
 }
 
 #[test]
 fn div_m0_sort_subr_numeric() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "3\n1\n2\n5\n4\n")
@@ -75,13 +78,14 @@ fn div_m0_sort_subr_numeric() {
                          (buffer-substring (point) (line-end-position)))))
   (buffer-string))
 "##,
+        expect_test::expect![[r#""OK \"3\n1\n2\n5\n4\n\"""#]],
     );
 }
 
 #[test]
 fn div_m0_button_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (insert "text here")
@@ -93,13 +97,14 @@ fn div_m0_button_creation() {
           (button-get b 'help-args))))
 "##,
         &["button.el"],
+        expect_test::expect![[r#""ERR (error \"Unknown button type ‘help-variable’\")""#]],
     );
 }
 
 #[test]
 fn div_m0_sort_subr_reverse_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "banana\napple\ncherry\n")
@@ -110,5 +115,6 @@ fn div_m0_sort_subr_reverse_key() {
                          (point) (line-end-position))))
   (buffer-string))
 "##,
+        expect_test::expect![[r#""OK \"banana\napple\ncherry\n\"""#]],
     );
 }

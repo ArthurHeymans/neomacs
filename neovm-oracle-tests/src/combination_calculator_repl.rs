@@ -82,7 +82,12 @@ fn oracle_prop_calc_repl_tokenizer() {
         (funcall 'neovm--cr-tokenize "123.456 + 789")
         (funcall 'neovm--cr-tokenize "foo_bar = baz_1 + 42"))
     (fmakunbound 'neovm--cr-tokenize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((num . 2) (op . \"+\") (num . 3) (op . \"*\") (num . 4)) ((id . \"x\") (eq) (num . 10) (semi) (id . \"y\") (eq) (num . 20) (semi) (id . \"x\") (op . \"+\") (id . \"y\")) ((id . \"ans\") (op . \"+\") (num . 5)) ((op . \"(\") (id . \"a\") (op . \"+\") (id . \"b\") (op . \")\") (op . \"*\") (op . \"(\") (id . \"c\") (op . \"-\") (id . \"d\") (op . \")\")) ((id . \"result\") (eq) (num . 2) (op . \"^\") (num . 10)) nil ((num . 123.456) (op . \"+\") (num . 789)) ((id . \"foo_bar\") (eq) (id . \"baz_1\") (op . \"+\") (num . 42)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +300,12 @@ fn oracle_prop_calc_repl_parser_evaluator() {
     (makunbound 'neovm--cr2-env)
     (makunbound 'neovm--cr2-ans)
     (makunbound 'neovm--cr2-history)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((14) (10) (50) (3 4 25) (26) (1024) (14 28) ((\"c\" . 14) (\"b\" . 4) (\"a\" . 3) (\"x\" . 10)) (28 14 1024 26 25 4 3 50 10 14))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -450,7 +460,12 @@ fn oracle_prop_calc_repl_error_handling() {
     (fmakunbound 'neovm--cr3-eval-line)
     (makunbound 'neovm--cr3-toks)
     (makunbound 'neovm--cr3-env)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((result 30) (assigned \"x\" 42) (result 50) (error \"undefined: y\") (error \"division by zero\") (error \"division by zero\") (empty) (result 30) (assigned \"a\" 7) (assigned \"b\" 21) (result 28))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -602,7 +617,12 @@ fn oracle_prop_calc_repl_history_and_ans() {
     (makunbound 'neovm--cr4-env)
     (makunbound 'neovm--cr4-ans)
     (makunbound 'neovm--cr4-hist)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (30 60 65 130 65 100 265 265 265 (265 265 100 65 130 65 60 30) 2)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -754,7 +774,12 @@ fn oracle_prop_calc_repl_multi_statement() {
     (fmakunbound 'neovm--cr5-process)
     (makunbound 'neovm--cr5-toks)
     (makunbound 'neovm--cr5-env)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((result . 42)) ((assign \"a\" . 10) (assign \"b\" . 20) (result . 30)) ((assign \"x\" . 5) (assign \"y\" . 10) (assign \"z\" . 15) (result . 15)) ((assign \"p\" . 3) (error \"undef: unknown\")) ((result . 2) (result . 6) (result . 6)) ((\"p\" . 3) (\"z\" . 15) (\"y\" . 10) (\"x\" . 5) (\"b\" . 20) (\"a\" . 10)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -928,5 +953,10 @@ fn oracle_prop_calc_repl_builtin_functions() {
     (fmakunbound 'neovm--cr6-eval)
     (makunbound 'neovm--cr6-toks)
     (makunbound 'neovm--cr6-env)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (7 42 20 10 15 200 201 7 (error \"unknown function: sqrt\") 15 -8 31)""#
+        ]],
+    );
 }

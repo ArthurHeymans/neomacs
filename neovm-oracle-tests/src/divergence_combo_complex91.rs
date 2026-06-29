@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx91_overlay_invisible_with_priority_and_window_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDEF")
@@ -24,13 +24,14 @@ fn div_cx91_overlay_invisible_with_priority_and_window_filter() {
       (remove-from-invisibility-spec 'hide-mid)
       (list v1 v2 (length v1) (length (buffer-string)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx91_overlay_display_string_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "AAA BBB CCC")
@@ -42,13 +43,14 @@ fn div_cx91_overlay_display_string_property() {
           (get-char-property 7 'display)
           (get-char-property 8 'display))))
 "##,
+        expect_test::expect![[r#""OK (\"AAA BBB CC\" \"[XX]\" \"[XX]\" nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx91_overlay_before_string_and_after_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "middle")
@@ -60,13 +62,14 @@ fn div_cx91_overlay_before_string_and_after_string() {
           (overlay-get ov 'after-string)
           (overlay-start ov) (overlay-end ov))))
 "##,
+        expect_test::expect![[r#""OK (\"middl\" \"[BEFORE]\" \"[AFTER]\" 3 5)""#]],
     );
 }
 
 #[test]
 fn div_cx91_overlay_evaporate_when_emptied() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -80,13 +83,14 @@ fn div_cx91_overlay_evaporate_when_emptied() {
       (let ((alive-after (overlayp ov)))
         (list alive-before start-before end-before alive-after)))))
 "##,
+        expect_test::expect![[r#""OK (t 3 7 t)""#]],
     );
 }
 
 #[test]
 fn div_cx91_overlay_priority_and_face_propagation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -106,13 +110,16 @@ fn div_cx91_overlay_priority_and_face_propagation() {
         (delete-overlay lo)
         (delete-overlay hi)))))
 "##,
+        expect_test::expect![[
+            r#""OK (bold italic italic italic nil (#<overlay in no buffer> #<overlay in no buffer>))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx91_overlay_window_local_only_in_selected() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -124,13 +131,14 @@ fn div_cx91_overlay_window_local_only_in_selected() {
       (list at-1-in-win at-1-default
             (overlay-get ov 'window)))))
 "##,
+        expect_test::expect![[r#""OK (region region #<window 1 on *scratch*>)""#]],
     );
 }
 
 #[test]
 fn div_cx91_overlay_invisible_buffer_substring_sees_through() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "beforehiddenafter")
@@ -144,13 +152,14 @@ fn div_cx91_overlay_invisible_buffer_substring_sees_through() {
       (list visible no-props full
             (length visible) (length full)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 19)""#]],
     );
 }
 
 #[test]
 fn div_cx91_overlay_modification_hooks_invocation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (with-temp-buffer
@@ -163,13 +172,14 @@ fn div_cx91_overlay_modification_hooks_invocation() {
       (insert "X" "Y" "Z")))
   (nreverse calls))
 "##,
+        expect_test::expect![[r#""OK ((:before 4 6 nil) (:after 4 4 2))""#]],
     );
 }
 
 #[test]
 fn div_cx91_overlay_insert_in_hooks_with_insert_in_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -184,13 +194,14 @@ fn div_cx91_overlay_insert_in_hooks_with_insert_in_types() {
     (insert "Y")
     (list (overlay-start ov) (overlay-end ov) (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK (3 7 \"01X234Y56789\")""#]],
     );
 }
 
 #[test]
 fn div_cx91_overlay_move_and_redisplay_preempt() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDEF")
@@ -205,13 +216,14 @@ fn div_cx91_overlay_move_and_redisplay_preempt() {
         (list after-move-start after-move-end zero-width
               (overlay-start ov) (overlay-end ov))))))
 "##,
+        expect_test::expect![[r#""OK (5 10 t 8 8)""#]],
     );
 }
 
 #[test]
 fn div_cx91_overlay_nested_categories_priority_invisible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDEF0123456789")
@@ -228,13 +240,14 @@ fn div_cx91_overlay_nested_categories_priority_invisible() {
       (let ((vis-2 (buffer-substring 1 29)))
         (list at-8-invis at-15-invis vis-1 vis-2)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 29)""#]],
     );
 }
 
 #[test]
 fn div_cx91_overlay_marker_point_undo_narrow_textprop_display_invis_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -269,5 +282,6 @@ fn div_cx91_overlay_marker_point_undo_narrow_textprop_display_invis_mega() {
             (overlayp face-ov) (overlay-start face-ov)
             (text-properties-at 1)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

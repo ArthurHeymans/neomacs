@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_cl_flet_with_buffer_manipulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cfb\")))\n\
          (with-current-buffer buf\n\
@@ -24,6 +24,7 @@ fn deficiency_cl_flet_with_buffer_manipulation() {
          (get-text-property 1 'transformed)\n\
          (length result)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -31,7 +32,7 @@ fn deficiency_cl_flet_with_buffer_manipulation() {
 fn deficiency_cl_labels_recursive_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"clr\")))\n\
          (with-current-buffer buf\n\
@@ -52,6 +53,7 @@ fn deficiency_cl_labels_recursive_buffer_ops() {
          (buffer-string)\n\
          (length result)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -59,7 +61,7 @@ fn deficiency_cl_labels_recursive_buffer_ops() {
 fn deficiency_unwind_protect_buffer_cleanup_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"upb\"))\n\
          (cleanup-log nil))\n\
@@ -83,6 +85,7 @@ fn deficiency_unwind_protect_buffer_cleanup_undo() {
          (with-current-buffer buf (get-text-property 1 'added))\n\
          (with-current-buffer buf (get-text-property 7 'critical))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -90,7 +93,7 @@ fn deficiency_unwind_protect_buffer_cleanup_undo() {
 fn deficiency_cl_macrolet_buffer_transform() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cmb\")))\n\
          (with-current-buffer buf\n\
@@ -112,6 +115,7 @@ fn deficiency_cl_macrolet_buffer_transform() {
          (get-text-property 12 'idx)\n\
          (get-text-property 18 'idx)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (wrong-type-argument symbolp (nth 0 words))""#]],
     );
 }
 
@@ -119,7 +123,7 @@ fn deficiency_cl_macrolet_buffer_transform() {
 fn deficiency_cl_typecase_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((items (list 42 \"hello\" '(1 2 3) [a b c] 'symbol\n\
          (make-hash-table) (make-marker) (make-overlay 1 1))))\n\
@@ -140,6 +144,7 @@ fn deficiency_cl_typecase_with_objects() {
          (let ((ov (car (last items))))\n\
          (when (overlayp ov) (delete-overlay ov))))\n\
          (delete-overlay (make-overlay 1 1)))",
+        expect_test::expect![[r#""ERR (void-variable items)""#]],
     );
 }
 
@@ -147,7 +152,7 @@ fn deficiency_cl_typecase_with_objects() {
 fn deficiency_cl_opt_dynamic_extent_buf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defun process-with-locals (buf data)\n\
          (let ((result nil)\n\
@@ -179,6 +184,7 @@ fn deficiency_cl_opt_dynamic_extent_buf() {
          (with-current-buffer buf (get-text-property 1 'color))\n\
          (with-current-buffer buf (get-text-property 7 'color)))\n\
          (kill-buffer buf)))))",
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -186,7 +192,7 @@ fn deficiency_cl_opt_dynamic_extent_buf() {
 fn deficiency_condition_case_signal_undo_preserve() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"csu\")))\n\
          (with-current-buffer buf\n\
@@ -213,6 +219,7 @@ fn deficiency_condition_case_signal_undo_preserve() {
          (get-text-property 7 'num)\n\
          (get-text-property 7 'deleted)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -220,7 +227,7 @@ fn deficiency_condition_case_signal_undo_preserve() {
 fn deficiency_cl_defun_with_cl_parse_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defun process-text (&key buf (prefix \"\") (suffix \"\") transforms)\n\
          (with-current-buffer buf\n\
@@ -245,6 +252,9 @@ fn deficiency_cl_defun_with_cl_parse_keys() {
          (with-current-buffer buf (get-text-property 8 'body)))))\n\
          (kill-buffer buf)\n\
          r)))",
+        expect_test::expect![[
+            r#""OK (#(\"[START]MIDDLE![END]\" 0 7 (prefix t) 7 14 (body t)) t t)""#
+        ]],
     );
 }
 
@@ -252,7 +262,7 @@ fn deficiency_cl_defun_with_cl_parse_keys() {
 fn deficiency_cl_loop_with_hash_buf_accumulate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"clh\"))\n\
          (tbl (make-hash-table :test 'equal)))\n\
@@ -269,6 +279,7 @@ fn deficiency_cl_loop_with_hash_buf_accumulate() {
          (hash-table-count tbl))))\n\
          (kill-buffer buf)\n\
          result)))",
+        expect_test::expect![[r#""OK (\"\" t t 20)""#]],
     );
 }
 
@@ -276,7 +287,7 @@ fn deficiency_cl_loop_with_hash_buf_accumulate() {
 fn deficiency_nested_unwind_protect_signal_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"nup\"))\n\
          (log nil))\n\
@@ -307,5 +318,6 @@ fn deficiency_nested_unwind_protect_signal_chain() {
          (get-text-property 16 'state))))\n\
          (kill-buffer buf)\n\
          r)))",
+        expect_test::expect![[r#""ERR (error \"inner\")""#]],
     );
 }

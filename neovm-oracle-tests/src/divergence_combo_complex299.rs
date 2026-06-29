@@ -8,19 +8,20 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx299_process_window_size_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'set-process-window-size)
       (fboundp 'window-size)
       (boundp 'process-adaptive-read-buffering))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx299_process_thread_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((p (make-process :name "neo-cx299-thread" :command '("echo" "test"))))
@@ -29,13 +30,14 @@ fn div_cx299_process_thread_query() {
               (process-thread p))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t #<thread 0x5555559c6020>)""#]],
     )
 }
 
 #[test]
 fn div_cx299_network_interface_info_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((ifaces (network-interface-list)))
@@ -45,35 +47,40 @@ fn div_cx299_network_interface_info_query() {
                 (or (null info) (consp info)))))
   (error (list :errored (car e)))))
 "##,
+        expect_test::expect![[
+            r#""ERR (wrong-type-argument stringp (\"Meta\" . [65152 0 0 0 14825 37298 63684 12398 0]))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx299_serial_process_configure_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'make-serial-process)
       (fboundp 'serial-process-configure))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     )
 }
 
 #[test]
 fn div_cx299_process_adaptive_read_buffering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'process-adaptive-read-buffering)
       (boundp 'read-process-output-max))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     )
 }
 
 #[test]
 fn div_cx299_process_environment_override_with_multiple_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((buf (get-buffer-create " *neo-cx299-env*"))
@@ -89,13 +96,14 @@ fn div_cx299_process_environment_override_with_multiple_vars() {
         content))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK \"Process neo-cx299-env finished\"""#]],
     )
 }
 
 #[test]
 fn div_cx299_make_network_process_with_filter_and_sentinel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((filter-data nil)
@@ -112,13 +120,14 @@ fn div_cx299_make_network_process_with_filter_and_sentinel() {
           (delete-process p))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored file-error)""#]],
     )
 }
 
 #[test]
 fn div_cx299_process_output_with_coding_system() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx299-cs*"))
        (p (make-process :name "neo-cx299-cs"
@@ -131,13 +140,14 @@ fn div_cx299_process_output_with_coding_system() {
     (kill-buffer buf)
     (list content (length content))))
 "##,
+        expect_test::expect![[r#""OK (\"世界\nProcess neo-cx299-cs finished\n\" 33)""#]],
     )
 }
 
 #[test]
 fn div_cx299_process_kill_after_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx299-kill"
                         :command '("sh" "-c" "sleep 5"))))
@@ -147,13 +157,14 @@ fn div_cx299_process_kill_after_query() {
         (process-live-p p)
         (process-status p)))
 "##,
+        expect_test::expect![[r#""OK ((run open listen connect stop) nil t nil signal)""#]],
     )
 }
 
 #[test]
 fn div_cx299_process_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx299-mega*")))
   (with-current-buffer buf
@@ -182,5 +193,6 @@ fn div_cx299_process_with_marker_overlay_undo_narrow_mega() {
         (kill-buffer buf)
         (list state (buffer-string)))))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments widen 1)""#]],
     )
 }

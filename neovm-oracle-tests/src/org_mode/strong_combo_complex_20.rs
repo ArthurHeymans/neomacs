@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo20_heading_mods() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H")
@@ -49,6 +49,7 @@ fn combo20_heading_mods() {
                                                 (when (org-element-property :deadline p) "D"))))) r)
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -59,7 +60,7 @@ fn combo20_heading_mods() {
 #[test]
 fn combo20_table_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| a | b |\n| 1 | 2 |\n| 3 | 4 |")
@@ -82,6 +83,7 @@ fn combo20_table_ops() {
     (org-table-delete-column)
     (push (list :after-del-col (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -92,7 +94,7 @@ fn combo20_table_ops() {
 #[test]
 fn combo20_list_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- A\n- B\n- C\n- D")
@@ -127,6 +129,7 @@ fn combo20_list_ops() {
                                                               (org-element-property :contents-begin i)
                                                               (org-element-property :contents-end i))))))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -137,7 +140,7 @@ fn combo20_list_ops() {
 #[test]
 fn combo20_src_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_SRC emacs-lisp\n(+ 1)\n(+ 2)\n(+ 3)\n#+END_SRC")
@@ -155,6 +158,7 @@ fn combo20_src_ops() {
     (org-babel-execute-src-block)
     (push (list :after-exec (buffer-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -165,7 +169,7 @@ fn combo20_src_ops() {
 #[test]
 fn combo20_visibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\n*** H3b\nDeep")
@@ -195,6 +199,7 @@ fn combo20_visibility() {
     (push (list :narrowed (buffer-string)) r)
     (widen)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -205,7 +210,7 @@ fn combo20_visibility() {
 #[test]
 fn combo20_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** B\n*** C\n** D\n* E\n** F\n*** G\n** H")
@@ -228,6 +233,7 @@ fn combo20_navigation() {
                (push (list :next-block (buffer-substring-no-properties (line-beginning-position) (line-end-position))) r))
       (error nil))
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -238,7 +244,7 @@ fn combo20_navigation() {
 #[test]
 fn combo20_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((src "#+TITLE: T\n* TODO [#A] H1 :t1:\nBody *bold* /italic/\n** H2\n- [X] a\n- [ ] b\n| x | y |\n| 1 | 2 |\n#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n* DONE H3\n:PROPERTIES:\n:A: 1\n:END:"))
   (let ((html (org-export-string-as src 'html t))
         (latex (org-export-string-as src 'latex t))
@@ -253,6 +259,9 @@ fn combo20_export() {
           (list :latex-has-table (string-match-p "\\\\begin{tabular}" latex))
           (list :ascii-has-h (string-match-p "H1" ascii))
           (list :ascii-has-bold (string-match-p "bold" ascii)))))"##,
+        expect_test::expect![[
+            r#""OK ((:html-has-title 9) (:html-has-todo 167) (:html-has-bold 703) (:html-has-table 1023) (:latex-has-title nil) (:latex-has-section 0) (:latex-has-bold 86) (:latex-has-table 242) (:ascii-has-h 7) (:ascii-has-bold 92))""#
+        ]],
     );
 }
 
@@ -263,7 +272,7 @@ fn combo20_export() {
 #[test]
 fn combo20_map_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+TITLE: T\n* TODO [#A] H1 :t1:\nSCHEDULED: <2026-01-15>\nBody *bold* /italic/ [[http://a][Link]] $x^2$\n** H2\n- [X] a\n- [ ] b\n| x | y |\n| 1 | 2 |\n#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n* DONE H3\n:PROPERTIES:\n:A: 1\n:END:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:00] =>  1:00")
@@ -280,6 +289,7 @@ fn combo20_map_all() {
     (push (list :tables (length (org-element-map (org-element-parse-buffer) 'table 'identity))) r)
     (push (list :src-blocks (length (org-element-map (org-element-parse-buffer) 'src-block 'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -290,7 +300,7 @@ fn combo20_map_all() {
 #[test]
 fn combo20_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO T\nSCHEDULED: <2026-01-15>\nDEADLINE: <2026-01-20>\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\nCLOCK: [2026-01-11 14:00]--[2026-01-11 15:00] =>  1:00\n:END:\nBody")
@@ -310,6 +320,7 @@ fn combo20_clock() {
     (push (list :dead (org-entry-get nil "DEADLINE")) r)
     (push (list :clock-string (org-clock-get-clock-string)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }
 
@@ -320,7 +331,7 @@ fn combo20_clock() {
 #[test]
 fn combo20_footnotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Para1[fn:1] text[fn:2] more[fn:3] end\n\nPara2[fn:1] ref\n\n[fn:1] First def\n[fn:2] Second def\n[fn:3] Third def")
@@ -335,5 +346,6 @@ fn combo20_footnotes() {
     (push (list :ref-count (length (org-element-map (org-element-parse-buffer) 'footnote-reference 'identity))) r)
     (push (list :def-count (length (org-element-map (org-element-parse-buffer) 'footnote-definition 'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
     );
 }

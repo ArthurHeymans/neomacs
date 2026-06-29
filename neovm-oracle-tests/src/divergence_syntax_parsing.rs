@@ -10,124 +10,133 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_sp_parse_partial_basic_depth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "(a (b) c)")
   (parse-partial-sexp 1 4))
 "##,
+        expect_test::expect![[r#""OK (1 1 2 nil nil nil 0 nil nil (1) nil)""#]],
     );
 }
 
 #[test]
 fn div_sp_parse_partial_into_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "(concat \"abc")
   (parse-partial-sexp 1 12))
 "##,
+        expect_test::expect![[r#""OK (1 1 2 34 nil nil 0 nil 9 (1) nil)""#]],
     );
 }
 
 #[test]
 fn div_sp_parse_partial_into_comment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "; abc comment")
   (parse-partial-sexp 1 8))
 "##,
+        expect_test::expect![[r#""OK (0 nil nil nil t nil 0 nil 1 nil nil)""#]],
     );
 }
 
 #[test]
 fn div_sp_parse_partial_nested_parens() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "(((a)))")
   (parse-partial-sexp 1 5))
 "##,
+        expect_test::expect![[r#""OK (3 3 4 nil nil nil 0 nil nil (1 2 3) nil)""#]],
     );
 }
 
 #[test]
 fn div_sp_parse_partial_escaped_quote_in_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "\"a\\\"b")
   (parse-partial-sexp 1 5))
 "##,
+        expect_test::expect![[r#""OK (0 nil nil 34 nil nil 0 nil 1 nil nil)""#]],
     );
 }
 
 #[test]
 fn div_sp_parse_partial_semicolon_in_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "\"a;b\"")
   (parse-partial-sexp 1 5))
 "##,
+        expect_test::expect![[r#""OK (0 nil nil 34 nil nil 0 nil 1 nil nil)""#]],
     );
 }
 
 #[test]
 fn div_sp_scan_lists_forward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "(a (b) c) x")
   (scan-lists 1 1))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments scan-lists 2)""#]],
     );
 }
 
 #[test]
 fn div_sp_scan_lists_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "x (a (b) c)")
   (scan-lists 12 -1))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments scan-lists 2)""#]],
     );
 }
 
 #[test]
 fn div_sp_scan_sexps_forward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "a b c d")
   (scan-sexps 1 2))
 "##,
+        expect_test::expect![[r#""OK 4""#]],
     );
 }
 
 #[test]
 fn div_sp_forward_sexp_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -136,13 +145,14 @@ fn div_sp_forward_sexp_list() {
   (list (progn (forward-sexp) (point))
         (progn (forward-sexp) (point))))
 "##,
+        expect_test::expect![[r#""OK (6 12)""#]],
     );
 }
 
 #[test]
 fn div_sp_forward_list_up_down() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -152,13 +162,14 @@ fn div_sp_forward_list_up_down() {
         (progn (backward-list) (point))
         (progn (down-list) (point))))
 "##,
+        expect_test::expect![[r#""OK (12 1 2)""#]],
     );
 }
 
 #[test]
 fn div_sp_up_list_from_inner() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -166,6 +177,7 @@ fn div_sp_up_list_from_inner() {
   (goto-char 5)
   (condition-case err (progn (up-list) (point)) (error (car err))))
 "##,
+        expect_test::expect![[r#""OK 9""#]],
     );
 }
 
@@ -178,13 +190,14 @@ fn div_sp_parse_partial_quoted_paren() {
     // last-complete-sexp slot (element 2) stays nil; element 5 (quoted) is t and
     // element 10 holds the escape syntax code (Sescape = 9).
     // GNU: (0 nil nil nil nil t 0 nil nil nil 9)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "\\(a\\)")
   (parse-partial-sexp 1 5))
 "##,
+        expect_test::expect![[r#""OK (0 nil nil nil nil t 0 nil nil nil 9)""#]],
     );
 }
 
@@ -195,13 +208,14 @@ fn div_sp_parse_partial_escaped_paren_mid_list() {
     // outer list stays balanced and closes; element 2 (last complete sexp) is
     // the outer list start 1, element 5 nil, element 10 nil.
     // GNU: (0 nil 1 nil nil nil 0 nil nil nil nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "(a \\( b)")
   (parse-partial-sexp 1 9))
 "##,
+        expect_test::expect![[r#""OK (0 nil 1 nil nil nil 0 nil nil nil nil)""#]],
     );
 }
 
@@ -212,13 +226,14 @@ fn div_sp_parse_partial_char_literal_paren() {
     // "?" is an expression-prefix and "(" still opens a list -> depth 1, with
     // the open paren at 2 recorded in element 1 and the open-paren stack (2).
     // GNU: (1 2 nil nil nil nil 0 nil nil (2) nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "?(")
   (parse-partial-sexp 1 3))
 "##,
+        expect_test::expect![[r#""OK (1 2 nil nil nil nil 0 nil nil (2) nil)""#]],
     );
 }
 
@@ -229,13 +244,14 @@ fn div_sp_parse_partial_escaped_paren_in_string() {
     // closing quote scanned, so element 3 reports the string terminator (34 =
     // ?\") and element 8 the string start (1); the escaped "(" is inert.
     // GNU: (0 nil nil 34 nil nil 0 nil 1 nil nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "\"a\\(b\"")
   (parse-partial-sexp 1 6))
 "##,
+        expect_test::expect![[r#""OK (0 nil nil 34 nil nil 0 nil 1 nil nil)""#]],
     );
 }
 
@@ -246,13 +262,14 @@ fn div_sp_parse_partial_lone_trailing_escape() {
     // trailing escape forces `endquoted', so the symbol is NOT registered as a
     // complete sexp (element 2 nil); element 5 (quoted) is t and element 10 = 9.
     // GNU: (0 nil nil nil nil t 0 nil nil nil 9)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "a\\")
   (parse-partial-sexp 1 3))
 "##,
+        expect_test::expect![[r#""OK (0 nil nil nil nil t 0 nil nil nil 9)""#]],
     );
 }
 
@@ -263,33 +280,35 @@ fn div_sp_parse_partial_escaped_symbol_completes() {
     // symbol char ends the run via `symdone', so element 2 (last complete sexp)
     // is the symbol start 1, with no trailing quote (element 5 nil, 10 nil).
     // GNU: (0 nil 1 nil nil nil 0 nil nil nil nil)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "a\\(b\\)c")
   (parse-partial-sexp 1 8))
 "##,
+        expect_test::expect![[r#""OK (0 nil 1 nil nil nil 0 nil nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_sp_parse_partial_box_quotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "(comment \"text\")")
   (parse-partial-sexp 1 10))
 "##,
+        expect_test::expect![[r#""OK (1 1 2 nil nil nil 0 nil nil (1) nil)""#]],
     );
 }
 
 #[test]
 fn div_sp_parse_partial_oldstate_continue() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -298,19 +317,23 @@ fn div_sp_parse_partial_oldstate_continue() {
          (s2 (parse-partial-sexp 5 9 nil nil s1)))
     (list s1 s2)))
 "##,
+        expect_test::expect![[
+            r#""OK ((1 1 2 34 nil nil 0 nil 4 (1) nil) (1 1 nil nil nil nil 1 nil nil (1) nil))""#
+        ]],
     );
 }
 
 #[test]
 fn div_sp_unbalanced_paren_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "(a (b")
   (condition-case err (scan-lists 1 1) (scan-error (list 'scan-error)) (error (car err))))
 "##,
+        expect_test::expect![[r#""OK wrong-number-of-arguments""#]],
     );
 }
 
@@ -330,7 +353,7 @@ fn div_sp_ignore_comments_forward_sexp_line_comment_stray_paren() {
     // emacs-lisp-mode has parse-sexp-ignore-comments t by default; the stray
     // "(" inside the ";; oops (" comment must not be treated as an open paren,
     // so forward-sexp skips the comment and the "(real sexp)" list -> 22.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -339,6 +362,7 @@ fn div_sp_ignore_comments_forward_sexp_line_comment_stray_paren() {
   (forward-sexp)
   (point))
 "##,
+        expect_test::expect![[r#""OK 22""#]],
     );
 }
 
@@ -348,7 +372,7 @@ fn div_sp_ignore_comments_forward_sexp_c_block_comment_parens() {
     // The C block comment "/* ) ( */" holds an unbalanced close+open; with
     // parse-sexp-ignore-comments t forward-sexp skips the comment body and the
     // whole list "(a /* ) ( */ b)" -> 16.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (c-mode)
@@ -358,6 +382,7 @@ fn div_sp_ignore_comments_forward_sexp_c_block_comment_parens() {
   (forward-sexp)
   (point))
 "##,
+        expect_test::expect![[r#""OK 16""#]],
     );
 }
 
@@ -366,7 +391,7 @@ fn div_sp_ignore_comments_backward_sexp_line_comment_stray_paren() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // backward-sexp 2 from end skips "(bar)" then the "; c (" comment with its
     // stray "(" and lands at the start of "(foo)" -> 1.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -375,6 +400,7 @@ fn div_sp_ignore_comments_backward_sexp_line_comment_stray_paren() {
   (backward-sexp 2)
   (point))
 "##,
+        expect_test::expect![[r#""OK 1""#]],
     );
 }
 
@@ -384,7 +410,7 @@ fn div_sp_ignore_comments_backward_sexp_nested_c_block_comment() {
     // c-mode treats /* */ as nestable here; backward-sexp from end skips the
     // "(b)" then must skip the whole nested "/* outer /* inner */ */" comment,
     // landing at the start of "(b)" line -> 29.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (c-mode)
@@ -394,6 +420,7 @@ fn div_sp_ignore_comments_backward_sexp_nested_c_block_comment() {
   (backward-sexp)
   (point))
 "##,
+        expect_test::expect![[r#""OK 29""#]],
     );
 }
 
@@ -403,13 +430,14 @@ fn div_sp_ignore_comments_scan_sexps_unbalanced_paren_in_comment() {
     // The #118 case: the unmatched "(" lives inside the ";  unmatched (" line
     // comment, so scan-sexps over the "(a ... b)" list finds the real closing
     // paren and returns 21 instead of signaling.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "(a ; unmatched (\n b)")
   (scan-sexps 1 1))
 "##,
+        expect_test::expect![[r#""OK 21""#]],
     );
 }
 
@@ -418,7 +446,7 @@ fn div_sp_ignore_comments_forward_sexp_two_block_comments_in_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Two separate block comments inside a single list; forward-sexp must skip
     // both and the whole list "(a /* c */ b /* d */ e)" -> 24.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (c-mode)
@@ -428,6 +456,7 @@ fn div_sp_ignore_comments_forward_sexp_two_block_comments_in_list() {
   (forward-sexp)
   (point))
 "##,
+        expect_test::expect![[r#""OK 24""#]],
     );
 }
 
@@ -436,7 +465,7 @@ fn div_sp_ignore_comments_scan_lists_backward_over_comment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // scan-lists backward over a comment containing a stray close paren must
     // skip the comment body and land before "(b)" -> 13.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (c-mode)
@@ -444,6 +473,7 @@ fn div_sp_ignore_comments_scan_lists_backward_over_comment() {
   (insert "(a) /* ) */ (b)")
   (scan-lists (point-max) -1 0))
 "##,
+        expect_test::expect![[r#""OK 13""#]],
     );
 }
 
@@ -452,7 +482,7 @@ fn div_sp_ignore_comments_eof_unterminated_c_block_signals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // An unterminated C block comment runs to EOF; GNU signals scan-error
     // because the enclosing list never closes.  Lock the signal class.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (c-mode)
@@ -464,6 +494,7 @@ fn div_sp_ignore_comments_eof_unterminated_c_block_signals() {
     (scan-error (list 'scan-error))
     (error (car err))))
 "##,
+        expect_test::expect![[r#""OK (scan-error)""#]],
     );
 }
 
@@ -472,7 +503,7 @@ fn div_sp_ignore_comments_eof_unterminated_line_signals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // An unterminated line comment swallows the rest of the buffer; the
     // enclosing list "(a ; ..." never closes -> scan-error.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -483,6 +514,7 @@ fn div_sp_ignore_comments_eof_unterminated_line_signals() {
     (scan-error (list 'scan-error))
     (error (car err))))
 "##,
+        expect_test::expect![[r#""OK (scan-error)""#]],
     );
 }
 
@@ -492,7 +524,7 @@ fn div_sp_ignore_comments_disabled_line_comment_stops_in_comment() {
     // With parse-sexp-ignore-comments nil the comment is NOT skipped: ";" is a
     // comment-starter but not a sexp boundary, so forward-sexp over ";; oops "
     // stops just before the stray "(" at 8.  Locks the non-ignore path.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -504,6 +536,7 @@ fn div_sp_ignore_comments_disabled_line_comment_stops_in_comment() {
     (scan-error (list 'scan-error))
     (error (car err))))
 "##,
+        expect_test::expect![[r#""OK 8""#]],
     );
 }
 
@@ -512,7 +545,7 @@ fn div_sp_ignore_comments_disabled_scan_sexps_sees_comment_paren() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // With parse-sexp-ignore-comments nil the stray "(" inside the comment is
     // counted as a real open paren, leaving the list unbalanced -> scan-error.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -523,6 +556,7 @@ fn div_sp_ignore_comments_disabled_scan_sexps_sees_comment_paren() {
     (scan-error (list 'scan-error))
     (error (car err))))
 "##,
+        expect_test::expect![[r#""OK (scan-error)""#]],
     );
 }
 
@@ -533,7 +567,7 @@ fn div_sp_ignore_comments_string_beats_block_comment_syntax() {
     // a comment opener.  Only the later real C block comment is skipped, so the
     // whole outer list is one sexp.
     // GNU: 41
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (c-mode)
@@ -543,6 +577,7 @@ fn div_sp_ignore_comments_string_beats_block_comment_syntax() {
   (forward-sexp)
   (point))
 "##,
+        expect_test::expect![[r#""OK 41""#]],
     );
 }
 
@@ -552,7 +587,7 @@ fn div_sp_ignore_comments_respects_narrowing_boundaries() {
     // Comment skipping must operate inside the accessible region only and
     // preserve GNU's absolute point values while narrowed.
     // GNU: (8 22 21 21)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (c-mode)
@@ -564,6 +599,7 @@ fn div_sp_ignore_comments_respects_narrowing_boundaries() {
         (progn (forward-sexp) (point))
         (scan-sexps (point-min) 1)))
 "##,
+        expect_test::expect![[r#""OK (8 22 21 21)""#]],
     );
 }
 
@@ -574,7 +610,7 @@ fn div_sp_ignore_comments_forward_and_backward_multicount_combo() {
     // both directions.  The stray open paren and close paren in comments are
     // both ignored while counting foo, (bar), and baz as three sexps.
     // GNU: (34 1)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -585,6 +621,7 @@ fn div_sp_ignore_comments_forward_and_backward_multicount_combo() {
     (let ((back (progn (backward-sexp 3) (point))))
       (list fwd back))))
 "##,
+        expect_test::expect![[r#""OK (34 1)""#]],
     );
 }
 
@@ -595,7 +632,7 @@ fn div_sp_ignore_comments_motion_from_inside_line_comment() {
     // the comment opener.  GNU skips to the next real sexp when moving forward
     // and back to the previous real sexp when moving backward.
     // GNU: (14 22)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -606,6 +643,7 @@ fn div_sp_ignore_comments_motion_from_inside_line_comment() {
     (let ((back (progn (backward-sexp) (point))))
       (list fwd back))))
 "##,
+        expect_test::expect![[r#""OK (14 22)""#]],
     );
 }
 
@@ -616,7 +654,7 @@ fn div_sp_ignore_comments_forward_list_down_up_combo() {
     // backward-list, down-list, forward-sexp with a comment before the nested
     // list, and up-list from inside the outer list.
     // GNU: (33 1 2 32 33)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (c-mode)
@@ -629,6 +667,7 @@ fn div_sp_ignore_comments_forward_list_down_up_combo() {
         (progn (forward-sexp 2) (point))
         (progn (up-list) (point))))
 "##,
+        expect_test::expect![[r#""OK (33 1 2 32 33)""#]],
     );
 }
 
@@ -639,7 +678,7 @@ fn div_sp_ignore_comments_scan_lists_depth_combo() {
     // This locks forward depth exit, backward depth exit, and the unbalanced
     // depth error payload in the presence of a skipped block comment.
     // GNU: (20 1 (scan-error "Unbalanced parentheses" 4 22))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (c-mode)
@@ -652,6 +691,7 @@ fn div_sp_ignore_comments_scan_lists_depth_combo() {
           (scan-error (cons 'scan-error (cdr err)))
           (error (cons (car err) (cdr err)))))))
 "##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 11 48)""#]],
     );
 }
 
@@ -662,7 +702,7 @@ fn div_sp_ignore_comments_comment_fence_combo() {
     // Treat "!" as a fence comment delimiter; the unmatched parens inside the
     // fenced comment must be ignored while scanning the outer list.
     // GNU: (nil 31 31)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((st (make-syntax-table)))
@@ -673,6 +713,7 @@ fn div_sp_ignore_comments_comment_fence_combo() {
       (goto-char (point-min))
       (list (forward-sexp) (point) (scan-sexps 1 1)))))
 "##,
+        expect_test::expect![[r#""OK (nil 31 31)""#]],
     );
 }
 
@@ -683,7 +724,7 @@ fn div_sp_ignore_comments_syntax_property_comment_combo() {
     // comment.  This covers the honor-properties path combined with
     // parse-sexp-ignore-comments and syntax-ppss state reporting.
     // GNU: (nil 19 (1 1 6 nil nil nil 0 nil nil (1) nil))
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -697,6 +738,7 @@ fn div_sp_ignore_comments_syntax_property_comment_combo() {
     (scan-error (cons 'scan-error (cdr err)))
     (error (cons (car err) (cdr err)))))
 "##,
+        expect_test::expect![[r#""OK (nil 19 (1 1 6 nil nil nil 0 nil nil (1) nil))""#]],
     );
 }
 
@@ -707,7 +749,7 @@ fn div_sp_ignore_comments_backward_over_strings_and_comments_combo() {
     // strings are inert, the real block comment is skipped, and backward sexp
     // scanning returns to the outer list start.
     // GNU: (42 1 1)
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (c-mode)
@@ -717,5 +759,6 @@ fn div_sp_ignore_comments_backward_over_strings_and_comments_combo() {
         (scan-sexps (point-max) -1)
         (progn (goto-char (point-max)) (backward-sexp) (point))))
 "##,
+        expect_test::expect![[r#""OK (42 1 1)""#]],
     );
 }

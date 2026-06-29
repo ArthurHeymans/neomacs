@@ -31,7 +31,12 @@ fn oracle_prop_register_set_get_numbers_and_text_collection() {
        deactivate-mark))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"gamma::alpha::beta\" 15 ((110 . 15) (97 . \"gamma::alpha::beta\") (115 . \"::\")) t)""#
+        ]],
+    );
 }
 
 #[test]
@@ -57,7 +62,10 @@ fn oracle_prop_register_copy_delete_region_and_number_at_point() {
          deactivate-mark)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (-42 6 \"remove\" \"  -42 tail\n keep\" t)""#]],
+    );
 }
 
 #[test]
@@ -93,7 +101,12 @@ fn oracle_prop_register_insert_string_number_marker_and_rectangle() {
        (list (buffer-string) (point) (mark))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"aTEXTb\" 2 6) (\"123\" 4 1) (\"1\" 2 1) (\"aXa\nbYZb\n\" 8 2))""#
+        ]],
+    );
 }
 
 #[test]
@@ -134,5 +147,10 @@ fn oracle_prop_register_point_jump_swap_out_and_descriptions() {
         (register-describe-oneline ?r))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5 5 \" *temp*\") (file-query \"/tmp/neomacs-register-oracle.txt\" 7) (\"text starting with hello\" \"42\" \"rectangle starting with aa\"))""#
+        ]],
+    );
 }

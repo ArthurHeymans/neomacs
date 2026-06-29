@@ -20,7 +20,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_afs_integer_mod_and_2arg_rounding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (% 7 3)
       (% -7 3)
@@ -40,13 +40,14 @@ fn div_afs_integer_mod_and_2arg_rounding() {
       (ceiling 7 -3)
       (round -7 3))
 "##,
+        expect_test::expect![[r#""OK (1 -1 1 -1 1 2 -2 -1 2 3 2 2 -3 -2 -3 -2 -2)""#]],
     );
 }
 
 #[test]
 fn div_afs_bignum_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (expt 2 64)
       (expt 2 128)
@@ -63,6 +64,7 @@ fn div_afs_bignum_arithmetic() {
       (floor (expt 2 100) 13)
       (% (expt 2 100) 13))
 "##,
+        expect_test::expect![[r#""ERR (void-function gcd)""#]],
     );
 }
 
@@ -71,7 +73,7 @@ fn div_afs_bignum_arithmetic() {
 #[test]
 fn div_afs_float_inf_nan_decomp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (/ 1.0 0.0)
       (/ -1.0 0.0)
@@ -90,13 +92,16 @@ fn div_afs_float_inf_nan_decomp() {
       (* 1.0e+INF -1.0)
       (+ 1.0e+INF 1.0e+INF))
 "##,
+        expect_test::expect![[
+            r#""OK (1.0e+INF -1.0e+INF -0.0e+NaN t nil nil -1.0 -0.0 (0.875 . 2) (0.0 . 0) 3.5 3 1.0e+INF -0.0 -1.0e+INF 1.0e+INF)""#
+        ]],
     );
 }
 
 #[test]
 fn div_afs_float_ffloor_fceiling_fround_ftruncate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (ffloor 3.7)
       (ffloor -3.7)
@@ -109,13 +114,14 @@ fn div_afs_float_ffloor_fceiling_fround_ftruncate() {
       (fceiling 0.0)
       (fround -0.5))
 "##,
+        expect_test::expect![[r#""OK (3.0 -4.0 4.0 -3.0 2.0 4.0 3.0 -3.0 0.0 -0.0)""#]],
     );
 }
 
 #[test]
 fn div_afs_float_transcendental_and_constants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (sqrt 2.0)
       (expt 2.0 0.5)
@@ -131,6 +137,7 @@ fn div_afs_float_transcendental_and_constants() {
       (abs -7)
       (abs 0))
 "##,
+        expect_test::expect![[r#""ERR (void-function float-e)""#]],
     );
 }
 
@@ -139,7 +146,7 @@ fn div_afs_float_transcendental_and_constants() {
 #[test]
 fn div_afs_format_time_padding_zone() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((time (encode-time 5 30 9 4 7 2025 0)))
   (list (format-time-string "%H:%M:%S" time 0)
@@ -156,13 +163,16 @@ fn div_afs_format_time_padding_zone() {
         (format-time-string "%^a %^b" time 0)
         (format-time-string "%H:%M:%S" time 7200)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"09:30:05\" \"2025-07-04\" \"09:30:05 +0000\" \"09:30 AM\" \"Fri Friday\" \"Jul July\" \"185\" \"26\" \"26\" \"2025-W27-5\" \" 9:30:05\" \"FRI JUL\" \"11:30:05\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_afs_encode_decode_time_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((time (encode-time 30 59 12 28 2 1999 0)))
   (list time
@@ -172,6 +182,9 @@ fn div_afs_encode_decode_time_roundtrip() {
         (encode-time 0 0 0 1 0 1970 0)
         (decode-time (encode-time 0 0 0 1 0 1970 0) 0)))
 "##,
+        expect_test::expect![[
+            r#""OK ((14041 15794) (30 59 12 28 2 1999 0 nil 0) (0 \"GMT\") 920206770.0 (-41 8576) (0 0 0 1 12 1969 1 nil 0))""#
+        ]],
     );
 }
 
@@ -180,7 +193,7 @@ fn div_afs_encode_decode_time_roundtrip() {
 #[test]
 fn div_afs_parse_partial_sexp_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "(foo (bar) baz) ;; comment
@@ -194,13 +207,16 @@ fn div_afs_parse_partial_sexp_state() {
         (nth 3 (parse-partial-sexp 1 6))
         (condition-case err (scan-sexps 1 5) (scan-error (car err)))))
 "##,
+        expect_test::expect![[
+            r#""OK (16 16 2 (0 nil 1 nil nil nil 0 nil nil nil nil) 1 nil nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_afs_custom_paren_delimiter_scan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (modify-syntax-entry ?< "(>")
@@ -212,6 +228,7 @@ fn div_afs_custom_paren_delimiter_scan() {
         (forward-comment 14)
         (nth 0 (parse-partial-sexp 1 7))))
 "##,
+        expect_test::expect![[r#""OK (15 15 nil 1)""#]],
     );
 }
 
@@ -220,20 +237,21 @@ fn div_afs_custom_paren_delimiter_scan() {
 #[test]
 fn div_afs_read_number_bases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (read "#x1ff")
       (read "#o777")
       (read "#b1011")
       (read "#24rn"))
 "##,
+        expect_test::expect![[r#""OK (511 511 11 23)""#]],
     );
 }
 
 #[test]
 fn div_afs_read_char_escapes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (read "?\\C-a")
       (read "?\\M-a")
@@ -241,17 +259,19 @@ fn div_afs_read_char_escapes() {
       (read "?\\u00e9")
       (read "?\\N{LATIN SMALL LETTER E WITH ACUTE}"))
 "##,
+        expect_test::expect![[r#""OK (1 134217825 134217729 233 233)""#]],
     );
 }
 
 #[test]
 fn div_afs_read_from_string_and_parens() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (car (read-from-string "42 extra"))
       (read "(?a ?b ?\\C-c)"))
 "##,
+        expect_test::expect![[r#""OK (42 (97 98 3))""#]],
     );
 }
 
@@ -264,20 +284,22 @@ fn div_afs_read_hash_paren_vector() {
     // GNU rejects the "#(" digraph outright; Neomacs' reader treats "#(" as a
     // record/char-table-like prefix and only fails later with a divergent
     // error message.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (read "#(1 2 3)")
 "##,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\")""##]],
     );
 }
 
 #[test]
 fn div_afs_read_bool_vector_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (read "#&3\"abc\"")
 "##,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#&...\")""##]],
     );
 }
 
@@ -286,7 +308,7 @@ fn div_afs_read_bool_vector_syntax() {
 #[test]
 fn div_afs_char_table_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'syntax-table nil)))
   (aset ct ?\( 4)
@@ -299,6 +321,7 @@ fn div_afs_char_table_basics() {
         (aref ct ?a)
         (char-table-range ct 0)))
 "##,
+        expect_test::expect![[r#""OK (t char-table syntax-table 4 nil (1) nil)""#]],
     );
 }
 
@@ -307,7 +330,7 @@ fn div_afs_char_table_basics() {
 #[test]
 fn div_afs_record_and_type_of() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((r (record 'foo 1 2 3)))
   (list (recordp r)
@@ -318,6 +341,7 @@ fn div_afs_record_and_type_of() {
         (record 'a 'b 'c)
         (vrecordp r)))
 "##,
+        expect_test::expect![[r#""ERR (void-function vrecordp)""#]],
     );
 }
 
@@ -326,7 +350,7 @@ fn div_afs_record_and_type_of() {
 #[test]
 fn div_afs_error_conditions_define_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (define-error 'probe-cust-err "a probe error" '(my-parent error))
@@ -342,5 +366,6 @@ fn div_afs_error_conditions_define_error() {
             (signal 'probe-child-err nil)
           (my-parent 'caught-parent))))
 "##,
+        expect_test::expect![[r#""ERR (error \"Unknown signal ‘my-parent’\")""#]],
     );
 }

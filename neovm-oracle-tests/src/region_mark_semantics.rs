@@ -27,7 +27,7 @@ fn oracle_region_bounds_clip_mark_to_current_narrowing() {
       (list left (region-beginning) (region-end)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK ((4 6) 5 8)""#]]);
 }
 
 #[test]
@@ -53,7 +53,10 @@ fn oracle_mark_respects_transient_mark_mode_and_force() {
        (mark)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((mark-inactive nil) 2 2 2)""#]],
+    );
 }
 
 #[test]
@@ -76,7 +79,12 @@ fn oracle_set_mark_nil_clears_mark_and_region_errors() {
        (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((2 t 2) nil nil nil (error (\"The mark is not set now, so there is no region\")))""#
+        ]],
+    );
 }
 
 #[test]
@@ -102,5 +110,8 @@ fn oracle_push_mark_return_value_and_ring_side_effects() {
          (mapcar #'marker-position global-mark-ring))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil 3 nil nil 5 t (3) (3))""#]],
+    );
 }

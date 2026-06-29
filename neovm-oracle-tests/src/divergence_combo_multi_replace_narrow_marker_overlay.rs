@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_multi_replace_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mrn")))
     (with-current-buffer buf
@@ -48,6 +48,7 @@ fn combo_multi_replace_narrow_marker_overlay_undo() {
                 (overlay-end ov)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -55,7 +56,7 @@ fn combo_multi_replace_narrow_marker_overlay_undo() {
 fn combo_multi_replace_narrow_clone_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mrc")))
     (with-current-buffer buf
@@ -95,6 +96,7 @@ fn combo_multi_replace_narrow_clone_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -102,7 +104,7 @@ fn combo_multi_replace_narrow_clone_undo() {
 fn combo_multi_replace_narrow_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mrt")))
     (with-current-buffer buf
@@ -140,6 +142,7 @@ fn combo_multi_replace_narrow_textprop_undo() {
                 (overlay-end ov)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -147,7 +150,7 @@ fn combo_multi_replace_narrow_textprop_undo() {
 fn combo_multi_replace_narrow_multi_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mro")))
     (with-current-buffer buf
@@ -188,6 +191,7 @@ fn combo_multi_replace_narrow_multi_overlay_undo() {
                 (overlay-end ov2)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -195,7 +199,7 @@ fn combo_multi_replace_narrow_multi_overlay_undo() {
 fn combo_multi_replace_narrow_buflocal_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mrb")))
     (with-current-buffer buf
@@ -232,5 +236,6 @@ fn combo_multi_replace_narrow_buflocal_undo() {
                 (overlay-end ov)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

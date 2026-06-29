@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf18_ctrlc_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n:PROPERTIES:\n:A: 1\n:END:")
@@ -23,6 +23,9 @@ fn uf18_ctrlc_prop() {
           (org-ctrl-c-ctrl-c)
           (list :ok before (buffer-string)))
       (error (list :error err before (buffer-string))))))"##,
+        expect_test::expect![[
+            r#""OK (:error (user-error \"No operator defined for property A\") \"* T\n:PROPERTIES:\n:A: 1\n:END:\" \"* T\n:PROPERTIES:\n:A: 1\n:END:\")""#
+        ]],
     );
 }
 
@@ -33,13 +36,14 @@ fn uf18_ctrlc_prop() {
 #[test]
 fn uf18_ctrlc_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text [[http://example.com][Link]] end")
   (search-forward "Link")
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r#""ERR (search-failed \"Link\")""#]],
     );
 }
 
@@ -50,7 +54,7 @@ fn uf18_ctrlc_link() {
 #[test]
 fn uf18_ctrlc_ts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\nSCHEDULED: <2026-01-15>")
@@ -59,6 +63,7 @@ fn uf18_ctrlc_ts() {
   (backward-char 2)
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"* T\nSCHEDULED: <2026-01-15 Thu>\"""#]],
     );
 }
 
@@ -69,7 +74,7 @@ fn uf18_ctrlc_ts() {
 #[test]
 fn uf18_ctrlc_foot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text[fn:1]\n\n[fn:1] Def")
@@ -77,6 +82,7 @@ fn uf18_ctrlc_foot() {
   (search-forward "[fn:1]")
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"Text[fn:1]\n\n[fn:1] Def\"""#]],
     );
 }
 
@@ -87,13 +93,14 @@ fn uf18_ctrlc_foot() {
 #[test]
 fn uf18_ctrlc_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| a | b |\n|---+---|\n| 1 | 2 |")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"| a | b |\n|---+---|\n| 1 | 2 |\"""#]],
     );
 }
 
@@ -104,7 +111,7 @@ fn uf18_ctrlc_table() {
 #[test]
 fn uf18_ctrlc_plan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO T\nSCHEDULED: <2026-01-15>\nBody")
@@ -112,6 +119,9 @@ fn uf18_ctrlc_plan() {
   (forward-line)
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[
+            r#""ERR (user-error #(\"‘C-c C-c’ can do nothing useful here\" 1 8 (font-lock-face help-key-binding face help-key-binding)))""#
+        ]],
     );
 }
 
@@ -122,7 +132,7 @@ fn uf18_ctrlc_plan() {
 #[test]
 fn uf18_ctrlc_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\nCLOCK: [2026-01-10 10:00]")
@@ -130,6 +140,7 @@ fn uf18_ctrlc_clock() {
   (search-forward "CLOCK:")
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"* T\nCLOCK: [2026-01-10 10:00]\"""#]],
     );
 }
 
@@ -140,7 +151,7 @@ fn uf18_ctrlc_clock() {
 #[test]
 fn uf18_ctrlc_stat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T [1/2]\n- [X] a\n- [ ] b")
@@ -148,6 +159,7 @@ fn uf18_ctrlc_stat() {
   (search-forward "[1/2]")
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"* T [1/2]\n- [X] a\n- [ ] b\"""#]],
     );
 }
 
@@ -158,7 +170,7 @@ fn uf18_ctrlc_stat() {
 #[test]
 fn uf18_ctrlc_tag() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T :tag:")
@@ -175,7 +187,7 @@ fn uf18_ctrlc_tag() {
 #[test]
 fn uf18_ctrlc_todo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO T")
@@ -193,7 +205,7 @@ fn uf18_ctrlc_todo() {
 #[test]
 fn uf18_ctrlc_prio() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* [#A] T")
@@ -211,7 +223,7 @@ fn uf18_ctrlc_prio() {
 #[test]
 fn uf18_ctrlc_drawer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n:MYDRAWER:\nData\n:END:")
@@ -219,6 +231,9 @@ fn uf18_ctrlc_drawer() {
   (search-forward ":MYDRAWER:")
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[
+            r#""ERR (user-error #(\"‘C-c C-c’ can do nothing useful here\" 1 8 (font-lock-face help-key-binding face help-key-binding)))""#
+        ]],
     );
 }
 
@@ -229,13 +244,16 @@ fn uf18_ctrlc_drawer() {
 #[test]
 fn uf18_ctrlc_fixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert ": fixed\n: lines")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[
+            r#""ERR (user-error #(\"‘C-c C-c’ can do nothing useful here\" 1 8 (font-lock-face help-key-binding face help-key-binding)))""#
+        ]],
     );
 }
 
@@ -246,13 +264,16 @@ fn uf18_ctrlc_fixed() {
 #[test]
 fn uf18_ctrlc_comment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "# Comment")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[
+            r#""ERR (user-error #(\"‘C-c C-c’ can do nothing useful here\" 1 8 (font-lock-face help-key-binding face help-key-binding)))""#
+        ]],
     );
 }
 
@@ -263,13 +284,14 @@ fn uf18_ctrlc_comment() {
 #[test]
 fn uf18_ctrlc_keyword() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+TITLE: Test")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r##""OK #(\"#+TITLE: Test\" 0 13 (fontified nil))""##]],
     );
 }
 
@@ -280,13 +302,16 @@ fn uf18_ctrlc_keyword() {
 #[test]
 fn uf18_ctrlc_quote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_QUOTE\nQ\n#+END_QUOTE")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[
+            r#""ERR (user-error #(\"‘C-c C-c’ can do nothing useful here\" 1 8 (font-lock-face help-key-binding face help-key-binding)))""#
+        ]],
     );
 }
 
@@ -297,13 +322,16 @@ fn uf18_ctrlc_quote() {
 #[test]
 fn uf18_ctrlc_center() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_CENTER\nC\n#+END_CENTER")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[
+            r#""ERR (user-error #(\"‘C-c C-c’ can do nothing useful here\" 1 8 (font-lock-face help-key-binding face help-key-binding)))""#
+        ]],
     );
 }
 
@@ -314,13 +342,16 @@ fn uf18_ctrlc_center() {
 #[test]
 fn uf18_ctrlc_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_EXPORT html\n<b>Bold</b>\n#+END_EXPORT")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[
+            r#""ERR (user-error #(\"‘C-c C-c’ can do nothing useful here\" 1 8 (font-lock-face help-key-binding face help-key-binding)))""#
+        ]],
     );
 }
 
@@ -331,13 +362,16 @@ fn uf18_ctrlc_export() {
 #[test]
 fn uf18_ctrlc_verse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_VERSE\nLine\n#+END_VERSE")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[
+            r#""ERR (user-error #(\"‘C-c C-c’ can do nothing useful here\" 1 8 (font-lock-face help-key-binding face help-key-binding)))""#
+        ]],
     );
 }
 
@@ -348,13 +382,14 @@ fn uf18_ctrlc_verse() {
 #[test]
 fn uf18_ctrlc_item() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- item")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"- item\"""#]],
     );
 }
 
@@ -365,7 +400,7 @@ fn uf18_ctrlc_item() {
 #[test]
 fn uf18_ctrlc_heading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H")
@@ -382,13 +417,16 @@ fn uf18_ctrlc_heading() {
 #[test]
 fn uf18_ctrlc_para() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Paragraph text")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[
+            r#""ERR (user-error #(\"‘C-c C-c’ can do nothing useful here\" 1 8 (font-lock-face help-key-binding face help-key-binding)))""#
+        ]],
     );
 }
 
@@ -399,13 +437,16 @@ fn uf18_ctrlc_para() {
 #[test]
 fn uf18_ctrlc_hr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "-----\nText")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[
+            r#""ERR (user-error #(\"‘C-c C-c’ can do nothing useful here\" 1 8 (font-lock-face help-key-binding face help-key-binding)))""#
+        ]],
     );
 }
 
@@ -416,13 +457,14 @@ fn uf18_ctrlc_hr() {
 #[test]
 fn uf18_ctrlc_latex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text $x^2$ end")
   (search-forward "$x")
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r#""ERR (search-failed \"$x\")""#]],
     );
 }
 
@@ -433,13 +475,14 @@ fn uf18_ctrlc_latex() {
 #[test]
 fn uf18_ctrlc_entity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text \\alpha end")
   (search-forward "\\alpha")
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r#""ERR (search-failed \"\\\\alpha\")""#]],
     );
 }
 
@@ -450,13 +493,14 @@ fn uf18_ctrlc_entity() {
 #[test]
 fn uf18_ctrlc_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+MACRO: m Hi\nText {{{m}}} end")
   (search-forward "{{{m}}}")
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r#""ERR (search-failed \"{{{m}}}\")""#]],
     );
 }
 
@@ -467,13 +511,14 @@ fn uf18_ctrlc_macro() {
 #[test]
 fn uf18_ctrlc_radio() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "<<<target>>> and <<target>>")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"<<<target>>> and <<target>>\"""#]],
     );
 }
 
@@ -484,13 +529,16 @@ fn uf18_ctrlc_radio() {
 #[test]
 fn uf18_ctrlc_diary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "%%(diary-anniversary 1 1 2000)")
   (goto-char (point-min))
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[
+            r#""ERR (user-error #(\"‘C-c C-c’ can do nothing useful here\" 1 8 (font-lock-face help-key-binding face help-key-binding)))""#
+        ]],
     );
 }
 
@@ -501,7 +549,7 @@ fn uf18_ctrlc_diary() {
 #[test]
 fn uf18_ctrlc_inline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
   (insert "*************** TODO Inline\nBody\n*************** END")
@@ -518,12 +566,13 @@ fn uf18_ctrlc_inline() {
 #[test]
 fn uf18_ctrlc_snippet() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text @@html:<b>bold</b>@@ end")
   (search-forward "@@html:")
   (org-ctrl-c-ctrl-c)
   (buffer-string))"##,
+        expect_test::expect![[r#""ERR (search-failed \"@@html:\")""#]],
     );
 }

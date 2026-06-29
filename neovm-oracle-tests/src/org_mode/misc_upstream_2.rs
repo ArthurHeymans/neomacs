@@ -11,7 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn upstream_org_pcomplete_drawer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-pcomplete)
   (let ((org-mode-hook nil))
@@ -24,6 +24,9 @@ fn upstream_org_pcomplete_drawer() {
      (with-temp-buffer (org-mode) (insert ":DRAWER:\nContents\n:END:\n* Foo\n:D")
        (goto-char (point-max))
        (pcomplete) (buffer-string)))))"##,
+        expect_test::expect![[
+            r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
+        ]],
     );
 }
 
@@ -32,7 +35,7 @@ fn upstream_org_pcomplete_drawer() {
 #[test]
 fn upstream_org_pcomplete_entity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-pcomplete)
   (let ((org-mode-hook nil))
@@ -45,6 +48,9 @@ fn upstream_org_pcomplete_entity() {
      (with-temp-buffer (org-mode) (insert "\\frac1")
        (goto-char (point-max))
        (pcomplete) (buffer-string)))))"##,
+        expect_test::expect![[
+            r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
+        ]],
     );
 }
 
@@ -53,13 +59,16 @@ fn upstream_org_pcomplete_entity() {
 #[test]
 fn upstream_org_pcomplete_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-pcomplete)
   (let ((org-mode-hook nil))
     (with-temp-buffer (org-mode) (insert "#+begin_")
       (goto-char (point-max))
       (pcomplete) (buffer-string))))"##,
+        expect_test::expect![[
+            r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
+        ]],
     );
 }
 
@@ -68,7 +77,7 @@ fn upstream_org_pcomplete_block() {
 #[test]
 fn upstream_org_protocol_parse_parameters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-protocol)
   (list
@@ -91,6 +100,9 @@ fn upstream_org_protocol_parse_parameters() {
    ;; Old-style slash parameters.
    (let ((data (org-protocol-parse-parameters "abc/def" nil '(:url :title))))
      (list (plist-get data :url) (plist-get data :title)))))"##,
+        expect_test::expect![[
+            r#""OK ((\"abc\" \"def\") (\"abc\" \"def\") (\"p\" \"https://orgmode.org/org.html#capture-protocol\" \"The Org Manual\" \"9.4.2 capture protocol\") (\"abc\" \"def\"))""#
+        ]],
     );
 }
 
@@ -99,7 +111,7 @@ fn upstream_org_protocol_parse_parameters() {
 #[test]
 fn upstream_org_colview_get_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-colview)
   (let ((org-mode-hook nil))
@@ -126,6 +138,7 @@ fn upstream_org_colview_get_format() {
        (goto-char (point-max))
        (let ((org-columns-default-format "%A"))
          (org-columns-get-format "%D"))))))"##,
+        expect_test::expect![[r#""OK (\"%A\" \"%B\" \"%C\" \"%D\")""#]],
     );
 }
 
@@ -134,7 +147,7 @@ fn upstream_org_colview_get_format() {
 #[test]
 fn upstream_org_colview_columns_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-colview)
   (let ((org-mode-hook nil))
@@ -160,6 +173,7 @@ fn upstream_org_colview_columns_width() {
        (goto-char (point-min))
        (let ((org-columns-default-format "%ITEM")) (org-columns))
        (aref org-columns-current-maxwidths 0)))))"##,
+        expect_test::expect![[r#""OK (9 2 4 6)""#]],
     );
 }
 
@@ -168,7 +182,7 @@ fn upstream_org_colview_columns_width() {
 #[test]
 fn upstream_org_colview_columns_scope() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-colview)
   (let ((org-mode-hook nil))
@@ -187,6 +201,7 @@ fn upstream_org_colview_columns_scope() {
        (let ((org-columns-default-format "%ITEM")) (org-columns t))
        (org-map-entries
         (lambda () (get-char-property (point) 'org-columns-value)))))))"##,
+        expect_test::expect![[r#""OK ((\"H1\" \"H2\" \"H3\") (\"H1\" \"H2\" \"H3\" \"H4\"))""#]],
     );
 }
 
@@ -195,7 +210,7 @@ fn upstream_org_colview_columns_scope() {
 #[test]
 fn upstream_org_capture_fill_template() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-capture)
   (let ((org-store-link-plist nil))
@@ -214,6 +229,9 @@ fn upstream_org_capture_fill_template() {
      (org-capture-fill-template "\\%i" "success!")
      ;; Multiple placeholders.
      (org-capture-fill-template "%i %i" "ok"))))"##,
+        expect_test::expect![[
+            r#""OK (\"success!\n\" \"2026\n\" \"<2026-06-29 Mon>\n\" \"[2026-06-29 Mon]\n\" \"\" \"%i\n\" \"\")""#
+        ]],
     );
 }
 
@@ -222,7 +240,7 @@ fn upstream_org_capture_fill_template() {
 #[test]
 fn upstream_org_agenda_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-agenda)
   (let ((org-agenda-span 'day)
@@ -231,6 +249,7 @@ fn upstream_org_agenda_empty() {
     (org-agenda-list)
     (set-buffer org-agenda-buffer-name)
     (count-lines (point-min) (point-max))))"##,
+        expect_test::expect![[r#""OK 2""#]],
     );
 }
 
@@ -239,7 +258,7 @@ fn upstream_org_agenda_empty() {
 #[test]
 fn upstream_org_agenda_skip_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-agenda)
   (let ((org-mode-hook nil))
@@ -250,6 +269,7 @@ fn upstream_org_agenda_skip_function() {
              (lambda () (org-agenda-skip-entry-if 'todo '("DONE")))))
         (org-agenda-skip-entry-if 'todo '("DONE"))
         (point)))))"##,
+        expect_test::expect![[r#""OK 1""#]],
     );
 }
 
@@ -258,7 +278,7 @@ fn upstream_org_agenda_skip_function() {
 #[test]
 fn upstream_org_lint_add_checker_extended() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
   (let ((org-lint--checkers nil))
@@ -272,6 +292,7 @@ fn upstream_org_lint_add_checker_extended() {
      ;; Second checker.
      (progn (org-lint-add-checker 'test-check2 "Another" #'ignore)
             (length org-lint--checkers)))))"##,
+        expect_test::expect![[r#""OK (1 1 2)""#]],
     );
 }
 
@@ -280,7 +301,7 @@ fn upstream_org_lint_add_checker_extended() {
 #[test]
 fn upstream_org_lint_deprecated_blocks_extended() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
   (let ((org-mode-hook nil))
@@ -300,6 +321,9 @@ fn upstream_org_lint_deprecated_blocks_extended() {
        (insert "#+begin_export html\n<p>Text</p>\n#+end_export")
        (goto-char (point-min))
        (org-lint '(deprecated-export-blocks))))))"##,
+        expect_test::expect![[
+            r#""OK (((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Deprecated syntax for export block.  Use \\\"BEGIN_EXPORT latex\\\" instead\" #s(org-lint-checker deprecated-export-blocks \"Report deprecated export block syntax\" org-lint-deprecated-export-blocks low (obsolete export))])) ((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Deprecated syntax for export block.  Use \\\"BEGIN_EXPORT HTML\\\" instead\" #s(org-lint-checker deprecated-export-blocks \"Report deprecated export block syntax\" org-lint-deprecated-export-blocks low (obsolete export))])) nil)""#
+        ]],
     );
 }
 
@@ -308,7 +332,7 @@ fn upstream_org_lint_deprecated_blocks_extended() {
 #[test]
 fn upstream_org_lint_missing_language_extended() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
   (let ((org-mode-hook nil))
@@ -323,5 +347,8 @@ fn upstream_org_lint_missing_language_extended() {
        (insert "#+begin_src emacs-lisp\n...\n#+end_src")
        (goto-char (point-min))
        (org-lint '(missing-language-in-src-block))))))"##,
+        expect_test::expect![[
+            r#""OK (((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Missing language in source block\" #s(org-lint-checker missing-language-in-src-block \"Report missing language in source blocks\" org-lint-missing-language-in-src-block nil (babel))])) nil)""#
+        ]],
     );
 }

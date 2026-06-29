@@ -23,5 +23,10 @@ fn oracle_md5_string_honors_coding_system_argument() {
  (md5 "é" nil nil 'unknown-coding-system t))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"66ddcd97cfdeabb2f6fb8a999b4bc76f\" \"66ddcd97cfdeabb2f6fb8a999b4bc76f\" \"ed71e8ffd3d8c47c1a2e22c53cd384aa\" (coding-system-error (unknown-coding-system)) \"66ddcd97cfdeabb2f6fb8a999b4bc76f\")""#
+        ]],
+    );
 }

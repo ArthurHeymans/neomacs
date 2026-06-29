@@ -30,7 +30,12 @@ fn oracle_prop_progress_reporter_numeric_updates_and_throttling() {
     (nreverse events)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0.0 \"Work...\" async 1 nil) (0.1 \"Work...\" async 2 \" one\") (0.2 \"Work...\" async 3 \" one\") (0.5 \"Changed...\" async 6 \" forced\") (done \"Changed...\" async 6 \" forced\"))""#
+        ]],
+    );
 }
 
 #[test]
@@ -55,7 +60,12 @@ fn oracle_prop_progress_reporter_pulse_updates_and_suffix_memory() {
     (nreverse events)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 \"Pulse...\" 1 nil) (2 \"Pulse...\" 2 \" a\") (3 \"Pulse...\" 3 \" legacy-value\") (0 \"Pulse...\" 0 \" legacy-value\") (1 \"Pulse changed\" 1 \" forced\") (done \"Pulse changed\" 1 \" forced\"))""#
+        ]],
+    );
 }
 
 #[test]
@@ -82,7 +92,12 @@ fn oracle_prop_progress_reporter_message_and_alias_semantics() {
      (nreverse events))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil \"Compile...\" \"Already...\" nil async ((0.25 \"Compile...\" nil) (0.0 \"Already...\" async)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -104,5 +119,10 @@ fn oracle_prop_progress_reporter_loop_macros_return_values() {
      (nreverse events))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (dotimes-result 6 ((0.0 \"Loop...\") (done \"Loop...\") (0.0 \"List loop...\") (done \"List loop...\")))""#
+        ]],
+    );
 }

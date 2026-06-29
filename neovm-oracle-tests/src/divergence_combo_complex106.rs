@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx106_eshell_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -17,13 +17,14 @@ fn div_cx106_eshell_availability() {
             (boundp 'eshell-buffer-name)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx106_eshell_basic_command_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((output (shell-command-to-string "echo hello")))
@@ -32,13 +33,14 @@ fn div_cx106_eshell_basic_command_output() {
             (string= (string-trim output) "hello")))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (\"hello\n\" \"hello\" t)""#]],
     );
 }
 
 #[test]
 fn div_cx106_shell_command_with_input() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((input-file (make-temp-file "neo-cx106-in"))
        (output (progn
@@ -49,13 +51,14 @@ fn div_cx106_shell_command_with_input() {
   (delete-file input-file)
   (string-trim output))
 "##,
+        expect_test::expect![[r#""OK \"3\"""#]],
     );
 }
 
 #[test]
 fn div_cx106_call_process_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx106-cp*")))
   (with-current-buffer buf
@@ -65,13 +68,14 @@ fn div_cx106_call_process_basic() {
                  (with-current-buffer buf (buffer-string)))
       (kill-buffer buf))))
 "##,
+        expect_test::expect![[r#""OK (0 \"hello\n\")""#]],
     );
 }
 
 #[test]
 fn div_cx106_call_process_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx106-cpr*")))
   (with-current-buffer buf
@@ -83,13 +87,14 @@ fn div_cx106_call_process_region_basic() {
   (prog1 (with-current-buffer buf (buffer-string))
     (kill-buffer buf)))
 "##,
+        expect_test::expect![[r#""OK \"alpha\nbeta\ngamma\"""#]],
     );
 }
 
 #[test]
 fn div_cx106_process_file_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'process-file)
       (fboundp 'process-file-side-effects)
@@ -97,13 +102,14 @@ fn div_cx106_process_file_predicate() {
       (fboundp 'make-pipe-process)
       (fboundp 'serial-process-configure))
 "##,
+        expect_test::expect![[r#""OK (t nil t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx106_tramp_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -113,13 +119,14 @@ fn div_cx106_tramp_availability() {
             (boundp 'tramp-default-method)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx106_remote_file_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (file-remote-p "/local/path")
@@ -127,13 +134,14 @@ fn div_cx106_remote_file_predicate() {
           (file-remote-p "/ssh:localhost:"))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil \"/method:host:\" \"/ssh:localhost:\")""#]],
     );
 }
 
 #[test]
 fn div_cx106_make_network_process_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((p (make-network-process :name "neo-cx106-net"
@@ -146,13 +154,14 @@ fn div_cx106_make_network_process_basic() {
         (delete-process p)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored file-error)""#]],
     );
 }
 
 #[test]
 fn div_cx106_term_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -162,13 +171,14 @@ fn div_cx106_term_availability() {
             (fboundp 'make-term)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx106_vterm_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'vterm)
@@ -176,13 +186,14 @@ fn div_cx106_vterm_availability() {
           (fboundp 'vterm-other-window))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx106_shell_environment_persistence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((original (getenv "NEO_CX106"))
        (env1 (let ((process-environment
@@ -195,13 +206,14 @@ fn div_cx106_shell_environment_persistence() {
         (string-trim env1)
         (string-trim env2)))
 "##,
+        expect_test::expect![[r#""OK (nil \"value-1\" \"value-2\")""#]],
     );
 }
 
 #[test]
 fn div_cx106_subprocess_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX106=v" process-environment)))
@@ -238,5 +250,6 @@ fn div_cx106_subprocess_with_marker_overlay_undo_narrow_mega() {
           (kill-buffer buf)
           (list state (buffer-string))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

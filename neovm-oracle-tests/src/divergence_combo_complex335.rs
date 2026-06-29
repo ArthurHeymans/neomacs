@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx335_indirect_buffer_shares_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((base (get-buffer-create " *neo-cx335-base*"))
        (ind (make-indirect-buffer base " *neo-cx335-ind*")))
@@ -21,13 +21,14 @@ fn div_cx335_indirect_buffer_shares_text() {
       (kill-buffer ind)
       (kill-buffer base))))
 "##,
+        expect_test::expect![[r#""OK (\"shared text content\" \"shared text content\" t t)""#]],
     )
 }
 
 #[test]
 fn div_cx335_buffer_list_reorder_bury_unbury() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx335-bury-a*"))
       (buf-b (get-buffer-create " *neo-cx335-bury-b*")))
@@ -38,13 +39,14 @@ fn div_cx335_buffer_list_reorder_bury_unbury() {
       (kill-buffer buf-b)
       (list before-a after-bury-a (> after-bury-a before-a)))))
 "##,
+        expect_test::expect![[r#""OK (10 11 t)""#]],
     )
 }
 
 #[test]
 fn div_cx335_window_configuration_save_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((config (current-window-configuration))
       (n-before (length (window-list))))
@@ -54,13 +56,14 @@ fn div_cx335_window_configuration_save_restore() {
     (let ((n-restored (length (window-list))))
       (list n-before n-split n-restored (= n-before n-restored)))))
 "##,
+        expect_test::expect![[r#""OK (1 2 1 t)""#]],
     )
 }
 
 #[test]
 fn div_cx335_frame_parameter_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (let ((before (frame-parameter frame 'neo-cx335-param)))
@@ -71,13 +74,14 @@ fn div_cx335_frame_parameter_round_trip() {
         (modify-frame-parameters frame '((neo-cx335-param)))
         (list before v1 v2 (frame-parameter frame 'neo-cx335-param)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     )
 }
 
 #[test]
 fn div_cx335_display_info_full_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (integerp (display-pixel-width))
@@ -88,13 +92,14 @@ fn div_cx335_display_info_full_query() {
         (frame-parameter frame 'name)
         (frame-parameter frame 'background-mode)))
 "##,
+        expect_test::expect![[r#""OK (t t t t nil \"F1\" dark)""#]],
     )
 }
 
 #[test]
 fn div_cx335_save_window_excursion_restores() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((n-before (length (window-list))))
   (save-window-excursion
@@ -104,13 +109,14 @@ fn div_cx335_save_window_excursion_restores() {
       (list n-before n-inside (length (window-list)))))
   (length (window-list)))
 "##,
+        expect_test::expect![[r#""OK 1""#]],
     )
 }
 
 #[test]
 fn div_cx335_window_parameter_set_get_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (set-window-parameter win 'neo-cx335-wp1 :val1)
@@ -125,13 +131,14 @@ fn div_cx335_window_parameter_set_get_round_trip() {
           (assq 'neo-cx335-wp2 all)
           (window-parameter win 'neo-cx335-wp1))))
 "##,
+        expect_test::expect![[r#""OK (:val1 42 \"string\" t (neo-cx335-wp2 . 42) nil)""#]],
     )
 }
 
 #[test]
 fn div_cx335_generate_new_buffer_name_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create "neo-cx335-buf"))
       (buf-b (get-buffer-create "neo-cx335-buf<2>")))
@@ -140,13 +147,14 @@ fn div_cx335_generate_new_buffer_name_query() {
     (kill-buffer buf-b)
     next))
 "##,
+        expect_test::expect![[r#""OK \"neo-cx335-buf<3>\"""#]],
     )
 }
 
 #[test]
 fn div_cx335_buffer_modified_p_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx335-mod*")))
   (with-current-buffer buf
@@ -158,13 +166,14 @@ fn div_cx335_buffer_modified_p_round_trip() {
       (prog1 (list mod-1 mod-2)
         (kill-buffer buf)))))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     )
 }
 
 #[test]
 fn div_cx335_buffer_window_frame_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame))
       (win (selected-window))
@@ -196,5 +205,6 @@ fn div_cx335_buffer_window_frame_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

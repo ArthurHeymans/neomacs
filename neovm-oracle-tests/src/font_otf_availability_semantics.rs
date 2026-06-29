@@ -22,5 +22,10 @@ fn oracle_font_otf_helpers_follow_gnu_primitive_availability() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (void-function font-drive-otf) nil (void-function font-otf-alternates))""#
+        ]],
+    );
 }

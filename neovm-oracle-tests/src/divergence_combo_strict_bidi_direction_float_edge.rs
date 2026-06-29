@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_q1_bidi_text_direction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-direction ?a)
       (char-direction ?A)
@@ -23,13 +23,14 @@ fn div_q1_bidi_text_direction() {
         (insert "שלום עולם")
         (bidi-paragraph-direction)))
 "##,
+        expect_test::expect![[r#""ERR (void-function char-direction)""#]],
     );
 }
 
 #[test]
 fn div_q1_float_formatting_extreme_precision() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%.20f" 0.1)
       (format "%.20f" 1.0)
@@ -42,13 +43,16 @@ fn div_q1_float_formatting_extreme_precision() {
       (format "%.0f" 0.5000000000000001)
       (format "%.17g" 0.1))
 "##,
+        expect_test::expect![[
+            r#""OK (\"0.10000000000000000555\" \"1.00000000000000000000\" \"1.00000000000000000000e+00\" \"0.333333333333333314829616256247\" \"0.1\" \"1.7976931348623157e+308\" \"5e-324\" \"0\" \"1\" \"0.10000000000000001\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_q1_bidi_mixed_ltr_rtl() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcשלוםdef")
@@ -57,13 +61,14 @@ fn div_q1_bidi_mixed_ltr_rtl() {
         (buffer-substring 1 10)
         (bidi-paragraph-direction)))
 "##,
+        expect_test::expect![[r#""ERR (void-function bidi-paragraph-direction)""#]],
     );
 }
 
 #[test]
 fn div_q1_float_arithmetic_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (/ 1.0 0.0)
       (/ -1.0 0.0)
@@ -75,5 +80,6 @@ fn div_q1_float_arithmetic_edge() {
       (< 5e-324 1.0e-300)
       (copysign 1.0 -1.0))
 "##,
+        expect_test::expect![[r#""OK (1.0e+INF -1.0e+INF -0.0e+NaN t nil 1.0e+INF nil t -1.0)""#]],
     );
 }

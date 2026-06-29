@@ -18,12 +18,13 @@ fn div_utf8_string_make_multibyte_utf8_bytes_not_decoded() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Bytes 195 169 are UTF-8 for é. string-make-multibyte must NOT decode
     // them; it must produce two distinct eight-bit chars.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((m (string-make-multibyte (unibyte-string 195 169))))
   (list (length m) (string-bytes m) (append m nil)
         (multibyte-string-p m)))
 "#,
+        expect_test::expect![[r#""OK (2 4 (4194243 4194217) t)""#]],
     );
 }
 
@@ -32,7 +33,7 @@ fn div_utf8_make_vs_as_vs_decode_three_way() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // The same bytes interpreted three different ways must give three
     // distinct results in GNU.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((bytes (unibyte-string 195 169 226 130 172)))   ; é, € as UTF-8
   (list (length (string-make-multibyte bytes))
@@ -41,18 +42,24 @@ fn div_utf8_make_vs_as_vs_decode_three_way() {
         (append (decode-coding-string bytes 'utf-8) nil)
         (append (string-make-multibyte bytes) nil)))
 "#,
+        expect_test::expect![[
+            r#""OK (5 2 2 (233 8364) (4194243 4194217 4194274 4194178 4194220))""#
+        ]],
     );
 }
 
 #[test]
 fn div_utf8_string_make_multibyte_each_byte_is_eightbit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((m (string-make-multibyte (unibyte-string 240 159 152 128))))  ; emoji UTF-8
   (list (length m) (append m nil)
         (mapcar #'char-charset (append m nil))))
 "#,
+        expect_test::expect![[
+            r#""OK (4 (4194288 4194207 4194200 4194176) (eight-bit eight-bit eight-bit eight-bit))""#
+        ]],
     );
 }
 
@@ -61,20 +68,21 @@ fn div_utf8_string_make_multibyte_each_byte_is_eightbit() {
 #[test]
 fn div_utf8_make_char_legacy_iso2022_charsets() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (condition-case err (make-char 'japanese-jisx0208 36 34) (error (cons 'err (car err))))
       (condition-case err (make-char 'chinese-gb2312 48 48) (error (cons 'err (car err))))
       (condition-case err (make-char 'korean-ksc5601 33 33) (error (cons 'err (car err))))
       (condition-case err (make-char 'latin-iso8859-1 41) (error (cons 'err (car err)))))
 "#,
+        expect_test::expect![[r#""OK (12354 38797 12288 169)""#]],
     );
 }
 
 #[test]
 fn div_utf8_make_char_legacy_charset_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (condition-case err
     (let ((c (make-char 'japanese-jisx0208 36 34)))
@@ -83,6 +91,7 @@ fn div_utf8_make_char_legacy_charset_roundtrip() {
             (encode-char c 'japanese-jisx0208)))
   (error (cons 'err (car err))))
 "#,
+        expect_test::expect![[r#""OK (12354 unicode-bmp 9250)""#]],
     );
 }
 
@@ -91,7 +100,7 @@ fn div_utf8_make_char_legacy_charset_roundtrip() {
 #[test]
 fn div_utf8_insert_unibyte_into_multibyte_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert "a")
@@ -100,6 +109,7 @@ fn div_utf8_insert_unibyte_into_multibyte_buffer() {
         (multibyte-string-p (buffer-string))
         (append (buffer-string) nil)))
 "#,
+        expect_test::expect![[r#""OK (3 t (97 4194248))""#]],
     );
 }
 
@@ -108,7 +118,7 @@ fn div_utf8_insert_unibyte_into_multibyte_buffer() {
 #[test]
 fn div_utf8_ucs_normalize_compose_decompose() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (ucs-normalize-string "café" 'NFC)
       (ucs-normalize-string "café" 'NFD)
@@ -119,6 +129,7 @@ fn div_utf8_ucs_normalize_compose_decompose() {
       (equal (ucs-normalize-string "café" 'NFC)
              (ucs-normalize-string (concat "cafe" (string #x301)) 'NFC)))
 "#,
+        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
     );
 }
 
@@ -126,7 +137,7 @@ fn div_utf8_ucs_normalize_compose_decompose() {
 fn div_utf8_ucs_normalize_korean_hangul() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Hangul has algorithmic (not table) composition in NFC.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let* ((composed (string #xAC00))                 ; 가
        (decomposed (ucs-normalize-string composed 'NFD)))
@@ -134,6 +145,7 @@ fn div_utf8_ucs_normalize_korean_hangul() {
         (append decomposed nil)
         (ucs-normalize-string decomposed 'NFC)))
 "#,
+        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
     );
 }
 
@@ -142,7 +154,7 @@ fn div_utf8_ucs_normalize_korean_hangul() {
 #[test]
 fn div_utf8_charset_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (list (charset-dimension 'ascii)
       (charset-dimension 'latin-iso8859-1)
@@ -151,5 +163,6 @@ fn div_utf8_charset_dimensions() {
       (charset-dimension 'eight-bit)
       (length (charset-list)))
 "#,
+        expect_test::expect![[r#""ERR (void-function charset-list)""#]],
     );
 }

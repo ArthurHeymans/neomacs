@@ -10,7 +10,10 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_let_scoping_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(let ((x 1)) (let ((x 2)) x))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((x 1)) (let ((x 2)) x))",
+        expect_test::expect![[r#""OK 2""#]],
+    );
     assert_ok_eq("2", &oracle, &neovm);
 }
 
@@ -18,7 +21,10 @@ fn oracle_prop_let_scoping_basic() {
 fn oracle_prop_let_parallel_binding_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(let ((x 1) (y (+ x 2))) y)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((x 1) (y (+ x 2))) y)",
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "void-variable");
 }
 
@@ -26,7 +32,10 @@ fn oracle_prop_let_parallel_binding_error() {
 fn oracle_prop_let_duplicate_binding_last_wins() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(let ((x 1) (x 2)) x)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((x 1) (x 2)) x)",
+        expect_test::expect![[r#""OK 2""#]],
+    );
     assert_ok_eq("2", &oracle, &neovm);
 }
 

@@ -29,7 +29,10 @@ fn oracle_prop_read_from_string_start_offsets() {
                      (cdr (read-from-string s 0))
                      (cdr (read-from-string s 4))
                      (cdr (read-from-string s 10))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 hello (1 2) \"str\" 4 10 16)""#]],
+    );
 }
 
 #[test]
@@ -47,7 +50,10 @@ fn oracle_prop_read_from_string_sequential_forms() {
                             (setq pos (cdr result))))
                       (error nil))
                     (list (length forms) (nreverse forms)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 ((+ 1 2) (* 3 4) (list 'a 'b 'c)))""#]],
+    );
 }
 
 #[test]
@@ -73,7 +79,12 @@ fn oracle_prop_read_from_string_all_data_types() {
                           (car (read-from-string "'quoted"))
                           (car (read-from-string "#'symbol-function")))))
                     (mapcar #'type-of types))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (integer integer float float symbol symbol string integer integer symbol symbol cons cons vector cons cons)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +107,12 @@ fn oracle_prop_prin1_to_string_special_chars() {
                     (equal "hello\nworld"
                            (car (read-from-string
                                   (prin1-to-string "hello\nworld")))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\\\"hello\nworld\\\"\" \"\\\"tab\there\\\"\" \"\\\"back\\\\\\\\slash\\\"\" \"\\\"double\\\\\\\"quote\\\"\" \"\\\"null\u{b}yte\\\"\" \"\\\"mixed\n\t\\\\\\\"special\\\\\\\\\\\"\" t)""#
+        ]],
+    );
 }
 
 #[test]
@@ -115,7 +131,12 @@ fn oracle_prop_prin1_vs_format_differences() {
                         ;; prin1 and %S should agree
                         (string= (prin1-to-string v) (format "%S" v))))
                      vals))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"nil\" \"nil\" \"nil\" t) (\"t\" \"t\" \"t\" t) (\"42\" \"42\" \"42\" t) (\"3.14\" \"3.14\" \"3.14\" t) (\"\\\"hello\\\"\" \"\\\"hello\\\"\" \"hello\" t) (\"foo\" \"foo\" \"foo\" t) (\"(1 2 3)\" \"(1 2 3)\" \"(1 2 3)\" t) (\"[4 5 6]\" \"[4 5 6]\" \"[4 5 6]\" t) (\"(a . b)\" \"(a . b)\" \"(a . b)\" t))""#
+        ]],
+    );
 }
 
 #[test]
@@ -155,7 +176,12 @@ fn oracle_prop_prin1_to_string_all_types() {
                     ;; Characters
                     (prin1-to-string ?A)
                     (prin1-to-string ?\n))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"nil\" \"t\" \"0\" \"-1\" \"999999\" \"0.0\" \"1.5\" \"-25000000000.0\" \"\\\"\\\"\" \"\\\"hello\\\"\" \"foo\" \":bar\" \"nil\" \"(1)\" \"(1 2 3)\" \"(a . b)\" \"(1 2 . 3)\" \"[]\" \"[1 2 3]\" \"((a . 1) (b 2 3) (c . [4 5]))\" \"65\" \"10\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +210,12 @@ fn oracle_prop_read_eval_print_loop_with_errors() {
                                            results))))))
                       (error nil))
                     (nreverse results))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok 3) (err arith-error) (ok 12) (err wrong-type-argument) (ok 5))""#
+        ]],
+    );
 }
 
 #[test]
@@ -210,7 +241,12 @@ fn oracle_prop_serialization_roundtrip_complex() {
                               (restored (car (read-from-string printed))))
                          (list (equal orig restored) printed)))
                      structures))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t \"nil\") (t \"t\") (t \"42\") (t \"\\\"hello world\\\"\") (t \"(a b c)\") (t \"(1 . 2)\") (t \"((a . 1) (b . 2) (c . 3))\") (t \"[1 \\\"two\\\" three]\") (t \"(nested (list \\\"with\\\" (various . types)) [and vectors])\") (t \"(1 2 . 3)\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -243,5 +279,8 @@ fn oracle_prop_read_build_alist_from_kv_string() {
                          (equal alist
                                 (car (read-from-string
                                        (prin1-to-string alist))))))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"Alice\" 30 (95 87 92) t t)""#]],
+    );
 }

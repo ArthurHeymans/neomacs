@@ -53,5 +53,10 @@ fn oracle_directory_abbrev_regexp_boundaries_and_apply_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\\\\`/tmp/a\\\\.b\\\\(/\\\\|\\\\'\\\\)\" ((\"/tmp/a.b\" \"/tmp/a.b\") (\"/tmp/a.b/\" \"/tmp/a.b/\") (\"/tmp/a.b/file\" \"/tmp/a.b/\") (\"/tmp/a.b-extra\" nil) (\"/tmp/aXb\" nil) (\"prefix/tmp/a.b\" nil)) (\"/one/file.el\" \"/two/other.el\" \"/two/longer/file.el\" \"relative/tmp/root/long/file.el\") \"/TMP/CASE/file.el\" \"/lower/file.el\" \"/tmp/root/file.el\" (wrong-type-argument (stringp 42)) 42 (wrong-number-of-arguments ((1 . 1) 0)))""#
+        ]],
+    );
 }

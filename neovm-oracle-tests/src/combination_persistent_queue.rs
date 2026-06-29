@@ -113,7 +113,12 @@ fn oracle_prop_persistent_queue_basic_ops() {
     (fmakunbound 'neovm--pq-dequeue)
     (fmakunbound 'neovm--pq-peek)
     (fmakunbound 'neovm--pq-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t nil 0 1 3 1 1 2 3 (1 2 3) (2 3) (3 4 5) (4 5) (1 2 3) 3 nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +242,12 @@ fn oracle_prop_persistent_queue_batch_ops() {
     (fmakunbound 'neovm--pq-dequeue-n)
     (fmakunbound 'neovm--pq-drain)
     (fmakunbound 'neovm--pq-from-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((10 20 30 40 50) 5 (10 20 30) (40 50) (40 50 60 70) (40 50 60 70) t (a b c d e) (1 2 3) nil t (10 20 30 40 50))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +372,12 @@ fn oracle_prop_persistent_queue_priority() {
     (fmakunbound 'neovm--ppq-priorities)
     (fmakunbound 'neovm--ppq-merge)
     (fmakunbound 'neovm--ppq-drain)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t nil 5 (1 . \"also-high\") (\"also-high\" \"high\" \"medium\" \"low\" \"very-low\") (1 1 2 3 5) (1 . \"also-high\") (1 . \"high\") (\"medium\" \"low\" \"very-low\") (\"urgent\" \"also-high\" \"high\" \"medium\" \"low\" \"normal\" \"very-low\") (0 1 1 2 3 4 5) ((1 . \"also-high\") (1 . \"high\") (2 . \"medium\") (3 . \"low\") (5 . \"very-low\")) 5 (\"also-high\" \"high\" \"medium\" \"low\" \"very-low\") (nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -492,7 +507,12 @@ fn oracle_prop_persistent_queue_circular_buffer() {
     (fmakunbound 'neovm--cb-peek-newest)
     (fmakunbound 'neovm--cb-to-list)
     (fmakunbound 'neovm--cb-add-all)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t 0 ((5 (4 (3 (2 (1)))))) 1 nil ((6 (5 (4 (3 (2 (1))))))) (6 (5 (4 (3 (2 (1)))))) (6 (5 (4 (3 (2 (1)))))) ((7 (6 (5 (4 (3 (2 (1)))))))) ((10 (9 (8 (7 (6 (5 (4 (3 (2 (1))))))))))) 1 ((50 (40 (30 (20 (10)))))) (50 (40 (30 (20 (10))))) (50 (40 (30 (20 (10))))) 5 3 ((5 (4 (3 (2 (1)))))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -603,7 +623,12 @@ fn oracle_prop_persistent_queue_bfs() {
     (fmakunbound 'neovm--bq-dequeue)
     (fmakunbound 'neovm--bq-bfs)
     (fmakunbound 'neovm--bq-bfs-levels)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a b c d e f) (d b a e c f) ((a) (b c) (d e f)) ((d) (b) (a e) (c f)) t ((x y z) ((x) (y) (z))) (solo))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -728,5 +753,10 @@ fn oracle_prop_persistent_queue_deque() {
     (fmakunbound 'neovm--dq-pop-front)
     (fmakunbound 'neovm--dq-pop-back)
     (fmakunbound 'neovm--dq-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5) 5 1 (2 3 4 5) 5 (1 2 3 4) (10 20 30) 10 (20 30) (1 2 3 4 5) t nil)""#
+        ]],
+    );
 }

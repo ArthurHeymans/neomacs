@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx109_set_text_properties_replaces_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -18,13 +18,14 @@ fn div_cx109_set_text_properties_replaces_all() {
         (text-properties-at 5)
         (text-properties-at 6)))
 "##,
+        expect_test::expect![[r#""OK ((color red) (color red) nil)""#]],
     );
 }
 
 #[test]
 fn div_cx109_add_text_properties_appends_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -36,13 +37,16 @@ fn div_cx109_add_text_properties_appends_keys() {
         (text-properties-at 4)
         (text-properties-at 5)))
 "##,
+        expect_test::expect![[
+            r#""OK ((color blue weight heavy face bold) (color blue weight heavy face bold) nil nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx109_remove_text_properties_specific_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -52,13 +56,14 @@ fn div_cx109_remove_text_properties_specific_keys() {
         (text-properties-at 3)
         (text-properties-at 6)))
 "##,
+        expect_test::expect![[r#""OK ((color blue face bold) (color blue face bold) nil)""#]],
     );
 }
 
 #[test]
 fn div_cx109_remove_text_properties_all_with_nil_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -68,13 +73,16 @@ fn div_cx109_remove_text_properties_all_with_nil_props() {
         (text-properties-at 3)
         (text-properties-at 6)))
 "##,
+        expect_test::expect![[
+            r#""OK ((color blue weight heavy face bold) (color blue weight heavy face bold) nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx109_rear_nonsticky_blocks_property_at_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -85,13 +93,14 @@ fn div_cx109_rear_nonsticky_blocks_property_at_end() {
         (get-text-property 6 'face)
         (get-text-property 7 'face)))
 "##,
+        expect_test::expect![[r#""OK (bold bold nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx109_text_property_stickiness_on_insertion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -112,13 +121,14 @@ fn div_cx109_text_property_stickiness_on_insertion() {
           (get-text-property 5 'face)
           (get-text-property 6 'face))))
 "##,
+        expect_test::expect![[r#""OK (bold bold nil nil bold bold)""#]],
     );
 }
 
 #[test]
 fn div_cx109_text_property_at_point_and_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -130,13 +140,14 @@ fn div_cx109_text_property_at_point_and_bounds() {
         (end (next-single-property-change beg 'face)))
     (list at-3 beg end)))
 "##,
+        expect_test::expect![[r#""ERR (void-variable beg)""#]],
     );
 }
 
 #[test]
 fn div_cx109_text_property_search_with_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -153,13 +164,14 @@ fn div_cx109_text_property_search_with_predicate() {
         (nreverse matches)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
     );
 }
 
 #[test]
 fn div_cx109_set_text_properties_with_overlap_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -175,13 +187,14 @@ fn div_cx109_set_text_properties_with_overlap_overlay() {
             (get-text-property 1 'face)
             (get-text-property 5 'face)))))
 "##,
+        expect_test::expect![[r#""OK (bold italic italic italic nil bold bold)""#]],
     );
 }
 
 #[test]
 fn div_cx109_text_property_buffer_substring_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -196,13 +209,14 @@ fn div_cx109_text_property_buffer_substring_with_props() {
           (text-properties-at 4 sub)
           (text-properties-at 7 sub))))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments put-text-property 3)""#]],
     );
 }
 
 #[test]
 fn div_cx109_set_text_properties_full_buffer_no_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -214,13 +228,14 @@ fn div_cx109_set_text_properties_full_buffer_no_props() {
         (text-properties-at 7)
         (next-single-property-change 1 'face)))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments put-text-property 3)""#]],
     );
 }
 
 #[test]
 fn div_cx109_text_property_undo_redo_with_marker_overlay_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -247,5 +262,6 @@ fn div_cx109_text_property_undo_redo_with_marker_overlay_narrow_mega() {
             (text-properties-at 1)
             (text-properties-at 5)))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 20)""#]],
     );
 }

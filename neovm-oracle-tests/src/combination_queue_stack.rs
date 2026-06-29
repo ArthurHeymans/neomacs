@@ -93,7 +93,10 @@ fn oracle_prop_qs_fifo_queue() {
     (fmakunbound 'neovm--qs-q-size)
     (fmakunbound 'neovm--qs-q-empty-p)
     (fmakunbound 'neovm--qs-q-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 0 4 alpha (delta) delta nil 0 nil epsilon nil 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +180,12 @@ fn oracle_prop_qs_priority_queue() {
     (fmakunbound 'neovm--qs-pq-peek)
     (fmakunbound 'neovm--qs-pq-size)
     (fmakunbound 'neovm--qs-pq-to-list)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (6 \"also-urgent\" (\"also-urgent\" \"urgent\" \"high\" \"medium\" \"low\" \"low-priority\") (\"also-urgent\" \"urgent\" \"high\") (\"medium\" \"low\" \"low-priority\") 3 \"critical\" (\"critical\" \"medium\" \"low\" \"low-priority\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -261,7 +269,10 @@ fn oracle_prop_qs_deque() {
     (fmakunbound 'neovm--qs-dq-pop-back)
     (fmakunbound 'neovm--qs-dq-to-list)
     (fmakunbound 'neovm--qs-dq-size)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((A B C D E) 5 A E (B C D) 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +334,12 @@ fn oracle_prop_qs_min_stack() {
     (fmakunbound 'neovm--qs-ms-get-min)
     (fmakunbound 'neovm--qs-ms-size)
     (fmakunbound 'neovm--qs-ms-empty-p)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((5 5 1) (3 3 2) (7 3 3) (1 1 4) (4 1 5) (0 0 6) (8 0 7)) ((8 0) (0 0) (4 1) (1 1) (7 3) (3 3) (5 5)) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -401,7 +417,10 @@ fn oracle_prop_qs_queue_from_two_stacks() {
     (fmakunbound 'neovm--qs-2sq-dequeue)
     (fmakunbound 'neovm--qs-2sq-peek)
     (fmakunbound 'neovm--qs-2sq-size)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (5 1 (5 nil nil) 2 6 (7))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -464,7 +483,12 @@ fn oracle_prop_qs_postfix_eval() {
         ;; neg: 5 neg = -5, then + 10 = 5
         (funcall 'neovm--qs-rpn-eval '(5 neg 10 +)))
     (fmakunbound 'neovm--qs-rpn-eval)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((7 1) (4 1) (14 1) (750 1) (5 1) (44 1) (25 1) (1 1) (5 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -552,7 +576,12 @@ fn oracle_prop_qs_bracket_matching() {
         ;; Complex code-like input
         (funcall 'neovm--qs-bracket-check "if (a[i] > 0) { b[j] = {x, y}; }"))
     (fmakunbound 'neovm--qs-bracket-check)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok 1) (ok 3) (ok 4) (ok 4) (error \"expected closing paren but got bracket\" 1) (error \"unclosed paren\" 0) (error \"unmatched closing paren\" 0) (ok 0) (ok 1) (ok 5))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -610,5 +639,10 @@ fn oracle_prop_qs_monotonic_stack() {
         (funcall 'neovm--qs-daily-temps '(100 90 80 70)))
     (fmakunbound 'neovm--qs-next-greater)
     (fmakunbound 'neovm--qs-daily-temps)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5 10 10 -1 -1) (2 3 4 5 -1) (-1 -1 -1 -1 -1) (7 8 5 6 6 8 -1) (1 1 4 2 1 1 0 0) (0 0 0) (0 0 0 0))""#
+        ]],
+    );
 }

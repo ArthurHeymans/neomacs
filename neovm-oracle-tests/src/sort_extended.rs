@@ -12,7 +12,10 @@ fn oracle_prop_sort_by_abs() {
 
     let form = "(sort (list 3 -1 4 -1 5 -9 2 -6)
                       (lambda (a b) (< (abs a) (abs b))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (-1 -1 2 3 4 5 -6 -9)""#]],
+    );
 }
 
 #[test]
@@ -22,7 +25,10 @@ fn oracle_prop_sort_strings_by_length() {
     let form = r#"(sort (list "cc" "aaa" "b" "dddd" "")
                         (lambda (a b)
                           (< (length a) (length b))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"\" \"b\" \"cc\" \"aaa\" \"dddd\")""#]],
+    );
 }
 
 #[test]
@@ -31,7 +37,10 @@ fn oracle_prop_sort_alist_by_cdr() {
 
     let form = "(sort (list '(a . 3) '(b . 1) '(c . 4) '(d . 1) '(e . 5))
                       (lambda (x y) (< (cdr x) (cdr y))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((b . 1) (d . 1) (a . 3) (c . 4) (e . 5))""#]],
+    );
 }
 
 #[test]
@@ -41,7 +50,10 @@ fn oracle_prop_sort_stable_for_equal_elements() {
     // Sort pairs by first element; second element shows original order
     let form = "(sort (list '(1 . a) '(2 . b) '(1 . c) '(2 . d) '(1 . e))
                       (lambda (x y) (< (car x) (car y))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 . a) (1 . c) (1 . e) (2 . b) (2 . d))""#]],
+    );
 }
 
 #[test]
@@ -49,7 +61,7 @@ fn oracle_prop_sort_reverse_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(sort (list 1 5 3 2 4) '>)";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (5 4 3 2 1)""#]]);
 }
 
 #[test]
@@ -58,7 +70,10 @@ fn oracle_prop_sort_with_string_lessp() {
 
     let form = r#"(sort (list "banana" "apple" "cherry" "date")
                         'string-lessp)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"apple\" \"banana\" \"cherry\" \"date\")""#]],
+    );
 }
 
 #[test]
@@ -66,7 +81,7 @@ fn oracle_prop_sort_single_element() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(sort (list 42) '<)";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (42)""#]]);
 }
 
 #[test]
@@ -74,7 +89,7 @@ fn oracle_prop_sort_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(sort nil '<)";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }
 
 #[test]
@@ -89,7 +104,10 @@ fn oracle_prop_sort_with_multi_key() {
                                  (string-lessp
                                   (symbol-name (cadr x))
                                   (symbol-name (cadr y)))))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 a) (1 b) (1 c) (2 a) (2 b))""#]],
+    );
 }
 
 #[test]
@@ -100,7 +118,7 @@ fn oracle_prop_sort_is_destructive() {
     let form = "(let ((lst (list 3 1 4 1 5)))
                   (let ((sorted (sort lst '<)))
                     (equal sorted '(1 1 3 4 5))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK t""#]]);
 }
 
 proptest! {

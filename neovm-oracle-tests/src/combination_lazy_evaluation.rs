@@ -85,7 +85,10 @@ fn oracle_prop_lazy_delay_force_basics() {
     (fmakunbound 'neovm--lz-car)
     (fmakunbound 'neovm--lz-cdr)
     (fmakunbound 'neovm--lz-take)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3 nil) ((a b) (a b c) nil) nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +166,10 @@ fn oracle_prop_lazy_infinite_streams() {
     (fmakunbound 'neovm--lz2-fib-from)
     (fmakunbound 'neovm--lz2-fib)
     (fmakunbound 'neovm--lz2-squares-from)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +251,10 @@ fn oracle_prop_lazy_prime_sieve() {
     (fmakunbound 'neovm--lz3-filter)
     (fmakunbound 'neovm--lz3-sieve)
     (fmakunbound 'neovm--lz3-primes)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +371,10 @@ fn oracle_prop_lazy_stream_operations() {
     (fmakunbound 'neovm--lz4-map)
     (fmakunbound 'neovm--lz4-filter)
     (fmakunbound 'neovm--lz4-zip)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -458,7 +470,10 @@ fn oracle_prop_lazy_merge_sorted_streams() {
     (fmakunbound 'neovm--lz5-take)
     (fmakunbound 'neovm--lz5-multiples)
     (fmakunbound 'neovm--lz5-merge)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -546,5 +561,10 @@ fn oracle_prop_lazy_memoized_streams() {
     (fmakunbound 'neovm--lzm-car)
     (fmakunbound 'neovm--lzm-cdr)
     (fmakunbound 'neovm--lzm-take)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (first-take (1 2 3) second-take (1 2 3) third-take (1 2 3) evals-after-first 3 evals-after-second 3 evals-after-third 3 all-equal t memoized t)""#
+        ]],
+    );
 }

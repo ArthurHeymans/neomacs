@@ -13,7 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx423_process_send_eof() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"
 (let ((buf (get-buffer-create " *cx423-eof*")))
   (let ((proc (make-process :name "neo-cx423-eof"
@@ -33,7 +33,7 @@ fn div_cx423_process_send_eof() {
 #[test]
 fn div_cx423_overlay_recenter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -41,6 +41,7 @@ fn div_cx423_overlay_recenter() {
     (overlay-recenter (point-max))
     (length (overlays-in 1 10))))
 "##,
+        expect_test::expect![[r#""OK 2""#]],
     );
 }
 
@@ -49,7 +50,7 @@ fn div_cx423_overlay_recenter() {
 #[test]
 fn div_cx423_with_propertized_buffer_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abc")
@@ -60,6 +61,7 @@ fn div_cx423_with_propertized_buffer_substring() {
           (text-properties-at 0 sub)
           (text-properties-at 2 sub))))
 "##,
+        expect_test::expect![[r#""ERR (void-function with-propertized-buffer-substring)""#]],
     );
 }
 
@@ -67,7 +69,7 @@ fn div_cx423_with_propertized_buffer_substring() {
 #[test]
 fn div_cx423_keymap_unset_canonicalize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
   (define-key map "a" 'forward-char)
@@ -75,6 +77,7 @@ fn div_cx423_keymap_unset_canonicalize() {
   (keymap-unset map "a" nil)
   (keymap-canonicalize map))
 "##,
+        expect_test::expect![[r#""OK (keymap (98 . backward-char) (97))""#]],
     );
 }
 
@@ -82,13 +85,14 @@ fn div_cx423_keymap_unset_canonicalize() {
 #[test]
 fn div_cx423_terminal_parameter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((term (frame-terminal (selected-frame))))
   (set-terminal-parameter term 'cx423-param 'test-val)
   (list (terminal-parameter term 'cx423-param)
         (terminal-parameter term 'nonexistent)))
 "##,
+        expect_test::expect![[r#""OK (test-val nil)""#]],
     );
 }
 
@@ -96,7 +100,7 @@ fn div_cx423_terminal_parameter() {
 #[test]
 fn div_cx423_buffer_swap_text_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (get-buffer-create " *cx423-swap-a*"))
       (b (get-buffer-create " *cx423-swap-b*")))
@@ -108,6 +112,7 @@ fn div_cx423_buffer_swap_text_narrow() {
     (kill-buffer a)
     (kill-buffer b)))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-swap-text 2)""#]],
     );
 }
 
@@ -115,7 +120,7 @@ fn div_cx423_buffer_swap_text_narrow() {
 #[test]
 fn div_cx423_window_state_put_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "state test")
@@ -123,6 +128,7 @@ fn div_cx423_window_state_put_buffer() {
     (list (window-state-put state (selected-window) 'safe)
           (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK (nil \"\")""#]],
     );
 }
 
@@ -130,11 +136,12 @@ fn div_cx423_window_state_put_buffer() {
 #[test]
 fn div_cx423_font_driver_available() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (font-driver-available-p) (error (car e)))
       (font-family-list))
 "##,
+        expect_test::expect![[r#""OK (void-function nil)""#]],
     );
 }
 
@@ -142,7 +149,7 @@ fn div_cx423_font_driver_available() {
 #[test]
 fn div_cx423_encode_decode_coding_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "héllo")
@@ -150,6 +157,7 @@ fn div_cx423_encode_decode_coding_region() {
   (list (buffer-size)
         (buffer-string)))
 "##,
+        expect_test::expect![[r#""OK (6 \"h\\303\\251llo\")""#]],
     );
 }
 
@@ -157,13 +165,14 @@ fn div_cx423_encode_decode_coding_region() {
 #[test]
 fn div_cx423_read_with_readtable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "'(a b c)")
   (goto-char 1)
   (read (current-buffer)))
 "##,
+        expect_test::expect![[r#""OK '(a b c)""#]],
     );
 }
 
@@ -171,12 +180,13 @@ fn div_cx423_read_with_readtable() {
 #[test]
 fn div_cx423_print_gensym() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((print-gensym t)
       (s (make-symbol "test-sym")))
   (prin1-to-string s))
 "##,
+        expect_test::expect![[r##""OK \"#:test-sym\"""##]],
     );
 }
 
@@ -184,7 +194,7 @@ fn div_cx423_print_gensym() {
 #[test]
 fn div_cx423_eval_after_load() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((flag nil))
   (with-eval-after-load 'nonexistent-cx423
@@ -193,6 +203,7 @@ fn div_cx423_eval_after_load() {
         (eval-after-load 'emacs (setq flag 'emacs))
         flag))
 "##,
+        expect_test::expect![[r#""ERR (void-variable emacs)""#]],
     );
 }
 
@@ -200,7 +211,7 @@ fn div_cx423_eval_after_load() {
 #[test]
 fn div_cx423_process_send_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx423-pss"
                           :command '("sh" "-c" "read line; echo ok")
@@ -211,6 +222,7 @@ fn div_cx423_process_send_string() {
     (delete-process proc)
     (eq status 'exit)))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -218,7 +230,7 @@ fn div_cx423_process_send_string() {
 #[test]
 fn div_cx423_marker_undo_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -228,6 +240,7 @@ fn div_cx423_marker_undo_position() {
     (undo)
     (marker-position m)))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     );
 }
 
@@ -235,7 +248,7 @@ fn div_cx423_marker_undo_position() {
 #[test]
 fn div_cx423_overlay_evaporate_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcde")
@@ -245,6 +258,7 @@ fn div_cx423_overlay_evaporate_delete() {
     (list (overlay-live-p ov)
           (length (overlays-in 1 10)))))
 "##,
+        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
     );
 }
 
@@ -252,7 +266,7 @@ fn div_cx423_overlay_evaporate_delete() {
 #[test]
 fn div_cx423_make_frame_tty_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frames-before (length (frame-list))))
   (condition-case e
@@ -260,6 +274,7 @@ fn div_cx423_make_frame_tty_deep() {
     (error (car e)))
   (length (frame-list)))
 "##,
+        expect_test::expect![[r#""OK 1""#]],
     );
 }
 
@@ -267,7 +282,7 @@ fn div_cx423_make_frame_tty_deep() {
 #[test]
 fn div_cx423_insert_buffer_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((src (get-buffer-create " *cx423-ibs*")))
   (with-current-buffer src
@@ -279,6 +294,7 @@ fn div_cx423_insert_buffer_substring() {
           (get-text-property 1 'face)))
   (kill-buffer src))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -286,11 +302,12 @@ fn div_cx423_insert_buffer_substring() {
 #[test]
 fn div_cx423_apply_many_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((args (number-sequence 1 50)))
   (apply #'+ 0 args))
 "##,
+        expect_test::expect![[r#""OK 1275""#]],
     );
 }
 
@@ -298,7 +315,7 @@ fn div_cx423_apply_many_args() {
 #[test]
 fn div_cx423_narrow_widen_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -306,5 +323,6 @@ fn div_cx423_narrow_widen_point() {
   (narrow-to-region 3 7)
   (point))
 "##,
+        expect_test::expect![[r#""OK 7""#]],
     );
 }

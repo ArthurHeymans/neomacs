@@ -14,7 +14,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo49_property_mutate_remap_verify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO Root\n** DONE A\n** TODO B\n* TODO Other\n")
@@ -61,6 +61,7 @@ fn combo49_property_mutate_remap_verify() {
     ;; buffer state
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (user-error \"State ‘WAIT’ not valid in this file\")""#]],
     );
 }
 
@@ -71,7 +72,7 @@ fn combo49_property_mutate_remap_verify() {
 #[test]
 fn combo49_clock_multi_entry_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-clock)
@@ -112,6 +113,9 @@ fn combo49_clock_multi_entry_cycle() {
       (push (list :logbook-count (length (org-element-map (org-element-parse-buffer) 'drawer
                                           (lambda (d) (when (equal "LOGBOOK" (org-element-property :drawer-name d)) d))))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:a-in t) (:a-out t) (:b-in t) (:b-out t) (:a-clock-count 3) (:b-clock-count 0) (:a-clock-sum 0) (:b-clock-sum 0) (:logbook-count 2))""#
+        ]],
     );
 }
 
@@ -122,7 +126,7 @@ fn combo49_clock_multi_entry_cycle() {
 #[test]
 fn combo49_fold_parse_unfold_reparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** A1\nBody 1.\n** A2\nBody 2.\n*** A2a\nBody 2a.\n* B\n** B1\nBody B1.\n")
@@ -149,6 +153,9 @@ fn combo49_fold_parse_unfold_reparse() {
     (org-fold-show-subtree)
     (push (list :after-show-a-headlines (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:init-headlines 6) (:init-sections 4) (:overview-vis-headlines 2) (:after-showall-headlines 6) (:after-showall-sections 4) (:after-hide-a-headlines 6) (:after-show-a-headlines 6))""#
+        ]],
     );
 }
 
@@ -159,7 +166,7 @@ fn combo49_fold_parse_unfold_reparse() {
 #[test]
 fn combo49_table_iterate_across_edits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+name: T1\n| a | b |\n| 5 | 3 |\n| 2 | 7 |\n\n")
@@ -191,6 +198,7 @@ fn combo49_table_iterate_across_edits() {
     ;; to-lisp of T2
     (push (list :t2-to-lisp (org-table-to-lisp)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (user-error \"Not at a table\")""#]],
     );
 }
 
@@ -201,7 +209,7 @@ fn combo49_table_iterate_across_edits() {
 #[test]
 fn combo49_adopt_extract_cross_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-element)
@@ -233,6 +241,7 @@ fn combo49_adopt_extract_cross_type() {
       ;; interpret the whole tree
       (push (list :interpreted-length (> (length (substring-no-properties (org-element-interpret-data tree))) 0)) r)
       (nreverse r))))"##,
+        expect_test::expect![[r#""ERR (void-function org-element-adopt-element)""#]],
     );
 }
 
@@ -243,7 +252,7 @@ fn combo49_adopt_extract_cross_type() {
 #[test]
 fn combo49_babel_session_cross_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -278,6 +287,9 @@ fn combo49_babel_session_cross_block() {
       ;; count all result blocks
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"ob-sh\")""#
+        ]],
     );
 }
 
@@ -288,7 +300,7 @@ fn combo49_babel_session_cross_block() {
 #[test]
 fn combo49_capture_template_context() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-capture)
@@ -306,6 +318,9 @@ fn combo49_capture_template_context() {
      (list :types (mapcar (lambda (tpl) (nth 0 tpl)) org-capture-templates))
      ;; template descriptions
      (list :descs (mapcar (lambda (tpl) (nth 1 tpl)) org-capture-templates)))))"##,
+        expect_test::expect![[
+            r#""OK ((:template-count 2) (:keys (\"t\" \"n\")) (:types (\"t\" \"n\")) (:descs (\"Todo\" \"Note\")))""#
+        ]],
     );
 }
 
@@ -316,7 +331,7 @@ fn combo49_capture_template_context() {
 #[test]
 fn combo49_export_env_mutate_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox)
@@ -346,6 +361,9 @@ fn combo49_export_env_mutate_chain() {
       (push (list :title2 (plist-get e :title)) r)
       (push (list :author2 (plist-get e :author)) r))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:title1 (#(\"Alpha\" 0 5 (:parent (#(\"Alpha\" 0 5 (:parent #5))))))) (:author1 (#(\"Bob\" 0 3 (:parent (#(\"Bob\" 0 3 (:parent #5))))))) (:email1 \"bob@test\") (:date1 (#(\"2024-01-01\" 0 10 (:parent (#(\"2024-01-01\" 0 10 (:parent #5))))))) (:options nil) (:export-file nil) (:title2 nil) (:author2 (#(\"Bob\" 0 3 (:parent (#(\"Bob\" 0 3 (:parent #5))))))))""#
+        ]],
     );
 }
 
@@ -356,7 +374,7 @@ fn combo49_export_env_mutate_chain() {
 #[test]
 fn combo49_footnote_create_delete_renumber() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Footnotes\n")
@@ -386,6 +404,7 @@ fn combo49_footnote_create_delete_renumber() {
                         (org-element-map (org-element-parse-buffer) 'footnote-reference #'identity))) r)
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (void-function org-footnote-renumber-fn-n)""#]],
     );
 }
 
@@ -396,7 +415,7 @@ fn combo49_footnote_create_delete_renumber() {
 #[test]
 fn combo49_element_secondary_p_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-element)
@@ -423,5 +442,8 @@ fn combo49_element_secondary_p_deep() {
       (when title-bold
         (push (list :title-bold-secondary-property (org-element-secondary-p title-bold)) r)))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""ERR (wrong-type-argument listp [org-element-deferred org-element--headline-parse-title (t) t])""#
+        ]],
     );
 }

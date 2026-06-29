@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_e9_regex_posix_classes_backrefs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-match-p "[[:alpha:]]+" "abc123")
       (string-match-p "[[:digit:]]+" "abc123")
@@ -22,13 +22,16 @@ fn div_e9_regex_posix_classes_backrefs() {
       (progn (string-match "\\(?:\\(.\\)\\1\\)" "aa") (match-data t))
       (regexp-opt '("foo" "x\\_<word\\_>")))
 "##,
+        expect_test::expect![[
+            r#""OK (0 3 2 0 4 3 (0 2 0 1) \"\\\\(?:foo\\\\|x\\\\\\\\_<word\\\\\\\\_>\\\\)\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_e9_event_and_key_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (event-modifiers 'C-S-a)
       (event-basic-type 'C-S-a)
@@ -42,13 +45,16 @@ fn div_e9_event_and_key_coding() {
       (event-modifiers 'S-down-mouse-1)
       (event-basic-type 'C-M-return))
 "##,
+        expect_test::expect![[
+            r#""OK ((control shift) a (meta) 120 1 134217848 \"C-<S-a>\" \"M-<f5>\" \"<f5>\" (shift down) nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_e9_match_data_save_set_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "hello world")
@@ -61,13 +67,14 @@ fn div_e9_match_data_save_set_restore() {
             (match-data t))
           (progn (set-match-data md) (match-data t)))))
 "##,
+        expect_test::expect![[r#""OK ((5 6 #<killed buffer>) (1 2) (5 6 #<killed buffer>))""#]],
     );
 }
 
 #[test]
 fn div_e9_replace_with_case_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (replace-regexp-in-string "\\b\\w"
                                 (lambda (_w) (upcase (match-string 0)))
@@ -79,13 +86,14 @@ fn div_e9_replace_with_case_function() {
         (re-search-forward "l")
         (replace-match (upcase (match-string 0)) t)))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 1)""#]],
     );
 }
 
 #[test]
 fn div_e9_encode_decode_time_extremes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (encode-time 0 0 12 1 1 1 0)
       (encode-time 0 0 12 1 1 10000 0)
@@ -93,13 +101,16 @@ fn div_e9_encode_decode_time_extremes() {
       (decode-time (encode-time 0 0 0 1 1 2038 0) 0)
       (format-time-string "%Y" (encode-time 0 0 0 1 1 1900 0) 0))
 "##,
+        expect_test::expect![[
+            r#""OK ((-948114 45504) (3866612 59968) (0 0 0 1 1 1970 4 nil 0) (0 0 0 1 1 2038 5 nil 0) \"1900\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_e9_assoc_rassoc_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((al '(("a" . 1) (b . 2) ("a" . 3))))
   (list (assoc "a" al)
@@ -109,18 +120,24 @@ fn div_e9_assoc_rassoc_variants() {
         (assoc-default "a" al)
         (assq-delete-all 'b al)))
 "##,
+        expect_test::expect![[
+            r#""OK ((\"a\" . 1) (b . 2) (b . 2) (b . 2) 1 ((\"a\" . 1) (\"a\" . 3)))""#
+        ]],
     );
 }
 
 #[test]
 fn div_e9_split_string_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (split-string "  a  b  c  ")
       (split-string "a,b,,c" ",")
       (split-string "a,b,,c" "," t)
       (split-string-and-unquote "a 'b c' d"))
 "##,
+        expect_test::expect![[
+            r#""OK ((\"a\" \"b\" \"c\") (\"a\" \"b\" \"\" \"c\") (\"a\" \"b\" \"c\") (\"a\" \"'b\" \"c'\" \"d\"))""#
+        ]],
     );
 }

@@ -50,7 +50,12 @@ fn oracle_prop_upcase_downcase_comprehensive() {
       ;; Long string
       (upcase "the quick brown fox jumps over the lazy dog")
       (downcase "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (65 97 90 122 48 48 33 33 32 32 \"\" \"\" \"A\" \"a\" \"!@#$%^&*()\" \"!@#$%^&*()\" \"123\" \"123\" t t t \"A1B2C3!D4\" \"a1b2c3!d4\" \"THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG\" \"the quick brown fox jumps over the lazy dog\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +110,12 @@ fn oracle_prop_capitalize_complex_boundaries() {
 
       ;; Complex mixed separators
       (capitalize "one.two-three_four five/six"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello-World\" \"Hello_World\" \"Hello.World\" \"Hello World\" \"Hello---World\" \"Hello___World\" \"Hello...World\" \"Hello   World\" \"---Hello---\" \"  Hello  World  \" \"Hello123world\" \"123hello\" \"Hello 123 World\" \"Hello World Foo Bar\" \"All-Caps-Here\" \"Hello World Foo Bar\" \"Already Capitalized\" \"A B C D E\" \"I-Am-A-Test\" \"\" \"X\" \"X\" \"One.Two-Three_Four Five/Six\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +167,12 @@ fn oracle_prop_upcase_initials_advanced() {
       ;; camelCase detection: initials on camelCase input
       (upcase-initials "camelCase test")
       (upcase-initials "already PascalCase"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello World\" \"HELLO WORLD\" \"HELLO WORLD\" (\"HELLO WORLD\" \"Hello World\" nil) \"Hello-World\" \"Hello_World\" \"Hello.World\" \"Hello World\" t \"A--B--C\" \"X  Y  Z\" \"\" \"A\" \"A\" \"123abc\" \"Abc123def\" \"1st 2nd 3rd\" \"CamelCase Test\" \"Already PascalCase\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -206,7 +221,12 @@ fn oracle_prop_upcase_downcase_region() {
           (push (= (point) p) results))
 
         (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hello WORLD FOO Bar Baz\" \"Hello world foo Bar Baz\" \"HELLO WORLD FOO BAR BAZ\" \"hello world foo bar baz\" \"Hello world foo bar baz\" t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +271,12 @@ fn oracle_prop_case_multibyte_chars() {
       ;; Case conversion preserves non-letter multibyte chars
       (let ((s "price: 100"))
         (list (upcase s) (downcase s))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"CAFE\" \"cafe\" \"Cafe Au Lait\" 65 97 \"HELLO WORLD 123\" \"hello world 123\" \"Hello World\" \"Hello World Test\" (\"HELLO WORLD\" \"hello world\" \"Hello World\" 11 11 11 t t) (\"PRICE: 100\" \"price: 100\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -351,7 +376,12 @@ fn oracle_prop_case_combined_string_ops() {
     (fmakunbound 'neovm--test-normalize-identifier)
     (fmakunbound 'neovm--test-to-title)
     (fmakunbound 'neovm--test-case-insensitive-sort)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello_world\" \"hello_world\" \"hello_world\" \"hello_world\" \"hello_world_test\" \"screaming_snake\" \"my_u_r_l_parser\" \"Hello World\" \"The Quick Brown Fox\" \"Already Title Case\" \"Single\" (\"Apple\" \"APRICOT\" \"banana\" \"cherry\" \"date\") (\"alpha\" \"BETA\" \"gamma\" \"Zebra\") \"My Variable Name\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -407,7 +437,12 @@ fn oracle_prop_case_fold_search_interaction() {
                 results))
 
         (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((fold-t 0 0 0) (fold-t-search (\"Hello\" \"foo\" \"baz\")) (fold-nil nil 0 nil) (fold-nil-search (\"Hello\" \"foo\" \"baz\")) (ci-lookup (\"apple\" . 1) (\"banana\" . 2) nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -462,5 +497,10 @@ fn oracle_prop_case_slug_generator() {
         (funcall 'neovm--test-slugify "a")
         (funcall 'neovm--test-slugify ""))
     (fmakunbound 'neovm--test-slugify)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello-world\" \"multiple-spaces\" \"emacs-lisp-a-tutorial\" \"camelcase-and-pascalcase\" \"100-pure-simple\" \"what-s-new-in-2026\" \"leading-and-trailing\" \"allcaps\" \"a\" \"\")""#
+        ]],
+    );
 }

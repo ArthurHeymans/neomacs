@@ -11,11 +11,12 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf35_clock_sum() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:00] =>  1:00\n:END:\n* B\n:LOGBOOK:\nCLOCK: [2026-01-11 14:00]--[2026-01-11 15:30] =>  1:30\n:END:")
   (org-clock-sum))"##,
+        expect_test::expect![[r#""OK 150""#]],
     );
 }
 
@@ -26,12 +27,13 @@ fn uf35_clock_sum() {
 #[test]
 fn uf35_clock_current() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\n:END:")
   (goto-char (point-min))
   (org-clock-sum-current-entry))"##,
+        expect_test::expect![[r#""ERR (void-function org-clock-sum-current-entry)""#]],
     );
 }
 
@@ -42,12 +44,13 @@ fn uf35_clock_current() {
 #[test]
 fn uf35_clock_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\n:END:")
   (goto-char (point-min))
   (org-clock-get-clock-string))"##,
+        expect_test::expect![[r#""ERR (error \"Invalid date: \")""#]],
     );
 }
 
@@ -58,12 +61,13 @@ fn uf35_clock_string() {
 #[test]
 fn uf35_clock_timestamps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\n:END:")
   (goto-char (point-min))
   (org-clock-get-timestamps))"##,
+        expect_test::expect![[r#""ERR (void-function org-clock-get-timestamps)""#]],
     );
 }
 
@@ -74,12 +78,13 @@ fn uf35_clock_timestamps() {
 #[test]
 fn uf35_clock_scheduled() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\nSCHEDULED: <2026-01-15>\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\n:END:")
   (goto-char (point-min))
   (org-clock-get-scheduled))"##,
+        expect_test::expect![[r#""ERR (void-function org-clock-get-scheduled)""#]],
     );
 }
 
@@ -90,12 +95,13 @@ fn uf35_clock_scheduled() {
 #[test]
 fn uf35_clock_deadline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\nDEADLINE: <2026-01-20>\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\n:END:")
   (goto-char (point-min))
   (org-clock-get-deadline))"##,
+        expect_test::expect![[r#""ERR (void-function org-clock-get-deadline)""#]],
     );
 }
 
@@ -106,12 +112,13 @@ fn uf35_clock_deadline() {
 #[test]
 fn uf35_clock_effort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n:PROPERTIES:\n:EFFORT: 2h\n:END:\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\n:END:")
   (goto-char (point-min))
   (org-clock-get-effort))"##,
+        expect_test::expect![[r#""ERR (void-function org-clock-get-effort)""#]],
     );
 }
 
@@ -122,12 +129,13 @@ fn uf35_clock_effort() {
 #[test]
 fn uf35_clock_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO T\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\n:END:")
   (goto-char (point-min))
   (org-clock-get-state))"##,
+        expect_test::expect![[r#""ERR (void-function org-clock-get-state)""#]],
     );
 }
 
@@ -138,12 +146,13 @@ fn uf35_clock_state() {
 #[test]
 fn uf35_clock_category() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+CATEGORY: default\n* T\n:PROPERTIES:\n:CATEGORY: custom\n:END:\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\n:END:")
   (goto-char (point-min))
   (org-clock-get-category))"##,
+        expect_test::expect![[r#""ERR (void-function org-clock-get-category)""#]],
     );
 }
 
@@ -154,12 +163,13 @@ fn uf35_clock_category() {
 #[test]
 fn uf35_clock_heading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO [#A] Heading :tag:\n:LOGBOOK:\nCLOCK: [2026-01-10 10:00]--[2026-01-10 11:30] =>  1:30\n:END:")
   (goto-char (point-min))
   (org-clock-get-heading))"##,
+        expect_test::expect![[r#""ERR (void-function org-clock-get-heading)""#]],
     );
 }
 
@@ -170,7 +180,7 @@ fn uf35_clock_heading() {
 #[test]
 fn uf35_archive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** TODO T1\n* H2\n** TODO T2")
@@ -181,6 +191,7 @@ fn uf35_archive() {
       (org-archive-subtree)
     (error nil))
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"* H1\n** TODO T1\n* H2\n** TODO T2\"""#]],
     );
 }
 
@@ -191,7 +202,7 @@ fn uf35_archive() {
 #[test]
 fn uf35_archive_sibling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** TODO T1\n* Archive :archive:\n* H2\n** TODO T2")
@@ -202,6 +213,9 @@ fn uf35_archive_sibling() {
       (org-archive-to-archive-sibling)
     (error nil))
   (buffer-string))"##,
+        expect_test::expect![[
+            r#""OK \"* H1\n** Archive                                                          :ARCHIVE:\n*** TODO T1\n:PROPERTIES:\n:ARCHIVE_TIME: 2026-06-29 Mon 06:32\n:END:\n* Archive :archive:\n* H2\n** TODO T2\"""#
+        ]],
     );
 }
 
@@ -212,13 +226,16 @@ fn uf35_archive_sibling() {
 #[test]
 fn uf35_archive_tag() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T")
   (goto-char (point-min))
   (org-toggle-archive-tag)
   (list (org-get-tags) (buffer-string)))"##,
+        expect_test::expect![[
+            r#""OK ((\"ARCHIVE\") \"* T                                                                 :ARCHIVE:\")""#
+        ]],
     );
 }
 
@@ -229,13 +246,16 @@ fn uf35_archive_tag() {
 #[test]
 fn uf35_archive_set_tag() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T")
   (goto-char (point-min))
   (org-archive-set-tag)
   (list (org-get-tags) (buffer-string)))"##,
+        expect_test::expect![[
+            r#""OK ((\"ARCHIVE\") \"* T                                                                 :ARCHIVE:\")""#
+        ]],
     );
 }
 
@@ -246,10 +266,11 @@ fn uf35_archive_set_tag() {
 #[test]
 fn uf35_feed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-feed)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -260,10 +281,11 @@ fn uf35_feed() {
 #[test]
 fn uf35_feed_update() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-feed-update "test-feed")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -274,10 +296,11 @@ fn uf35_feed_update() {
 #[test]
 fn uf35_feed_update_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-feed-update-all)
   (error nil))"##,
+        expect_test::expect![[r#""OK \"No new entries from 0 feeds\"""#]],
     );
 }
 
@@ -288,10 +311,11 @@ fn uf35_feed_update_all() {
 #[test]
 fn uf35_feed_atom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-feed-parse-atom-feed "<feed><entry><title>T</title></entry></feed>")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -302,10 +326,11 @@ fn uf35_feed_atom() {
 #[test]
 fn uf35_feed_rss() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-feed-parse-rss-feed "<rss><channel><item><title>T</title></item></channel></rss>")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -316,10 +341,11 @@ fn uf35_feed_rss() {
 #[test]
 fn uf35_feed_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-feed-parse-feed "<rss><channel><item><title>T</title></item></channel></rss>")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -330,10 +356,11 @@ fn uf35_feed_parse() {
 #[test]
 fn uf35_feed_entries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-feed-get-entries '(:url "http://example.com/feed.xml"))
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -344,7 +371,7 @@ fn uf35_feed_entries() {
 #[test]
 fn uf35_feed_add() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Feed\n** Entries")
@@ -352,6 +379,7 @@ fn uf35_feed_add() {
       (org-feed-add-entry '(:url "http://example.com/feed.xml") '((:title . "T") (:link . "http://example.com/1")))
     (error nil))
   (buffer-string))"##,
+        expect_test::expect![[r#""OK \"* Feed\n** Entries\"""#]],
     );
 }
 
@@ -362,10 +390,11 @@ fn uf35_feed_add() {
 #[test]
 fn uf35_feed_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-feed-format-entry '((:title . "T") (:link . "http://example.com/1") (:description . "Desc")))
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -376,10 +405,11 @@ fn uf35_feed_format() {
 #[test]
 fn uf35_feed_elfeed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-feed-read-elfeed)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -390,10 +420,11 @@ fn uf35_feed_elfeed() {
 #[test]
 fn uf35_feed_read_rss() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-feed-read-rss "http://example.com/feed.xml")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -404,9 +435,10 @@ fn uf35_feed_read_rss() {
 #[test]
 fn uf35_feed_read_atom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-feed-read-atom "http://example.com/feed.xml")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

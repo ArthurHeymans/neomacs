@@ -99,7 +99,12 @@ fn oracle_prop_ssa_variable_renaming() {
                 unique)
               (length ssa1) (length ssa2)))
     (fmakunbound 'neovm--ssa-rename-vars)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((assign x_0 1) (assign x_1 (+ x_0 2)) (assign y_0 x_1) (assign x_2 (* x_1 y_0)) (return x_2)) ((assign a_0 5) (assign b_0 a_0) (assign a_1 (+ b_0 a_0)) (assign b_1 a_1) (return b_1)) t 5 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -202,7 +207,12 @@ fn oracle_prop_ssa_phi_insertion() {
         (list df phis df2 phis2))
     (fmakunbound 'neovm--ssa-compute-dom-frontiers)
     (fmakunbound 'neovm--ssa-insert-phis)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((B1 merge) (B2 merge) (entry) (merge)) ((merge x y)) ((body latch) (entry) (exit) (header header) (latch header) (left latch) (right latch)) ((header i x) (latch x)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -310,7 +320,12 @@ fn oracle_prop_ssa_dominance_tree() {
         (list dom idom entry-dom-all self-dom))
     (fmakunbound 'neovm--ssa-compute-dominators)
     (fmakunbound 'neovm--ssa-idom-from-dom)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((A A) (B A B) (C A C) (D A D) (E A D E) (F A D F)) ((A) (B . A) (C . A) (D . A) (E . D) (F . D)) t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -430,7 +445,12 @@ fn oracle_prop_ssa_constant_propagation() {
     (fmakunbound 'neovm--ssa-cp-lattice-meet)
     (fmakunbound 'neovm--ssa-cp-eval-expr)
     (fmakunbound 'neovm--ssa-cp-propagate)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((w_0 const . 30) (x_0 const . 5) (y_0 const . 10) (z_0 const . 15)) ((x_0 const . 5) (x_1 const . 5) (x_2 const . 5) (y_0 const . 6)) ((x_0 const . 5) (x_1 const . 10) (x_2 . bottom) (y_0 . bottom)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -522,7 +542,12 @@ fn oracle_prop_ssa_dead_code_elimination() {
                         dce2))))
     (fmakunbound 'neovm--ssa-dce-collect-uses)
     (fmakunbound 'neovm--ssa-dce-eliminate)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 ((assign x_0 1) (assign y_0 2) (assign z_0 (+ x_0 y_0)) (return z_0)) 2 ((assign x_0 42) (return x_0)) 2 ((assign y_0 7) (return y_0)) t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -616,7 +641,12 @@ fn oracle_prop_ssa_destruction_phi_elimination() {
               (and b1-has-copy t)
               (and b2-has-copy t)))
     (fmakunbound 'neovm--ssa-destroy-phis)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((entry nil ((assign x_init 0) (branch-cond))) (B1 (entry) ((assign x_0 5) (copy x_2 x_0))) (B2 (entry) ((assign x_1 10) (copy x_2 x_1))) (merge (B1 B2) ((assign result (+ x_2 1)) (return result)))) ((entry nil ((assign i_0 0) (copy i_2 i_0))) (header (entry latch) ((branch-if (< i_2 10) body exit))) (body (header) ((assign tmp (+ i_2 1)))) (latch (body) ((assign i_1 tmp) (copy i_2 i_1))) (exit (header) ((return i_2)))) t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -716,5 +746,10 @@ fn oracle_prop_ssa_copy_propagation() {
               (not (seq-find (lambda (i) (memq (car i) '(copy))) cp1))
               (not (seq-find (lambda (i) (memq (car i) '(copy))) cp2))))
     (fmakunbound 'neovm--ssa-copy-prop)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((assign a 5) (assign d (+ a 1)) (return d)) 3 ((assign x_0 5) (assign y (+ x_0 10)) (return y)) 3 ((assign a 1) (assign b 2) (assign c (+ a b)) (return c)) 4 t t)""#
+        ]],
+    );
 }

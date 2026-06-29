@@ -34,7 +34,10 @@ fn oracle_prop_nested_with_temp_buffer() {
             (buffer-size) (point)
             (buffer-string)
             inner-result))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (13 14 13 14 \"outer-content\" (13 \"inner-content\" 14))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -57,7 +60,10 @@ fn oracle_prop_get_buffer_create_and_predicates() {
                 (sz (buffer-size)))
             (list name-before live-before content sz))))
     (kill-buffer buf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\" *neovm-test-buf-adv*\" t \"test data\" 9)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +90,12 @@ fn oracle_prop_rename_buffer_effects() {
                     (buffer-string)
                     (buffer-size))))))
     (when (buffer-live-p buf) (kill-buffer buf))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\" *neovm-rename-test*\" \" *neovm-renamed*\" \" *neovm-renamed*\" \"renamed buffer content\" 22)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +128,12 @@ fn oracle_prop_set_buffer_current_buffer_switching() {
                 (eq (current-buffer) (current-buffer)))))
     (kill-buffer buf-a)
     (kill-buffer buf-b)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\" *temp*\" \"temp-origin\" \"content-a\" \"content-b\" t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +168,10 @@ fn oracle_prop_buffer_size_vs_point_max_vs_length() {
          (list sz2 pm2 pm-min2 len2)
          ;; After widen: restored
          (list sz3 pm3 len3))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((10 11 10) (10 8 3 5) (10 11 10))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +203,12 @@ fn oracle_prop_erase_buffer_then_reinsert() {
                              (buffer-substring (point) (line-end-position))
                              (buffer-string))))
             (list snap1 snap2 snap3 snap4 snap5)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""\n        OK ((13 14 \"first content\") (0 1 1 1 t t) (19 20 \"second content here\") (0 1) (17 7 \"line2\" \"line1\n        line2\n        line3\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +249,10 @@ fn oracle_prop_multi_buffer_copy_processing() {
                   (with-current-buffer dst (buffer-size))))))
     (kill-buffer src)
     (kill-buffer dst)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 \"DISK FULL\nTIMEOUT\nNETWORK\n\" 85 26)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -275,5 +302,8 @@ fn oracle_prop_buffer_local_simulation_with_alist() {
          (length buffer-vars)))
     (fmakunbound 'neovm--bvar-set)
     (fmakunbound 'neovm--bvar-get)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"text\" 43 \"prog\" 99 nil 2)""#]],
+    );
 }

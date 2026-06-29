@@ -42,7 +42,12 @@ fn oracle_prop_nconc_nreverse_many_args() {
   (let ((b (list 10 20)))
     (let ((r (nconc nil b)))
       (list r (eq r b)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (1 2) ((1 2 3 4) t 4) (a b c d) ((1 2 3 4 5 6 7 8) 8 t) (x y . z) 99 ((10 20) t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +86,12 @@ fn oracle_prop_nconc_nreverse_inplace_reversal() {
          (lst (list obj1 obj2)))
     (let ((rev (nreverse lst)))
       (list (eq (car rev) obj2) (eq (cadr rev) obj1)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5 4 3 2 1) (42) nil (a b c d) ((5 4 3 2 1) (1) 5 1 nil) ((b a) b a) (t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +163,12 @@ fn oracle_prop_nconc_nreverse_efficient_building() {
     (fmakunbound 'neovm--test-filter-transform-consrev)
     (fmakunbound 'neovm--test-filter-transform-nconc)
     (fmakunbound 'neovm--test-filter-transform-mapcar)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((4 16 36 64 100 144 196) (4 16 36 64 100 144 196) (4 16 36 64 100 144 196) t t (1 2 3 4 5 6 7) ((a . 1) (b . 2) (c . 3) (d . 4) (e . 5)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +210,12 @@ fn oracle_prop_nconc_nreverse_nbutlast_deque() {
                     (setq deque (nreverse deque))
                     (setq log (cons (copy-sequence deque) log))
                     (nreverse log))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3) (0 1 2 3) (popped-back 3 (0 1 2)) (popped-front 0 (1 2)) (1 2 10 20 30) (1 2 10) (10 2 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +252,12 @@ fn oracle_prop_nconc_nreverse_sort_destructive() {
   ;; Sort stability test: sort by first element of pairs, check order
   (let ((pairs (list '(2 . a) '(1 . b) '(3 . c) '(1 . d) '(2 . e))))
     (sort (copy-sequence pairs) (lambda (a b) (< (car a) (car b))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 2 3 4 5) 5) ((5 3 1 4 2) (1 2 3 4 5)) (\"apple\" \"banana\" \"cherry\" \"date\") (1 -1 2 -3 4 -5) (1 2 3 4 5 6 7 8 9 10) ((42) nil) ((1 . b) (1 . d) (2 . a) (2 . e) (3 . c)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +295,12 @@ fn oracle_prop_nconc_nreverse_shared_structure() {
                         ;; After nreverse, tail points to what was the last cell
                         (let ((rev-tail (nreverse (copy-sequence tail))))
                           rev-tail))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 999 200 300) (3 4 999 200 300) t t t (1 2 100 200 300) (3 4 100 200 300) (300 200 999))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -353,5 +383,10 @@ fn oracle_prop_nconc_nreverse_build_structures() {
     (fmakunbound 'neovm--test-add-edge)
     (fmakunbound 'neovm--test-neighbors)
     (fmakunbound 'neovm--test-bfs)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((b c) (d e) (a c b e d) (d e) 6 ((a b) (a c) (b d) (c d) (c e) (d e)))""#
+        ]],
+    );
 }

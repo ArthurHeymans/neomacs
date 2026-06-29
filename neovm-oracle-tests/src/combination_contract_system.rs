@@ -86,7 +86,12 @@ fn oracle_prop_contract_basic_pre_post() {
           (funcall bounded-add 800 500)
           (funcall bounded-add -600 -500)))
     (fmakunbound 'neovm--ct-make-contract)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok 3) (ok 14) (ok -3) (violation precondition \"safe-div\" \"division by zero\") (violation precondition \"safe-div\" \"dividend must be integer\") (ok 300) (ok -200) (violation postcondition \"bounded-add\" \"result 1300 out of range [-1000, 1000]\") (violation postcondition \"bounded-add\" \"result -1100 out of range [-1000, 1000]\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +198,12 @@ fn oracle_prop_contract_invariant_sorted_list() {
             (funcall sorted-check-invariant s5)
             (funcall sorted-check-invariant s6)
             (funcall sorted-check-invariant s7)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (ok ok ok ok ok (1 3 4 5 7) ok (1 4 5 7) ok (1 4 4 5 7) t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -292,7 +302,12 @@ fn oracle_prop_contract_inheritance_composition() {
           (funcall safe-harmonic 10 10)
           (funcall safe-harmonic -1 5)))
     (fmakunbound 'neovm--ct-combine-contracts)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok 5) (ok 10) (ok 1) (violation precondition \"safe-sqrt\" \"non-positive argument: -4\") (violation precondition \"safe-sqrt\" \"non-number argument: \\\"x\\\"\") (ok 6) (ok 20) (violation precondition \"safe-geo-mean\" \"non-positive argument: -1\") (ok 4) (ok 10) (violation precondition \"safe-harmonic\" \"non-positive argument: -1\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -393,7 +408,12 @@ fn oracle_prop_contract_checked_stack() {
       ;; Empty after all pops
       (funcall stack-size s6)
       (funcall stack-to-list s6))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (ok ok ok (ok charlie) ok charlie ok bravo ok alpha (violation \"pop: stack is empty\") (violation \"push: value must not be nil\") 0 1 2 3 (charlie bravo alpha) 0 nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -495,7 +515,12 @@ fn oracle_prop_contract_registry_system() {
     (fmakunbound 'neovm--ct-lookup)
     (fmakunbound 'neovm--ct-apply)
     (makunbound 'neovm--ct-registry)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok 15) (violation pre non-negative \"non-negative required: -1\") (ok 2500) (violation pre bounded-100 \"value out of [-100,100]: 200\") (ok \"hello world\") (violation pre string-args \"string required: 42\") (error \"no contract: nonexistent\") 3)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -586,7 +611,12 @@ fn oracle_prop_contract_validated_record() {
       (funcall schema-validate-field person-schema 'age 25)
       (funcall schema-validate-field person-schema 'age 200)
       (funcall schema-validate-field person-schema 'unknown 42))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((valid ((name . \"Alice\") (age . 30) (email . \"alice@example.com\") (score . 95))) (valid ((name . \"Bob\") (age . 25))) (invalid (\"missing required field: age\")) (invalid (\"field name: invalid value \\\"\\\"\" \"missing required field: name\")) (invalid (\"field name: invalid value \\\"\\\"\" \"field age: invalid value -5\" \"field email: invalid value \\\"bademail\\\"\" \"field score: invalid value 200\" \"missing required field: name\" \"missing required field: age\")) (ok \"Alice\") (violation \"field name: invalid value \\\"\\\"\") (ok 25) (violation \"field age: invalid value 200\") (error \"unknown field: unknown\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -659,5 +689,10 @@ fn oracle_prop_contract_pipeline_stages() {
       (funcall run-pipeline pipeline "600")
       ;; Two-stage pipeline only
       (funcall run-pipeline (list parse-stage double-stage) "25"))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((pipeline-ok -84 ((\"parse\" \"42\" 42) (\"double\" 42 84) (\"negate\" 84 -84))) (pipeline-ok -10 ((\"parse\" \"5\" 5) (\"double\" 5 10) (\"negate\" 10 -10))) (pipeline-error (input-violation \"parse\" \"input must be string\") nil) (pipeline-error (output-violation \"double\" \"output 1200 exceeds 1000\") ((\"parse\" \"600\" 600))) (pipeline-ok 50 ((\"parse\" \"25\" 25) (\"double\" 25 50))))""#
+        ]],
+    );
 }

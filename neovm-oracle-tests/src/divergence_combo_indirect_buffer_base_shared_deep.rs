@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_indirect_buffer_shares_text_with_base() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((base (generate-new-buffer \"ib1\")))\n\
          (with-current-buffer base\n\
@@ -21,6 +21,7 @@ fn deficiency_indirect_buffer_shares_text_with_base() {
          (buffer-string ind)\n\
          (eq base (buffer-base ind))))\n\
          (kill-buffer base)))",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-string 1)""#]],
     );
 }
 
@@ -28,7 +29,7 @@ fn deficiency_indirect_buffer_shares_text_with_base() {
 fn deficiency_indirect_buffer_separate_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((base (generate-new-buffer \"sp1\")))\n\
          (with-current-buffer base\n\
@@ -41,6 +42,7 @@ fn deficiency_indirect_buffer_separate_point() {
          (with-current-buffer ind (point))\n\
          (buffer-string base)))\n\
          (kill-buffer base)))",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-string 1)""#]],
     );
 }
 
@@ -48,7 +50,7 @@ fn deficiency_indirect_buffer_separate_point() {
 fn deficiency_indirect_buffer_separate_narrowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((base (generate-new-buffer \"sn1\")))\n\
          (with-current-buffer base\n\
@@ -62,6 +64,7 @@ fn deficiency_indirect_buffer_separate_narrowing() {
          (list (point-min) (point-max)\n\
          (buffer-string)))))\n\
          (kill-buffer base)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -69,7 +72,7 @@ fn deficiency_indirect_buffer_separate_narrowing() {
 fn deficiency_indirect_buffer_text_props_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((base (generate-new-buffer \"tp1\")))\n\
          (with-current-buffer base\n\
@@ -83,6 +86,7 @@ fn deficiency_indirect_buffer_text_props_shared() {
          (get-text-property 7 'zone ind)\n\
          (eq base (buffer-base ind))))\n\
          (kill-buffer base)))",
+        expect_test::expect![[r#""ERR (void-function buffer-base)""#]],
     );
 }
 
@@ -90,7 +94,7 @@ fn deficiency_indirect_buffer_text_props_shared() {
 fn deficiency_indirect_buffer_overlays_separate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((base (generate-new-buffer \"os1\")))\n\
          (with-current-buffer base\n\
@@ -106,6 +110,7 @@ fn deficiency_indirect_buffer_overlays_separate() {
          (with-current-buffer ind\n\
          (length (overlays-in 1 13)))))\n\
          (kill-buffer base)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -113,7 +118,7 @@ fn deficiency_indirect_buffer_overlays_separate() {
 fn deficiency_indirect_buffer_separate_buffer_locals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar ibl-test-var 'global)\n\
          (make-variable-buffer-local 'ibl-test-var)\n\
@@ -126,6 +131,7 @@ fn deficiency_indirect_buffer_separate_buffer_locals() {
          (list (buffer-local-value 'ibl-test-var base)\n\
          (buffer-local-value 'ibl-test-var ind)))\n\
          (kill-buffer base)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -133,7 +139,7 @@ fn deficiency_indirect_buffer_separate_buffer_locals() {
 fn deficiency_indirect_buffer_with_markers_in_both() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((base (generate-new-buffer \"mk1\")))\n\
          (with-current-buffer base\n\
@@ -147,6 +153,7 @@ fn deficiency_indirect_buffer_with_markers_in_both() {
          (with-current-buffer base (buffer-string))\n\
          (with-current-buffer ind (buffer-string))))))\n\
          (kill-buffer base)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -154,7 +161,7 @@ fn deficiency_indirect_buffer_with_markers_in_both() {
 fn deficiency_indirect_buffer_undo_separate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((base (generate-new-buffer \"un1\")))\n\
          (with-current-buffer base\n\
@@ -167,6 +174,7 @@ fn deficiency_indirect_buffer_undo_separate() {
          (list (buffer-string base)\n\
          (buffer-string ind)))\n\
          (kill-buffer base)))",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-string 1)""#]],
     );
 }
 
@@ -174,7 +182,7 @@ fn deficiency_indirect_buffer_undo_separate() {
 fn deficiency_two_indirect_buffers_same_base_edit_conflict() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((base (generate-new-buffer \"2ib\")))\n\
          (with-current-buffer base\n\
@@ -192,6 +200,7 @@ fn deficiency_two_indirect_buffers_same_base_edit_conflict() {
          (buffer-string ind2)\n\
          (eq (buffer-base ind1) (buffer-base ind2))))\n\
          (kill-buffer base)))",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-string 1)""#]],
     );
 }
 
@@ -199,7 +208,7 @@ fn deficiency_two_indirect_buffers_same_base_edit_conflict() {
 fn deficiency_indirect_buffer_kill_base_kills_indirect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((base (generate-new-buffer \"kbi\")))\n\
          (with-current-buffer base (insert \"test\"))\n\
@@ -210,5 +219,6 @@ fn deficiency_indirect_buffer_kill_base_kills_indirect() {
          (list alive-before\n\
          (buffer-live-p base)\n\
          (buffer-live-p ind))))))",
+        expect_test::expect![[r#""OK (t nil nil)""#]],
     );
 }

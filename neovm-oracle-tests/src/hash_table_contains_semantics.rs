@@ -35,7 +35,10 @@ fn oracle_prop_gnu_hash_table_contains_p_distinguishes_nil_values() {
    (hash-table-count equal-table)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil nil nil t t t nil nil t nil 3 3)""#]],
+    );
 }
 
 #[test]
@@ -54,5 +57,10 @@ fn oracle_prop_gnu_hash_table_contains_p_argument_errors() {
   (lambda () (hash-table-contains-p))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument hash-table-p) (wrong-type-argument hash-table-p) (wrong-number-of-arguments (2 . 2)))""#
+        ]],
+    );
 }

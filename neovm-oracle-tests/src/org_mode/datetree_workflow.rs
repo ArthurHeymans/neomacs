@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_datetree_property_subtree_timestamp_cleanup_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-datetree)
@@ -37,6 +37,9 @@ fn org_datetree_property_subtree_timestamp_cleanup_combo() {
          (goto-char (point-min))
          (search-forward "* Other")
          (org-outline-level))))))"#,
+        expect_test::expect![[
+            r#""OK (\"* Inbox\n** Timeline\n:PROPERTIES:\n:DATE_TREE: t\n:END:\n*** 2026\n**** 2026-05 May\n\n***** 2026-05-25 Monday\n[2026-05-25 Mon]\n****** Early\n<2026-05-25 Mon>\n***** 2026-05-26 Tuesday\n[2026-05-26 Tue]\n****** LateMoved stamp <2026-05-26 Tue>\n\nBody\n***** 2026-05-27 Wednesday\n[2026-05-27 Wed]\n\n** Other\n\" 5 2)""#
+        ]],
     );
 }
 
@@ -44,7 +47,7 @@ fn org_datetree_property_subtree_timestamp_cleanup_combo() {
 fn org_datetree_iso_week_property_ordering_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-datetree)
@@ -76,6 +79,9 @@ fn org_datetree_iso_week_property_ordering_combo() {
                 headlines)))
       (list (nreverse headlines)
             (buffer-substring-no-properties (point-min) (point-max))))))"#,
+        expect_test::expect![[
+            r#""OK (((1 \"Weekly\") (2 \"2026\") (3 \"2026-W02\") (4 \"Earlier entry\") (4 \"2026-01-05 Monday\") (3 \"2026-W53\") (4 \"Thu entry\") (4 \"2026-12-31 Thursday\") (4 \"Fri entry\") (4 \"2027-01-01 Friday\") (1 \"Notes\")) \"* Weekly\n:PROPERTIES:\n:WEEK_TREE: t\n:END:\n** 2026\n\n*** 2026-W02\n\n**** Earlier entry\n**** 2026-01-05 Monday\n\n*** 2026-W53\n\n**** Thu entry\n**** 2026-12-31 Thursday\n\n**** Fri entry\n**** 2027-01-01 Friday\n\n* Notes\n\")""#
+        ]],
     );
 }
 
@@ -83,7 +89,7 @@ fn org_datetree_iso_week_property_ordering_combo() {
 fn org_datetree_month_and_day_find_existing_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-datetree)
@@ -113,6 +119,9 @@ fn org_datetree_month_and_day_find_existing_combo() {
        (goto-char (point-min))
        (search-forward "2026-06-02 Tuesday")
        (org-outline-level)))))"#,
+        expect_test::expect![[
+            r#""OK (\"* 2026\n\n*** Month note\n** 2026-05 May\n*** 2026-05-27 Wednesday\n**** Existing\n\n**** Day note\n\n** 2026-06 June\n\n**** New month day\n*** 2026-06-02 Tuesday\n\" 2 3)""#
+        ]],
     );
 }
 
@@ -120,7 +129,7 @@ fn org_datetree_month_and_day_find_existing_combo() {
 fn org_datetree_dual_tree_cleanup_level_matrix_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-datetree)
@@ -164,6 +173,7 @@ fn org_datetree_dual_tree_cleanup_level_matrix_combo() {
                         "Weekly" "2026-W22" "Week entry" "Loose"))
               (buffer-substring-no-properties
                (point-min) (point-max))))))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -171,7 +181,7 @@ fn org_datetree_dual_tree_cleanup_level_matrix_combo() {
 fn org_datetree_narrow_cleanup_sort_timestamp_shift_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-datetree)
@@ -266,6 +276,7 @@ fn org_datetree_narrow_cleanup_sort_timestamp_shift_combo() {
                         "** Morning"))
               (buffer-substring-no-properties
                (point-min) (point-max))))))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -273,7 +284,7 @@ fn org_datetree_narrow_cleanup_sort_timestamp_shift_combo() {
 fn org_datetree_keep_restriction_subtree_property_matrix_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
   (require 'org-datetree)
@@ -370,6 +381,7 @@ fn org_datetree_keep_restriction_subtree_property_matrix_combo() {
                 (count-matches "^\\*+ " (point-min) (point-max))
                  (buffer-substring-no-properties
                   (point-min) (point-max))))))))"#,
+        expect_test::expect![[r#""ERR (void-function snapshot)""#]],
     );
 }
 
@@ -377,7 +389,7 @@ fn org_datetree_keep_restriction_subtree_property_matrix_combo() {
 fn org_datetree_insert_find_cleanup_structure_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-datetree)
@@ -430,6 +442,7 @@ fn org_datetree_insert_find_cleanup_structure_deep_state_combo() {
                    (count-matches "^\\*+ " (point-min) (point-max))
                    (buffer-substring-no-properties
                     (point-min) (point-max)))))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument fixnump nil)""#]],
     );
 }
 
@@ -437,7 +450,7 @@ fn org_datetree_insert_find_cleanup_structure_deep_state_combo() {
 fn org_datetree_find_insert_edit_multi_date_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-datetree)
@@ -472,5 +485,6 @@ fn org_datetree_find_insert_edit_multi_date_deep() {
               found-heading
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]],
     );
 }

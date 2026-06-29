@@ -16,11 +16,12 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_copy_sequence_list_equal_not_eq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (let ((orig '(a b c)))
     (let ((cpy (copy-sequence orig)))
       (list (equal orig cpy) (eq orig cpy)))))"#,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
     assert_ok_eq("(t nil)", &o, &n);
 }
@@ -28,21 +29,30 @@ fn oracle_copy_sequence_list_equal_not_eq() {
 #[test]
 fn oracle_copy_sequence_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(equal "hello" (copy-sequence "hello"))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(equal "hello" (copy-sequence "hello"))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_copy_sequence_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(equal [1 2 3] (copy-sequence [1 2 3]))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(equal [1 2 3] (copy-sequence [1 2 3]))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_copy_sequence_nil_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(copy-sequence nil)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(copy-sequence nil)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -53,34 +63,49 @@ fn oracle_copy_sequence_nil_returns_nil() {
 #[test]
 fn oracle_read_from_string_string_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(car (read-from-string "\"hello\""))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(car (read-from-string "\"hello\""))"#,
+        expect_test::expect![[r#""OK \"hello\"""#]],
+    );
     assert_ok_eq("\"hello\"", &o, &n);
 }
 
 #[test]
 fn oracle_read_from_string_integer_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(car (read-from-string "42"))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(car (read-from-string "42"))"#,
+        expect_test::expect![[r#""OK 42""#]],
+    );
     assert_ok_eq("42", &o, &n);
 }
 
 #[test]
 fn oracle_read_from_string_list_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(car (read-from-string "(a b c)"))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(car (read-from-string "(a b c)"))"#,
+        expect_test::expect![[r#""OK (a b c)""#]],
+    );
     assert_ok_eq("(a b c)", &o, &n);
 }
 
 #[test]
 fn oracle_read_from_string_returns_cons_of_value_and_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(consp (read-from-string "42"))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(consp (read-from-string "42"))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_read_from_string_end_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(> (cdr (read-from-string "hello")) 0)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(> (cdr (read-from-string "hello")) 0)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }

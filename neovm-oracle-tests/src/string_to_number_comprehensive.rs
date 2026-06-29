@@ -382,7 +382,7 @@ fn oracle_prop_string_to_number_comprehensive_degenerate() {
   (= 0 (string-to-number "abc"))
   (= 0 (string-to-number " "))
   (integerp (string-to-number "abc")))"##;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -424,5 +424,10 @@ fn oracle_prop_string_to_number_comprehensive_roundtrip_cross_base() {
          (s (number-to-string sum))
          (reparsed (string-to-number s)))
     (list a b sum s reparsed (= sum reparsed))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t t t t t t t t 36 (2 8 10 16) (255 63 318 \"318\" 318 t))""#
+        ]],
+    );
 }

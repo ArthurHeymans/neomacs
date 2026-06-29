@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_cl_loop_collect_nunion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tag-entry ()
     ((tag :initarg :tag :accessor te-tag :initform "")
@@ -68,6 +68,7 @@ fn combo_eieio_cl_loop_collect_nunion() {
                 (buffer-string)
                 tag-entries)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range 25 29)""#]],
     );
 }
 
@@ -75,7 +76,7 @@ fn combo_eieio_cl_loop_collect_nunion() {
 fn combo_eieio_pcase_destructure_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass command ()
     ((verb :initarg :verb :accessor cmd-verb :initform "")
@@ -136,6 +137,7 @@ fn combo_eieio_pcase_destructure_objects() {
                 (buffer-string)
                 commands)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -143,7 +145,7 @@ fn combo_eieio_pcase_destructure_objects() {
 fn combo_eieio_cl_loop_for_object_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass event ()
     ((type :initarg :type :accessor ev-type :initform "")
@@ -206,6 +208,7 @@ fn combo_eieio_cl_loop_for_object_bindings() {
                 (buffer-string)
                 my-events my-clicks)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range 20 26)""#]],
     );
 }
 
@@ -213,7 +216,7 @@ fn combo_eieio_cl_loop_for_object_bindings() {
 fn combo_eieio_pcase_guard_with_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass measurement ()
     ((sensor :initarg :sensor :accessor msr-sensor :initform "")
@@ -277,6 +280,7 @@ fn combo_eieio_pcase_guard_with_loop() {
                 (buffer-string)
                 meas)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
     );
 }
 
@@ -284,7 +288,7 @@ fn combo_eieio_pcase_guard_with_loop() {
 fn combo_eieio_cl_loop_hash_objects_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass group ()
     ((name :initarg :name :accessor grp-name :initform "")
@@ -350,5 +354,6 @@ fn combo_eieio_cl_loop_hash_objects_nested() {
                 (buffer-string)
                 my-groups my-people)))
       (kill-buffer buf))))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

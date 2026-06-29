@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_custom_dynamic_block_insert_update_all_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((org-dynamic-block-alist nil))
@@ -32,6 +32,9 @@ fn org_custom_dynamic_block_insert_update_all_combo() {
             (org-find-dblock "probe")
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""ERR (wrong-number-of-arguments (closure (t) (params) (insert (format \"| key | value |\n| name | %s |\n| limit | %S |\n\" (plist-get params :name) (plist-get params :limit)))) 0)""#
+        ]],
     );
 }
 
@@ -39,7 +42,7 @@ fn org_custom_dynamic_block_insert_update_all_combo() {
 fn org_dblock_prepare_nested_content_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (defun org-dblock-write:probe-prepare (params)
@@ -69,6 +72,7 @@ fn org_dblock_prepare_nested_content_combo() {
                   (list (org-element-type e)
                         (org-element-property :begin e)
                         (org-element-property :end e))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -76,7 +80,7 @@ fn org_dblock_prepare_nested_content_combo() {
 fn org_clocktable_dblock_shift_steps_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -109,6 +113,7 @@ fn org_clocktable_dblock_shift_steps_combo() {
               after-update
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -116,7 +121,7 @@ fn org_clocktable_dblock_shift_steps_combo() {
 fn org_columnview_dblock_filters_tblfm_links_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-colview)
@@ -175,6 +180,9 @@ fn org_columnview_dblock_filters_tblfm_links_combo() {
             org-columns-current-fmt-compiled
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""ERR (user-error \"Several field/range formulas try to set @4$6\")""#
+        ]],
     );
 }
 
@@ -182,7 +190,7 @@ fn org_columnview_dblock_filters_tblfm_links_combo() {
 fn org_custom_dblock_nested_table_rewrite_all_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-table)
@@ -264,6 +272,7 @@ fn org_custom_dblock_nested_table_rewrite_all_combo() {
               ast
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -271,7 +280,7 @@ fn org_custom_dblock_nested_table_rewrite_all_combo() {
 fn org_clocktable_properties_shift_recalc_ast_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -365,6 +374,7 @@ fn org_clocktable_properties_shift_recalc_ast_combo() {
             before-shift
             after-right
             after-left))))"##,
+        expect_test::expect![[r#""ERR (user-error \"Unknown ‘:step’ specification: daysteps\")""#]],
     );
 }
 
@@ -372,7 +382,7 @@ fn org_clocktable_properties_shift_recalc_ast_combo() {
 fn org_dblock_update_all_errors_indentation_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((writes nil)
@@ -489,6 +499,7 @@ fn org_dblock_update_all_errors_indentation_lifecycle_combo() {
               (nreverse messages)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""ERR (user-error \"Not at a dynamic block\")""#]],
     );
 }
 
@@ -496,7 +507,7 @@ fn org_dblock_update_all_errors_indentation_lifecycle_combo() {
 fn org_clocktable_columnview_custom_dblock_update_regen_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -556,6 +567,9 @@ fn org_clocktable_columnview_custom_dblock_update_regen_combo() {
                       after-col
                       after-all
                       after-mutate)))))))))"##,
+        expect_test::expect![[
+            r#""OK (\"* Alpha :work:\n:PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n:END:\n** Sub A1\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 13:00]--[2026-05-27 Wed 14:00] =>  1:00\n:END:\n* Beta :home:\n:PROPERTIES:\n:Effort: 1:00\n:Owner: Bob\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 15:00]--[2026-05-27 Wed 15:30] =>  0:30\n:END:\n#+BEGIN: clocktable :maxlevel 2 :scope file\n#+END:\n\n#+BEGIN: columnview :hlines 1 :id local\n#+END:\n\n#+BEGIN: clocktable :maxlevel 3 :scope file :block today\n#+END:\n\" \"* Alpha :work:\n:PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n:END:\n** Sub A1\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 13:00]--[2026-05-27 Wed 14:00] =>  1:00\n:END:\n* Beta :home:\n:PROPERTIES:\n:Effort: 1:00\n:Owner: Bob\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 15:00]--[2026-05-27 Wed 15:30] =>  0:30\n:END:\n#+BEGIN: clocktable :maxlevel 2 :scope file\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     |   Time |      |\n|--------------+--------+------|\n| *Total time* | *3:45* |      |\n|--------------+--------+------|\n| Alpha        |   3:15 |      |\n| \\\\_  Sub A1   |        | 1:00 |\n| Beta         |   0:30 |      |\n#+END:\n\n#+BEGIN: columnview :hlines 1 :id local\n#+END:\n\n#+BEGIN: clocktable :maxlevel 3 :scope file :block today\n#+END:\n\" \"* Alpha :work:\n:PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n:END:\n** Sub A1\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 13:00]--[2026-05-27 Wed 14:00] =>  1:00\n:END:\n* Beta :home:\n:PROPERTIES:\n:Effort: 1:00\n:Owner: Bob\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 15:00]--[2026-05-27 Wed 15:30] =>  0:30\n:END:\n#+BEGIN: clocktable :maxlevel 2 :scope file\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     |   Time |      |\n|--------------+--------+------|\n| *Total time* | *3:45* |      |\n|--------------+--------+------|\n| Alpha        |   3:15 |      |\n| \\\\_  Sub A1   |        | 1:00 |\n| Beta         |   0:30 |      |\n#+END:\n\n#+BEGIN: columnview :hlines 1 :id local\n| <25> |      | <3>      |        |\n| ITEM | TODO | PRIORITY | TAGS   |\n|------+------+----------+--------|\n| Beta |      | B        | :home: |\n#+END:\n\n#+BEGIN: clocktable :maxlevel 3 :scope file :block today\n#+END:\n\" \"* Alpha :work:\n:PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n:END:\n** Sub A1\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 13:00]--[2026-05-27 Wed 14:00] =>  1:00\n:END:\n* Beta :home:\n:PROPERTIES:\n:Effort: 1:00\n:Owner: Bob\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 15:00]--[2026-05-27 Wed 15:30] =>  0:30\n:END:\n#+BEGIN: clocktable :maxlevel 2 :scope file\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     |   Time |      |\n|--------------+--------+------|\n| *Total time* | *3:45* |      |\n|--------------+--------+------|\n| Alpha        |   3:15 |      |\n| \\\\_  Sub A1   |        | 1:00 |\n| Beta         |   0:30 |      |\n#+END:\n\n#+BEGIN: columnview :hlines 1 :id local\n| <25> |      | <3>      |        |\n| ITEM | TODO | PRIORITY | TAGS   |\n|------+------+----------+--------|\n| Beta |      | B        | :home: |\n#+END:\n\n#+BEGIN: clocktable :maxlevel 3 :scope file :block today\n#+END:\n\" \"* Alpha :work:\n:PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n:END:\n** Sub A1\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 16:00]--[2026-05-27 Wed 16:30] =>  0:30\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 13:00]--[2026-05-27 Wed 14:00] =>  1:00\n:END:\n* Beta :home:\n:PROPERTIES:\n:Effort: 1:00\n:Owner: Bob\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 15:00]--[2026-05-27 Wed 15:30] =>  0:30\n:END:\n#+BEGIN: clocktable :maxlevel 2 :scope file\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     |   Time |      |\n|--------------+--------+------|\n| *Total time* | *4:15* |      |\n|--------------+--------+------|\n| Alpha        |   3:45 |      |\n| \\\\_  Sub A1   |        | 1:30 |\n| Beta         |   0:30 |      |\n#+END:\n\n#+BEGIN: columnview :hlines 1 :id local\n| <25> |      | <3>      |        |\n| ITEM | TODO | PRIORITY | TAGS   |\n|------+------+----------+--------|\n| Beta |      | B        | :home: |\n#+END:\n\n#+BEGIN: clocktable :maxlevel 3 :scope file :block today\n#+END:\n\")""#
+        ]],
     );
 }
 
@@ -563,7 +577,7 @@ fn org_clocktable_columnview_custom_dblock_update_regen_combo() {
 fn org_dblock_clocktable_columnview_multi_update_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -610,5 +624,6 @@ fn org_dblock_clocktable_columnview_multi_update_edit_deep() {
                     after-ct
                     after-col
                     after-mutate)))))))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp point-min)""#]],
     );
 }

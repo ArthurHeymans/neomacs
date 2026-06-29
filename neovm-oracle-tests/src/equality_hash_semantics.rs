@@ -29,7 +29,10 @@ fn oracle_equal_ignores_string_properties_but_including_properties_checks_them()
     (propertize "abc" 'tag 'source 'face 'bold))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil nil t t)""#]],
+    );
 }
 
 #[test]
@@ -60,7 +63,10 @@ fn oracle_equal_numeric_and_bool_vector_edges() {
    (equal a b)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil t t t nil nil)""#]],
+    );
 }
 
 #[test]
@@ -83,7 +89,10 @@ fn oracle_equal_handles_circular_lists_and_vectors() {
    (equal v1 (let ((v (vector 'y nil))) (aset v 1 v) v))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t nil)""#]],
+    );
 }
 
 #[test]
@@ -115,7 +124,10 @@ fn oracle_equal_including_properties_recurses_through_cycles() {
    (equal-including-properties left-vector different-vector)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil t t nil)""#]],
+    );
 }
 
 #[test]
@@ -139,7 +151,10 @@ fn oracle_sxhash_equal_invariants_for_properties_and_structures() {
    (= (sxhash-equal 0.0) (sxhash-equal -0.0))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t nil t nil nil)""#]],
+    );
 }
 
 #[test]
@@ -168,7 +183,10 @@ fn oracle_hash_table_equal_including_properties_test_respects_string_properties(
      (hash-table-count table))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (neomacs-oracle-eip-test bold missing 1)""#]],
+    );
 }
 
 #[test]
@@ -194,5 +212,8 @@ fn oracle_hash_table_tests_follow_eq_eql_equal_keys() {
    (hash-table-test equalh)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (missing eql-float eql-float equal-string eq eql equal)""#]],
+    );
 }

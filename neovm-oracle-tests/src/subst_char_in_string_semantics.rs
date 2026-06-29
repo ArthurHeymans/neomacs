@@ -26,7 +26,12 @@ fn oracle_subst_char_preserves_properties_on_multibyte_copy_path() {
           (text-properties-at 3 r))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (#(\"aeae\" 0 1 (face bold) 1 3 (help-echo \"mid\") 3 4 (mouse-face highlight)) #(\"aéaé\" 0 1 (face bold) 1 3 (help-echo \"mid\") 3 4 (mouse-face highlight)) nil \"aeae\" (face bold) (help-echo \"mid\") (mouse-face highlight))""#
+        ]],
+    );
 }
 
 #[test]
@@ -44,7 +49,12 @@ fn oracle_subst_char_no_match_multibyte_copy_identity() {
           (text-properties-at 1 r))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (#(\"café\" 0 4 (face bold)) #(\"café\" 0 4 (face bold)) t t (face bold))""#
+        ]],
+    );
 }
 
 #[test]
@@ -63,7 +73,12 @@ fn oracle_subst_char_ascii_copy_path_properties() {
           (text-properties-at 5 r))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (#(\"bonono\" 0 6 (face bold)) #(\"banana\" 0 6 (face bold)) nil \"bonono\" (face bold) (face bold))""#
+        ]],
+    );
 }
 
 #[test]
@@ -84,7 +99,12 @@ fn oracle_subst_char_inplace_preserves_object_and_properties() {
           (text-properties-at 3 s))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""ERR (error \"Attempt to replace non-ASCII char in multibyte string\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -107,7 +127,12 @@ fn oracle_subst_char_unibyte_to_multibyte_conversion() {
    (string-bytes r2)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil 6 \"A\\303\\210B\\303\\210\" nil 6 \"A\\303\\210B\\303\\210\" nil 6)""#
+        ]],
+    );
 }
 
 #[test]
@@ -130,5 +155,10 @@ fn oracle_subst_char_argument_errors() {
    cases))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"abc\" (wrong-type-argument number-or-marker-p) (wrong-type-argument sequencep) \"abc\" (wrong-type-argument characterp))""#
+        ]],
+    );
 }

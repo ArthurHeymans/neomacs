@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_match_data_basic_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass match-snap ()
     ((pattern :initarg :pattern :accessor ms-pat :initform "")
@@ -51,6 +51,7 @@ fn combo_eieio_match_data_basic_search() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -58,7 +59,7 @@ fn combo_eieio_match_data_basic_search() {
 fn combo_eieio_match_data_edit_after_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass edit-after-match ()
     ((match-pos :initarg :match-pos :accessor eam-pos :initform 0)
@@ -110,6 +111,7 @@ fn combo_eieio_match_data_edit_after_match() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -117,7 +119,7 @@ fn combo_eieio_match_data_edit_after_match() {
 fn combo_eieio_match_data_narrow_restricted() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-match ()
     ((narrow-bounds :initarg :narrow :accessor nm-bounds :initform nil)
@@ -173,6 +175,7 @@ fn combo_eieio_match_data_narrow_restricted() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -180,7 +183,7 @@ fn combo_eieio_match_data_narrow_restricted() {
 fn combo_eieio_match_data_replace_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass replace-step ()
     ((step-num :initarg :step :accessor rs-step :initform 0)
@@ -229,6 +232,7 @@ fn combo_eieio_match_data_replace_sequence() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -236,7 +240,7 @@ fn combo_eieio_match_data_replace_sequence() {
 fn combo_eieio_match_data_overlay_markers_integrity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass md-integrity-snap ()
     ((label :initarg :label :accessor mis-label :initform "")
@@ -290,5 +294,6 @@ fn combo_eieio_match_data_overlay_markers_integrity() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-function mis)""#]],
     );
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_buffer_substring_prop_transfer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass content-block ()
     ((id :initarg :id :accessor cb-id :initform 0)
@@ -71,6 +71,7 @@ fn combo_eieio_buffer_substring_prop_transfer() {
                 (buffer-string)
                 blocks))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -78,7 +79,7 @@ fn combo_eieio_buffer_substring_prop_transfer() {
 fn combo_eieio_substring_narrow_propagate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass snippet ()
     ((tag :initarg :tag :accessor sn-tag :initform "")
@@ -141,6 +142,7 @@ fn combo_eieio_substring_narrow_propagate() {
                 (buffer-string)
                 snippets))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 6)""#]],
     );
 }
 
@@ -148,7 +150,7 @@ fn combo_eieio_substring_narrow_propagate() {
 fn combo_eieio_substring_object_as_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tagged-span ()
     ((label :initarg :label :accessor ts-label :initform "")
@@ -205,6 +207,7 @@ fn combo_eieio_substring_object_as_property() {
                 (buffer-string)
                 spans))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -212,7 +215,7 @@ fn combo_eieio_substring_object_as_property() {
 fn combo_eieio_substring_multibuf_transfer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass transfer-log ()
     ((source :initarg :source :accessor tl-source :initform "")
@@ -270,6 +273,7 @@ fn combo_eieio_substring_multibuf_transfer() {
                 tlogs))))
     (kill-buffer buf1)
     (kill-buffer buf2)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -277,7 +281,7 @@ fn combo_eieio_substring_multibuf_transfer() {
 fn combo_eieio_substring_undo_prop_restoration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass prop-snapshot ()
     ((step :initarg :step :accessor ps-step :initform "")
@@ -325,5 +329,6 @@ fn combo_eieio_substring_undo_prop_restoration() {
       (list (marker-position m) (overlay-start ov) (overlay-end ov) (buffer-string)
             snapshots))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (void-variable m)""#]],
     );
 }

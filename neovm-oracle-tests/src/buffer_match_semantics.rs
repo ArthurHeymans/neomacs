@@ -44,5 +44,10 @@ fn oracle_prop_gnu_subr_buffer_match_p_contracts() {
                    (match-buffers '(or . ("alpha" "beta")) (list b1 b2))))))
     (kill-buffer b1)
     (kill-buffer b2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((t t t) (nil nil nil) (\"alpha\" t nil) (\"beta\" nil t) ((major-mode . text-mode) t nil) ((major-mode . emacs-lisp-mode) nil t) ((derived-mode . prog-mode) nil t) ((this-command . find-file) t t) ((this-command save-buffer find-file) t t) ((not \"alpha\") nil t) ((or \"nomatch\" \"beta\") nil t) ((and \"alpha\" (major-mode . text-mode)) t nil)) t nil t t (\"*neovm-match-beta*\" \"*neovm-match-alpha*\"))""#
+        ]],
+    );
 }

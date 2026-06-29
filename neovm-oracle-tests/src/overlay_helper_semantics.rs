@@ -35,7 +35,10 @@ fn oracle_prop_gnu_copy_overlay_preserves_properties_and_deleted_state() {
              (overlay-get deleted-copy 'tag))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 8 t bold 7 (a b c)) (nil nil nil gone))""#]],
+    );
 }
 
 #[test]
@@ -71,5 +74,10 @@ fn oracle_prop_gnu_remove_overlays_deletes_moves_and_splits_matching_overlays() 
      (lambda (a b) (string< (car a) (car b))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"left\" 2 5 target) (\"miss\" 6 20 miss) (\"outer\" 1 5 target) (\"outer\" 15 25 target) (\"right\" 15 18 target))""#
+        ]],
+    );
 }

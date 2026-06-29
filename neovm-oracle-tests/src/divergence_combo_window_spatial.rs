@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_split_window_point_per_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "LINE-1\nLINE-2\nLINE-3\nLINE-4\nLINE-5")
   (let ((w1 (selected-window))
@@ -20,6 +20,7 @@ fn divergence_split_window_point_per_window() {
           (eq (window-buffer w1) (window-buffer w2))
           (delete-window w2)
           (= (length (window-list)) 1)))) "#,
+        expect_test::expect![[r#""LINE-1\nLINE-2\nLINE-3\nLINE-4\nLINE-5OK (1 4 t nil t)""#]],
     );
 }
 
@@ -27,12 +28,13 @@ fn divergence_split_window_point_per_window() {
 fn divergence_walk_windows_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((windows nil))
   (walk-windows (lambda (w) (push (list (window-buffer w) (window-point w)) windows)))
   (list (length windows)
         (>= (length windows) 1)
         (cl-every #'windowp (window-list)))) "#,
+        expect_test::expect![[r#""OK (1 t t)""#]],
     );
 }
 
@@ -40,7 +42,7 @@ fn divergence_walk_windows_consistency() {
 fn divergence_set_window_buffer_then_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let* ((buf (generate-new-buffer "*test-wbuf*"))
        (w (selected-window)))
   (with-current-buffer buf
@@ -52,6 +54,7 @@ fn divergence_set_window_buffer_then_point() {
         (>= (window-point w) 7)
         (set-window-buffer w (get-buffer "*scratch*"))
         (kill-buffer buf))) "#,
+        expect_test::expect![[r#""OK (#<killed buffer> 7 t nil t)""#]],
     );
 }
 
@@ -59,7 +62,7 @@ fn divergence_set_window_buffer_then_point() {
 fn divergence_save_selected_window_mutation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((w1 (selected-window)))
   (save-selected-window
     (let ((w2 (split-window nil nil 'right)))
@@ -70,6 +73,7 @@ fn divergence_save_selected_window_mutation() {
   (list (eq (selected-window) w1)
         (delete-other-windows)
         (= (length (window-list)) 1))) "#,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }
 
@@ -77,7 +81,7 @@ fn divergence_save_selected_window_mutation() {
 fn divergence_window_configuration_full_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((wc1 (current-window-configuration)))
   (split-window nil nil 'right)
   (let ((wc2 (current-window-configuration))
@@ -93,6 +97,7 @@ fn divergence_window_configuration_full_cycle() {
             (= (length (window-list)) n2)
             (set-window-configuration wc1)
             (= (length (window-list)) 1)))))) "#,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 45)""#]],
     );
 }
 
@@ -100,7 +105,7 @@ fn divergence_window_configuration_full_cycle() {
 fn divergence_window_scroll_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (dotimes (i 50) (insert (format "Line %02d\n" i)))
   (goto-char 1)
@@ -112,6 +117,9 @@ fn divergence_window_scroll_positions() {
           (goto-char 200)
           (recenter 0)
           (>= (window-start w) 1)))) "#,
+        expect_test::expect![[
+            r#""Line 00\nLine 01\nLine 02\nLine 03\nLine 04\nLine 05\nLine 06\nLine 07\nLine 08\nLine 09\nLine 10\nLine 11\nLine 12\nLine 13\nLine 14\nLine 15\nLine 16\nLine 17\nLine 18\nLine 19\nLine 20\nLine 21\nLine 22\nLine 23\nLine 24\nLine 25\nLine 26\nLine 27\nLine 28\nLine 29\nLine 30\nLine 31\nLine 32\nLine 33\nLine 34\nLine 35\nLine 36\nLine 37\nLine 38\nLine 39\nLine 40\nLine 41\nLine 42\nLine 43\nLine 44\nLine 45\nLine 46\nLine 47\nLine 48\nLine 49\nERR (error \"‘recenter’ing a window that does not display current-buffer\")""#
+        ]],
     );
 }
 
@@ -119,7 +127,7 @@ fn divergence_window_scroll_positions() {
 fn divergence_buffer_in_two_windows_simultaneously() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF")
   (let ((w1 (selected-window))
@@ -135,6 +143,7 @@ fn divergence_buffer_in_two_windows_simultaneously() {
       (list p1 p2
             (/= p1 p2)
             (eq (window-buffer w1) (current-buffer)))))) "#,
+        expect_test::expect![[r#""AAAA-BBBB-CCCC-DDDD-EEEE-FFFFOK (1 15 t nil)""#]],
     );
 }
 
@@ -142,13 +151,14 @@ fn divergence_buffer_in_two_windows_simultaneously() {
 fn divergence_window_dedicated_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((w (selected-window)))
   (list (not (window-dedicated-p w))
         (set-window-dedicated-p w t)
         (window-dedicated-p w)
         (set-window-dedicated-p w nil)
         (not (window-dedicated-p w))))) "#,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 6 39)""#]],
     );
 }
 
@@ -156,7 +166,7 @@ fn divergence_window_dedicated_p() {
 fn divergence_temp_buffer_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((orig-buf (current-buffer)))
   (with-temp-buffer
     (insert "temp content for display")
@@ -165,6 +175,7 @@ fn divergence_temp_buffer_display() {
           (= (point) 1)
           (not (eq (current-buffer) orig-buf))))
   (eq (current-buffer) orig-buf)) "#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -172,7 +183,7 @@ fn divergence_temp_buffer_display() {
 fn divergence_window_margins_fringes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((w (selected-window)))
   (list (>= (window-width w) 1)
         (>= (window-height w) 1)
@@ -183,5 +194,6 @@ fn divergence_window_margins_fringes() {
         (window-left-fringe w)
         (window-right-fringe w)
         (>= (+ (window-left-fringe w) (window-right-fringe w)) 0)))) "#,
+        expect_test::expect![[r#""ERR (void-function window-left-margin)""#]],
     );
 }

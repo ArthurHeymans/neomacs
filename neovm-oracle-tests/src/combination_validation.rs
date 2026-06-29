@@ -63,7 +63,12 @@ fn oracle_prop_validation_email_format() {
                   test-emails)))
       ;; Cleanup
       (fmakunbound 'test--validate-email))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"user@example.com\" . t) (\"first.last@company.org\" . t) (\"user+tag@domain.co.uk\" . t) (\"a@b.cd\" . t) (\"\" . \"empty string\") (\"@missing-local.com\" . \"invalid format\") (\"missing-at-sign\" . \"invalid format\") (\"user@\" . \"invalid format\") (\"user@.com\" . \"invalid format\") (\"user@domain\" . \"invalid format\") (\"user..name@example.com\" . \"consecutive dots in local part\") (\".user@example.com\" . \"local part starts with dot\") (\"user.@example.com\" . \"local part ends with dot\") (\"valid_underscore@test.io\" . t) (\"UPPER@CASE.COM\" . t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +141,12 @@ fn oracle_prop_validation_date_leap_year() {
       (fmakunbound 'test--leap-year-p)
       (fmakunbound 'test--days-in-month)
       (fmakunbound 'test--validate-date))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t \"day 29 exceeds max 28 for month 2 year 2023\" \"day 29 exceeds max 28 for month 2 year 1900\" \"day 31 exceeds max 30 for month 4 year 2026\" \"month 13 out of range\" \"month 0 out of range\" \"day < 1\" \"year < 1\" t nil t nil 29 28 28)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +236,12 @@ fn oracle_prop_validation_nested_schema_check() {
               user-schema))))
       ;; Cleanup
       (fmakunbound 'test--validate-schema))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (\"age: expected positive integer\" \"missing required field: email\" \"address.missing required field: zip\") nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -311,7 +326,12 @@ fn oracle_prop_validation_constraint_propagation() {
               (start_date . 20261231) (end_date . 20260101)))))
       ;; Cleanup
       (fmakunbound 'test--validate-constraints))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (\"admin role requires mfa_enabled=t\") (\"admin role requires mfa_enabled=t\" \"age < 18 cannot have admin role\") (\"US zip must be 5 digits\") nil (\"UK zip format invalid\") (\"start_date must be <= end_date\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -399,7 +419,12 @@ Returns (:ok form-data) or (:errors error-list)."
       ;; Cleanup
       (fmakunbound 'test--validate-field)
       (fmakunbound 'test--validate-form))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:ok ((username . \"alice\") (age . 30) (score . 95.5))) (:errors (\"username: required non-empty string\" \"username: minimum length 3\" \"age: must be integer 0-150\" \"score: must be positive number\")) (:errors (\"username: minimum length 3\")) (:errors (\"username: required non-empty string\" \"username: minimum length 3\" \"username: maximum length 50\")) (:ok ((username . \"bob\") (age . 0) (score . 0.001))) (:ok ((username . \"bob\") (age . 150) (score . 1))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -492,7 +517,12 @@ Returns (ok . coerced-value) or (error . message)."
                   config-raw)))
       ;; Cleanup
       (fmakunbound 'test--coerce-and-validate))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"port\" ok . 8080) (\"workers\" ok . 4) (\"timeout\" ok . 30.5) (\"debug\" ok . t) (\"mode\" ok . \"production\") (\"bad-port\" error . \"not a valid integer: abc\") (\"neg-workers\" error . \"-3 < minimum 1\") (\"bad-bool\" error . \"not a boolean: maybe\") (\"bad-mode\" error . \"staging not in allowed values: (development testing production)\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -553,5 +583,10 @@ Returns (ok . final-value) or (error . first-error-msg)."
               (test--chain-validate "hello world" username-chain)))))
       ;; Cleanup
       (fmakunbound 'test--chain-validate))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok . \"alice\") (ok . \"bob\") (error . \"must not be empty\") (error . \"exceeds 20 chars\") (error . \"must be alphabetic only\") (error . \"must be alphabetic only\"))""#
+        ]],
+    );
 }

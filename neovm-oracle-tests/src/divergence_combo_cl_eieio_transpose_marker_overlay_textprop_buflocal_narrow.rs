@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_transpose_chars_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass transpose-char-snap ()
     ((step :initarg :step :accessor tc-step :initform "")
@@ -62,6 +62,7 @@ fn combo_eieio_transpose_chars_with_markers() {
                 (marker-position m1) (marker-position m2)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -69,7 +70,7 @@ fn combo_eieio_transpose_chars_with_markers() {
 fn combo_eieio_transpose_words_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass transpose-word-snap ()
     ((step :initarg :step :accessor tw-step :initform "")
@@ -122,6 +123,7 @@ fn combo_eieio_transpose_words_with_props() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -129,7 +131,7 @@ fn combo_eieio_transpose_words_with_props() {
 fn combo_eieio_transpose_lines_with_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass transpose-line-snap ()
     ((step :initarg :step :accessor tl-step :initform "")
@@ -183,6 +185,7 @@ fn combo_eieio_transpose_lines_with_overlays() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range 28 33)""#]],
     );
 }
 
@@ -190,7 +193,7 @@ fn combo_eieio_transpose_lines_with_overlays() {
 fn combo_eieio_transpose_sexps_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass transpose-sexp-snap ()
     ((step :initarg :step :accessor tss-step :initform "")
@@ -246,6 +249,7 @@ fn combo_eieio_transpose_sexps_narrow() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -253,7 +257,7 @@ fn combo_eieio_transpose_sexps_narrow() {
 fn combo_eieio_transpose_undo_marker_integrity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass trans-undo-snap ()
     ((step :initarg :step :accessor tus-step :initform "")
@@ -308,5 +312,6 @@ fn combo_eieio_transpose_undo_marker_integrity() {
                 (marker-position m1) (marker-position m2)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

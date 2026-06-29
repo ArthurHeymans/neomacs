@@ -41,7 +41,10 @@ fn oracle_prop_string_version_lessp_multi_dot_versions() {
       (push (string-version-lessp "9.99.99" "10.0.0") results)
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t nil t nil t t nil t nil t nil t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +86,10 @@ fn oracle_prop_string_version_lessp_alpha_numeric_mixing() {
       (push (string-version-lessp "v1.beta.2" "v1.alpha.3") results)
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t nil t nil t nil t nil t t nil t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +132,10 @@ fn oracle_prop_string_version_lessp_leading_zeros() {
       (push (string-version-lessp "0" "00") results)
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil nil nil t nil t nil t nil t t nil nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +179,12 @@ fn oracle_prop_string_version_lessp_edge_cases() {
       (push (string-version-lessp "foo_10" "foo_2") results)
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil t nil t nil nil nil nil t nil t nil t nil t t nil t nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +217,12 @@ fn oracle_prop_string_version_lessp_sort_versions() {
                         :ordered ordered
                         :files sorted-files
                         :packages sorted-pkgs))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:versions (\"0.1.0\" \"1.0.0\" \"1.2.0\" \"1.9.3\" \"1.9.10\" \"1.10.0\" \"1.10.1\" \"2.0.0\" \"2.0.1\" \"10.0.0\") :ordered t :files (\"file1.txt\" \"file2.txt\" \"file3.txt\" \"file10.txt\" \"file20.txt\") :packages (\"emacs-27.1\" \"emacs-27.2\" \"emacs-28.1\" \"emacs-28.2\" \"emacs-29.1\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +268,10 @@ fn oracle_prop_string_version_lessp_transitivity() {
           (list :transitive transitive-ok
                 :irreflexive irreflexive-ok
                 :asymmetric asymmetric-ok))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (:transitive t :irreflexive t :asymmetric t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -285,5 +307,8 @@ fn oracle_prop_string_version_lessp_symbols_and_suffixes() {
       (push (string-version-lessp "1.2-3" "1.2-4") results)
 
       (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil nil t t nil t t t nil t t t)""#]],
+    );
 }

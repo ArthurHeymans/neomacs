@@ -11,8 +11,9 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf24_table_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "'((1 2) (3 4))" '((:results . "table")))"##,
+        expect_test::expect![[r#""OK ((1 2) (3 4))""#]],
     );
 }
 
@@ -23,7 +24,10 @@ fn uf24_table_result() {
 #[test]
 fn uf24_list_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(org-babel-execute:emacs-lisp "'(1 2 3)" '((:results . "list")))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(org-babel-execute:emacs-lisp "'(1 2 3)" '((:results . "list")))"##,
+        expect_test::expect![[r#""OK (1 2 3)""#]],
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -33,7 +37,10 @@ fn uf24_list_result() {
 #[test]
 fn uf24_vector_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(org-babel-execute:emacs-lisp "[1 2 3]" '((:results . "vector")))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(org-babel-execute:emacs-lisp "[1 2 3]" '((:results . "vector")))"##,
+        expect_test::expect![[r#""OK [1 2 3]""#]],
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -43,7 +50,10 @@ fn uf24_vector_result() {
 #[test]
 fn uf24_scalar_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "scalar")))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "scalar")))"##,
+        expect_test::expect![[r#""OK 3""#]],
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -53,8 +63,9 @@ fn uf24_scalar_result() {
 #[test]
 fn uf24_verbatim_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"hello\"" '((:results . "verbatim")))"##,
+        expect_test::expect![[r#""OK \"hello\"""#]],
     );
 }
 
@@ -65,8 +76,9 @@ fn uf24_verbatim_result() {
 #[test]
 fn uf24_file_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"/tmp/test.txt\"" '((:results . "file-link")))"##,
+        expect_test::expect![[r#""OK \"/tmp/test.txt\"""#]],
     );
 }
 
@@ -77,8 +89,9 @@ fn uf24_file_link() {
 #[test]
 fn uf24_graphics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"/tmp/img.png\"" '((:results . "graphics")))"##,
+        expect_test::expect![[r#""OK \"/tmp/img.png\"""#]],
     );
 }
 
@@ -89,7 +102,10 @@ fn uf24_graphics() {
 #[test]
 fn uf24_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "replace")))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "replace")))"##,
+        expect_test::expect![[r#""OK 3""#]],
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -99,7 +115,10 @@ fn uf24_replace() {
 #[test]
 fn uf24_append() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "append")))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "append")))"##,
+        expect_test::expect![[r#""OK 3""#]],
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -109,7 +128,10 @@ fn uf24_append() {
 #[test]
 fn uf24_prepend() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "prepend")))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "prepend")))"##,
+        expect_test::expect![[r#""OK 3""#]],
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -119,8 +141,9 @@ fn uf24_prepend() {
 #[test]
 fn uf24_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"/tmp/test.txt\"" '((:results . "link")))"##,
+        expect_test::expect![[r#""OK \"/tmp/test.txt\"""#]],
     );
 }
 
@@ -131,8 +154,9 @@ fn uf24_link() {
 #[test]
 fn uf24_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"/tmp/test.txt\"" '((:results . "file")))"##,
+        expect_test::expect![[r#""OK \"/tmp/test.txt\"""#]],
     );
 }
 
@@ -143,7 +167,10 @@ fn uf24_file() {
 #[test]
 fn uf24_org() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "org")))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "org")))"##,
+        expect_test::expect![[r#""OK 3""#]],
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -153,8 +180,9 @@ fn uf24_org() {
 #[test]
 fn uf24_html() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"<b>bold</b>\"" '((:results . "html")))"##,
+        expect_test::expect![[r#""OK \"<b>bold</b>\"""#]],
     );
 }
 
@@ -165,8 +193,9 @@ fn uf24_html() {
 #[test]
 fn uf24_latex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"\\\\textbf{bold}\"" '((:results . "latex")))"##,
+        expect_test::expect![[r#""OK \"\\\\textbf{bold}\"""#]],
     );
 }
 
@@ -177,7 +206,10 @@ fn uf24_latex() {
 #[test]
 fn uf24_code() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "code")))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "code")))"##,
+        expect_test::expect![[r#""OK 3""#]],
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -187,7 +219,10 @@ fn uf24_code() {
 #[test]
 fn uf24_pp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(org-babel-execute:emacs-lisp "'(1 2 3)" '((:results . "pp")))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(org-babel-execute:emacs-lisp "'(1 2 3)" '((:results . "pp")))"##,
+        expect_test::expect![[r#""OK (1 2 3)""#]],
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -197,7 +232,10 @@ fn uf24_pp() {
 #[test]
 fn uf24_drawer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "drawer")))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "drawer")))"##,
+        expect_test::expect![[r#""OK 3""#]],
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -207,8 +245,9 @@ fn uf24_drawer() {
 #[test]
 fn uf24_wrap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "value") (:wrap . "example")))"##,
+        expect_test::expect![[r#""OK 3""#]],
     );
 }
 
@@ -219,8 +258,9 @@ fn uf24_wrap() {
 #[test]
 fn uf24_prologue() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ x 2)" '((:results . "value") (:prologue . "(setq x 10)") (:epilogue . "(message \"done\")")))"##,
+        expect_test::expect![[r#""OK 12""#]],
     );
 }
 
@@ -231,8 +271,9 @@ fn uf24_prologue() {
 #[test]
 fn uf24_eval_never() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "value") (:eval . "never")))"##,
+        expect_test::expect![[r#""OK 3""#]],
     );
 }
 
@@ -243,8 +284,9 @@ fn uf24_eval_never() {
 #[test]
 fn uf24_cache() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(random)" '((:results . "value") (:cache . "yes")))"##,
+        expect_test::expect![[r#""OK 0""#]],
     );
 }
 
@@ -255,8 +297,9 @@ fn uf24_cache() {
 #[test]
 fn uf24_hlines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "'((1 2) :hline (3 4))" '((:results . "value") (:hlines . "yes")))"##,
+        expect_test::expect![[r#""OK ((1 2) :hline (3 4))""#]],
     );
 }
 
@@ -267,8 +310,9 @@ fn uf24_hlines() {
 #[test]
 fn uf24_colnames() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "'((\"a\" \"b\") (1 2))" '((:results . "value") (:colnames . "yes")))"##,
+        expect_test::expect![[r#""OK ((\"a\" \"b\") (1 2))""#]],
     );
 }
 
@@ -279,7 +323,8 @@ fn uf24_colnames() {
 #[test]
 fn uf24_rownames() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "'((\"a\" 1) (\"b\" 2))" '((:results . "value") (:rownames . "yes")))"##,
+        expect_test::expect![[r#""OK ((\"a\" 1) (\"b\" 2))""#]],
     );
 }

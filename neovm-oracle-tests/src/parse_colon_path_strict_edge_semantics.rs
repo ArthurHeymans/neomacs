@@ -29,5 +29,10 @@ fn oracle_parse_colon_path_empty_env_slash_and_type_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil (nil) (nil nil) (\"a/\" \"b/\" nil \"c/\" nil) (\"/tmp/neomacs-root/bin/\" \"/tmp/neomacs-root/lib/\" \"/x/\" \"/end/\") (\"/server/path/\" \"/many/\") nil)""#
+        ]],
+    );
 }

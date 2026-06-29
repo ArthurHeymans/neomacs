@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_h3_json_encode_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (json-encode '((a . 1) (b . "str")))
       (json-encode '((arr . [1 2 3]) (b . t) (c . :null)))
@@ -20,13 +20,16 @@ fn div_h3_json_encode_read() {
       (json-encode '((unicode . "café日本"))))
 "##,
         &["emacs-lisp/json.el"],
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/emacs-lisp/json.el\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_h3_dom_traversal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((d '(html nil
               (head nil (title nil "Hi"))
@@ -38,13 +41,14 @@ fn div_h3_dom_traversal() {
         (length (dom-children d))))
 "##,
         &["dom.el"],
+        expect_test::expect![[r#""OK (html 2 \"x\" (\"Hi\" \"text\" \"more\") 2)""#]],
     );
 }
 
 #[test]
 fn div_h3_rfc2047_decode_and_ascii_encode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (rfc2047-decode-string "=?utf-8?B?aGVsbG8=?=")
       (rfc2047-decode-string "=?utf-8?Q?h=C3=A9llo?=")
@@ -52,6 +56,7 @@ fn div_h3_rfc2047_decode_and_ascii_encode() {
       (rfc2047-encode-string "hello"))
 "##,
         &["mail/rfc2047.el"],
+        expect_test::expect![[r#""OK (\"hello\" \"héllo\" \"plain text only\" \"hello\")""#]],
     );
 }
 
@@ -65,18 +70,19 @@ fn div_h3_rfc2047_encode_multibyte() {
     // underlying primitive that rfc2047.el relies on diverges); ASCII
     // encode and all decode forms agree. Running GNU's rfc2047.el under
     // assert_oracle_parity_with_load.
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (rfc2047-encode-string "héllo")
 "##,
         &["mail/rfc2047.el"],
+        expect_test::expect![[r#""OK \"=?utf-8?Q?h=C3=A9llo?=\"""#]],
     );
 }
 
 #[test]
 fn div_h3_url_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((u (url-generic-parse-url "https://user:pw@host:8080/path?q=1#frag")))
   (list (aref u 0)
@@ -86,17 +92,21 @@ fn div_h3_url_parse() {
         (url-host u)))
 "##,
         &["url/url.el"],
+        expect_test::expect![[r#""OK (url \"https\" \"pw\" \"host\" \"host\")""#]],
     );
 }
 
 #[test]
 fn div_h3_json_array_objects_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (json-read-from-string "[{\"x\":[1,2,{\"y\":3}]},4]")
       (json-encode '((nested . ((deep . ((deeper . 42))))))))
 "##,
         &["emacs-lisp/json.el"],
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/emacs-lisp/json.el\")""#
+        ]],
     );
 }

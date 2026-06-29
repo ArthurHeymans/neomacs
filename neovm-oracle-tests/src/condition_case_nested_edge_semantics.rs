@@ -11,10 +11,11 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_condition_case_catches_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(condition-case err
          (/ 1 0)
        (arith-error 'caught))"#,
+        expect_test::expect![[r#""OK caught""#]],
     );
     assert_ok_eq("caught", &oracle, &neovm);
 }
@@ -22,10 +23,11 @@ fn oracle_condition_case_catches_error() {
 #[test]
 fn oracle_condition_case_no_error_returns_body() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(condition-case err
          42
        (error 'never-reached))"#,
+        expect_test::expect![[r#""OK 42""#]],
     );
     assert_ok_eq("42", &oracle, &neovm);
 }
@@ -33,10 +35,11 @@ fn oracle_condition_case_no_error_returns_body() {
 #[test]
 fn oracle_condition_case_error_data_is_cons() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(condition-case err
          (error "test message")
        (error (consp err)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &oracle, &neovm);
 }
@@ -45,7 +48,7 @@ fn oracle_condition_case_error_data_is_cons() {
 fn oracle_condition_case_unwind_protect_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Uses setq+cons instead of push (push is a cl-lib macro, not in minimal eval).
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (defvar neovm--test-cc-uwp-log '())
   (condition-case nil
@@ -55,6 +58,7 @@ fn oracle_condition_case_unwind_protect_interaction() {
     (error
      (setq neovm--test-cc-uwp-log (cons 'caught neovm--test-cc-uwp-log))))
   (nreverse neovm--test-cc-uwp-log))"#,
+        expect_test::expect![[r#""OK (cleanup caught)""#]],
     );
     assert_ok_eq("(cleanup caught)", &oracle, &neovm);
 }
@@ -62,12 +66,13 @@ fn oracle_condition_case_unwind_protect_interaction() {
 #[test]
 fn oracle_condition_case_re_signals_when_no_handler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(condition-case nil
          (condition-case nil
              (error "inner")
            (arith-error 'wrong-handler))
        (error 'outer-caught))"#,
+        expect_test::expect![[r#""OK outer-caught""#]],
     );
     assert_ok_eq("outer-caught", &oracle, &neovm);
 }
@@ -75,11 +80,12 @@ fn oracle_condition_case_re_signals_when_no_handler() {
 #[test]
 fn oracle_condition_case_multiple_handlers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(condition-case err
          (error "test")
        (arith-error 'arith)
        (error 'generic-error))"#,
+        expect_test::expect![[r#""OK generic-error""#]],
     );
     assert_ok_eq("generic-error", &oracle, &neovm);
 }

@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_text_property_interval_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAAAAAAAABBBBBBBBBBCCCCCCCCCC")
   (put-text-property 1 10 'level 1)
@@ -22,6 +22,9 @@ fn divergence_text_property_interval_merge() {
         (push (list pos next val) props)
         (setq pos (or next 31))))
     (nreverse props))) "#,
+        expect_test::expect![[
+            r#""AAAAAAAAAABBBBBBBBBBCCCCCCCCCCOK ((1 10 1) (10 21 bridge) (21 30 3) (30 nil nil))""#
+        ]],
     );
 }
 
@@ -29,7 +32,7 @@ fn divergence_text_property_interval_merge() {
 fn divergence_overlay_stacking_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((ov1 (make-overlay 1 10))
@@ -51,6 +54,7 @@ fn divergence_overlay_stacking_priority() {
             (= (length at-2) 1)
             (= (length at-9) 1)
             (mapcar (lambda (ov) (overlay-get ov 'priority)) at-5))))) "#,
+        expect_test::expect![[r#""ABCDEFGHIJOK (t t t (100 200 300))""#]],
     );
 }
 
@@ -58,7 +62,7 @@ fn divergence_overlay_stacking_priority() {
 fn divergence_textprop_front_sticky_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB")
   (put-text-property 1 4 'sticky-front t)
@@ -73,6 +77,9 @@ fn divergence_textprop_front_sticky_insert() {
           (get-text-property 1 'sticky-front)
           (get-text-property 11 'sticky-front)
           (buffer-string)))) "#,
+        expect_test::expect![[
+            r#""AAAXA-BBBYBOK (nil nil t nil #(\"AAAXA-BBBYB\" 0 3 (sticky-front t) 5 9 (sticky-front nil)))""#
+        ]],
     );
 }
 
@@ -80,7 +87,7 @@ fn divergence_textprop_front_sticky_insert() {
 fn divergence_remove_list_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (put-text-property 1 10 'face 'bold)
@@ -98,6 +105,7 @@ fn divergence_remove_list_properties() {
           (null f3) (null i3) (eq t3 t)
           (eq f8 'bold) (eq i8 t)
           (eq f1 'bold) (eq i1 t)))) "#,
+        expect_test::expect![[r#""ABCDEFGHIJOK (nil nil t bold t bold t t t t t t t t)""#]],
     );
 }
 
@@ -105,7 +113,7 @@ fn divergence_remove_list_properties() {
 fn divergence_overlay_invisible_text_adjustment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((ov1 (make-overlay 5 9))
@@ -118,6 +126,9 @@ fn divergence_overlay_invisible_text_adjustment() {
           (overlay-start ov1) (overlay-end ov1)
           (overlay-start ov2) (overlay-end ov2)
           (buffer-size)))) "#,
+        expect_test::expect![[
+            r#""AAAA-BBBB-CCCC-DDDD-EEEEOK (\"AAAA-BBBB-CCCC-DDDD-EEEE\" 2 t 5 9 10 14 24)""#
+        ]],
     );
 }
 
@@ -125,7 +136,7 @@ fn divergence_overlay_invisible_text_adjustment() {
 fn divergence_textprop_category_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (put 'test-cat-xxx 'face 'bold)
   (put 'test-cat-xxx 'invisible nil)
@@ -142,6 +153,7 @@ fn divergence_textprop_category_inheritance() {
           (null f6)
           (eq c1 'test-cat-xxx)
           (null i1)))) "#,
+        expect_test::expect![[r#""ABCDEFGHIJOK (bold bold nil test-cat-xxx nil t t t t t)""#]],
     );
 }
 
@@ -149,7 +161,7 @@ fn divergence_textprop_category_inheritance() {
 fn divergence_overlay_before_string_after_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "MIDDLE")
   (let ((ov (make-overlay 1 6)))
@@ -162,6 +174,7 @@ fn divergence_overlay_before_string_after_string() {
             (overlay-start ov) (overlay-end ov)
             (buffer-string)
             (= (buffer-size) 6))))) "#,
+        expect_test::expect![[r#""MIDDLEOK (t t 1 6 \"MIDDLE\" t)""#]],
     );
 }
 
@@ -169,7 +182,7 @@ fn divergence_overlay_before_string_after_string() {
 fn divergence_textprop_search_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-BBBB-CCCC-DDDD-EEEE")
   (put-text-property 1 4 'group 'a)
@@ -183,6 +196,7 @@ fn divergence_textprop_search_property() {
           (= p2 10)
           (= p3 1)
           (= p4 10)))) "#,
+        expect_test::expect![[r#""AAA-BBBB-CCCC-DDDD-EEEEOK (1 10 1 10 t t t t)""#]],
     );
 }
 
@@ -190,7 +204,7 @@ fn divergence_textprop_search_property() {
 fn divergence_set_text_properties_overwrite() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (put-text-property 1 10 'old t)
@@ -206,6 +220,7 @@ fn divergence_set_text_properties_overwrite() {
           (null o3) (eq n3 t) (eq f3 'italic)
           (eq o1 t) (null n1)
           (eq o8 t) (null n8)))) "#,
+        expect_test::expect![[r#""ABCDEFGHIJOK (nil t italic t nil t nil t t t t t t t)""#]],
     );
 }
 
@@ -213,7 +228,7 @@ fn divergence_set_text_properties_overwrite() {
 fn divergence_overlay_move_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((ov (make-overlay 1 4)))
@@ -228,5 +243,6 @@ fn divergence_overlay_move_overlay() {
               (= s1 1) (= e1 4)
               (= s2 10) (= e2 14)
               (eq tag 'movable)))))) "#,
+        expect_test::expect![[r#""AAAA-BBBB-CCCC-DDDD-EEEEOK (1 4 10 14 movable t t t t t)""#]],
     );
 }

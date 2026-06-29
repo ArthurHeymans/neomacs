@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx232_posn_at_point_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "first line\nsecond line\nthird line\n")
@@ -21,25 +21,27 @@ fn div_cx232_posn_at_point_basic() {
           (posn-area posn)
           (posn-object posn))))
 "##,
+        expect_test::expect![[r#""OK (nil (0 . 0) nil nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx232_posn_at_x_y_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'posn-at-x-y)
       (fboundp 'pos-at-point)
       (fboundp 'window-absolute-pixel-edges))
 "##,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx232_posn_string_object_decomposition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "text with properties")
@@ -50,13 +52,14 @@ fn div_cx232_posn_string_object_decomposition() {
           (posn-image posn)
           (posn-object posn))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx232_child_frame_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'make-frame)
@@ -64,38 +67,41 @@ fn div_cx232_child_frame_availability() {
           (boundp 'child-frame-parameters))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx232_display_fill_column_indicator_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'display-fill-column-indicator-mode)
       (boundp 'display-fill-column-indicator)
       (boundp 'display-fill-column-indicator-character))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx232_display_line_numbers_pixel_width_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'display-line-numbers-mode)
       (boundp 'display-line-numbers-width)
       (boundp 'display-line-numbers-grow-limit)
       (boundp 'display-line-numbers-offset))
 "##,
+        expect_test::expect![[r#""OK (t t nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx232_posn_col_row_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert (mapconcat #'identity (make-list 20 "text content here") "\n"))
@@ -108,13 +114,14 @@ fn div_cx232_posn_col_row_consistency() {
           (>= (car col-row) 0)
           (>= (cdr col-row) 0))))
 "##,
+        expect_test::expect![[r#""OK (t nil t t)""#]],
     );
 }
 
 #[test]
 fn div_cx232_frame_parameters_pixel_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))
   (list (integerp (frame-pixel-width frame))
@@ -123,13 +130,14 @@ fn div_cx232_frame_parameters_pixel_query() {
         (integerp (frame-char-height frame))
         (consp (frame-edges frame))))
 "##,
+        expect_test::expect![[r#""OK (t t t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx232_window_text_pixel_dimensions_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (list (integerp (window-text-pixel-width win))
@@ -138,13 +146,14 @@ fn div_cx232_window_text_pixel_dimensions_query() {
         (integerp (window-body-height win 'pixels))
         (integerp (window-max-chars-per-line))))
 "##,
+        expect_test::expect![[r#""ERR (void-function window-text-pixel-width)""#]],
     );
 }
 
 #[test]
 fn div_cx232_posn_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -171,5 +180,6 @@ fn div_cx232_posn_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

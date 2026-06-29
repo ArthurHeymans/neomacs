@@ -21,7 +21,10 @@ fn oracle_prop_while_fibonacci_generator() {
                     (let ((next (+ a b)))
                       (setq a b b next)))
                   (nreverse result))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 1 1 2 3 5 8 13 21 34 55 89)""#]],
+    );
 }
 
 #[test]
@@ -37,7 +40,7 @@ fn oracle_prop_while_collatz_sequence() {
                       (setq n (+ (* 3 n) 1))))
                   (setq steps (cons 1 steps))
                   (list (length steps) (apply #'max (nreverse steps))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (112 9232)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +67,10 @@ fn oracle_prop_while_running_statistics() {
                     (setq remaining (cdr remaining)))
                   (list n sum min-val max-val
                         (/ (float sum) n)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 108 4 42 18.0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +90,10 @@ fn oracle_prop_while_nested_multiplication_table() {
                       (setq result (cons (nreverse row) result)))
                     (setq i (1+ i)))
                   (nreverse result))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3 4) (2 4 6 8) (3 6 9 12) (4 8 12 16))""#]],
+    );
 }
 
 #[test]
@@ -106,7 +115,10 @@ fn oracle_prop_while_nested_find_pairs() {
                           (setq inner (cdr inner))))
                       (setq outer (cdr outer))))
                   (nreverse pairs))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 9) (2 8) (3 7) (4 6))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +139,8 @@ fn oracle_prop_while_newton_sqrt() {
                           iterations (1+ iterations)))
                   (list (< (abs (- (* guess guess) n)) epsilon)
                         (< iterations 100)))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (t t)""#]]);
     assert_ok_eq("(t t)", &o, &n);
 }
 
@@ -144,7 +157,8 @@ fn oracle_prop_while_converge() {
                           steps (1+ steps)))
                   (list (< (abs (- (* x x) 50.0)) 0.01)
                         (< steps 50)))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (t t)""#]]);
     assert_ok_eq("(t t)", &o, &n);
 }
 
@@ -168,5 +182,8 @@ fn oracle_prop_while_buffer_tokenizer() {
                                            (match-string 2)))
                                     tokens)))
                       (nreverse tokens)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((\"alpha\" . 1) (\"beta\" . 2) (\"gamma\" . 3))""#]],
+    );
 }

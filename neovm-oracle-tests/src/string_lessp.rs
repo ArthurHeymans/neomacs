@@ -12,7 +12,10 @@ use super::common::{
 fn oracle_prop_string_lessp_wrong_arity_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-lessp "a")"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-lessp "a")"#,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments string-lessp 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-number-of-arguments");
 }
 
@@ -20,7 +23,10 @@ fn oracle_prop_string_lessp_wrong_arity_error() {
 fn oracle_prop_string_lessp_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm(r#"(string-lessp "a" 1)"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(string-lessp "a" 1)"#,
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -28,7 +34,10 @@ fn oracle_prop_string_lessp_wrong_type_error() {
 fn oracle_prop_string_lessp_alias_smoke() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(r#"(string< "abc" "abd")"#);
+    crate::common::assert_oracle_parity_expect(
+        r#"(string< "abc" "abd")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
 }
 
 proptest! {

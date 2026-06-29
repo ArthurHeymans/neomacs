@@ -70,7 +70,12 @@ fn oracle_prop_setops_union_intersection_difference() {
     (fmakunbound 'neovm--test-set-union)
     (fmakunbound 'neovm--test-set-intersect)
     (fmakunbound 'neovm--test-set-diff)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 5 7 8 9 11 13 14) (3 5 11) (1 7 9 13) (2 8 14) (1 3 5 7 9 11 13) nil (1 3 5 7 9 11 13) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +138,10 @@ fn oracle_prop_setops_symmetric_difference() {
                            r)
                          #'<)))))
     (fmakunbound 'neovm--test-set-symdiff)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 6 7) nil (1 2 3) (4 5 6) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +190,10 @@ fn oracle_prop_setops_power_set() {
           (length ps1)
           ps1))
     (fmakunbound 'neovm--test-power-set)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (8 t t 1 (nil) 2 (nil (x)))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +243,10 @@ fn oracle_prop_setops_subset_check() {
         (funcall 'neovm--test-proper-subsetp '(1 2 3) '(1 2 3)))
     (fmakunbound 'neovm--test-subsetp)
     (fmakunbound 'neovm--test-proper-subsetp)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t nil t t t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +308,10 @@ fn oracle_prop_setops_set_equality() {
             all-agree)))
     (fmakunbound 'neovm--test-set-equal)
     (fmakunbound 'neovm--test-set-equal-sym)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil nil t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -371,7 +388,12 @@ fn oracle_prop_setops_multiset_bag_operations() {
     (fmakunbound 'neovm--test-bag-union)
     (fmakunbound 'neovm--test-bag-intersect)
     (fmakunbound 'neovm--test-bag-sum)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . 2) (2 . 1) (3 . 3) (4 . 1)) ((1 . 1) (2 . 2) (3 . 1) (5 . 1)) ((1 . 2) (2 . 2) (3 . 3) (4 . 1) (5 . 1)) ((1 . 1) (2 . 1) (3 . 1)) ((1 . 3) (2 . 3) (3 . 4) (4 . 1) (5 . 1)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -429,7 +451,10 @@ fn oracle_prop_setops_jaccard_similarity() {
               (ab '(1 2 3 4 5)))
           (funcall 'neovm--test-jaccard a ab)))
     (fmakunbound 'neovm--test-jaccard)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1.0 0.0 0.5 0.2 0.0 0.0 t 0.6)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -499,5 +524,10 @@ fn oracle_prop_setops_knn_jaccard() {
             (sort dists (lambda (a b) (< (cdr a) (cdr b)))))))
     (fmakunbound 'neovm--test-jaccard-dist)
     (fmakunbound 'neovm--test-knn)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((cat hamster) (bird) (fish) ((hamster . 0.25) (cat . 0.25) (fish . 0.6) (bird . 0.8333333333333334) (dog . 0.8333333333333334)))""#
+        ]],
+    );
 }

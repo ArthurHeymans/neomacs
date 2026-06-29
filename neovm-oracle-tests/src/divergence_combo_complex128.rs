@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx128_setq_default_does_not_affect_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx128-shared :default)
 (let ((buf-a (get-buffer-create " *neo-cx128-a*"))
@@ -24,13 +24,14 @@ fn div_cx128_setq_default_does_not_affect_buffer_local() {
     (kill-buffer buf-b)
     (list a-val b-val def)))
 "##,
+        expect_test::expect![[r#""OK (:local-a :local-b :new-default)""#]],
     );
 }
 
 #[test]
 fn div_cx128_setq_local_creates_buffer_local_in_current_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx128-loc :global)
 (let ((buf-a (get-buffer-create " *neo-cx128-loc-a*"))
@@ -45,13 +46,14 @@ fn div_cx128_setq_local_creates_buffer_local_in_current_buffer() {
     (kill-buffer buf-b)
     (list a-val b-val default)))
 "##,
+        expect_test::expect![[r#""OK (:local-a :global :global)""#]],
     );
 }
 
 #[test]
 fn div_cx128_let_shadowing_does_not_change_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx128-shad :default)
 (let ((buf (get-buffer-create " *neo-cx128-shad*")))
@@ -65,26 +67,28 @@ fn div_cx128_let_shadowing_does_not_change_buffer_local() {
     (kill-buffer buf)
     after-let))
 "##,
+        expect_test::expect![[r#""OK :buffer-local""#]],
     );
 }
 
 #[test]
 fn div_cx128_dynamic_binding_let_visible_in_called_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (defvar neo-cx128-dyn :unset)
 (defun neo-cx128-read-dyn () neo-cx128-dyn)
 (let ((neo-cx128-dyn :let-bound))
   (neo-cx128-read-dyn))
 "##,
+        expect_test::expect![[r#""OK :let-bound""#]],
     );
 }
 
 #[test]
 fn div_cx128_lexical_binding_let_invisible_in_called_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (defvar neo-cx128-lex :global)
@@ -93,13 +97,14 @@ fn div_cx128_lexical_binding_let_invisible_in_called_function() {
     (list (neo-cx128-read-lex)
           neo-cx128-lex)))
 "##,
+        expect_test::expect![[r#""OK (:let-bound :let-bound)""#]],
     );
 }
 
 #[test]
 fn div_cx128_let_with_buffer_local_does_not_affect_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx128-bl :default)
 (let ((buf (get-buffer-create " *neo-cx128-bl*")))
@@ -115,13 +120,14 @@ fn div_cx128_let_with_buffer_local_does_not_affect_default() {
       (kill-buffer buf)
       (list default-before default-after))))
 "##,
+        expect_test::expect![[r#""OK (:default :default)""#]],
     );
 }
 
 #[test]
 fn div_cx128_setq_default_in_let_does_not_persist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx128-persist :outer)
 (let ((saved neo-cx128-persist))
@@ -130,13 +136,14 @@ fn div_cx128_setq_default_in_let_does_not_persist() {
     (setq-default neo-cx128-persist saved)
     (list saved in-let (default-value 'neo-cx128-persist))))
 "##,
+        expect_test::expect![[r#""OK (:outer :in-let :outer)""#]],
     );
 }
 
 #[test]
 fn div_cx128_buffer_local_persistence_after_kill_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx128-kill :survivor)
 (let ((buf (get-buffer-create " *neo-cx128-kill*")))
@@ -149,13 +156,14 @@ fn div_cx128_buffer_local_persistence_after_kill_buffer() {
           (condition-case e (buffer-local-value 'neo-cx128-kill buf)
             (error (car e))))))
 "##,
+        expect_test::expect![[r#""OK (:in-buf :survivor :survivor)""#]],
     );
 }
 
 #[test]
 fn div_cx128_with_temp_buffer_default_value_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx128-temp :inherited)
 (with-temp-buffer
@@ -163,13 +171,14 @@ fn div_cx128_with_temp_buffer_default_value_inheritance() {
         (default-value 'neo-cx128-temp)
         (local-variable-p 'neo-cx128-temp)))
 "##,
+        expect_test::expect![[r#""OK (:inherited :inherited nil)""#]],
     );
 }
 
 #[test]
 fn div_cx128_let_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx128-mega :default)
 (let ((buf (get-buffer-create " *neo-cx128-mega*")))
@@ -196,5 +205,6 @@ fn div_cx128_let_with_marker_overlay_undo_narrow_mega() {
           (kill-buffer buf)
           (list state (default-value 'neo-cx128-mega))))))
 "##,
+        expect_test::expect![[r#""OK :default""#]],
     );
 }

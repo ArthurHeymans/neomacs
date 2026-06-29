@@ -15,42 +15,51 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_aq_format_message_backtick_curly() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(format-message "a `b' c")"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(format-message "a `b' c")"##,
+        expect_test::expect![[r#""OK \"a ‘b’ c\"""#]],
+    );
 }
 
 #[test]
 fn div_aq_format_message_apostrophe_curly() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(format-message "don't `do' it")"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(format-message "don't `do' it")"##,
+        expect_test::expect![[r#""OK \"don’t ‘do’ it\"""#]],
+    );
 }
 
 #[test]
 fn div_aq_error_message_quote_style() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e (replace-regexp-in-string "x" "\\z" "x") (error (cadr e)))
 "##,
+        expect_test::expect![[r#""OK \"Invalid use of ‘\\\\’ in replacement text\"""#]],
     );
 }
 
 #[test]
 fn div_aq_user_error_quote_style() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e (user-error "bad `%s'" 'foo) (error (cadr e)))
 "##,
+        expect_test::expect![[r#""OK \"bad ‘foo’\"""#]],
     );
 }
 
 #[test]
 fn div_aq_signal_message_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e (signal 'wrong-type-argument (list 'stringp 5)) (error (cadr e)))
 "##,
+        expect_test::expect![[r#""OK stringp""#]],
     );
 }
 
@@ -58,10 +67,11 @@ fn div_aq_signal_message_text() {
 fn div_aq_message_with_format_message() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // message uses format (straight); format-message uses curly.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "a `%s'" 'b) (format-message "a `%s'" 'b))
 "##,
+        expect_test::expect![[r#""OK (\"a `b'\" \"a ‘b’\")""#]],
     );
 }
 
@@ -70,32 +80,44 @@ fn div_aq_message_with_format_message() {
 #[test]
 fn div_acf_sigma_lower_to_upper() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(let ((case-fold-search t)) (string-match "σ" "Σ"))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(let ((case-fold-search t)) (string-match "σ" "Σ"))"##,
+        expect_test::expect![[r#""OK 0""#]],
+    );
 }
 
 #[test]
 fn div_acf_sigma_upper_to_lower() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(let ((case-fold-search t)) (string-match "Σ" "σ"))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(let ((case-fold-search t)) (string-match "Σ" "σ"))"##,
+        expect_test::expect![[r#""OK 0""#]],
+    );
 }
 
 #[test]
 fn div_acf_alpha_lower_to_upper() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(let ((case-fold-search t)) (string-match "α" "Α"))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(let ((case-fold-search t)) (string-match "α" "Α"))"##,
+        expect_test::expect![[r#""OK 0""#]],
+    );
 }
 
 #[test]
 fn div_acf_omega_lower_to_upper() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(let ((case-fold-search t)) (string-match "ω" "Ω"))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(let ((case-fold-search t)) (string-match "ω" "Ω"))"##,
+        expect_test::expect![[r#""OK 0""#]],
+    );
 }
 
 #[test]
 fn div_acf_greek_lowercase_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Probe several Greek lowercase -> uppercase case-fold matches.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-fold-search t))
   (mapcar (lambda (p) (if (string-match (char-to-string (car p))
@@ -103,17 +125,19 @@ fn div_acf_greek_lowercase_loop() {
                           t nil))
           '((945 . 913) (946 . 914) (956 . 924) (969 . 937))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_acf_cyrillic_lower_to_upper() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-fold-search t))
   (list (string-match "б" "Б") (string-match "я" "Я")))
 "##,
+        expect_test::expect![[r#""OK (0 0)""#]],
     );
 }
 
@@ -121,10 +145,11 @@ fn div_acf_cyrillic_lower_to_upper() {
 fn div_acf_ascii_case_fold_control() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // ASCII case-fold should work in both directions.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-fold-search t))
   (list (string-match "a" "A") (string-match "A" "a")))
 "##,
+        expect_test::expect![[r#""OK (0 0)""#]],
     );
 }

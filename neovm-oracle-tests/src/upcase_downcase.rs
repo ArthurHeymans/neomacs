@@ -8,16 +8,28 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 fn oracle_prop_upcase_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(upcase "hello")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(upcase "hello")"#,
+        expect_test::expect![[r#""OK \"HELLO\"""#]],
+    );
     assert_ok_eq(r#""HELLO""#, &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm(r#"(upcase "Hello World")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(upcase "Hello World")"#,
+        expect_test::expect![[r#""OK \"HELLO WORLD\"""#]],
+    );
     assert_ok_eq(r#""HELLO WORLD""#, &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm(r#"(upcase "ALREADY")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(upcase "ALREADY")"#,
+        expect_test::expect![[r#""OK \"ALREADY\"""#]],
+    );
     assert_ok_eq(r#""ALREADY""#, &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm(r#"(upcase "")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(upcase "")"#,
+        expect_test::expect![[r#""OK \"\"""#]],
+    );
     assert_ok_eq(r#""""#, &o, &n);
 }
 
@@ -25,13 +37,22 @@ fn oracle_prop_upcase_string() {
 fn oracle_prop_downcase_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(downcase "HELLO")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(downcase "HELLO")"#,
+        expect_test::expect![[r#""OK \"hello\"""#]],
+    );
     assert_ok_eq(r#""hello""#, &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm(r#"(downcase "Hello World")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(downcase "Hello World")"#,
+        expect_test::expect![[r#""OK \"hello world\"""#]],
+    );
     assert_ok_eq(r#""hello world""#, &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm(r#"(downcase "already")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(downcase "already")"#,
+        expect_test::expect![[r#""OK \"already\"""#]],
+    );
     assert_ok_eq(r#""already""#, &o, &n);
 }
 
@@ -39,10 +60,16 @@ fn oracle_prop_downcase_string() {
 fn oracle_prop_upcase_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(upcase ?a)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(upcase ?a)",
+        expect_test::expect![[r#""OK 65""#]],
+    );
     assert_ok_eq("65", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(upcase ?A)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(upcase ?A)",
+        expect_test::expect![[r#""OK 65""#]],
+    );
     assert_ok_eq("65", &o, &n);
 }
 
@@ -50,10 +77,16 @@ fn oracle_prop_upcase_char() {
 fn oracle_prop_downcase_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(downcase ?A)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(downcase ?A)",
+        expect_test::expect![[r#""OK 97""#]],
+    );
     assert_ok_eq("97", &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm("(downcase ?a)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(downcase ?a)",
+        expect_test::expect![[r#""OK 97""#]],
+    );
     assert_ok_eq("97", &o, &n);
 }
 
@@ -61,13 +94,22 @@ fn oracle_prop_downcase_char() {
 fn oracle_prop_capitalize_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(capitalize "hello world")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(capitalize "hello world")"#,
+        expect_test::expect![[r#""OK \"Hello World\"""#]],
+    );
     assert_ok_eq(r#""Hello World""#, &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm(r#"(capitalize "HELLO WORLD")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(capitalize "HELLO WORLD")"#,
+        expect_test::expect![[r#""OK \"Hello World\"""#]],
+    );
     assert_ok_eq(r#""Hello World""#, &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm(r#"(capitalize "hello")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(capitalize "hello")"#,
+        expect_test::expect![[r#""OK \"Hello\"""#]],
+    );
     assert_ok_eq(r#""Hello""#, &o, &n);
 }
 
@@ -75,10 +117,16 @@ fn oracle_prop_capitalize_string() {
 fn oracle_prop_upcase_downcase_with_numbers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(upcase "abc123def")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(upcase "abc123def")"#,
+        expect_test::expect![[r#""OK \"ABC123DEF\"""#]],
+    );
     assert_ok_eq(r#""ABC123DEF""#, &o, &n);
 
-    let (o, n) = eval_oracle_and_neovm(r#"(downcase "ABC123DEF")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(downcase "ABC123DEF")"#,
+        expect_test::expect![[r#""OK \"abc123def\"""#]],
+    );
     assert_ok_eq(r#""abc123def""#, &o, &n);
 }
 
@@ -87,7 +135,8 @@ fn oracle_prop_upcase_downcase_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(string-equal (downcase (upcase "hello")) "hello")"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK t""#]]);
     assert_ok_eq("t", &o, &n);
 }
 
@@ -95,11 +144,17 @@ fn oracle_prop_upcase_downcase_roundtrip() {
 fn oracle_prop_upcase_initials() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(upcase-initials "hello world")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(upcase-initials "hello world")"#,
+        expect_test::expect![[r#""OK \"Hello World\"""#]],
+    );
     assert_ok_eq(r#""Hello World""#, &o, &n);
 
     // upcase-initials only capitalizes first letter of each word, preserves rest
-    let (o, n) = eval_oracle_and_neovm(r#"(upcase-initials "hELLO wORLD")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(upcase-initials "hELLO wORLD")"#,
+        expect_test::expect![[r#""OK \"HELLO WORLD\"""#]],
+    );
     assert_ok_eq(r#""HELLO WORLD""#, &o, &n);
 }
 
@@ -108,5 +163,8 @@ fn oracle_prop_mapcar_upcase() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(mapcar 'upcase '("foo" "bar" "baz"))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"FOO\" \"BAR\" \"BAZ\")""#]],
+    );
 }

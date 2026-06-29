@@ -37,5 +37,10 @@ fn oracle_default_file_modes_low_bits_and_errors() {
     (set-default-file-modes original)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-number-of-arguments (default-file-modes 1)) (wrong-number-of-arguments (set-default-file-modes 0)) (wrong-type-argument (fixnump nil)) nil 448 nil 511 nil 511)""#
+        ]],
+    );
 }

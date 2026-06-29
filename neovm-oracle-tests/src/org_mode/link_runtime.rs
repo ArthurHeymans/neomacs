@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_custom_link_follow_export_store_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -40,6 +40,9 @@ fn org_custom_link_follow_export_store_combo() {
                 ascii
                 org-store-link-plist
                 org-stored-links))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"abc%20def\" (4))) \"<p>\n[html:abc:Desc]</p>\n\" \"[ascii:abc:]\n\" (:type \"probe\" :link \"probe:stored\" :description \"Stored Probe\") nil)""#
+        ]],
     );
 }
 
@@ -47,7 +50,7 @@ fn org_custom_link_follow_export_store_combo() {
 fn org_custom_link_activation_completion_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -139,7 +142,7 @@ fn org_custom_link_activation_completion_export_combo() {
 fn org_link_search_fuzzy_target_radio_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -193,6 +196,9 @@ fn org_link_search_fuzzy_target_radio_deep_state_combo() {
             search-results
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r##""OK (((\"custom-id\" \"alpha-id\" \"#alpha-id\" nil \"Custom ID\") (\"fuzzy\" \"*Heading Beta\" \"*Heading Beta\" nil \"Star Link\") (\"fuzzy\" \"radio\" \"radio\" nil \"Radio Link\") (\"https\" \"//example.org\" \"https://example.org\" nil nil)) (\"custom-id\" \"alpha-id\" \"#alpha-id\" nil \"Custom ID\") (\"fuzzy\" \"*Heading Beta\" \"*Heading Beta\" nil \"Star Link\") (\"fuzzy\" \"radio\" \"radio\" nil \"Radio Link\") (\"https\" \"//example.org\" \"https://example.org\" nil nil) (found found (err error \"No match for fuzzy expression: radio\")) \"* Heading Alpha\n:PROPERTIES:\n:CUSTOM_ID: alpha-id\n:END:\nAlpha body.\n\n* Heading Beta\nBeta body with <<<radio>>> target.\n\n* Heading Gamma :tag:\nGamma body.\n\nLink to [[#alpha-id][Custom ID]].\nLink to [[*Heading Beta][Star Link]].\nLink to [[radio][Radio Link]].\nPlain https://example.org link.\n\")""##
+        ]],
     );
 }
 
@@ -200,7 +206,7 @@ fn org_link_search_fuzzy_target_radio_deep_state_combo() {
 fn org_id_cross_file_folded_context_store_open_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -317,6 +323,9 @@ fn org_id_cross_file_folded_context_store_open_combo() {
                                       org-stored-links)
                               "\n")))))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK (((store-from-hidden nil) (store-from-visible nil) (link-type nil nil) (store-from-b nil) (find-task-ccc t 162 \"<root>/a.org\") (find-proj t 1 \"<root>/a.org\")) \"\")""#
+        ]],
     );
 }
 
@@ -324,7 +333,7 @@ fn org_id_cross_file_folded_context_store_open_combo() {
 fn org_link_escape_decode_make_string_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ol)
   (let* ((raw "file:has space/ümlaut?#x")
@@ -338,6 +347,9 @@ fn org_link_escape_decode_make_string_combo() {
           decoded
           (org-link-make-string "https://example.org/a b" "Example")
           (org-link-make-string "https://example.org/a b"))))"##,
+        expect_test::expect![[
+            r#""OK (\"file:has space/ümlaut?#x\" \"file:has space/ümlaut?#x\" \"a%20b%2F%C3%A7\" \"a b/ç\" \"[[https://example.org/a b][Example]]\" \"[[https://example.org/a b]]\")""#
+        ]],
     );
 }
 
@@ -345,7 +357,7 @@ fn org_link_escape_decode_make_string_combo() {
 fn org_link_store_props_mail_date_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ol)
   (let ((org-link-from-user-regexp "me@example\\.org")
@@ -366,6 +378,9 @@ fn org_link_store_props_mail_date_combo() {
           (plist-get org-store-link-plist :date-timestamp-inactive)
           (plist-get org-store-link-plist :link)
           (plist-get org-store-link-plist :description))))"##,
+        expect_test::expect![[
+            r#""OK (nil \"me@example.org\" nil \"ada@example.org\" \"to %t\" \"<2026-05-27 Wed 05:30>\" \"[2026-05-27 Wed 05:30]\" \"mailto:ada@example.org\" \"Hello\")""#
+        ]],
     );
 }
 
@@ -373,7 +388,7 @@ fn org_link_store_props_mail_date_combo() {
 fn org_link_navigation_toggle_context_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -415,6 +430,7 @@ fn org_link_navigation_toggle_context_combo() {
                       after-toggle
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -422,7 +438,7 @@ fn org_link_navigation_toggle_context_combo() {
 fn org_link_id_custom_fuzzy_radio_runtime_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -536,6 +552,9 @@ fn org_link_id_custom_fuzzy_radio_runtime_combo() {
                          ascii)))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r##""OK (\"[[id:alpha-id][Alpha Target]]\" (:link \"id:alpha-id\" :description \"Alpha Target\" :type \"id\") ((link-0 206 link \"id\" \"alpha-id\" \"id:alpha-id\" org-link nil org-link) (link-1 232 link \"custom-id\" \"custom-beta\" \"#custom-beta\" org-link nil org-link) (link-2 262 link \"fuzzy\" \"*Plain Target\" \"*Plain Target\" org-link nil org-link) (link-3 293 link \"fuzzy\" \"radio target\" \"radio target\" org-link nil org-link) (raw-0 206 link \"id\" \"alpha-id\" \"id:alpha-id\" nil nil org-link) (raw-1 232 link \"custom-id\" \"custom-beta\" \"#custom-beta\" nil nil org-link) (raw-2 262 link \"fuzzy\" \"*Plain Target\" \"*Plain Target\" nil nil org-link) (raw-3 293 link \"fuzzy\" \"radio target\" \"radio target\" nil nil org-link)) ((\"Alpha ID\" #(\"Alpha Target\" 0 12 (face org-level-1)) 21 \"* Alpha Target\") (\"Beta Custom\" #(\"Beta Target\" 0 11 (face org-level-1)) 103 \"* Beta Target\") (\"Plain Fuzzy\" #(\"Plain Target\" 0 12 (face org-level-1)) 171 \"* Plain Target\") (\"Radio Target\" #(\"Alpha Target\" 0 12 (face org-level-1)) 99 \"Alpha body with <<radio target>>.\")) ((\"id\" \"alpha-id\" \"id:alpha-id\" \"Alpha ID\") (\"custom-id\" \"custom-beta\" \"#custom-beta\" \"Beta Custom\") (\"fuzzy\" \"*Plain Target\" \"*Plain Target\" \"Plain Fuzzy\") (\"fuzzy\" \"radio target\" \"radio target\" \"Radio Target\")) \"#+TITLE: Mixed Links\n* Alpha Target\n:PROPERTIES:\n:ID: alpha-id\n:END:\nAlpha body with <<radio target>>.\n* Beta Target\n:PROPERTIES:\n:CUSTOM_ID: custom-beta\n:END:\nBeta body.\n* Plain Target\nPlain body.\n* Links\n[[id:alpha-id][Alpha ID]] [[#custom-beta][Beta Custom]] [[*Plain Target][Plain Fuzzy]] [[radio target][Radio Target]]\n\n\" \"1 Alpha Target\n==============\n\n  Alpha body with .\n\n\n2 Beta Target\n=============\n\n  Beta body.\n\n\n3 Plain Target\n==============\n\n  Plain body.\n\n\n4 Links\n=======\n\n  [Alpha ID] [Beta Custom] [Plain Fuzzy] [Radio Target]\n\n\n[Alpha ID] See section 1\n\n[Beta Custom] See section 2\n\n[Plain Fuzzy] See section 3\n\n[Radio Target] See figure (1)\n\")""##
+        ]],
     );
 }
 
@@ -543,7 +562,7 @@ fn org_link_id_custom_fuzzy_radio_runtime_combo() {
 fn org_link_abbrev_expand_open_from_string_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -578,6 +597,7 @@ fn org_link_abbrev_expand_open_from_string_combo() {
               radio
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -585,7 +605,7 @@ fn org_link_abbrev_expand_open_from_string_combo() {
 fn org_link_store_region_file_context_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -621,6 +641,7 @@ fn org_link_store_region_file_context_combo() {
                        (point-min) (point-max)))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument arrayp nil)""#]],
     );
 }
 
@@ -628,7 +649,7 @@ fn org_link_store_region_file_context_combo() {
 fn org_link_precise_target_region_named_heading_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -661,6 +682,7 @@ fn org_link_precise_target_region_named_heading_combo() {
                    "TODO [#B] Other [33%] :x:y:")
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -668,7 +690,7 @@ fn org_link_precise_target_region_named_heading_combo() {
 fn org_insert_link_stored_region_completion_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -782,6 +804,7 @@ fn org_insert_link_stored_region_completion_combo() {
                       (buffer-substring-no-properties
                        (point-min) (point-max)))))))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (search-failed \"Stored Desc\")""#]],
     );
 }
 
@@ -789,7 +812,7 @@ fn org_insert_link_stored_region_completion_combo() {
 fn org_link_search_targets_names_coderef_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -821,6 +844,7 @@ fn org_link_search_targets_names_coderef_combo() {
             (funcall probe "body")
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""ERR (error \"No match for coderef: call\")""#]],
     );
 }
 
@@ -828,7 +852,7 @@ fn org_link_search_targets_names_coderef_combo() {
 fn org_link_open_file_search_targets_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -860,6 +884,9 @@ fn org_link_open_file_search_targets_combo() {
               (nreverse out))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
+        expect_test::expect![[
+            r##""OK ((\"#alpha-id\" \"<file>\" \"* Alpha\" 0) (\"*Beta\" \"<file>\" \"* Beta\" 60) (\"radio-file-target\" \"<file>\" \"<<radio-file-target>>\" 67) (\"named-block\" \"<file>\" \"#+NAME: named-block\" 89))""##
+        ]],
     );
 }
 
@@ -867,7 +894,7 @@ fn org_link_open_file_search_targets_combo() {
 fn org_export_resolve_links_reference_matrix_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ox)
@@ -907,6 +934,7 @@ fn org_export_resolve_links_reference_matrix_combo() {
             (org-export-resolve-coderef "call" info)
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""ERR (org-link-broken \"tbl\")""#]],
     );
 }
 
@@ -914,7 +942,7 @@ fn org_export_resolve_links_reference_matrix_combo() {
 fn org_insert_link_region_file_stored_edit_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -1005,6 +1033,9 @@ fn org_insert_link_region_file_stored_edit_combo() {
                               (point-min) (point-max)))))))))))
       (when (get-file-buffer org-file) (kill-buffer (get-file-buffer org-file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r#""OK (\"* Source\nSelected Words[[descprobe:path value][auto:descprobe:path value:none]]\n* Target\nBody\n\" ((\"https://example.org/one\" \"One\") (\"https://example.org/two\" \"Two\")) \"* Source\nSelected Words[[descprobe:path value][auto:descprobe:path value:none]]\n* Target\nBody\n[[file:docs/read me.txt::7][External doc]]\n[[*Target][Same file target]]\n[[descprobe:auto-only][auto:descprobe:auto-only:none]]\n\" \"* Source\nSelected Words[[https://edited.example/a b][Edited Desc]]\n* Target\nBody\n[[file:docs/read me.txt::7][External doc]]\n[[*Target][Same file target]]\n[[descprobe:auto-only][auto:descprobe:auto-only:none]]\n\" \"* Source\nSelected Words[[https://edited.example/a b][Edited Desc]]\n* Target\nBody\n[[file:docs/read me.txt::7][External doc]]\n[[*Target][Same file target]]\n[[descprobe:auto-only][auto:descprobe:auto-only:none]]\n\n- [[https://example.org/one][One]]\n- [[https://example.org/two][Two]]\n\" nil ((\"https://example.org/keep\" \"Keep\") (\"https://example.org/also\" \"Also\")) (\"Shown\" \"x:y\" \"plain\") (\"<a>\" \"<b>\" \"<c>\" \"<d>\") \"* Source\nSelected Words[[https://edited.example/a b][Edited Desc]]\n* Target\nBody\n[[file:docs/read me.txt::7][External doc]]\n[[*Target][Same file target]]\n[[descprobe:auto-only][auto:descprobe:auto-only:none]]\n\n- [[https://example.org/one][One]]\n- [[https://example.org/two][Two]]\n+ [[https://example.org/keep][Keep]]\n+ [[https://example.org/also][Also]]\n\")""#
+        ]],
     );
 }
 
@@ -1012,7 +1043,7 @@ fn org_insert_link_region_file_stored_edit_combo() {
 fn org_link_open_store_move_visibility_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -1166,6 +1197,9 @@ fn org_link_open_store_move_visibility_combo() {
       (when (get-file-buffer main) (kill-buffer (get-file-buffer main)))
       (when (get-file-buffer other) (kill-buffer (get-file-buffer other)))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r##""OK (\"[[id:alpha-id][Alpha]]\" (:link \"id:alpha-id\" :description \"Alpha\" :type \"id\") ((\"Alpha ID\" \"main.org\" #(\"Alpha\" 0 5 (face org-level-1)) 2 nil \"* TODO Alpha :work:\") (\"Beta Custom\" \"main.org\" #(\"Beta\" 0 4 (face org-level-1)) 13 nil \"* TODO Beta\") (\"Alpha Grand\" \"main.org\" #(\"Alpha grand\" 0 11 (face org-level-3)) 10 t \"*** TODO Alpha grand\") (\"Radio\" \"main.org\" #(\"Alpha\" 0 5 (face org-level-1)) 7 t \"Alpha body with <<radio-alpha>>.\") (\"Stored Alpha\" \"main.org\" #(\"Alpha\" 0 5 (face org-level-1)) 2 nil \"* TODO Alpha :work:\") (\"External Heading\" \"other.org\" \"External\" 1 nil \"* External\")) (#(\"Beta child\" 0 10 (face org-level-2)) 19 2) (#(\"Beta child\" 0 10 (face org-level-2)) 11 5 dedicated #(\"Beta child\" 0 10 (face org-level-2))) ((\"Alpha\" 2 nil org-level-1) (\"Alpha child\" 8 t org-level-2) (\"Alpha grand\" 10 nil org-level-3) (\"Alpha L4\" 13 t org-level-4) (\"Beta child\" 11 nil org-level-2) (\"beta child body\" 12 nil nil) (\"Beta\" 11 nil org-level-2) (\"Links\" 21 t org-level-1)) ((\"id\" \"alpha-id\" \"id:alpha-id\" \"Stored Alpha\") (\"file\" \"other.org\" \"file:other.org::*External\" \"External Heading\") (\"id\" \"alpha-id\" \"id:alpha-id\" \"Alpha ID\") (\"custom-id\" \"beta-custom\" \"#beta-custom\" \"Beta Custom\") (\"fuzzy\" \"*Alpha grand\" \"*Alpha grand\" \"Alpha Grand\") (\"fuzzy\" \"radio-alpha\" \"radio-alpha\" \"Radio\")) \"#+TITLE: Link Move\n* TODO Alpha :work:\n:PROPERTIES:\n:ID: alpha-id\n:CUSTOM_ID: alpha-custom\n:END:\nAlpha body with <<radio-alpha>>.\n** WAIT Alpha child\nchild body\n*** TODO Alpha grand\n***** TODO Beta child\nbeta child body\n**** TODO Alpha L4\nlevel four body\n* TODO Beta\n:PROPERTIES:\n:ID: beta-id\n:CUSTOM_ID: beta-custom\n:END:\nBeta body.\n* Links\n[[id:alpha-id][Stored Alpha]] [[file:other.org::*External][External Heading]]\n[[id:alpha-id][Alpha ID]] [[#beta-custom][Beta Custom]]\n[[*Alpha grand][Alpha Grand]] [[radio-alpha][Radio]]\n\")""##
+        ]],
     );
 }
 
@@ -1173,7 +1207,7 @@ fn org_link_open_store_move_visibility_combo() {
 fn org_link_attachment_custom_export_visibility_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-attach)
@@ -1321,6 +1355,7 @@ fn org_link_attachment_custom_export_visibility_combo() {
       (when (get-file-buffer org-file)
         (kill-buffer (get-file-buffer org-file)))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (void-variable norm)""#]],
     );
 }
 
@@ -1328,7 +1363,7 @@ fn org_link_attachment_custom_export_visibility_combo() {
 fn org_link_abbrev_safety_legacy_follow_matrix_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'ol)
@@ -1418,6 +1453,7 @@ fn org_link_abbrev_safety_legacy_follow_matrix_combo() {
                   (nreverse follow-calls)
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -1425,7 +1461,7 @@ fn org_link_abbrev_safety_legacy_follow_matrix_combo() {
 fn org_link_stored_insert_edit_search_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-link)
@@ -1475,6 +1511,9 @@ fn org_link_stored_insert_edit_search_deep() {
                   links2
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-link\")""#
+        ]],
     );
 }
 
@@ -1482,7 +1521,7 @@ fn org_link_stored_insert_edit_search_deep() {
 fn org_link_id_radio_custom_export_parse_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-id)
@@ -1531,5 +1570,6 @@ fn org_link_id_radio_custom_export_parse_deep() {
             html2-has-renamed
             (buffer-substring-no-properties
              (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]],
     );
 }

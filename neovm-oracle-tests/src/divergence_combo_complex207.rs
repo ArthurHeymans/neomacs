@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx207_define_key_with_various_key_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
   (define-key map (kbd "C-c C-a") 'neo-cx207-a)
@@ -23,13 +23,16 @@ fn div_cx207_define_key_with_various_key_types() {
         (lookup-key map [M-down])
         (lookup-key map (kbd "C-c C-x"))))
 "##,
+        expect_test::expect![[
+            r#""OK (neo-cx207-a neo-cx207-b neo-cx207-find neo-cx207-f5 neo-cx207-mdown nil)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx207_where_is_internal_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
   (define-key map (kbd "C-c C-a") 'neo-cx207-a)
@@ -38,13 +41,14 @@ fn div_cx207_where_is_internal_lookup() {
         (where-is-internal 'neo-cx207-b map)
         (where-is-internal 'neo-cx207-missing map)))
 "##,
+        expect_test::expect![[r#""OK (([3 1]) ([3 2]) nil)""#]],
     );
 }
 
 #[test]
 fn div_cx207_command_remap_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
   (define-key map [remap neo-cx207-old] 'neo-cx207-new)
@@ -52,13 +56,14 @@ fn div_cx207_command_remap_lookup() {
         (lookup-key map [remap neo-cx207-old])
         (command-remapping 'neo-cx207-other map)))
 "##,
+        expect_test::expect![[r#""OK (nil neo-cx207-new nil)""#]],
     );
 }
 
 #[test]
 fn div_cx207_prefix_command_nested_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((outer (make-sparse-keymap))
       (inner (make-sparse-keymap)))
@@ -74,13 +79,14 @@ fn div_cx207_prefix_command_nested_keymap() {
         (lookup-key outer "\C-cx")
         (lookup-key outer (kbd "C-c a"))))
 "##,
+        expect_test::expect![[r#""OK (t t inner-a inner-b inner-c nil inner-a)""#]],
     );
 }
 
 #[test]
 fn div_cx207_define_prefix_command_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -94,13 +100,16 @@ fn div_cx207_define_prefix_command_state() {
             (lookup-key 'neo-cx207-prefix "b")))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (nil neo-cx207-prefix neo-cx207-action-a neo-cx207-action-b)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx207_accessible_keymaps_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap))
       (sub (make-sparse-keymap)))
@@ -112,13 +121,14 @@ fn div_cx207_accessible_keymaps_query() {
     (list (consp accessible)
           (>= (length accessible) 1))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx207_map_keymap_collect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
   (define-key map "a" 'cmd-a)
@@ -130,13 +140,14 @@ fn div_cx207_map_keymap_collect() {
                       (string< (prin1-to-string (car a))
                                (prin1-to-string (car b)))))))
 "##,
+        expect_test::expect![[r#""OK ((97 . cmd-a) (98 . cmd-b) (99 . cmd-c))""#]],
     );
 }
 
 #[test]
 fn div_cx207_key_description_and_single_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (key-description (kbd "C-x C-f"))
       (key-description "\C-x\C-f")
@@ -147,13 +158,16 @@ fn div_cx207_key_description_and_single_key() {
       (single-key-description 'C-return)
       (single-key-description 'M-mouse-1))
 "##,
+        expect_test::expect![[
+            r#""OK (\"C-x C-f\" \"C-x C-f\" \"a\" \"<return>\" \"C-x\" \"C-M-a\" \"C-<return>\" \"M-<mouse-1>\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx207_event_modifiers_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (e) (list e (event-modifiers e)))
         '(?a C-a M-a C-M-a S-a
@@ -161,13 +175,16 @@ fn div_cx207_event_modifiers_matrix() {
           mouse-1 C-down-mouse-1 M-mouse-3
           (control meta shift ?a)))
 "##,
+        expect_test::expect![[
+            r#""OK ((97 nil) (C-a (control)) (M-a (meta)) (C-M-a (meta control)) (S-a (shift)) (return nil) (C-return (control)) (M-return (meta)) (mouse-1 (click)) (C-down-mouse-1 (control down)) (M-mouse-3 (meta click)) ((control meta shift 97) nil))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx207_keymap_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
   (define-key map (kbd "C-c C-a") 'neo-cx207-a)
@@ -195,5 +212,6 @@ fn div_cx207_keymap_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

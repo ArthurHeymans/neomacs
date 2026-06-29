@@ -10,10 +10,16 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_not_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_t, neovm_t) = eval_oracle_and_neovm("(not nil)");
+    let (oracle_t, neovm_t) = crate::common::eval_oracle_and_neovm_expect(
+        "(not nil)",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle_t, &neovm_t);
 
-    let (oracle_nil, neovm_nil) = eval_oracle_and_neovm("(not 1)");
+    let (oracle_nil, neovm_nil) = crate::common::eval_oracle_and_neovm_expect(
+        "(not 1)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle_nil, &neovm_nil);
 }
 
@@ -21,7 +27,10 @@ fn oracle_prop_not_basics() {
 fn oracle_prop_not_wrong_arity_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(not)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(not)",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments not 0)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-number-of-arguments");
 }
 

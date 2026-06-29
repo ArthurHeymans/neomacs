@@ -32,7 +32,12 @@ fn oracle_prop_string_replace_patterns_basic() {
   (string-replace "a" "xyz" "banana")
   ;; Replacement where TOSTRING is shorter than FROMSTRING
   (string-replace "abc" "z" "abcdefabcghi"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"I have a dog\" \"Goodbye, world!\" \"This is the finish\" \"replaced\" \"foyboy\" \"This is an new phrase here\" \"bxyznxyznxyz\" \"zdefzghi\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +63,12 @@ fn oracle_prop_string_replace_patterns_multiple_occurrences() {
   (string-replace "the" "THE" "the cat and the dog and the bird")
   ;; Replacement that creates what looks like a new match (but shouldn't re-match)
   (string-replace "ab" "a" "aabb"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"f00 b00 m00 z00\" \"XX\" \"XXa\" \"heLLo LLama\" \"CDCDCD\" \"THE cat and THE dog and THE bird\" \"aab\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +93,12 @@ fn oracle_prop_string_replace_patterns_no_match() {
   ;; Result is string-equal to input when no match
   (let ((orig "unchanged"))
     (string-equal orig (string-replace "zzz" "aaa" orig))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello world\" \"hello world\" \"sheaven\" \"\" \"too\" t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +125,10 @@ fn oracle_prop_string_replace_patterns_empty_fromstring() {
   (string-replace "" "|" "abcde")
   ;; Length verification: empty-replace on "ab" with "-" should give "-a-b-"
   (length (string-replace "" "-" "ab")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (wrong-length-argument 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +157,12 @@ fn oracle_prop_string_replace_patterns_deletion() {
   ;; Cascaded deletion
   (let ((s "a--b--c--d"))
     (string-replace "--" "" s)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"heo word\" \"hellobeautifulworld\" \"ccc\" \"fix\" \"suf\" \"\" \"a\" \"abcd\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -176,7 +199,12 @@ fn oracle_prop_string_replace_patterns_special_chars() {
   (string-replace "|" " or " "a|b|c")
   ;; Combined: replace a regex-like pattern literally
   (string-replace ".*" "STAR" "match .* everything"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"a!b!c\" \"axbxc\" \"a-b-c\" \"array(0]\" \"array[0)\" \"path/to/file\" \"xUP2\" \"price: USD100\" \"fn{x)\" \"fn(x}\" \"really!\" \"a or b or c\" \"match STAR everything\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +250,12 @@ fn oracle_prop_string_replace_patterns_cascaded() {
     s)
   ;; Replacement creating new instances of original pattern does NOT re-match
   (string-replace "ab" "aab" "ab"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Hi, Emacs.\" \"ccc\" \"hello-world-a-test\" \"&lt;p&gt;Hello &amp; &quot;World&quot;&lt;/p&gt;\" \"The slow white rabbit\" \"aab\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +314,12 @@ fn oracle_prop_string_replace_patterns_vs_regexp() {
       (string-equal
         (string-replace "foo" "baz" s)
         (replace-regexp-in-string "foo" "baz" s)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"hi world hi\" \"hi world hi\" t) (\"aXbXc\" \"aXbXc\" t) (\"a+b+c\" \"a+b+c\" t) (\"line1; line2; line3\" \"line1; line2; line3\" t) (\"bazbarbaz\" \"bazbarbaz\" t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -310,5 +348,10 @@ fn oracle_prop_string_replace_patterns_unicode_and_boundaries() {
   (length (string-replace "x" "abcdefghij" "xxxx"))
   ;; Verify the actual long replacement
   (string-replace "x" "ab" "xxx"))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"hello mundo\" \"left -> right\" \"col1  col2  col3\" \"too many spaces here\" \"a b\" 40 \"ababab\")""#
+        ]],
+    );
 }

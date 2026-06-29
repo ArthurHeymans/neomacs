@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_simulated_code_edit_session() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "fn main() {\n    println!(\"hello\");\n}\n")
   (let ((ov-fn (make-overlay 1 9))
@@ -39,6 +39,9 @@ fn divergence_simulated_code_edit_session() {
               (buffer-string)
               (get-text-property 1 'syntax)
               (eq (get-text-property 1 'syntax) 'function)))))) "#,
+        expect_test::expect![[
+            r#""fn main()// comment\n     {\n    println!(\"world\");\n}\nERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -46,7 +49,7 @@ fn divergence_simulated_code_edit_session() {
 fn divergence_multi_region_edit_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "REGION1-AAAA REGION2-BBBB REGION3-CCCC")
   (put-text-property 1 12 'zone 1)
@@ -76,6 +79,9 @@ fn divergence_multi_region_edit_with_props() {
             (string= (buffer-string) "REGION1-AAAA REGION2-BBBB REGION3-CCCC")
             (overlay-get ov1 'priority)
             (= (overlay-get ov1 'priority) 1))))) "#,
+        expect_test::expect![[
+            r#""REGION1-XXAAAA REGION2-BBBBYY REGION3-CCCCERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -83,7 +89,7 @@ fn divergence_multi_region_edit_with_props() {
 fn divergence_ediff_style_region_comparison() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1 common\nline2 only-A\nline3 common\nline4 only-A\nline5 common\n")
   (let ((m1 (copy-marker 1 t))
@@ -112,6 +118,9 @@ fn divergence_ediff_style_region_comparison() {
               (marker-position m1)
               (marker-position m2)
               (marker-position m3)))))) "#,
+        expect_test::expect![[
+            r#""line1 common\nline2 only-A\nline3 common\nline4 only-A\nline5 common\nERR (args-out-of-range 61 75)""#
+        ]],
     );
 }
 
@@ -119,7 +128,7 @@ fn divergence_ediff_style_region_comparison() {
 fn divergence_refactor_rename_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "var foo = 1;\nvar foo = 2;\nprint(foo);\nfoo = 3;\n")
   (let ((refs nil))
@@ -141,6 +150,9 @@ fn divergence_refactor_rename_with_markers() {
               (null (string-match "\\<foo\\>" s1))
               (= (length refs) 4)
               (every (lambda (p) p) initial-positions)))))) "#,
+        expect_test::expect![[
+            r#""var bar = 1;\nvar bar = 2;\nprint(bar);\nbar = 3;\nERR (void-function every)""#
+        ]],
     );
 }
 
@@ -148,7 +160,7 @@ fn divergence_refactor_rename_with_markers() {
 fn divergence_overlay_chain_delete_reinsert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH")
   (let ((ovs nil))
@@ -175,6 +187,7 @@ fn divergence_overlay_chain_delete_reinsert() {
                      "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH")
             (= (length ov-pos) 6)
             (= (buffer-size) 39))))) "#,
+        expect_test::expect![[r#""AAAA--EEEE-FFFF-GGGG-HHHHERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -182,7 +195,7 @@ fn divergence_overlay_chain_delete_reinsert() {
 fn divergence_nested_narrow_widen_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "OUTER-START MIDDLE-START INNER-END MIDDLE-END OUTER-END")
   (let ((m-inner (copy-marker 20 t))
@@ -207,6 +220,7 @@ fn divergence_nested_narrow_widen_with_undo() {
                 (marker-position m-outer)
                 (get-text-property 1 'level)
                 (eq (get-text-property 1 'level) 'outer))))))) "#,
+        expect_test::expect![[r#""XXE-START INNEERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -214,7 +228,7 @@ fn divergence_nested_narrow_widen_with_undo() {
 fn divergence_comment_uncomment_region_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity(
         r#"(progn
   (insert "code1\ncode2\ncode3\n")
   (put-text-property 1 6 'type 'code)
@@ -244,7 +258,7 @@ fn divergence_comment_uncomment_region_with_props() {
 fn divergence_kill_yank_ring_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((m1 (copy-marker 1 t))
@@ -267,6 +281,9 @@ fn divergence_kill_yank_ring_with_markers() {
               (string= (buffer-string) "AAAA-BBBB-CCCC-DDDD-EEEE")
               (marker-position m1)
               (marker-position m2)))))) "#,
+        expect_test::expect![[
+            r#""AAAA-BBBB-CCCC-DDDD-EEE-BBBEERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -274,7 +291,7 @@ fn divergence_kill_yank_ring_with_markers() {
 fn divergence_text_property_search_replace_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "keep ALPHA replace BETA keep GAMMA replace DELTA keep")
   (put-text-property 6 11 'action 'keep)
@@ -295,6 +312,9 @@ fn divergence_text_property_search_replace_cycle() {
         (get-text-property 50 'action)
         (eq (get-text-property 50 'action) 'keep)
         (= (buffer-size) 55))) "#,
+        expect_test::expect![[
+            r#""keep ALPHA replace BETA keep GAMMA replace DELTA keepERR (args-out-of-range 50 55)""#
+        ]],
     );
 }
 
@@ -302,7 +322,7 @@ fn divergence_text_property_search_replace_cycle() {
 fn divergence_revert_buffer_with_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ORIGINAL-CONTENT-HERE")
   (let ((ov (make-overlay 1 22))
@@ -323,5 +343,6 @@ fn divergence_revert_buffer_with_state() {
             (marker-position m)
             (overlay-start ov)
             (null (overlay-start ov))))) #"#,
+        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 20 42)""##]],
     );
 }

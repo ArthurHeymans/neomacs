@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_save_excursion_nested_overlay_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass save-snap ()
     ((step :initarg :step :accessor svs-step :initform "")
@@ -76,6 +76,7 @@ fn combo_eieio_save_excursion_nested_overlay_edit() {
               (overlay-start ov) (overlay-end ov)
               my-save-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -83,7 +84,7 @@ fn combo_eieio_save_excursion_nested_overlay_edit() {
 fn combo_eieio_save_restriction_nested_with_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass savenar-snap ()
     ((step :initarg :step :accessor sns-step :initform "")
@@ -160,6 +161,7 @@ fn combo_eieio_save_restriction_nested_with_excursion() {
               (overlay-start ov) (overlay-end ov)
               my-sn-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -167,7 +169,7 @@ fn combo_eieio_save_restriction_nested_with_excursion() {
 fn combo_eieio_save_excursion_with_marker_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass save-mtype-snap ()
     ((step :initarg :step :accessor sms-step :initform "")
@@ -240,6 +242,7 @@ fn combo_eieio_save_excursion_with_marker_type() {
               (overlay-start ov) (overlay-end ov)
               my-smt-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -247,7 +250,7 @@ fn combo_eieio_save_excursion_with_marker_type() {
 fn combo_eieio_save_excursion_with_overlay_mod() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass save-ov-snap ()
     ((step :initarg :step :accessor sos-step :initform "")
@@ -314,6 +317,7 @@ fn combo_eieio_save_excursion_with_overlay_mod() {
               (overlay-get ov 'face)
               my-so-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -321,7 +325,7 @@ fn combo_eieio_save_excursion_with_overlay_mod() {
 fn combo_eieio_save_buflocal_with_excursion_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass save-bl-snap ()
     ((step :initarg :step :accessor sbls-step :initform "")
@@ -398,5 +402,6 @@ fn combo_eieio_save_buflocal_with_excursion_narrow() {
               tab-width fill-column
               my-sbl-log)))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

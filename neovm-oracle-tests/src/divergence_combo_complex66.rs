@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx66_error_data_propagation_car_of_condition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (condition-case e (signal 'wrong-type-argument '(listp 10)) (error e))
@@ -18,13 +18,16 @@ fn div_cx66_error_data_propagation_car_of_condition() {
  (condition-case e (signal 'file-missing '("/no/such/path")) (file-error e))
  (condition-case e (signal 'file-missing '("/no/such/path")) (error e)))
 "##,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument listp 10) (wrong-type-argument \"extra\" detail) (args-out-of-range 5 0 3) (error \"formatted: msg\") (file-missing \"/no/such/path\") (file-missing \"/no/such/path\"))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx66_catch_throw_through_unwind_protect_ordering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (trace)
   (prog1
@@ -40,13 +43,14 @@ fn div_cx66_catch_throw_through_unwind_protect_ordering() {
     (push :end trace))
   trace)
 "##,
+        expect_test::expect![[r#""OK (:end :unwind-inner :before-inner)""#]],
     );
 }
 
 #[test]
 fn div_cx66_nested_unwind_protect_with_error_in_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (trace)
   (condition-case outer
@@ -59,13 +63,16 @@ fn div_cx66_nested_unwind_protect_with_error_in_cleanup() {
      (push (cons :outer-caught outer) trace)))
   trace)
 "##,
+        expect_test::expect![[
+            r#""OK ((:outer-caught error \"secondary error during cleanup\") :enter-cleanup)""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx66_error_with_backtrace_in_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -75,13 +82,16 @@ fn div_cx66_error_with_backtrace_in_condition_case() {
   (error
    (list :uncaught (car e) (cdr e))))
 "##,
+        expect_test::expect![[
+            r#""OK (:caught wrong-type-argument (number-or-marker-p \"not a number\"))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx66_user_defined_error_symbols_with_define_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -91,13 +101,14 @@ fn div_cx66_user_defined_error_symbols_with_define_error() {
   (neo-cx66-my-error (list :my-error-caught (cadr e)))
   (error (list :other-error (car e) (cadr e))))
 "##,
+        expect_test::expect![[r#""OK (:other-error error \"Unknown signal ‘my-errors’\")""#]],
     );
 }
 
 #[test]
 fn div_cx66_signal_with_nil_data_and_empty_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (condition-case e (signal 'neo-cx66-err nil) (error e))
@@ -105,13 +116,16 @@ fn div_cx66_signal_with_nil_data_and_empty_data() {
  (condition-case e (signal 'neo-cx66-err '("single")) (error e))
  (condition-case e (signal 'neo-cx66-err '("a" "b" "c")) (error e)))
 "##,
+        expect_test::expect![[
+            r#""OK ((error \"Invalid error symbol\" neo-cx66-err) (error \"Invalid error symbol\" neo-cx66-err) (error \"Invalid error symbol\" neo-cx66-err) (error \"Invalid error symbol\" neo-cx66-err))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx66_condition_case_no_handler_match_propagates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case outer
     (condition-case inner
@@ -122,13 +136,14 @@ fn div_cx66_condition_case_no_handler_match_propagates() {
   (error
    (list :caught-other outer)))
 "##,
+        expect_test::expect![[r#""OK (:caught-outer (wrong-type-argument integerp \"x\"))""#]],
     );
 }
 
 #[test]
 fn div_cx66_throw_with_marker_overlay_textprop_narrow_unwind_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (trace)
   (with-temp-buffer
@@ -160,13 +175,16 @@ fn div_cx66_throw_with_marker_overlay_textprop_narrow_unwind_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"Changes to be undone are outside visible portion of buffer\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx66_ignore_errors_returns_nil_on_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (ignore-errors (+ 1 2))
@@ -176,13 +194,14 @@ fn div_cx66_ignore_errors_returns_nil_on_error() {
  (ignore-errors (aref "abc" 99))
  (ignore-errors (/ 1 0)))
 "##,
+        expect_test::expect![[r#""OK (3 nil nil nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx66_handler_only_condition_case_with_no_body_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list
  (condition-case nil
@@ -192,13 +211,14 @@ fn div_cx66_handler_only_condition_case_with_no_body_returns_nil() {
      (progn (error "still no handlers") :never)
    (error)))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx66_deferred_errors_via_condition_case_after_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((form-to-eval '(+ 1 "two")))
   (list
@@ -206,13 +226,16 @@ fn div_cx66_deferred_errors_via_condition_case_after_eval() {
    (condition-case e (eval form-to-eval t) (error (cons (car e) (cadr e))))
    (condition-case e (eval form-to-eval 'lexical) (error (cons (car e) (cadr e))))))
 "##,
+        expect_test::expect![[
+            r#""OK ((+ 1 \"two\") (wrong-type-argument . number-or-marker-p) (wrong-type-argument . number-or-marker-p))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx66_quit_signal_handling_with_catch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -221,13 +244,14 @@ fn div_cx66_quit_signal_handling_with_catch() {
   (quit (list :caught-quit e))
   (error (list :other e)))
 "##,
+        expect_test::expect![[r#""OK (:caught-quit (quit))""#]],
     );
 }
 
 #[test]
 fn div_cx66_error_in_unwind_protect_body_after_throw() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (trace)
   (catch 'tag
@@ -238,13 +262,14 @@ fn div_cx66_error_in_unwind_protect_body_after_throw() {
         (error (push (cons :cleanup cleanup-err) trace)))))
   trace)
 "##,
+        expect_test::expect![[r#""OK ((:cleanup error \"during cleanup\"))""#]],
     );
 }
 
 #[test]
 fn div_cx66_error_during_printing_with_circular_ref_print_circle_off() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((x (list 1 2 3)))
   (setcdr (cddr x) x)
@@ -253,5 +278,6 @@ fn div_cx66_error_during_printing_with_circular_ref_print_circle_off() {
             (let ((print-circle nil)) (prin1-to-string x))
           (error (cons (car e) (cadr e))))))
 "##,
+        expect_test::expect![[r##""OK (\"#1=(1 2 3 . #1#)\" \"(1 2 3 1 2 . #2)\")""##]],
     );
 }

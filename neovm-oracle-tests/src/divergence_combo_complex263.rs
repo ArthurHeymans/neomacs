@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx263_undo_tree_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'undo-tree)
@@ -16,13 +16,14 @@ fn div_cx263_undo_tree_availability() {
           (boundp 'undo-tree-visualizer-timestamps))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx263_undo_fu_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'undo-fu)
@@ -30,26 +31,28 @@ fn div_cx263_undo_fu_availability() {
           (fboundp 'undo-fu-only-redo))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx263_page_break_lines_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'page-break-lines)
           (fboundp 'page-break-lines-mode))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx263_visual_fill_column_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'visual-fill-column)
@@ -57,39 +60,42 @@ fn div_cx263_visual_fill_column_availability() {
           (boundp 'visual-fill-column-width))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx263_form_feed_display_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'form-feed)
           (fboundp 'form-feed-mode))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx263_origami_folding_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'origami)
           (fboundp 'origami-mode))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx263_consult_vertico_orderless_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (featurep 'consult)
       (fboundp 'consult-line)
@@ -98,13 +104,14 @@ fn div_cx263_consult_vertico_orderless_availability() {
       (featurep 'orderless)
       (boundp 'orderless-style-dispatchers))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx263_marginalia_embark_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (featurep 'marginalia)
       (fboundp 'marginalia-mode)
@@ -112,26 +119,28 @@ fn div_cx263_marginalia_embark_availability() {
       (fboundp 'embark-act)
       (boundp 'embark-action-indicator))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx263_selectrum_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'selectrum)
           (fboundp 'selectrum-mode))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx263_folding_completion_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((avail (list (featurep 'undo-tree)
                    (featurep 'visual-fill-column)
@@ -161,5 +170,6 @@ fn div_cx263_folding_completion_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

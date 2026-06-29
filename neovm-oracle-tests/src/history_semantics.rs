@@ -28,7 +28,10 @@ fn oracle_add_to_history_empty_duplicate_and_keep_all_rules() {
    h))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable h)""#]],
+    );
 }
 
 #[test]
@@ -47,7 +50,10 @@ fn oracle_add_to_history_delete_duplicates_and_truncation() {
    h))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable h)""#]],
+    );
 }
 
 #[test]
@@ -74,7 +80,10 @@ fn oracle_add_to_history_uses_symbol_property_and_dynamic_history_length() {
     (put 'h 'history-length nil)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable h)""#]],
+    );
 }
 
 #[test]
@@ -92,5 +101,8 @@ fn oracle_add_to_history_requires_symbol_value_list_and_not_lexical() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable h)""#]],
+    );
 }

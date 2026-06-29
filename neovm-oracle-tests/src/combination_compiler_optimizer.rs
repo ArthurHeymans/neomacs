@@ -76,7 +76,12 @@ fn oracle_prop_compiler_opt_constant_folding() {
         (list folded1 folded2 folded3 folded4 folded5 folded6))
     (fmakunbound 'neovm--copt-cf-fold)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((const 14) (binop + (var x) (const 6)) (const 10) (const 20) (const 6) (binop * (var x) (const 3)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +177,12 @@ fn oracle_prop_compiler_opt_dead_code_elimination() {
     (fmakunbound 'neovm--copt-dce-used-vars)
     (fmakunbound 'neovm--copt-dce-eliminate)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 t ((assign x (const 5)) (assign y (binop + (var x) (const 1))) (return (var y))) 4 ((assign a (const 1)) (assign b (const 2)) (assign c (binop + (var a) (var b))) (return (var c))) 1 ((print (const 42))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +263,12 @@ fn oracle_prop_compiler_opt_cse() {
     (fmakunbound 'neovm--copt-cse-expr-key)
     (fmakunbound 'neovm--copt-cse-optimize)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((assign a (binop + (var x) (var y))) (assign b (var a)) (assign c (binop * (var a) (var b))) (return (var c))) t ((assign a (binop * (var x) (var y))) (assign b (var a)) (return (binop + (var a) (var b)))) t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -365,7 +380,12 @@ fn oracle_prop_compiler_opt_strength_reduction() {
     (fmakunbound 'neovm--copt-sr-power-of-2-p)
     (fmakunbound 'neovm--copt-sr-reduce)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((binop + (var x) (var x)) (binop lshift (var x) (const 3)) (binop rshift (var x) (const 2)) (binop bitand (var x) (const 15)) (const 0) (var x) (var x) (binop lshift (var y) (const 2)) (binop * (var x) (const 3)) t t t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -469,7 +489,12 @@ fn oracle_prop_compiler_opt_peephole() {
     (fmakunbound 'neovm--copt-ph-optimize)
     (fmakunbound 'neovm--copt-ph-multi-pass)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((push 10) (ret)) 2 ((push 10) (push 2) (mul) (ret)) ((load y) (push 1) (add) (store y) (ret)) 5 ((push 1) (label L1) (push 2) (add) (ret)) ((load x) (push 1) (add) (ret)) 4 ((push 7) (ret)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -599,7 +624,12 @@ fn oracle_prop_compiler_opt_basic_blocks() {
     (fmakunbound 'neovm--copt-bb-build)
     (fmakunbound 'neovm--copt-bb-count-instrs)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 9 (4 3 2) 4 (4 2 2 3) 4 ((0 4) (1 5) (2 9) (3 3)) t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -737,5 +767,8 @@ fn oracle_prop_compiler_opt_liveness_analysis() {
     (fmakunbound 'neovm--copt-lv-set-diff)
     (fmakunbound 'neovm--copt-lv-analyze)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (4 ((a b) (a x) (a y) (y)) t ((a b) (b)))""#]],
+    );
 }

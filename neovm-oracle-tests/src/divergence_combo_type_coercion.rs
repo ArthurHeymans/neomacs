@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_number_string_conversion_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((n 42)
         (s (number-to-string n))
         (n2 (string-to-number s))
@@ -20,6 +20,7 @@ fn divergence_number_string_conversion_chain() {
         (= n n3)
         (string= hex \"2a\")
         (string= oct \"52\"))) ",
+        expect_test::expect![[r#""OK (42 \"42\" 42 \"2a\" \"52\" \"101010\" 42 t t t t)""#]],
     );
 }
 
@@ -27,7 +28,7 @@ fn divergence_number_string_conversion_chain() {
 fn divergence_char_string_number_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((char ?A)
         (s (char-to-string char))
         (n (aref s 0))
@@ -38,6 +39,7 @@ fn divergence_char_string_number_roundtrip() {
         (string= s back)
         (= (length s) 1)
         (= (aref s 0) 65))) ",
+        expect_test::expect![[r#""OK (t t t t t t)""#]],
     );
 }
 
@@ -45,7 +47,7 @@ fn divergence_char_string_number_roundtrip() {
 fn divergence_sequence_type_conversions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((lst '(1 2 3 4 5))
         (vec [1 2 3 4 5])
         (str \"abcde\"))
@@ -57,6 +59,7 @@ fn divergence_sequence_type_conversions() {
         (equal (string-to-list str) '(97 98 99 100 101))
         (concat (mapcar #'char-to-string '(65 66 67)))
         (string= (concat (mapcar #'char-to-string '(65 66 67))) \"ABC\"))) ",
+        expect_test::expect![[r#""ERR (wrong-type-argument characterp \"A\")""#]],
     );
 }
 
@@ -64,7 +67,7 @@ fn divergence_sequence_type_conversions() {
 fn divergence_float_integer_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (floor 3.7)
   (ceiling 3.7)
@@ -78,6 +81,7 @@ fn divergence_float_integer_boundary() {
   (= (float 5) 5)
   (equal (float 5) 5.0)
   (not (equal (float 5) 5))) ",
+        expect_test::expect![[r#""OK (3 4 4 3 -4 -3 -4 -3 t t t t)""#]],
     );
 }
 
@@ -85,7 +89,7 @@ fn divergence_float_integer_boundary() {
 fn divergence_symbol_string_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((sym 'hello-world)
         (name (symbol-name sym))
         (back (intern name)))
@@ -94,6 +98,7 @@ fn divergence_symbol_string_conversion() {
         (equal sym back)
         (intern-soft name obarray)
         (eq (intern-soft name obarray) sym))) ",
+        expect_test::expect![[r#""OK (t t t hello-world t)""#]],
     );
 }
 
@@ -101,7 +106,7 @@ fn divergence_symbol_string_conversion() {
 fn divergence_format_specs_all_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (format \"%s\" 'symbol)
   (format \"%S\" '(a b c))
@@ -116,6 +121,9 @@ fn divergence_format_specs_all_types() {
   (format \"%010d\" 7)
   (format \"%+d\" 7)
   (format \"%+d\" -7)) ",
+        expect_test::expect![[
+            r#""OK (\"symbol\" \"(a b c)\" \"42\" \"ff\" \"10\" \"3.140000\" \"1.000000e+03\" \"A\" \"%\" \"         7\" \"0000000007\" \"+7\" \"-7\")""#
+        ]],
     );
 }
 
@@ -123,7 +131,7 @@ fn divergence_format_specs_all_types() {
 fn divergence_bool_coercion_in_conditionals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(list
   (if 0 'yes 'no)
   (if \"\" 'yes 'no)
@@ -138,6 +146,7 @@ fn divergence_bool_coercion_in_conditionals() {
   (not 0)
   (not \"\")
   (not nil)) ",
+        expect_test::expect![[r#""OK (yes yes no yes yes no 3 nil 3 nil nil nil t)""#]],
     );
 }
 
@@ -145,7 +154,7 @@ fn divergence_bool_coercion_in_conditionals() {
 fn divergence_list_vector_hash_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((alist '((a . 1) (b . 2) (c . 3)))
         (ht (alist-get 'hash-table (make-hash-table :test 'equal))))
   (dolist (p alist) (puthash (car p) (cdr p) ht))
@@ -155,6 +164,7 @@ fn divergence_list_vector_hash_conversion() {
           (= (length back) 3)
           (gethash 'b ht)
           (= (gethash 'b ht) 2)))) ",
+        expect_test::expect![[r#""ERR (wrong-type-argument listp #s(hash-table test equal))""#]],
     );
 }
 
@@ -162,7 +172,7 @@ fn divergence_list_vector_hash_conversion() {
 fn divergence_string_bytes_chars_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let ((ascii \"hello\")
         (utf8 \"\\u4e16\\u754c\")
         (mixed \"hi\\u4e16\"))
@@ -175,6 +185,7 @@ fn divergence_string_bytes_chars_multibyte() {
         (multibyte-string-p utf8)
         (multibyte-string-p mixed)
         (string= (substring utf8 0 1) \"\\u4e16\"))) ",
+        expect_test::expect![[r#""OK (t t t t t t t t t)""#]],
     );
 }
 
@@ -182,7 +193,7 @@ fn divergence_string_bytes_chars_multibyte() {
 fn divergence_propertized_string_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(let* ((s (propertize \"hello\" 'face 'bold 'data 42))
         (len (length s))
         (has-face (get-text-property 1 'face s))
@@ -194,5 +205,6 @@ fn divergence_propertized_string_conversion() {
         (= has-data 42)
         (string= plain \"hello\")
         (not (get-text-property 1 'face plain)))) ",
+        expect_test::expect![[r#""OK (5 t bold t t t)""#]],
     );
 }

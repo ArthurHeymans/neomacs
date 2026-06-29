@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx326_func_arity_of_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((fixed (lambda (a b) (+ a b)))
       (many (lambda (&rest args) args))
@@ -22,13 +22,16 @@ fn div_cx326_func_arity_of_various() {
         (func-arity (symbol-function 'car))
         (func-arity (symbol-function 'list))))
 "##,
+        expect_test::expect![[
+            r#""OK ((2 . 2) (0 . many) (0 . 1) (1 . many) (0 . many) (1 . 1) (0 . many))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx326_closure_capture_mutation_visible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (let ((count 0))
@@ -43,13 +46,14 @@ fn div_cx326_closure_capture_mutation_visible() {
             (funcall get)
             count))))
 "##,
+        expect_test::expect![[r#""OK (0 1 2 3 2 2 2)""#]],
     )
 }
 
 #[test]
 fn div_cx326_dynamic_vs_lexical_var_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defvar neo-cx326-dyn 0)
@@ -59,13 +63,14 @@ fn div_cx326_dynamic_vs_lexical_var_capture() {
         (let ((neo-cx326-dyn 999))
           (list (funcall captured) neo-cx326-dyn))))))
 "##,
+        expect_test::expect![[r#""OK (999 999)""#]],
     )
 }
 
 #[test]
 fn div_cx326_apply_funcall_with_optional_and_rest() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((fn (lambda (a b &optional c &rest d) (list a b c d))))
   (list (funcall fn 1 2)
@@ -75,13 +80,16 @@ fn div_cx326_apply_funcall_with_optional_and_rest() {
         (apply fn 1 2 '(3 4 5))
         (apply '+ 1 2 '(3 4 5))))
 "##,
+        expect_test::expect![[
+            r#""OK ((1 2 nil nil) (1 2 3 nil) (1 2 3 (4 5)) (1 2 nil nil) (1 2 3 (4 5)) 15)""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx326_function_cells_and_indirect_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (defalias 'neo-cx326-orig (lambda () :orig))
 (defalias 'neo-cx326-alias 'neo-cx326-orig)
@@ -95,13 +103,14 @@ fn div_cx326_function_cells_and_indirect_function() {
         (funcall 'neo-cx326-orig)
         (funcall 'neo-cx326-alias)))
 "##,
+        expect_test::expect![[r#""OK (nil t t :orig :orig)""#]],
     )
 }
 
 #[test]
 fn div_cx326_eval_with_different_environments() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (let ((x 100))
@@ -111,13 +120,14 @@ fn div_cx326_eval_with_different_environments() {
           (let ((y 50)) (eval '(+ x y) t))
           (eval '(let ((z 5)) (* x z))))))
 "##,
+        expect_test::expect![[r#""ERR (void-variable x)""#]],
     )
 }
 
 #[test]
 fn div_cx326_funcall_macro_should_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (defmacro neo-cx326-mac (x) `(* ,x 2))
 (list (macrop 'neo-cx326-mac)
@@ -126,13 +136,14 @@ fn div_cx326_funcall_macro_should_error() {
       (condition-case e (funcall 'neo-cx326-mac 5) (error (cons :err (car e))))
       (macroexpand '(neo-cx326-mac 21)))
 "##,
+        expect_test::expect![[r#""OK (t t nil (:err . invalid-function) (* 21 2))""#]],
     )
 }
 
 #[test]
 fn div_cx326_apply_partially_partial_application() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((add-then (apply-partially #'+ 1000))
@@ -143,13 +154,14 @@ fn div_cx326_apply_partially_partial_application() {
             (length (funcall add-then 5))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
     )
 }
 
 #[test]
 fn div_cx326_recursive_lambda_with_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (letrec ((fact (lambda (n acc1 acc2)
@@ -160,13 +172,14 @@ fn div_cx326_recursive_lambda_with_state() {
           (funcall fact 5 0 1)
           (funcall fact 10 0 1))))
 "##,
+        expect_test::expect![[r#""OK (0 1 5 55)""#]],
     )
 }
 
 #[test]
 fn div_cx326_eval_apply_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
   (letrec ((counter 0)
@@ -195,5 +208,6 @@ fn div_cx326_eval_apply_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     )
 }

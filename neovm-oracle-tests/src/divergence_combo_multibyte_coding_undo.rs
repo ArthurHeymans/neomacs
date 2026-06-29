@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_multibyte_insert_delete_undo_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mid\")))\n\
          (with-current-buffer buf\n\
@@ -37,6 +37,7 @@ fn deficiency_multibyte_insert_delete_undo_props() {
          (get-text-property 12 'type)\n\
          (get-text-property 15 'type)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 15 18)""#]],
     );
 }
 
@@ -44,7 +45,7 @@ fn deficiency_multibyte_insert_delete_undo_props() {
 fn deficiency_string_as_multibyte_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"sam\")))\n\
          (with-current-buffer buf\n\
@@ -67,6 +68,7 @@ fn deficiency_string_as_multibyte_buffer_ops() {
          (string-bytes (buffer-string))\n\
          (get-text-property 1 'lang))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -74,7 +76,7 @@ fn deficiency_string_as_multibyte_buffer_ops() {
 fn deficiency_encode_decode_region_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"edr\")))\n\
          (with-current-buffer buf\n\
@@ -92,6 +94,7 @@ fn deficiency_encode_decode_region_undo() {
          (length orig) (length decoded)\n\
          (get-text-property 1 'original)))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 1 20)""#]],
     );
 }
 
@@ -99,7 +102,7 @@ fn deficiency_encode_decode_region_undo() {
 fn deficiency_char_syntax_multibyte_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"csm\")))\n\
          (with-current-buffer buf\n\
@@ -116,6 +119,7 @@ fn deficiency_char_syntax_multibyte_combo() {
          (length syntax-list)\n\
          (length parens)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -123,7 +127,7 @@ fn deficiency_char_syntax_multibyte_combo() {
 fn deficiency_buffer_position_multibyte_byte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"bpm\")))\n\
          (with-current-buffer buf\n\
@@ -150,6 +154,7 @@ fn deficiency_buffer_position_multibyte_byte() {
          (list positions zones chars s\n\
          (buffer-string))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -157,7 +162,7 @@ fn deficiency_buffer_position_multibyte_byte() {
 fn deficiency_case_change_multibyte_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ccm\")))\n\
          (with-current-buffer buf\n\
@@ -182,6 +187,7 @@ fn deficiency_case_change_multibyte_undo() {
          (get-text-property 7 'case)\n\
          (get-text-property 13 'case)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -189,7 +195,7 @@ fn deficiency_case_change_multibyte_undo() {
 fn deficiency_whitespace_cleanup_undo_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"wcu\")))\n\
          (with-current-buffer buf\n\
@@ -214,6 +220,7 @@ fn deficiency_whitespace_cleanup_undo_props() {
          (get-text-property 10 'line)\n\
          (get-text-property 20 'line)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -221,7 +228,7 @@ fn deficiency_whitespace_cleanup_undo_props() {
 fn deficiency_indent_region_undo_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"iru\")))\n\
          (with-current-buffer buf\n\
@@ -249,6 +256,7 @@ fn deficiency_indent_region_undo_with_props() {
          (get-text-property 15 'depth)\n\
          (get-text-property 24 'depth)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 33 41)""#]],
     );
 }
 
@@ -256,7 +264,7 @@ fn deficiency_indent_region_undo_with_props() {
 fn deficiency_apply_macro_undo_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"amu\")))\n\
          (with-current-buffer buf\n\
@@ -278,6 +286,7 @@ fn deficiency_apply_macro_undo_textprop() {
          (get-text-property 1 'gen)\n\
          (get-text-property 5 'gen)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -285,7 +294,7 @@ fn deficiency_apply_macro_undo_textprop() {
 fn deficiency_mapconcat_over_intervals_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mci\")))\n\
          (with-current-buffer buf\n\
@@ -309,5 +318,6 @@ fn deficiency_mapconcat_over_intervals_undo() {
          (get-text-property 4 'index)\n\
          (get-text-property 8 'index))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }

@@ -41,7 +41,12 @@ fn oracle_prop_coll_flatten_nested() {
                      (funcall my-flatten '(((((42))))))
                      ;; Flat to begin with
                      (funcall my-flatten nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5) (1 2 3 4 5 6) (1 2 3 4 5) (1 2 3 4) (a b c d e f) (1 2 3) (42) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +122,12 @@ fn oracle_prop_coll_tree_rotations() {
                          (funcall tree-inorder
                                   (funcall rotate-right
                                            (funcall rotate-left tree)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 3 4 5 7 9) (1 3 4 5 7 9) (1 3 4 5 7 9) (7 (5 (3 (1 nil nil) (4 nil nil)) nil) (9 nil nil)) (3 (1 nil nil) (5 (4 nil nil) (7 nil (9 nil nil)))) (1 3 4 5 7 9))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +189,12 @@ fn oracle_prop_coll_permutations_combinations() {
                      (funcall combinations '(a b c d) 4)
                      ;; C(4,1) = 4
                      (length (funcall combinations '(a b c d) 1))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 2 3) (1 3 2) (2 1 3) (2 3 1) (3 1 2) (3 2 1)) 6 ((a b) (a c) (a d) (b c) (b d) (c d)) 6 (nil) ((a b c d)) 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +245,12 @@ fn oracle_prop_coll_multi_partition() {
                               '(1 2 3 4 5 6 7 8 9 10 11 12)
                               (list (lambda (x) (= (% x 3) 0))
                                     (lambda (x) (= (% x 2) 0))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((-5 -2 -1) (0 0 0) (3 7 4 8)) ((1 2) (\"a\" \"b\") (foo bar) (3.0)) ((3 6 9 12) (2 4 8 10) (1 5 7 11)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +310,12 @@ fn oracle_prop_coll_interleave_transpose() {
                               (funcall transpose '((a b c) (d e f))))
                      ;; Transpose 1x4
                      (funcall transpose '((1 2 3 4)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a 1 b 2 c 3) (a 1 x b 2 y) (a 1 b 2 c d) ((1 4) (2 5) (3 6)) ((1 3 5) (2 4 6)) ((a b c) (d e f)) ((1) (2) (3) (4)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +367,12 @@ fn oracle_prop_coll_frequency_histogram() {
                          (apply #'+ (mapcar #'cdr freq))
                          ;; Number of unique items
                          (length freq)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#####""OK (((apple . 4) (banana . 3) (cherry . 2) (date . 1)) ((apple . \"####\") (banana . \"###\") (cherry . \"##\") (date . \"#\")) apple 10 4)""#####
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -399,7 +429,12 @@ fn oracle_prop_coll_zip_unzip() {
                      (funcall unzip (funcall zip '(x y z) '(10 20 30)))
                      ;; Zip with itself (duplicate)
                      (funcall zip '(1 2 3) '(1 2 3))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a . 1) (b . 2) (c . 3)) ((a . 1) (b . 2)) (11 22 33) (\"hello world\" \"good night\") ((a b c) (1 2 3)) ((x y z) (10 20 30)) ((1 . 1) (2 . 2) (3 . 3)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -445,5 +480,10 @@ fn oracle_prop_coll_group_by() {
                      (funcall group-by
                               (lambda (x) (* (/ x 10) 10))
                               '(3 15 7 22 31 8 19 25 2 37))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((odd 1 3 5 7) (even 2 4 6 8)) ((1 \"a\" \"c\" \"f\") (2 \"bb\" \"dd\") (3 \"eee\" \"ggg\")) ((97 \"apple\" \"avocado\") (98 \"banana\" \"blueberry\") (99 \"cherry\")) ((0 3 7 8 2) (10 15 19) (20 22 25) (30 31 37)))""#
+        ]],
+    );
 }

@@ -33,5 +33,10 @@ fn oracle_prop_gnu_bidi_string_mark_left_to_right_edges() {
        (bidi-string-mark-left-to-right 42)
      (error (car err)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t 2 t t t \"א\u{200e}\" 4 t t \"xא.\u{200e}\" wrong-type-argument)""#
+        ]],
+    );
 }

@@ -24,7 +24,10 @@ fn oracle_autoloadp_uses_interned_autoload_car_safe_semantics() {
    (autoloadp "autoload")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (t t t nil nil nil nil)""#],
+    );
 }
 
 #[test]
@@ -53,7 +56,12 @@ fn oracle_autoload_preserves_existing_real_definition_and_replaces_autoloads() {
     (fmakunbound 'neomacs--oracle-autoload-target)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil t real-definition neomacs--oracle-autoload-target neomacs--oracle-autoload-target (autoload \"first-file\" \"First doc.\" nil macro) neomacs--oracle-autoload-target (autoload \"second-file\" \"Second doc.\" t keymap))""#
+        ]],
+    );
 }
 
 #[test]
@@ -85,7 +93,12 @@ fn oracle_autoload_argument_errors_and_function_cell_state() {
       (fmakunbound sym))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument (symbolp 42)) (wrong-type-argument (stringp 42)) nil neomacs--oracle-autoload-good (t \"good-file\" nil (mode-a mode-b) t))""#
+        ]],
+    );
 }
 
 #[test]
@@ -108,7 +121,12 @@ fn oracle_autoload_do_load_macro_only_ordering_without_file_load() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (17 t (wrong-type-argument (symbolp 42)) (wrong-type-argument (symbolp 42)))""#
+        ],
+    );
 }
 
 #[test]
@@ -129,5 +147,8 @@ fn oracle_autoload_do_load_macro_only_requires_literal_macro_symbol() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 43)""#]],
+    );
 }

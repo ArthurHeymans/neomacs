@@ -83,7 +83,12 @@ fn oracle_prop_verification_pre_post_conditions() {
          ;; gcd precondition failure
          (funcall verified-gcd 0 5)))
     (fmakunbound 'neovm--vfy-check)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((verified 0) (verified 1) (verified 5) (verified 5) (verified 10) (rejected \"isqrt\" ((pre-fail \"non-negative\" (-5)))) (verified 4) (verified 25) (verified 1) (rejected \"gcd\" ((pre-fail \"positive-a\" (0 5)))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +184,12 @@ fn oracle_prop_verification_invariant_maintenance() {
       r7
       ;; Invalid creation: init outside bounds
       (funcall make-counter 10 20 5))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (ok 0 ok 1 ok 2 ok 3 ok 2 (error (invariant-broken \"value -1 < min 0\")) ok ok 5 (error (invariant-broken \"value 6 > max 5\")) (error (invariant-broken \"value 5 < min 10\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +268,12 @@ fn oracle_prop_verification_design_by_contract() {
          ;; Empty vector
          (funcall binary-search-contract [] 1)))
     (fmakunbound 'neovm--vfy-contract)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((success 2) (success 0) (success 5) (success nil) (blame caller \"binary-search\" \"vector must be sorted\") (blame caller \"binary-search\" \"first arg must be vector\") (success 0) (success nil) (success nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -319,7 +334,12 @@ fn oracle_prop_verification_assertion_system() {
      (nth 6 results)
      ;; Summary
      (funcall assert-all results))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((pass \"1+1=2\") (fail \"bad-math\" 7 4) (fail \"nil-is-true\" t nil) (summary 10 2 ((fail \"bad-math\" 7 4) (fail \"nil-is-true\" t nil))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +420,12 @@ fn oracle_prop_verification_hoare_triples() {
     (fmakunbound 'neovm--vfy-hoare)
     (fmakunbound 'neovm--vfy-state-get)
     (fmakunbound 'neovm--vfy-state-set)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((valid ((x . 6) (y . 10))) (valid ((y . 10) (x . 5))) (valid ((x . 0) (y . 10))) (valid ((z . 15) (x . 5) (y . 10))) (precondition-not-met ((x . 5) (y . 10))) (postcondition-violated ((x . 6) (y . 10))))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -490,7 +515,12 @@ fn oracle_prop_verification_loop_invariant() {
                 (lambda (s) (= s 0))   ;; Wrong: only true at start
                 100))
     (fmakunbound 'neovm--vfy-loop)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((valid (11 . 55) 10) (valid (8 . 5040) 7) (valid (6 0 6) 3) (violated 1 1 \"mid-loop\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -616,5 +646,10 @@ fn oracle_prop_verification_weakest_precondition() {
     (fmakunbound 'neovm--wp-eval-expr)
     (fmakunbound 'neovm--wp-exec-stmt)
     (fmakunbound 'neovm--wp-verify-triple)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((triple-holds ((x . 7) (y . 10) (z . 0))) (triple-holds ((y . 6) (x . 5) (z . 0))) (triple-holds ((y . 12) (x . 6) (z . 0))) (triple-holds ((z . 5) (x . 5) (y . 10))) (triple-holds ((x . 5) (y . 10) (z . 0))) (triple-fails ((x . 6) (y . 10) (z . 0))) (triple-holds ((y . 5) (x . 10) (z . 5))))""#
+        ]],
+    );
 }

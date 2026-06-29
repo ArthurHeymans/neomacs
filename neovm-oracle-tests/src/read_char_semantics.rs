@@ -10,13 +10,19 @@ use super::common::{assert_err_kind, eval_oracle_and_neovm};
 #[test]
 fn oracle_read_char_wrong_number_of_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(read-char nil nil nil nil)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(read-char nil nil nil nil)",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments read-char 4)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-number-of-arguments");
 }
 
 #[test]
 fn oracle_read_char_wrong_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(read-char '(bad))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(read-char '(bad))",
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp (bad))""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }

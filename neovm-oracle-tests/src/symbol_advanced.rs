@@ -20,7 +20,7 @@ fn oracle_prop_intern_basic() {
                         (eq (intern "t") t)
                         (symbolp (intern "car"))
                         (symbolp (intern "some-name")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t t)""#]]);
 }
 
 #[test]
@@ -31,7 +31,10 @@ fn oracle_prop_intern_soft_basic() {
                         (intern-soft "+")
                         (intern-soft "neovm--surely-not-interned-xyz")
                         (eq (intern-soft "car") 'car))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (car + nil t)""#]],
+    );
 }
 
 #[test]
@@ -50,7 +53,10 @@ fn oracle_prop_intern_creates_new() {
                                 (symbolp sym)
                                 (eq sym after)
                                 (symbol-name sym))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t \"neovm--test-intern-temp-sym\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +73,10 @@ fn oracle_prop_symbol_name() {
                         (symbol-name nil)
                         (symbol-name '+)
                         (symbol-name 'with\ space))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"foo\" \"bar-baz\" \"t\" \"nil\" \"+\" \"with space\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +98,10 @@ fn oracle_prop_symbol_value_lifecycle() {
                             (let ((b2 (boundp 'neovm--test-sv-var)))
                               (list v1 b1 v2 b2))))
                       (makunbound 'neovm--test-sv-var)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 t 99 nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +125,10 @@ fn oracle_prop_symbol_plist_manipulation() {
                                 (get 'neovm--test-plist-sym 'missing)
                                 (symbol-plist 'neovm--test-plist-sym)))
                       (setplist 'neovm--test-plist-sym nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (red 42 t nil (color red size 42 active t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +174,10 @@ fn oracle_prop_symbol_registry() {
                            (funcall get-type 'circle 'fields)))
                       (setplist (intern "neovm--test-type-point") nil)
                       (setplist (intern "neovm--test-type-line") nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((x y) t (start end) nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -199,5 +217,5 @@ fn oracle_prop_symbol_method_dispatch() {
                              (funcall dispatch r 'perimeter))))
                       (setplist 'neovm--test-shape-circle nil)
                       (setplist 'neovm--test-shape-rect nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t 12 14)""#]]);
 }

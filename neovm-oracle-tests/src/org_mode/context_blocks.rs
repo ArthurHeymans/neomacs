@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_context_mixed_positions_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -44,6 +44,9 @@ fn org_context_mixed_positions_combo() {
        ("clocktable" . t)
        ("(+ 1 2)" . nil)
        ("$x+y$" . nil)))))"##,
+        expect_test::expect![[
+            r#""OK ((\"TODO\" (:headline :todo-keyword) t nil nil nil nil nil nil nil headline) (\"SCHEDULED\" (:keyword) nil t nil nil nil nil nil nil planning) (\"[ ]\" (:item :checkbox) nil nil t nil nil nil nil nil item) (\"link\" (:item :link) nil nil t nil nil nil nil nil paragraph) (\"| 1\" (:table) nil nil nil t nil nil nil nil table-row) (\"clocktable\" (:clocktable) nil nil nil nil t nil nil nil dynamic-block) (\"(+ 1 2)\" (:src-block) nil nil nil nil nil t t \"src\" src-block) (\"$x+y$\" (:latex-fragment) nil nil nil nil nil nil nil nil paragraph))""#
+        ]],
     );
 }
 
@@ -51,7 +54,7 @@ fn org_context_mixed_positions_combo() {
 fn org_block_map_next_previous_restricted_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -101,6 +104,7 @@ fn org_block_map_next_previous_restricted_combo() {
               (nreverse restricted)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -108,7 +112,7 @@ fn org_block_map_next_previous_restricted_combo() {
 fn org_between_regexps_nested_blocks_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -144,6 +148,9 @@ fn org_between_regexps_nested_blocks_combo() {
                (org-in-block-p '("quote" "special"))
                (org-element-type (org-element-at-point)))))
      '("before" "inside quote" "after" "Next"))))"##,
+        expect_test::expect![[
+            r#""OK ((\"before\" (4 85) nil \"special\" paragraph) (\"inside quote\" (4 85) (27 65) \"quote\" paragraph) (\"after\" (4 85) nil \"special\" paragraph) (\"Next\" nil nil nil headline))""#
+        ]],
     );
 }
 
@@ -151,7 +158,7 @@ fn org_between_regexps_nested_blocks_combo() {
 fn org_context_drawer_timestamp_comment_latex_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)
@@ -216,6 +223,7 @@ fn org_context_drawer_timestamp_comment_latex_combo() {
          ("src_emacs-lisp")
          ("self")
           ("alpha")))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -223,7 +231,7 @@ fn org_context_drawer_timestamp_comment_latex_combo() {
 fn org_block_drawer_comment_structure_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -307,5 +315,8 @@ fn org_block_drawer_comment_structure_deep_state_combo() {
             comments
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r##""OK ((org-data section keyword headline plain-text section planning property-drawer node-property node-property node-property drawer clock comment paragraph plain-text quote-block paragraph plain-text bold plain-text plain-text src-block example-block headline plain-text section planning paragraph plain-text latex-fragment plain-text center-block paragraph plain-text) ((quote-block nil nil 253) (src-block \"emacs-lisp\" \"(+ 1 2)\n\" 307) (example-block nil \"Example block.\n\" 364) (center-block nil nil 482)) ((property-drawer nil 75) (drawer \"LOGBOOK\" 141)) ((\"Effort\" \"2:00\") (\"CUSTOM_ID\" \"alpha-id\") (\"Owner\" \"Ada\")) ((\"<2026-05-27 Wed>\" nil nil) (nil nil \"[2026-05-26 Mon 15:00]\")) ((\"1:00\" closed)) (\"# This is a comment\n\") \"#+TITLE: Structure Probe\n\n* TODO Alpha :work:\nSCHEDULED: <2026-05-27 Wed>\n:PROPERTIES:\n:Effort: 2:00\n:CUSTOM_ID: alpha-id\n:Owner: Ada\n:END:\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:00] =>  1:00\n:END:\n# This is a comment\nAlpha body.\n\n#+begin_quote\nQuoted text with *markup*.\n#+end_quote\n\n#+begin_src emacs-lisp :results value\n(+ 1 2)\n#+end_src\n\n#+begin_example\nExample block.\n#+end_example\n\n** DONE Beta\nCLOSED: [2026-05-26 Mon 15:00]\nBeta body with $x^2$ math.\n\n#+begin_center\nCentered content.\n#+end_center\n\")""##
+        ]],
     );
 }

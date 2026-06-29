@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_save_excursion_point_after_insert_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"sep\")))\n\
          (with-current-buffer buf\n\
@@ -25,6 +25,7 @@ fn deficiency_save_excursion_point_after_insert_delete() {
          (buffer-string)\n\
          (get-text-property 3 'zone))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -32,7 +33,7 @@ fn deficiency_save_excursion_point_after_insert_delete() {
 fn deficiency_save_restriction_with_nested_inserts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"srn\")))\n\
          (with-current-buffer buf\n\
@@ -51,6 +52,7 @@ fn deficiency_save_restriction_with_nested_inserts() {
          (buffer-string)\n\
          (get-text-property (point-min) 'grp))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -58,7 +60,7 @@ fn deficiency_save_restriction_with_nested_inserts() {
 fn deficiency_save_excursion_across_buffer_switch_with_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((b1 (generate-new-buffer \"se1\"))\n\
          (b2 (generate-new-buffer \"se2\")))\n\
@@ -77,6 +79,7 @@ fn deficiency_save_excursion_across_buffer_switch_with_narrow() {
          (list (with-current-buffer b1 (list (point) (buffer-string)))\n\
          (with-current-buffer b2 (list (point) (buffer-string)))))\n\
          (kill-buffer b1) (kill-buffer b2)))",
+        expect_test::expect![[r#""ERR (void-variable b1)""#]],
     );
 }
 
@@ -84,7 +87,7 @@ fn deficiency_save_excursion_across_buffer_switch_with_narrow() {
 fn deficiency_nested_save_excursion_with_marker_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"nse\")))\n\
          (with-current-buffer buf\n\
@@ -102,6 +105,7 @@ fn deficiency_nested_save_excursion_with_marker_tracking() {
          (list (point) (marker-position m5) (marker-position m8)\n\
          (buffer-string)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -109,7 +113,7 @@ fn deficiency_nested_save_excursion_with_marker_tracking() {
 fn deficiency_save_excursion_with_overlay_modification() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"sov\")))\n\
          (with-current-buffer buf\n\
@@ -130,6 +134,7 @@ fn deficiency_save_excursion_with_overlay_modification() {
          (get-text-property 4 'part)\n\
          (buffer-string)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -137,7 +142,7 @@ fn deficiency_save_excursion_with_overlay_modification() {
 fn deficiency_save_restriction_with_undo_after_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"sru\")))\n\
          (with-current-buffer buf\n\
@@ -156,6 +161,7 @@ fn deficiency_save_restriction_with_undo_after_edit() {
          (buffer-string)\n\
          (get-text-property (point-min) 'line))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -163,7 +169,7 @@ fn deficiency_save_restriction_with_undo_after_edit() {
 fn deficiency_excursion_with_kill_ring_save() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ekr\")))\n\
          (with-current-buffer buf\n\
@@ -178,6 +184,7 @@ fn deficiency_excursion_with_kill_ring_save() {
          (get-text-property 4 'pos)\n\
          (get-text-property 5 'pos)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -185,7 +192,7 @@ fn deficiency_excursion_with_kill_ring_save() {
 fn deficiency_triple_nested_save_excursion_point_restoration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"tne\")))\n\
          (with-current-buffer buf\n\
@@ -203,6 +210,7 @@ fn deficiency_triple_nested_save_excursion_point_restoration() {
          (list (point) (buffer-string)))\n\
          (list (point) (buffer-string))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -210,7 +218,7 @@ fn deficiency_triple_nested_save_excursion_point_restoration() {
 fn deficiency_save_buffer_state_with_props_and_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"sbs\")))\n\
          (with-current-buffer buf\n\
@@ -232,6 +240,7 @@ fn deficiency_save_buffer_state_with_props_and_overlays() {
          (get-text-property 7 'sec)\n\
          (buffer-string)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -239,7 +248,7 @@ fn deficiency_save_buffer_state_with_props_and_overlays() {
 fn deficiency_excursion_restore_after_narrow_widen_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ern\")))\n\
          (with-current-buffer buf\n\
@@ -258,5 +267,6 @@ fn deficiency_excursion_restore_after_narrow_widen_cycle() {
          (buffer-string)\n\
          (get-text-property (point-min) 'block))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_register_save_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rsm\")))\n\
          (with-current-buffer buf\n\
@@ -45,6 +45,7 @@ fn combo_register_save_marker_overlay_undo() {
          (overlay-start ov)\n\
          (overlay-end ov)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -52,7 +53,7 @@ fn combo_register_save_marker_overlay_undo() {
 fn combo_register_point_narrow_overlay_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rnp\")))\n\
          (with-current-buffer buf\n\
@@ -81,6 +82,7 @@ fn combo_register_point_narrow_overlay_prop() {
          (overlay-end ov)\n\
          (marker-position m)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -88,7 +90,7 @@ fn combo_register_point_narrow_overlay_prop() {
 fn combo_register_insert_with_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"riu\")))\n\
          (with-current-buffer buf\n\
@@ -118,6 +120,7 @@ fn combo_register_insert_with_marker_overlay_undo() {
          (overlay-start ov)\n\
          (overlay-end ov)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -125,7 +128,7 @@ fn combo_register_insert_with_marker_overlay_undo() {
 fn combo_register_rect_marker_overlay_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rrm\")))\n\
          (with-current-buffer buf\n\
@@ -159,6 +162,7 @@ fn combo_register_rect_marker_overlay_prop() {
          (overlay-start ov)\n\
          (overlay-end ov)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -166,7 +170,7 @@ fn combo_register_rect_marker_overlay_prop() {
 fn combo_register_narrow_undo_overlay_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rnu\")))\n\
          (with-current-buffer buf\n\
@@ -198,5 +202,6 @@ fn combo_register_narrow_undo_overlay_textprop() {
          (overlay-start ov)\n\
          (overlay-end ov)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }

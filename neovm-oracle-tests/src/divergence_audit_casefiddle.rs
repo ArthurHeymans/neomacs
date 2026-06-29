@@ -12,26 +12,28 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_ac_case_table_ignored_for_downcase() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Buffer-local case table mapping A→x; GNU reads it, Neomacs ignores it.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (copy-case-table)))
   (set-char-table-range ct ?A ?x)
   (set-case-table ct)
   (downcase "A"))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
     );
 }
 
 #[test]
 fn div_ac_case_table_ignored_for_upcase() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (copy-case-table)))
   (set-char-table-range ct ?a ?X)
   (set-case-table ct)
   (upcase "a"))
 "##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
     );
 }
 
@@ -40,33 +42,45 @@ fn div_ac_upcase_sharp_s_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // char-upcase of ß: GNU returns ß unchanged (SS is multi-char),
     // Neomacs maps ß→ẞ (7838).
-    assert_oracle_parity(r##"(upcase ?ß)"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(upcase ?ß)"##,
+        expect_test::expect![[r#""OK 7838""#]],
+    );
 }
 
 #[test]
 fn div_ac_downcase_dotted_I_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // downcase of İ (U+0130): GNU unchanged (one-to-many), Neomacs → i (105).
-    assert_oracle_parity(r##"(downcase ?İ)"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(downcase ?İ)"##,
+        expect_test::expect![[r#""OK 304""#]],
+    );
 }
 
 #[test]
 fn div_ac_greek_final_sigma_downcase() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Σ at end of word → ς (final sigma) in GNU; Neomacs → σ always.
-    assert_oracle_parity(r##"(downcase "ΑΣ")"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(downcase "ΑΣ")"##,
+        expect_test::expect![[r#""OK \"ας\"""#]],
+    );
 }
 
 #[test]
 fn div_ac_upcase_strasse_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(upcase "straße")"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(upcase "straße")"##,
+        expect_test::expect![[r#""OK \"STRASSE\"""#]],
+    );
 }
 
 #[test]
 fn div_ac_with_case_table_missing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-case-table (let ((ct (copy-case-table)))
@@ -74,6 +88,7 @@ fn div_ac_with_case_table_missing() {
       (downcase "a"))
   (error (car e)))
 "##,
+        expect_test::expect![[r#""OK wrong-number-of-arguments""#]],
     );
 }
 
@@ -81,11 +96,12 @@ fn div_ac_with_case_table_missing() {
 fn div_ac_case_symbols_as_words() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // GNU: _ is word-constituent with case-symbols-as-words -> foo_bar one word.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-symbols-as-words t))
   (capitalize "foo_bar baz"))
 "##,
+        expect_test::expect![[r#""OK \"Foo_bar Baz\"""#]],
     );
 }
 
@@ -93,7 +109,7 @@ fn div_ac_case_symbols_as_words() {
 fn div_ac_forward_sexp_syntax_text_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Override syntax of "(" to word-constituent via text property.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "ab(cd)ef")
@@ -103,6 +119,7 @@ fn div_ac_forward_sexp_syntax_text_property() {
     (forward-sexp 1)
     (point)))
 "##,
+        expect_test::expect![[r#""OK 6""#]],
     );
 }
 
@@ -110,12 +127,13 @@ fn div_ac_forward_sexp_syntax_text_property() {
 fn div_ac_char_width_table_mutation_ignored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // GNU consults the (mutable) char-width-table; Neomacs hardcodes width.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((cw (char-width ?\x300)))
   (set-char-table-range (char-width-table) ?\x300 1)
   (list cw (char-width ?\x300)))
 "##,
+        expect_test::expect![[r#""ERR (void-function char-width-table)""#]],
     );
 }
 
@@ -123,25 +141,29 @@ fn div_ac_char_width_table_mutation_ignored() {
 fn div_ac_display_table_string_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // string-width should honor buffer-display-table glyph replacement.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (setq buffer-display-table (make-display-table))
   (aset (char-table-extra-slot buffer-display-table 0) ?a (vector ?X ?Y))
   (string-width "a"))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument arrayp nil)""#]],
     );
 }
 
 #[test]
 fn div_ac_standard_category_docstring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (category-docstring ?l (standard-category-table))
       (category-docstring ?a (standard-category-table))
       (category-docstring ?r (standard-category-table)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"Latin\" \"ASCII\nASCII graphic characters 32-126 (ISO646 IRV:1983[4/0])\" \"Roman\nJapanese roman\")""#
+        ]],
     );
 }
 
@@ -149,19 +171,23 @@ fn div_ac_standard_category_docstring() {
 fn div_ac_make_category_set_uppercase_letter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Category letter "A" -> bit position; uppercase letters map to bits 27-52.
-    assert_oracle_parity(r##"(aref (make-category-set "A") 28)"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(aref (make-category-set "A") 28)"##,
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 #[test]
 fn div_ac_char_width_display_property_in_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // char-width text property / display glyph affecting column accounting.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "x")
   (put-text-property 1 2 'display (vector ?a ?b ?c))
   (list (current-column) (string-width (buffer-substring 1 2))))
 "##,
+        expect_test::expect![[r#""OK (1 1)""#]],
     );
 }

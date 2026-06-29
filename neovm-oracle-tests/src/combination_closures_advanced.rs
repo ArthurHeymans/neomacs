@@ -49,7 +49,10 @@ fn oracle_prop_closure_counter_factory() {
                          ;; c2 unaffected
                          (funcall peek2)   ;; 110
                          ))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 1 2 3 100 105 50 50 51 110)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +105,10 @@ fn oracle_prop_closure_iterator_protocol() {
                          ;; Empty list
                          (funcall iter-to-list
                                   (funcall make-list-iter nil))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 10 20 t (30 40 50) nil (a b c) nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +157,10 @@ fn oracle_prop_closure_callback_higher_order() {
                                 (list odds
                                       (= (+ (length evens) (length odds))
                                          (length numbers))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2 4 6 8 10) (4 16 36 64 100) 220 ((1 3 5 7 9) t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +183,7 @@ fn oracle_prop_closure_loop_capture() {
                     (setq closures (nreverse closures))
                     ;; Call each closure — should get 0,1,2,3,4
                     (mapcar #'funcall closures))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 1 2 3 4)""#]]);
 }
 
 #[test]
@@ -200,7 +209,10 @@ fn oracle_prop_closure_loop_capture_mutation() {
                       (let ((after (mapcar (lambda (c) (funcall (car c)))
                                           closures)))
                         (list initial after))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 10 20) (0 999 20))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +238,10 @@ fn oracle_prop_closure_generator_fibonacci() {
                       (dotimes (_ 12)
                         (setq results (cons (funcall fib) results)))
                       (nreverse results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 1 1 2 3 5 8 13 21 34 55 89)""#]],
+    );
 }
 
 #[test]
@@ -258,7 +273,12 @@ fn oracle_prop_closure_generator_collatz() {
                        (funcall collect (funcall make-collatz-gen 6))
                        (funcall collect (funcall make-collatz-gen 11))
                        (length (funcall collect (funcall make-collatz-gen 27))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((6 3 10 5 16 8 4 2 1) (11 34 17 52 26 13 40 20 10 5 16 8 4 2 1) 112)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +333,10 @@ fn oracle_prop_closure_object_system() {
                        (funcall send s 'pop)      ;; 10
                        (funcall send s 'size)     ;; 0
                        )))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (3 30 30 20 1 (10) 10 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -367,7 +390,10 @@ fn oracle_prop_closure_memoize_with_stats() {
                          (funcall call 1)       ;; 1
                          (funcall call 3)       ;; 6 (cached)
                          (funcall stats)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable memo)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -421,5 +447,10 @@ fn oracle_prop_closure_event_emitter() {
                          (funcall count 'hover)   ;; 1
                          (funcall count 'keydown) ;; 0
                          ))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((click-2 button-a) (click-1 button-a) (hover menu) (click-2 button-b) (click-1 button-b)) 2 1 0)""#
+        ]],
+    );
 }

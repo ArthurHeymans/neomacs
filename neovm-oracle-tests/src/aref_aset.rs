@@ -15,7 +15,7 @@ fn oracle_prop_aref_vector_basic() {
 
     let form = r#"(let ((v [10 20 30 40 50]))
                     (list (aref v 0) (aref v 2) (aref v 4)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (10 30 50)""#]);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn oracle_prop_aref_vector_nested() {
                           (aref (aref m 2) 2)
                           (aref (aref m 0) 2)
                           (aref (aref m 2) 0)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (1 5 9 3 7)""#]);
 }
 
 #[test]
@@ -43,7 +43,10 @@ fn oracle_prop_aref_string() {
                     (list (aref s 0) (aref s 1) (aref s 4)
                           (= (aref s 0) ?H)
                           (= (aref s 4) ?o)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (72 101 111 t t)""#],
+    );
 }
 
 #[test]
@@ -56,7 +59,10 @@ fn oracle_prop_aref_string_multibyte() {
                           (aref s 0)
                           (aref s 3)
                           (char-to-string (aref s 3))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (4 99 233 \"é\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +79,10 @@ fn oracle_prop_aset_vector_basic() {
                     (aset v 4 55)
                     (list (aref v 0) (aref v 1) (aref v 2)
                           (aref v 3) (aref v 4)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (99 2 77 4 55)""#],
+    );
 }
 
 #[test]
@@ -89,7 +98,10 @@ fn oracle_prop_aset_vector_mixed_types() {
                     (aset v 4 t)
                     (list (aref v 0) (aref v 1) (aref v 2)
                           (aref v 3) (aref v 4)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 \"hello\" (a b c) 3.14 t)""#]],
+    );
 }
 
 #[test]
@@ -102,7 +114,10 @@ fn oracle_prop_aset_return_value() {
                           (aset v 1 42)
                           (aset v 2 '(x y))
                           v))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (alpha 42 (x y) [alpha 42 (x y)])""#],
+    );
 }
 
 #[test]
@@ -113,7 +128,10 @@ fn oracle_prop_aset_checks_index_before_array_type_like_gnu() {
     // When both ARRAY and IDX are invalid, the observable signal must be the
     // index type error, not the array type error.
     let form = r#"(aset 42 'not-a-fixnum 'value)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""ERR (wrong-type-argument fixnump not-a-fixnum)""#],
+    );
 }
 
 #[test]
@@ -147,7 +165,12 @@ fn oracle_aref_aset_record_and_bool_vector_boundaries() {
    (condition-case err
        (aref bits 4)
      (error (list (car err) (cdr err))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (neovm--test-record a b changed changed #s(neovm--test-record a changed) nil 42 t nil nil t (t t t t) t (nil nil nil nil) (args-out-of-range (#s(neovm--test-record a changed) -1)) (args-out-of-range (#&4\"\\0\" 4)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -178,7 +201,12 @@ fn oracle_aref_aset_byte_code_and_validation_order() {
        (aref bc 99)
      (error (list (car err) (cdr err))))))"#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (byte-code-function 4 257 [42] 1 (wrong-type-argument (fixnump not-a-fixnum)) (wrong-type-argument (arrayp #[257 \"\\300\\207\" [42] 1])) (wrong-type-argument (fixnump not-a-fixnum)) (args-out-of-range (#[257 \"\\300\\207\" [42] 1] 99)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +221,7 @@ fn oracle_prop_aset_string() {
                     (aset s 0 ?H)
                     (aset s 4 ?O)
                     s)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK \"HellO\"""#]]);
 }
 
 #[test]
@@ -207,7 +235,10 @@ fn oracle_prop_aset_string_build_alphabet() {
                         (aset s i (+ ?a i))
                         (setq i (1+ i))))
                     s)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"abcdefghijklmnopqrstuvwxyz\"""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +252,10 @@ fn oracle_prop_fillarray_vector() {
     let form = r#"(let ((v (vector 1 2 3 4 5)))
                     (fillarray v 0)
                     (list v (aref v 0) (aref v 4)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ([0 0 0 0 0] 0 0)""#],
+    );
 }
 
 #[test]
@@ -231,7 +265,7 @@ fn oracle_prop_fillarray_vector_with_symbol() {
     let form = r#"(let ((v (make-vector 4 nil)))
                     (fillarray v 'x)
                     v)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK [x x x x]""#]);
 }
 
 #[test]
@@ -241,7 +275,10 @@ fn oracle_prop_fillarray_string() {
     let form = r#"(let ((s (make-string 10 ?a)))
                     (fillarray s ?z)
                     s)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK \"zzzzzzzzzz\"""#]],
+    );
 }
 
 #[test]
@@ -251,7 +288,7 @@ fn oracle_prop_fillarray_returns_array() {
     // fillarray returns the modified array itself
     let form = r#"(let ((v (vector 1 2 3)))
                     (eq v (fillarray v 0)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK t""#]);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +317,10 @@ fn oracle_prop_aref_aset_matrix_transpose() {
                     (list (aref result 0)
                           (aref result 1)
                           (aref result 2)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ([1 4 7] [2 5 8] [3 6 9])""#],
+    );
 }
 
 #[test]
@@ -307,7 +347,10 @@ fn oracle_prop_aref_aset_matrix_multiply() {
                             (setq j (1+ j))))
                         (setq i (1+ i))))
                     (list (aref result 0) (aref result 1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ([19 22] [43 50])""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -330,7 +373,10 @@ fn oracle_prop_aref_aset_histogram() {
                           (aref freq ?l) (aref freq ?o)
                           (aref freq ?\ ) (aref freq ?w)
                           (aref freq ?r) (aref freq ?d)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (1 1 3 2 1 1 1 1)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -356,7 +402,10 @@ fn oracle_prop_aref_aset_bubble_sort() {
                             (setq i (1+ i))))
                         (setq n (1- n))))
                     v)"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK [1 2 3 4 5 6 7 8 9]""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -403,5 +452,8 @@ fn oracle_prop_aref_aset_ring_buffer() {
                       (setq log (cons (funcall pop) log)) ;; 11
                       (setq log (cons count log)) ;; 0
                       (nreverse log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (4 1 2 3 4 10 11 0)""#],
+    );
 }

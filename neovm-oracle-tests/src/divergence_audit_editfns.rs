@@ -12,66 +12,79 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_ae_format_spec_missing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e (format-spec "%a" '((97 . "x"))) (error (car e)))"##,
+        expect_test::expect![[r#""OK \"x\"""#]],
     );
 }
 
 #[test]
 fn div_ae_filter_buffer_substring_missing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer (insert "hello") (filter-buffer-substring 1 5))
   (error (car e)))
 "##,
+        expect_test::expect![[r#""OK \"hell\"""#]],
     );
 }
 
 #[test]
 fn div_ae_format_precision_width_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(format "%05.2d" 3)"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(format "%05.2d" 3)"##,
+        expect_test::expect![[r#""OK \"   03\"""#]],
+    );
 }
 
 #[test]
 fn div_ae_format_d_on_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // GNU rewrites %d on a float to %f semantics (3.9 -> 3 with width 5).
-    assert_oracle_parity(r##"(list (format "%5d" 3.9) (format "%05d" 3.9))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(list (format "%5d" 3.9) (format "%05d" 3.9))"##,
+        expect_test::expect![[r#""OK (\"    3\" \"00003\")""#]],
+    );
 }
 
 #[test]
 fn div_ae_format_c_multibyte_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // %c of a non-ASCII char + width/zero-flag interaction.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%4c" 40960)
       (format "%c" 40960)
       (multibyte-string-p (format "%c" 40960)))
 "##,
+        expect_test::expect![[r#""OK (\"  ꀀ\" \"ꀀ\" t)""#]],
     );
 }
 
 #[test]
 fn div_ae_format_g_zero_precision() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(list (format "%.0g" 0.0) (format "%#.0g" 1.0))"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(list (format "%.0g" 0.0) (format "%#.0g" 1.0))"##,
+        expect_test::expect![[r#""OK (\"0\" \"1.\")""#]],
+    );
 }
 
 #[test]
 fn div_ae_current_column_ignores_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // GNU current-column honors the `display` text property (glyph width).
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "x")
   (put-text-property 1 2 'display "abc")
   (current-column))
 "##,
+        expect_test::expect![[r#""OK 3""#]],
     );
 }
 
@@ -79,13 +92,14 @@ fn div_ae_current_column_ignores_display() {
 fn div_ae_count_lines_selective_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // selective-display = t: \r[^\n] counts as a line boundary.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((selective-display t))
   (with-temp-buffer
     (insert "ab\rcd\nef")
     (count-lines 1 (point-max))))
 "##,
+        expect_test::expect![[r#""OK 3""#]],
     );
 }
 
@@ -93,13 +107,14 @@ fn div_ae_count_lines_selective_display() {
 fn div_ae_position_bytes_under_narrowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // GNU position-bytes works on full-buffer positions even when narrowed.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abc\ndef")
   (narrow-to-region 1 4)
   (list (position-bytes 6) (condition-case e (position-bytes 5) (error (car e)))))
 "##,
+        expect_test::expect![[r#""OK (6 5)""#]],
     );
 }
 
@@ -107,7 +122,7 @@ fn div_ae_position_bytes_under_narrowing() {
 fn div_ae_field_bounds_rear_nonsticky() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // field scan should honor rear-nonsticky at the field boundary.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "AAAABBBB")
@@ -116,13 +131,14 @@ fn div_ae_field_bounds_rear_nonsticky() {
   (put-text-property 4 5 'rear-nonsticky '(field))
   (list (field-beginning 6 nil) (field-end 4 nil)))
 "##,
+        expect_test::expect![[r#""OK (5 5)""#]],
     );
 }
 
 #[test]
 fn div_ae_save_mark_and_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -132,6 +148,7 @@ fn div_ae_save_mark_and_excursion() {
         (length mark-ring)))
   (error (car e)))
 "##,
+        expect_test::expect![[r#""OK 0""#]],
     );
 }
 
@@ -139,7 +156,7 @@ fn div_ae_save_mark_and_excursion() {
 fn div_ae_mark_marker_relocation_on_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // The mark-marker should relocate on insert like a real marker.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -148,13 +165,14 @@ fn div_ae_mark_marker_relocation_on_insert() {
   (insert "X")
   (marker-position (mark-marker)))
 "##,
+        expect_test::expect![[r#""OK 3""#]],
     );
 }
 
 #[test]
 fn div_ae_move_to_column_with_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -162,5 +180,6 @@ fn div_ae_move_to_column_with_display() {
   (move-to-column 5)
   (current-column))
 "##,
+        expect_test::expect![[r#""OK 5""#]],
     );
 }

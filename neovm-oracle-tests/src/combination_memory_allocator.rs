@@ -129,7 +129,12 @@ fn oracle_prop_memalloc_buddy_allocator() {
     (fmakunbound 'neovm--buddy-alloc)
     (fmakunbound 'neovm--buddy-free)
     (makunbound 'neovm--buddy-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:a-size 32 :b-size 64 :c-size 16 :d-size 1 :alloc-count 5 :after-free-count 2 :final-count 3 :e-present t :b-freed t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +242,12 @@ fn oracle_prop_memalloc_slab_allocator() {
     (fmakunbound 'neovm--slab-free)
     (fmakunbound 'neovm--slab-stats)
     (makunbound 'neovm--slab-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:offsets (0 0 0 0 8) :stats-after-alloc ((:class 8 :free 8 :allocated 2 :total 10 :utilization 20) (:class 16 :free 9 :allocated 1 :total 10 :utilization 10) (:class 32 :free 9 :allocated 1 :total 10 :utilization 10) (:class 64 :free 9 :allocated 1 :total 10 :utilization 10) (:class 128 :free 10 :allocated 0 :total 10 :utilization 0)) :stats-after-free ((:class 8 :free 9 :allocated 1 :total 10 :utilization 10) (:class 16 :free 9 :allocated 1 :total 10 :utilization 10) (:class 32 :free 10 :allocated 0 :total 10 :utilization 0) (:class 64 :free 9 :allocated 1 :total 10 :utilization 10) (:class 128 :free 10 :allocated 0 :total 10 :utilization 0)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +339,12 @@ Returns (offset . new-arena) or (nil . arena) if full."
     (fmakunbound 'neovm--arena-reset)
     (fmakunbound 'neovm--arena-stats)
     (makunbound 'neovm--arena-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:offsets (0 112 312 384 688) :aligned-check (t t t t t) :stats-before (:capacity 1024 :used 838 :free 186 :alloc-count 5 :utilization 81) :overflow-failed t :stats-after-reset (:capacity 1024 :used 0 :free 1024 :alloc-count 0 :utilization 0) :r7-offset 0 :stats-final (:capacity 1024 :used 512 :free 512 :alloc-count 1 :utilization 50))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -424,7 +439,12 @@ fn oracle_prop_memalloc_free_list_strategies() {
     (fmakunbound 'neovm--fl-first-fit)
     (fmakunbound 'neovm--fl-best-fit)
     (makunbound 'neovm--fl-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:ff1-offset 0 :bf1-offset 700 :ff2-offset 400 :bf2-offset nil :ff3-offset 200 :ff-fail nil :bf-fail nil :ff1-remaining (40 50 50 20 100) :bf1-remaining (40 50 50 20 100))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -509,7 +529,12 @@ Returns fragmentation metrics."
          :extreme extreme))
     (fmakunbound 'neovm--frag-analyze)
     (makunbound 'neovm--frag-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:no-frag (:total-size 1000 :total-free 1000 :total-alloc 0 :free-block-count 1 :max-block 1000 :min-block 1000 :avg-block 1000 :external-frag-pct 0 :allocated-gaps 0) :high-frag (:total-size 500 :total-free 100 :total-alloc 400 :free-block-count 10 :max-block 10 :min-block 10 :avg-block 10 :external-frag-pct 90 :allocated-gaps 9) :med-frag (:total-size 1000 :total-free 450 :total-alloc 550 :free-block-count 3 :max-block 200 :min-block 100 :avg-block 150 :external-frag-pct 56 :allocated-gaps 2) :extreme (:total-size 200 :total-free 100 :total-alloc 100 :free-block-count 50 :max-block 2 :min-block 2 :avg-block 2 :external-frag-pct 98 :allocated-gaps 49))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -588,7 +613,12 @@ Returns sorted, merged list."
     (fmakunbound 'neovm--coal-coalesce)
     (fmakunbound 'neovm--coal-free-and-coalesce)
     (makunbound 'neovm--coal-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:already-no-change t :c1 ((0 . 100) (200 . 100) (400 . 100)) :two-merged ((0 . 200)) :three-merged ((0 . 150)) :mixed-merged ((0 . 50) (100 . 100) (300 . 50)) :unsorted-merged ((0 . 300)) :alloc-free-cycle ((100 . 300) (500 . 100)) :single ((42 . 10)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -692,5 +722,10 @@ State: (alloc-count free-count total-alloc-bytes total-free-bytes
     (fmakunbound 'neovm--astats-record-free)
     (fmakunbound 'neovm--astats-summary)
     (makunbound 'neovm--astats-state)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:summary (:alloc-count 8 :free-count 8 :total-alloc-bytes 576 :total-free-bytes 576 :peak-usage 480 :current-usage 0 :leak-bytes 0 :avg-alloc-size 72 :histogram ((\"16\" . 2) (\"32\" . 3) (\"64\" . 1) (\"128\" . 1) (\"256\" . 1))) :balanced t :no-leaks t)""#
+        ]],
+    );
 }

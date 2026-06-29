@@ -12,29 +12,31 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx6_encode_unencodable_various_codings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // € (U+20AC) unencodable in latin-1 but encodable in latin-9.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (append (encode-coding-string "€" 'iso-8859-1) nil)
       (append (encode-coding-string "€" 'iso-8859-15) nil)
       (append (encode-coding-string "€" 'windows-1252) nil))
 "##,
+        expect_test::expect![[r#""OK ((32) (164) (128))""#]],
     );
 }
 
 #[test]
 fn div_cx6_encode_unencodable_multiple_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (append (encode-coding-string "a€b中c" 'iso-8859-1) nil)
 "##,
+        expect_test::expect![[r#""OK (97 32 98 32 99)""#]],
     );
 }
 
 #[test]
 fn div_cx6_set_process_coding_system_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((p (make-process :name "neo-cx6-pc" :command '("echo" "hello")
@@ -43,13 +45,14 @@ fn div_cx6_set_process_coding_system_output() {
     (accept-process-output p 1))
   (buffer-string))
 "##,
+        expect_test::expect![[r#""OK \"hello\n\"""#]],
     );
 }
 
 #[test]
 fn div_cx6_set_buffer_file_coding_system_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx6-bfc-")))
   (with-temp-buffer
@@ -62,25 +65,27 @@ fn div_cx6_set_buffer_file_coding_system_roundtrip() {
            (list (buffer-string) (buffer-file-coding-system)))
     (ignore-errors (delete-file f))))
 "##,
+        expect_test::expect![[r#""ERR (void-function buffer-file-coding-system)""#]],
     );
 }
 
 #[test]
 fn div_cx6_multiple_value_bind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-multiple-value-bind (a b c) (values 1 2 3) (list a b c))
       (cl-multiple-value-list (values :x :y))
       (multiple-value-list (floor 17 5)))
 "##,
+        expect_test::expect![[r#""ERR (void-function values)""#]],
     );
 }
 
 #[test]
 fn div_cx6_register_ops_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (set-register ?a (cons 1 2))
@@ -90,13 +95,14 @@ fn div_cx6_register_ops_types() {
   (list (get-register ?a) (get-register ?b) (get-register ?c) (get-register ?d)
         (get-register ?z)))
 "##,
+        expect_test::expect![[r#""OK ((1 . 2) \"hello\" 42 [:vector :register] nil)""#]],
     );
 }
 
 #[test]
 fn div_cx6_insert_file_contents_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx6-ifr-")))
   (write-region "1234567890" nil f nil 0)
@@ -107,13 +113,14 @@ fn div_cx6_insert_file_contents_replace() {
            (buffer-string))
     (ignore-errors (delete-file f))))
 "##,
+        expect_test::expect![[r#""OK \"1234567890\"""#]],
     );
 }
 
 #[test]
 fn div_cx6_write_region_to_process_stdin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((p (make-process :name "neo-cx6-wp" :command '("cat")
@@ -123,37 +130,40 @@ fn div_cx6_write_region_to_process_stdin() {
     (accept-process-output p 1))
   (buffer-string))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument stringp #<process neo-cx6-wp>)""#]],
     );
 }
 
 #[test]
 fn div_cx6_print_escape_newline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((print-escape-newlines t))
   (list (prin1-to-string "line1\nline2\ttab")
         (prin1-to-string "no-newline")))
 "##,
+        expect_test::expect![[r#""OK (\"\\\"line1\\\\nline2\ttab\\\"\" \"\\\"no-newline\\\"\")""#]],
     );
 }
 
 #[test]
 fn div_cx6_char_fold_plus_case_fold_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-fold-search t))
   (list (string-match (char-fold-to-regexp ?e) "CAFÉ")
         (string-match (char-fold-to-regexp ?E) "café")))
 "##,
+        expect_test::expect![[r#""ERR (wrong-type-argument sequencep 101)""#]],
     );
 }
 
 #[test]
 fn div_cx6_default_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -161,13 +171,14 @@ fn div_cx6_default_text_properties() {
     (put-text-property 2 4 'mouse-face 'highlight))
   (list (text-properties-at 0) (text-properties-at 1) (text-properties-at 2)))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 0 0)""#]],
     );
 }
 
 #[test]
 fn div_cx6_text_property_any_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -176,13 +187,14 @@ fn div_cx6_text_property_any_narrow() {
   (list (text-property-any (point-min) (point-max) 'face 'bold)
         (text-property-not-all (point-min) (point-max) 'face nil)))
 "##,
+        expect_test::expect![[r#""OK (3 3)""#]],
     );
 }
 
 #[test]
 fn div_cx6_narrow_excursion_stack() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789ABCDE")
@@ -194,13 +206,14 @@ fn div_cx6_narrow_excursion_stack() {
       (goto-char 7)))
   (list (point) (point-min) (point-max)))
 "##,
+        expect_test::expect![[r#""OK (10 1 10)""#]],
     );
 }
 
 #[test]
 fn div_cx6_cl_letf_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defvar neo-cx6-letf 5)
@@ -208,13 +221,14 @@ fn div_cx6_cl_letf_buffer_local() {
           (default-value 'neo-cx6-letf))
         (default-value 'neo-cx6-letf)))
 "##,
+        expect_test::expect![[r#""OK (99 5)""#]],
     );
 }
 
 #[test]
 fn div_cx6_set_marker_insertion_type_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -228,25 +242,27 @@ fn div_cx6_set_marker_insertion_type_undo() {
       (undo)
       (list p1 p2 (marker-position m1) (marker-position m2)))))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     );
 }
 
 #[test]
 fn div_cx6_compare_strings_case_fold_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (compare-strings "CAFÉ" nil nil "café" nil nil t)
       (compare-strings "CAFÉ" nil nil "café" nil nil nil)
       (compare-strings "世界" nil nil "世界" nil nil nil))
 "##,
+        expect_test::expect![[r#""OK (t -1 t)""#]],
     );
 }
 
 #[test]
 fn div_cx6_buffer_local_hook_run_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (fired)
   (with-temp-buffer
@@ -256,25 +272,27 @@ fn div_cx6_buffer_local_hook_run_remove() {
     (run-hooks 'neo-cx6-hook))
   fired)
 "##,
+        expect_test::expect![[r#""OK (:local)""#]],
     );
 }
 
 #[test]
 fn div_cx6_format_message_quotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format-message "a `%s'" 'sym)
       (format-message "don't")
       (format-message "`nested' `deeper'"))
 "##,
+        expect_test::expect![[r#""OK (\"a ‘sym’\" \"don’t\" \"‘nested’ ‘deeper’\")""#]],
     );
 }
 
 #[test]
 fn div_cx6_with_slots_oref_oset_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defclass neo-cx6-obj () ((a :initarg :a) (b :initarg :b)))
@@ -283,13 +301,14 @@ fn div_cx6_with_slots_oref_oset_chain() {
       (oset o b (+ a b)))
     (list (oref o a) (oref o b))))
 "##,
+        expect_test::expect![[r#""OK (1 3)""#]],
     );
 }
 
 #[test]
 fn div_cx6_process_connection_type_pipe_vs_pty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p1 (make-process :name "neo-cx6-pty" :command '("echo" "pty")
                          :connection-type t))
@@ -299,5 +318,8 @@ fn div_cx6_process_connection_type_pipe_vs_pty() {
   (accept-process-output p2 1)
   (list (processp p1) (processp p2) (eq (process-status p1) 'exit)))
 "##,
+        expect_test::expect![[
+            r#""ERR (file-error \"Unknown connection type\" \"Not a directory\" t)""#
+        ]],
     );
 }

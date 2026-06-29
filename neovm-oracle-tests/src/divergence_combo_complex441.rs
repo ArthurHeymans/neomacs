@@ -12,10 +12,11 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx441_load_history() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (listp load-history)
       (> (length load-history) 0)
       (consp (car load-history)))"##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -23,9 +24,10 @@ fn div_cx441_load_history() {
 #[test]
 fn div_cx441_read_circle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((read-circle t))
   (car (read-from-string "#1=(1 2 . #1#)")))"##,
+        expect_test::expect![[r#""OK (1 2 1 2 . #2)""#]],
     );
 }
 
@@ -33,12 +35,13 @@ fn div_cx441_read_circle() {
 #[test]
 fn div_cx441_pcase_app_guard() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((v 5))
   (pcase '(3 4 5)
     (`(,a ,b ,c) (pcase c
                    ((and (pred numberp) (guard (> c 3))) :high)
                    (_ :low)))))"##,
+        expect_test::expect![[r#""OK :high""#]],
     );
 }
 
@@ -46,12 +49,15 @@ fn div_cx441_pcase_app_guard() {
 #[test]
 fn div_cx441_cl_loop_multi_collection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((ht (make-hash-table :test 'equal)))
   (puthash "a" 1 ht) (puthash "b" 2 ht)
   (cl-loop for k being the hash-keys of ht
            for v being the hash-values of ht
            collect (cons k v)))"##,
+        expect_test::expect![[
+            r#""ERR (error \"Iteration on hash-tables does not support this combination\")""#
+        ]],
     );
 }
 
@@ -59,12 +65,13 @@ fn div_cx441_cl_loop_multi_collection() {
 #[test]
 fn div_cx441_sort_circular() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (let ((l (list 3 1 2)))
       (setcdr (cddr l) l)
       (sort l #'<))
   (error (car e)))"##,
+        expect_test::expect![[r#""OK circular-list""#]],
     );
 }
 
@@ -72,13 +79,14 @@ fn div_cx441_sort_circular() {
 #[test]
 fn div_cx441_nconc_circular() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (let ((l1 (list 1 2))
           (l2 (list 3 4)))
       (setcdr l2 l2)
       (nconc l1 l2))
   (error (car e)))"##,
+        expect_test::expect![[r#""OK (1 2 3 . #2)""#]],
     );
 }
 
@@ -86,9 +94,10 @@ fn div_cx441_nconc_circular() {
 #[test]
 fn div_cx441_plist_malformed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (condition-case e (plist-get '(:a 1 :b) :b) (error (car e)))
       (condition-case e (plist-member '(1 2 3) :a) (error (car e))))"##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
@@ -96,10 +105,11 @@ fn div_cx441_plist_malformed() {
 #[test]
 fn div_cx441_setcar_setcdr_selfref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((x (list 1 2 3)))
   (setcar x x)
   (list (car x) (cadr x) (caddr x)))"##,
+        expect_test::expect![[r#""OK ((#1 2 3) 2 3)""#]],
     );
 }
 
@@ -107,11 +117,12 @@ fn div_cx441_setcar_setcdr_selfref() {
 #[test]
 fn div_cx441_add_variable_watcher() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((watched nil))
   (add-variable-watcher 'neo-cx441-w (lambda (&rest _) (setq watched t)))
   (setq neo-cx441-w 42)
   watched)"##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -119,16 +130,20 @@ fn div_cx441_add_variable_watcher() {
 #[test]
 fn div_cx441_track_mouse_batch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(track-mouse nil)"##);
+    crate::common::assert_oracle_parity_expect(
+        r##"(track-mouse nil)"##,
+        expect_test::expect![[r#""OK nil""#]],
+    );
 }
 
 /// condition-case with :success (Emacs 28+).
 #[test]
 fn div_cx441_condition_case_success() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (condition-case :success val (/ 6 2) (:success val))
       (condition-case :success val (error "fail") (:success val)))"##,
+        expect_test::expect![[r#""ERR (void-variable val)""#]],
     );
 }
 
@@ -136,10 +151,11 @@ fn div_cx441_condition_case_success() {
 #[test]
 fn div_cx441_key_parse_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(list (key-parse "C-x C-f")
       (key-parse "M-C-<return>")
       (condition-case e (key-parse "") (error (car e))))"##,
+        expect_test::expect![[r#""OK ([24 6] [M-C-return] [])""#]],
     );
 }
 
@@ -147,13 +163,14 @@ fn div_cx441_key_parse_edge() {
 #[test]
 fn div_cx441_buffer_local_state_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (setq-local neo-cx441-s1 'a neo-cx441-s2 'b)
   (let ((state (buffer-local-set-state 'neo-cx441-s1 'x 'neo-cx441-s2 'y)))
     (list neo-cx441-s1 neo-cx441-s2
           (progn (buffer-local-restore-state state)
                  neo-cx441-s1 neo-cx441-s2))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument symbolp 'neo-cx441-s1)""#]],
     );
 }
 
@@ -161,11 +178,14 @@ fn div_cx441_buffer_local_state_deep() {
 #[test]
 fn div_cx441_event_start_end_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((ev ?a))
   (list (eventp ev)
         (event-start ev)
         (event-end ev)))"##,
+        expect_test::expect![[
+            r#""OK (t (#<window 1 on *scratch*> 1 (0 . 0) 0) (#<window 1 on *scratch*> 1 (0 . 0) 0))""#
+        ]],
     );
 }
 
@@ -173,9 +193,10 @@ fn div_cx441_event_start_end_char() {
 #[test]
 fn div_cx441_format_S_hash_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((ht (make-hash-table :test 'equal)))
   (puthash "a" 1 ht)
   (format "%S" ht))"##,
+        expect_test::expect![[r##""OK \"#s(hash-table test equal data (\\\"a\\\" 1))\"""##]],
     );
 }

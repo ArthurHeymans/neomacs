@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_compare_bufsubst_basic_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass diff-state ()
     ((label :initarg :label :accessor ds-label :initform "")
@@ -76,6 +76,7 @@ fn combo_eieio_compare_bufsubst_basic_with_objects() {
       (list results
             (ds-mm ds) (ds-td ds) (ds-log ds)
             (marker-position m-a) (marker-position m-b)))))))"#,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 66 60)""#]],
     );
 }
 
@@ -83,7 +84,7 @@ fn combo_eieio_compare_bufsubst_basic_with_objects() {
 fn combo_eieio_compare_bufsubst_narrow_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cmp-ctx ()
     ((buf-a :initarg :ba :accessor cc-ba :initform nil)
@@ -146,6 +147,7 @@ fn combo_eieio_compare_bufsubst_narrow_overlay() {
       (list results
             (cc-dr ctx) (cc-log ctx)
             (marker-position m-a) (marker-position m-b)))))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -153,7 +155,7 @@ fn combo_eieio_compare_bufsubst_narrow_overlay() {
 fn combo_eieio_compare_bufsubst_multi_region_diff() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass region-diff ()
     ((region-id :initarg :id :accessor rd-id :initform 0)
@@ -225,6 +227,9 @@ fn combo_eieio_compare_bufsubst_multi_region_diff() {
           (list results my-rd-log
                 total-diffs
                 (mapcar (lambda (rd) (rd-result rd)) regions)))))))"#,
+        expect_test::expect![[
+            r#""OK (((\"initial-scan\" 5 ((1 5 0) (6 10 -2) (11 15 -2) (16 20 -2) (21 25 0) (26 30 -2) (31 35 -2))) (\"after-edit\" 6 (0 -2 -1 -1 -1 -1 -1) 18 6 28) (\"narrow-cmp\" -2 5 30)) (\"ins@8\") 5 (0 -2 -1 -1 -1 -1 -1))""#
+        ]],
     );
 }
 
@@ -232,7 +237,7 @@ fn combo_eieio_compare_bufsubst_multi_region_diff() {
 fn combo_eieio_compare_bufsubst_undo_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-diff-tracker ()
     ((label :initarg :label :accessor udt-label :initform "")
@@ -295,6 +300,7 @@ fn combo_eieio_compare_bufsubst_undo_restore() {
               (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf-a)
     (kill-buffer buf-b)))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }
 
@@ -302,7 +308,7 @@ fn combo_eieio_compare_bufsubst_undo_restore() {
 fn combo_eieio_compare_bufsubst_class_hierarchy_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass text-source ()
     ((name :initarg :name :accessor ts-name :initform "")
@@ -372,5 +378,6 @@ fn combo_eieio_compare_bufsubst_class_hierarchy_dispatch() {
             (cl-typep src-pri 'pristine-source)
             (cl-typep src-mod 'text-source)
             (cl-typep src-pri 'text-source)))))"#,
+        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
     );
 }

@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_sequence_map_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (mapcar '1+ '(1 2 3 4 5))
         (equal (mapcar '1+ '(1 2 3 4 5)) '(2 3 4 5 6))
@@ -22,6 +22,9 @@ fn divergence_sequence_map_functions() {
         (equal (seq-map #'1+ [10 20 30]) [11 21 31])
         (seq-map #'symbol-name '(a b c))
         (equal (seq-map #'symbol-name '(a b c)) '("a" "b" "c")))) "#,
+        expect_test::expect![[
+            r#""OK ((2 3 4 5 6) t (1 4 9 16) t (a b c) \"hello world\" t \"1-2-3\" t (11 21 31) nil (\"a\" \"b\" \"c\") t)""#
+        ]],
     );
 }
 
@@ -29,7 +32,7 @@ fn divergence_sequence_map_functions() {
 fn divergence_sequence_filter_reduce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (seq-filter #'cl-evenp '(1 2 3 4 5 6))
         (equal (seq-filter #'cl-evenp '(1 2 3 4 5 6)) '(2 4 6))
@@ -44,6 +47,9 @@ fn divergence_sequence_filter_reduce() {
         (seq-group-by #'cl-evenp '(1 2 3 4 5))
         (equal (seq-group-by #'cl-evenp '(1 2 3 4 5))
                '((nil 1 3 5) (t 2 4))))) "#,
+        expect_test::expect![[
+            r#""OK ((2 4 6) t (a b c) t (1 3 5) t 15 t 120 t ((t 2 4) (nil 1 3 5)) nil)""#
+        ]],
     );
 }
 
@@ -51,7 +57,7 @@ fn divergence_sequence_filter_reduce() {
 fn divergence_sequence_sort_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (seq-sort #'< '(3 1 4 1 5 9 2 6))
         (equal (seq-sort #'< '(3 1 4 1 5 9 2 6)) '(1 1 2 3 4 5 6 9))
@@ -66,6 +72,9 @@ fn divergence_sequence_sort_merge() {
         (equal (seq-intersection '(1 2 3 4) '(3 4 5 6)) '(3 4))
         (seq-difference '(1 2 3 4) '(3 4 5 6))
         (equal (seq-difference '(1 2 3 4) '(3 4 5 6)) '(1 2)))) "#,
+        expect_test::expect![[
+            r#""OK ((1 1 2 3 4 5 6 9) t (\"apple\" \"banana\" \"cherry\") t (1 2 3) t (1 2 3 4 5) t (3 4) t (1 2) t)""#
+        ]],
     );
 }
 
@@ -73,7 +82,7 @@ fn divergence_sequence_sort_merge() {
 fn divergence_record_type_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-rto-xxx (:type list) :named)
     x y z)
@@ -89,6 +98,7 @@ fn divergence_record_type_operations() {
           (setf (test-rto-xxx-x r) 99)
           (= (test-rto-xxx-x r) 99)
           (= (test-rto-xxx-y r) 20)))) "#,
+        expect_test::expect![[r#""ERR (void-function test-rto-xxx)""#]],
     );
 }
 
@@ -96,7 +106,7 @@ fn divergence_record_type_operations() {
 fn divergence_subr_string_manipulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (string= "hello" "hello")
         (not (string= "hello" "Hello"))
@@ -122,6 +132,9 @@ fn divergence_subr_string_manipulation() {
         (string= (string-chop-newline "hello\n") "hello")
         (string-replace "world" "emacs" "hello world")
         (string= (string-replace "world" "emacs" "hello world") "hello emacs"))) "#,
+        expect_test::expect![[
+            r#""OK (t t t t t t t nil t t t t \"hello\" t \"hello\" t \"hello\" t \"hi   \" t \"hello\" t \"hello emacs\" t)""#
+        ]],
     );
 }
 
@@ -129,7 +142,7 @@ fn divergence_subr_string_manipulation() {
 fn divergence_sequence_search_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (seq-contains '(1 2 3 4 5) 3)
         (= (seq-contains '(1 2 3 4 5) 3) 3)
@@ -156,6 +169,9 @@ fn divergence_sequence_search_access() {
         (= (seq-length [1 2 3 4]) 4)
         (seq-copy '(1 2 3))
         (equal (seq-copy '(1 2 3)) '(1 2 3)))) "#,
+        expect_test::expect![[
+            r#""OK (3 t t 2 t nil t 1 t (2 3 4 5) t (2 3) t (3 4 5) t c t 20 t 3 t 4 t (1 2 3) t)""#
+        ]],
     );
 }
 
@@ -163,7 +179,7 @@ fn divergence_sequence_search_access() {
 fn divergence_subr_list_operations_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((lst '(1 2 3 4 5)))
     (list (car lst) (= (car lst) 1)
@@ -180,6 +196,9 @@ fn divergence_subr_list_operations_deep() {
           (reverse lst) (equal (reverse lst) '(5 4 3 2 1))
           (length lst) (= (length lst) 5)
           (safe-length lst) (= (safe-length lst) 5)))) "#,
+        expect_test::expect![[
+            r#""OK (1 t (2 3 4 5) t 1 t (2 3 4 5) t 1 t 3 t 5 t (3 4 5) t (5) t (1 2 3) t (1 2 3) t (5 4 3 2 1) t 5 t 5 t)""#
+        ]],
     );
 }
 
@@ -187,7 +206,7 @@ fn divergence_subr_list_operations_deep() {
 fn divergence_subr_alist_plist_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((al '((a . 1) (b . 2) (c . 3))))
     (list (assoc 'a al)
@@ -204,6 +223,7 @@ fn divergence_subr_alist_plist_ops() {
           (copy-alist al)
           (equal (copy-alist al) al)
           (not (eq (copy-alist al) al))))) "#,
+        expect_test::expect![[r#""ERR (void-function acons)""#]],
     );
 }
 
@@ -211,7 +231,7 @@ fn divergence_subr_alist_plist_ops() {
 fn divergence_sequence_do_each() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((result nil))
     (seq-do (lambda (x) (push x result)) '(1 2 3 4 5))
@@ -229,6 +249,7 @@ fn divergence_sequence_do_each() {
           (= (seq-count #'cl-oddp '(1 2 3 4 5)) 3)
           (seq-count #'symbolp '(a 1 b 2 c 3))
           (= (seq-count #'symbolp '(a 1 b 2 c 3)) 3)))) "#,
+        expect_test::expect![[r#""OK ((1 2 3 4 5) nil 60 t [1 2 3] 3 t 3 t)""#]],
     );
 }
 
@@ -236,7 +257,7 @@ fn divergence_sequence_do_each() {
 fn divergence_subr_number_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (max 1 5 3 2 4) (= (max 1 5 3 2 4) 5)
         (min 1 5 3 2 4) (= (min 1 5 3 2 4) 1)
@@ -257,5 +278,8 @@ fn divergence_subr_number_operations() {
         (integerp (random))
         (>= (random 10) 0)
         (< (random 10) 10))) "#,
+        expect_test::expect![[
+            r#""OK (5 t 1 t 42 t 42 t 1024 t 4.0 t 15 t 7 t 6 t 256 t -1 t 2 t 3 t 4 t 4 t 3 t t t t)""#
+        ]],
     );
 }

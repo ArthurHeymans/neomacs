@@ -22,7 +22,12 @@ fn oracle_prop_parse_time_tokenize_and_rfc_dates() {
    (parse-time-string "21 Nov 97 09:55 EST")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"ed\" 15 \"an\" 2020 \"16:12:21\" \"-0800\") (21 12 16 15 1 2020 3 -1 -28800) (0 0 0 1 1 1970 4 nil 0) (6 55 9 21 11 1997 5 -1 nil) (0 55 9 21 11 1997 nil nil -18000))""#
+        ]],
+    );
 }
 
 #[test]
@@ -42,7 +47,12 @@ fn oracle_prop_parse_time_iso8601_variants_and_encoding() {
                        (parse-iso8601-time-string "2020-01-15T16:12:21-08:00") t)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((21 12 16 15 1 2020 nil -1 -28800) (21 12 16 15 1 2020 nil nil 0) (21 12 16 15 1 2020 nil nil 0) \"2020-01-15 16:12:21 +0000\" \"2020-01-16 00:12:21 +0000\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -63,7 +73,12 @@ fn oracle_prop_parse_time_two_digit_years_times_and_zones() {
    (parse-time-string "Jan 2 2020 01:02:03 -0330")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 2 1 2 1 2049 nil -1 nil) (0 2 1 2 1 1950 nil -1 nil) (3 2 1 2 1 1999 nil -1 nil) (3 2 1 2 1 2000 nil -1 nil) (0 2 1 2 1 2020 nil -1 nil) (3 2 1 2 1 2020 nil t -25200) (3 2 1 2 1 2020 nil -1 19800) (3 2 1 2 1 2020 nil -1 -12600))""#
+        ]],
+    );
 }
 
 #[test]
@@ -87,5 +102,10 @@ fn oracle_prop_parse_time_malformed_and_partial_inputs() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((nil nil nil nil nil nil nil -1 nil) (nil nil nil nil nil nil nil -1 nil) (0 99 25 nil nil nil nil -1 nil) (nil nil nil nil 3 2020 nil -1 nil) (nil nil nil 99 13 2020 nil -1 nil) (wrong-type-argument sequencep) (wrong-type-argument sequencep))""#
+        ]],
+    );
 }

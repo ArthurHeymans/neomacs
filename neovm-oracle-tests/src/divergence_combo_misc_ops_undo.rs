@@ -7,13 +7,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_replace_regexp_in_string_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let* ((input \"Hello [world] and [universe] plus [galaxy]\")\n\
          (result (replace-regexp-in-string \"\\\\[\\\\([^]]*\\\\)\\\\]\" \"<\\\\1>\" input)))\n\
          (list result\n\
          (string= result \"Hello <world> and <universe> plus <galaxy>\")\n\
          (length result))))",
+        expect_test::expect![[r#""OK (\"Hello <world> and <universe> plus <galaxy>\" t 42)""#]],
     );
 }
 
@@ -21,7 +22,7 @@ fn deficiency_replace_regexp_in_string_with_props() {
 fn deficiency_mapcan_over_intervals_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"miu\")))\n\
          (with-current-buffer buf\n\
@@ -47,6 +48,7 @@ fn deficiency_mapcan_over_intervals_undo() {
          (get-text-property 1 'group)\n\
          (get-text-property 5 'group))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -54,7 +56,7 @@ fn deficiency_mapcan_over_intervals_undo() {
 fn deficiency_apply_partial_with_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"apb\")))\n\
          (with-current-buffer buf\n\
@@ -75,6 +77,7 @@ fn deficiency_apply_partial_with_buffer_ops() {
          (get-text-property 1 'state)\n\
          (get-text-property 7 'state))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -82,7 +85,7 @@ fn deficiency_apply_partial_with_buffer_ops() {
 fn deficiency_compose_region_undo_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cru\")))\n\
          (with-current-buffer buf\n\
@@ -103,6 +106,7 @@ fn deficiency_compose_region_undo_with_props() {
          (get-text-property 3 'half)\n\
          (get-text-property 7 'half)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -110,7 +114,7 @@ fn deficiency_compose_region_undo_with_props() {
 fn deficiency_decompose_region_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"dru\")))\n\
          (with-current-buffer buf\n\
@@ -127,6 +131,7 @@ fn deficiency_decompose_region_undo() {
          (get-text-property 1 'composition)\n\
          (get-text-property 1 'comp)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -134,7 +139,7 @@ fn deficiency_decompose_region_undo() {
 fn deficiency_cl_coerce_with_buffer_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((vec [1 2 3 4 5]))\n\
          (let ((lst (cl-coerce vec 'list))\n\
@@ -144,6 +149,7 @@ fn deficiency_cl_coerce_with_buffer_types() {
          (= (length lst) 5)\n\
          (equal back vec)\n\
          (equal vec back)))))",
+        expect_test::expect![[r#""ERR (void-variable lst)""#]],
     );
 }
 
@@ -151,7 +157,7 @@ fn deficiency_cl_coerce_with_buffer_types() {
 fn deficiency_nested_set_buffer_undo_chains() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf1 (generate-new-buffer \"ns1\"))\n\
          (buf2 (generate-new-buffer \"ns2\"))\n\
@@ -183,6 +189,7 @@ fn deficiency_nested_set_buffer_undo_chains() {
          (kill-buffer buf1)\n\
          (kill-buffer buf2)\n\
          (kill-buffer buf3)))",
+        expect_test::expect![[r#""ERR (void-variable buf1)""#]],
     );
 }
 
@@ -190,7 +197,7 @@ fn deficiency_nested_set_buffer_undo_chains() {
 fn deficiency_string_props_buffer_insert_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"spb\")))\n\
          (with-current-buffer buf\n\
@@ -214,6 +221,7 @@ fn deficiency_string_props_buffer_insert_undo() {
          (get-text-property 1 'priority)\n\
          (get-text-property 6 'priority))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -221,7 +229,7 @@ fn deficiency_string_props_buffer_insert_undo() {
 fn deficiency_format_buffer_substring_multiline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"fbm\")))\n\
          (with-current-buffer buf\n\
@@ -243,6 +251,7 @@ fn deficiency_format_buffer_substring_multiline() {
          (get-text-property 6 'field)\n\
          (get-text-property 19 'field))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -250,7 +259,7 @@ fn deficiency_format_buffer_substring_multiline() {
 fn deficiency_vconcat_mapcar_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"vmo\")))\n\
          (with-current-buffer buf\n\
@@ -265,5 +274,6 @@ fn deficiency_vconcat_mapcar_with_objects() {
          (= (aref vec 0) 3)\n\
          (= (aref vec 1) 5)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }

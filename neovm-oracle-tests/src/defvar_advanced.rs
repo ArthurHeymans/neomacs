@@ -34,7 +34,10 @@ fn oracle_prop_defvar_adv_initial_value_vs_void() {
         (boundp 'neovm--test-dv-void1)
         neovm--test-dv-void1)
     (makunbound 'neovm--test-dv-void1)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil got-void-error nil t 42)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -59,7 +62,10 @@ fn oracle_prop_defvar_adv_redefinition_preserves() {
             (let ((v4 neovm--test-dv-redef))
               (list v1 v2 v3 v4))))))
   (makunbound 'neovm--test-dv-redef))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (first first mutated mutated)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +94,10 @@ fn oracle_prop_defvar_adv_boundp_makunbound_cycle() {
       (setq results (cons neovm--test-dv-cycle results))
       (nreverse results))
   (makunbound 'neovm--test-dv-cycle))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil t 100 nil t 200)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +134,12 @@ fn oracle_prop_defvar_adv_complex_initial_values() {
   (makunbound 'neovm--test-dv-computed)
   (makunbound 'neovm--test-dv-alist)
   (makunbound 'neovm--test-dv-nested))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a b (c d) ((e))) (1 2 3 4 5) (11 21 31) val2 (10 20 30))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +183,10 @@ fn oracle_prop_defvar_adv_dynamic_scoping_across_calls() {
     (fmakunbound 'neovm--test-dv-reader)
     (fmakunbound 'neovm--test-dv-caller)
     (makunbound 'neovm--test-dv-dynscope)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (global local-a global (outer inner outer) global)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +227,10 @@ fn oracle_prop_defvar_adv_let_binding_unwind_on_error() {
         ;; Final value
         neovm--test-dv-unwind)
     (makunbound 'neovm--test-dv-unwind)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((original original) original level1 original)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +265,10 @@ fn oracle_prop_defvar_adv_docstring_and_symbol_props() {
             (setq plist (cddr plist)))
           (list has-custom has-another))))
   (makunbound 'neovm--test-dv-doc))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 hello (1 2 3) t (t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -311,5 +334,10 @@ fn oracle_prop_defvar_adv_config_system_with_defaults() {
     (makunbound 'neovm--test-cfg-height)
     (makunbound 'neovm--test-cfg-color)
     (makunbound 'neovm--test-cfg-verbose)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((width . 80) (height . 24) (color . white) (verbose)) ((width . 120) (height . 24) (color . blue) (verbose)) ((width . 80) (height . 24) (color . white) (verbose)) (((width . 100) (height . 24) (color . white) (verbose)) ((width . 100) (height . 50) (color . white) (verbose . t))) 80)""#
+        ]],
+    );
 }

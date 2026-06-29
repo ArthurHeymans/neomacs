@@ -12,7 +12,12 @@ fn oracle_kbd_repeats_and_historical_macro_delimiters() {
  (key-description (kbd "2*C-x"))
  (kbd "C-x ( C-d C-x )")
  (key-description (kbd "C-x ( C-d C-x )")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"aaa\" \"a a a\" \"\u{18}\u{18}\" \"C-x C-x\" \"\u{4}\" \"C-d\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -27,7 +32,10 @@ b"))
 b")
  (key-description (kbd "a REM ignored to end of line
 b")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"ab\" \"a b\" \"ab\" \"a b\")""#]],
+    );
 }
 
 #[test]
@@ -39,7 +47,10 @@ fn oracle_key_parse_octal_events() {
  (kbd "\\377")
  (key-description (kbd "\\377"))
  (listify-key-sequence (kbd "\\377")))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"A\" \"A\" [255] \"ÿ\" (255))""#]],
+    );
 }
 
 #[test]
@@ -50,7 +61,10 @@ fn oracle_key_parse_angle_tokens_with_embedded_spaces() {
  (key-parse "<mouse-1> a")
  (condition-case err (key-parse "<mouse 1>") (error (car err)))
  (condition-case err (kbd "<mouse 1>") (error (car err))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ([mouse-1] [mouse-1 97] [mouse\\ 1] [mouse\\ 1])""#]],
+    );
 }
 
 #[test]
@@ -78,5 +92,10 @@ fn oracle_key_valid_p_strict_textual_syntax_contract() {
  (condition-case e
      (key-parse "M-C-a")
    (error (list (car e) (cadr e)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t t nil t nil nil nil nil nil (error \"C-M- must prefix a single character, not foo\") [134217729])""#
+        ]],
+    );
 }

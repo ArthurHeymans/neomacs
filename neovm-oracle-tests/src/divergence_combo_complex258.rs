@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx258_so_long_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -19,13 +19,14 @@ fn div_cx258_so_long_mode_availability() {
             (boundp 'so-long-variable-values)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     )
 }
 
 #[test]
 fn div_cx258_zone_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -35,13 +36,14 @@ fn div_cx258_zone_mode_availability() {
             (boundp 'zone-programs)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx258_display_time_battery_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -52,13 +54,14 @@ fn div_cx258_display_time_battery_availability() {
             (boundp 'display-time-interval)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     )
 }
 
 #[test]
 fn div_cx258_which_key_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'which-key)
@@ -67,13 +70,14 @@ fn div_cx258_which_key_mode_availability() {
           (boundp 'which-key-max-description-length))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil t nil nil)""#]],
     )
 }
 
 #[test]
 fn div_cx258_emoji_insert_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'emoji)
@@ -83,13 +87,14 @@ fn div_cx258_emoji_insert_availability() {
           (boundp 'emoji--font-set))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil t t t nil)""#]],
     )
 }
 
 #[test]
 fn div_cx258_animate_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -98,13 +103,14 @@ fn div_cx258_animate_availability() {
             (fboundp 'animate)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     )
 }
 
 #[test]
 fn div_cx258_life_gomoku_games_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (featurep 'life)
@@ -113,13 +119,14 @@ fn div_cx258_life_gomoku_games_availability() {
           (fboundp 'gomoku))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil t nil t)""#]],
     )
 }
 
 #[test]
 fn div_cx258_doctor_yow_spook_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'doctor)
@@ -128,26 +135,28 @@ fn div_cx258_doctor_yow_spook_availability() {
           (fboundp 'cookie))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil t t)""#]],
     )
 }
 
 #[test]
 fn div_cx258_dunnet_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'dunnet)
           (boundp 'dunnet-mode))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     )
 }
 
 #[test]
 fn div_cx258_toy_games_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((avail (list (fboundp 'doctor)
                    (fboundp 'yow)
@@ -174,5 +183,6 @@ fn div_cx258_toy_games_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

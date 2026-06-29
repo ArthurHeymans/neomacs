@@ -97,7 +97,12 @@ fn oracle_prop_combination_ray_tracer_vec3_ops() {
     (fmakunbound 'neovm--rt-vcross)
     (fmakunbound 'neovm--rt-vlength)
     (fmakunbound 'neovm--rt-vnormalize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5.0 1.0 5.0) (-3.0 3.0 1.0) (2.5 5.0 7.5) 8.0 (7.0 10.0 -9.0) (-7.0 -10.0 9.0) 3.7416573867739413 ((0.2672612419124244 0.5345224838248488 0.8017837257372732) t) (0.0 0.0 0.0) 0.0)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +169,10 @@ fn oracle_prop_combination_ray_tracer_sphere_intersection() {
     (fmakunbound 'neovm--rt2-vscale)
     (fmakunbound 'neovm--rt2-vdot)
     (fmakunbound 'neovm--rt2-intersect-sphere)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t t) nil t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -229,7 +237,10 @@ fn oracle_prop_combination_ray_tracer_plane_intersection() {
     (fmakunbound 'neovm--rt3-vadd)
     (fmakunbound 'neovm--rt3-intersect-plane)
     (fmakunbound 'neovm--rt3-ray-at)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((2.0 (0.0 0.0 0.0)) nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +302,10 @@ fn oracle_prop_combination_ray_tracer_lambertian_shading() {
     (fmakunbound 'neovm--rt4-vnormalize)
     (fmakunbound 'neovm--rt4-lambertian)
     (fmakunbound 'neovm--rt4-color-scale)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1.0 t 0.0 (0.4 0.1 0.25) (1.0 1.0 1.0) (0.0 0.0 0.0))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -361,7 +375,10 @@ fn oracle_prop_combination_ray_tracer_shadow_rays() {
     (fmakunbound 'neovm--rt5-vnormalize)
     (fmakunbound 'neovm--rt5-intersect-sphere)
     (fmakunbound 'neovm--rt5-in-shadow)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -435,7 +452,10 @@ fn oracle_prop_combination_ray_tracer_scene_nearest_hit() {
     (fmakunbound 'neovm--rt6-vadd)
     (fmakunbound 'neovm--rt6-intersect-sphere)
     (fmakunbound 'neovm--rt6-trace-scene)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (red green blue gray nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -516,5 +536,10 @@ fn oracle_prop_combination_ray_tracer_color_mixing() {
     (fmakunbound 'neovm--rt7-color-clamp)
     (fmakunbound 'neovm--rt7-color-lerp)
     (fmakunbound 'neovm--rt7-color-to-int)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1.0 1.0 0.0) (0.0 0.0 0.0) (0.0 0.0 0.5) (1.0 0.0 0.8) (1.0 0.0 0.0) (0.5 0.0 0.5) (0.0 0.0 1.0) (0.9599999999999999 0.5399999999999999 0.5399999999999999) (128 191 255) (255 0 85))""#
+        ]],
+    );
 }

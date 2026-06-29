@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_next_single_property_change_across_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"nsp\")))\n\
          (with-current-buffer buf\n\
@@ -23,6 +23,7 @@ fn deficiency_next_single_property_change_across_boundaries() {
          (next-single-property-change 13 'zone)\n\
          (next-single-property-change 14 'zone)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -30,7 +31,7 @@ fn deficiency_next_single_property_change_across_boundaries() {
 fn deficiency_previous_single_property_change_backwards() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"psp\")))\n\
          (with-current-buffer buf\n\
@@ -45,6 +46,7 @@ fn deficiency_previous_single_property_change_backwards() {
          (previous-single-property-change 4 'zone)\n\
          (previous-single-property-change 1 'zone)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -52,7 +54,7 @@ fn deficiency_previous_single_property_change_backwards() {
 fn deficiency_text_property_stickiness_front_rear() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"stk\")))\n\
          (with-current-buffer buf\n\
@@ -69,6 +71,7 @@ fn deficiency_text_property_stickiness_front_rear() {
          (get-text-property 7 'sticky)\n\
          (get-text-property 8 'sticky))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -76,7 +79,7 @@ fn deficiency_text_property_stickiness_front_rear() {
 fn deficiency_next_property_change_with_nil_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"npn\")))\n\
          (with-current-buffer buf\n\
@@ -88,6 +91,7 @@ fn deficiency_next_property_change_with_nil_default() {
          (next-single-property-change 1 'face buf)\n\
          (next-single-property-change 7 'face buf)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -95,7 +99,7 @@ fn deficiency_next_property_change_with_nil_default() {
 fn deficiency_get_text_property_at_boundary_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"gtp\")))\n\
          (with-current-buffer buf\n\
@@ -113,6 +117,7 @@ fn deficiency_get_text_property_at_boundary_positions() {
          (get-text-property 7 'grp)\n\
          (get-text-property 8 'grp)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -120,7 +125,7 @@ fn deficiency_get_text_property_at_boundary_positions() {
 fn deficiency_text_property_not_all_with_nested_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"tpn\")))\n\
          (with-current-buffer buf\n\
@@ -135,6 +140,7 @@ fn deficiency_text_property_not_all_with_nested_props() {
          (text-property-any 1 10 'level 2)\n\
          (text-property-any 1 10 'level 3)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -142,7 +148,7 @@ fn deficiency_text_property_not_all_with_nested_props() {
 fn deficiency_add_text_properties_merges_intervals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"atp\")))\n\
          (with-current-buffer buf\n\
@@ -160,6 +166,7 @@ fn deficiency_add_text_properties_merges_intervals() {
          (get-text-property 5 'size)\n\
          (get-text-property 8 'size)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -167,7 +174,7 @@ fn deficiency_add_text_properties_merges_intervals() {
 fn deficiency_remove_text_properties_partial() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rtp\")))\n\
          (with-current-buffer buf\n\
@@ -182,6 +189,7 @@ fn deficiency_remove_text_properties_partial() {
          (get-text-property 6 'color)\n\
          (get-text-property 6 'size)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -189,7 +197,7 @@ fn deficiency_remove_text_properties_partial() {
 fn deficiency_set_text_properties_replaces_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"stp\")))\n\
          (with-current-buffer buf\n\
@@ -204,6 +212,7 @@ fn deficiency_set_text_properties_replaces_all() {
          (get-text-property 9 'face)\n\
          (get-text-property 9 'color)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -211,7 +220,7 @@ fn deficiency_set_text_properties_replaces_all() {
 fn deficiency_property_search_with_overlay_and_prop_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"poi\")))\n\
          (with-current-buffer buf\n\
@@ -226,5 +235,6 @@ fn deficiency_property_search_with_overlay_and_prop_interaction() {
          (get-text-property 9 'src)\n\
          (next-single-property-change 1 'src)))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""OK t""#]],
     );
 }

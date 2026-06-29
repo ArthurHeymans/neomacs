@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx220_mega_all_subsystem_ultimate_stress_1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX220=v1" process-environment)))
@@ -75,13 +75,14 @@ fn div_cx220_mega_all_subsystem_ultimate_stress_1() {
               (kill-buffer buf)
               (list state (buffer-live-p buf))))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx220_mega_all_subsystem_ultimate_stress_2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX220=v2" process-environment)))
@@ -121,13 +122,14 @@ fn div_cx220_mega_all_subsystem_ultimate_stress_2() {
         (kill-buffer buf))
       (list snapshot (buffer-live-p buf)))))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     );
 }
 
 #[test]
 fn div_cx220_mega_all_subsystem_ultimate_stress_3() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
       (t0 (encode-time 30 30 14 16 6 2026 nil))
@@ -170,5 +172,6 @@ fn div_cx220_mega_all_subsystem_ultimate_stress_3() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

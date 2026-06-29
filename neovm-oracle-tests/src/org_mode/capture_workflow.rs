@@ -5,7 +5,7 @@ use crate::common::{assert_oracle_parity, assert_oracle_parity_with_shared_tempd
 fn org_capture_table_line_and_plain_append_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -36,6 +36,9 @@ fn org_capture_table_line_and_plain_append_combo() {
       (dolist (buf '("CAPTURE-org-capture-table" "CAPTURE-org-capture-table.org"))
         (when (get-buffer buf) (kill-buffer buf)))
       (when (file-exists-p file) (delete-file file)))))"##,
+        expect_test::expect![[
+            r#""OK \"* Log\n| When             | Text     |\n|------------------+----------|\n| [date] | row text |\nPlain: plain text\n\"""#
+        ]],
     );
 }
 
@@ -43,7 +46,7 @@ fn org_capture_table_line_and_plain_append_combo() {
 fn org_capture_item_checkitem_prepend_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -71,6 +74,7 @@ fn org_capture_item_checkitem_prepend_combo() {
       (dolist (buf '("CAPTURE-org-capture-items" "CAPTURE-org-capture-items.org"))
         (when (get-buffer buf) (kill-buffer buf)))
       (when (file-exists-p file) (delete-file file)))))"##,
+        expect_test::expect![[r#""OK \"* List\n- first\n- existing\n- done-ish\n\"""#]],
     );
 }
 
@@ -78,7 +82,7 @@ fn org_capture_item_checkitem_prepend_combo() {
 fn org_capture_template_expand_context_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -98,6 +102,9 @@ fn org_capture_template_expand_context_combo() {
                    :default-time (encode-time 0 30 9 27 5 2026)
                    :buffer (current-buffer))))
         (org-capture-fill-template)))))"##,
+        expect_test::expect![[
+            r#""OK \"* TODO done-ish\nFrom: \nFile: /tmp/source.org\nName: source.org\nTime: 2026-05-27\nOK\n\"""#
+        ]],
     );
 }
 
@@ -105,7 +112,7 @@ fn org_capture_template_expand_context_combo() {
 fn org_capture_olp_datetree_week_clock_template_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -146,6 +153,9 @@ fn org_capture_olp_datetree_week_clock_template_combo() {
         (when (get-buffer buf) (kill-buffer buf)))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
+        expect_test::expect![[
+            r#""OK ((t \"Captured body\" #<killed buffer>) nil \"* Journal\n** Work\n*** 2026\n**** 2026-W22\n***** 2026-05-27 Wednesday\n****** TODO Captured body\n:LOGBOOK:\nCLOCK: [stamp]--[stamp] => [duration]\n:END:\nCreated: [stamp]\n\")""#
+        ]],
     );
 }
 
@@ -153,7 +163,7 @@ fn org_capture_olp_datetree_week_clock_template_combo() {
 fn org_capture_regexp_function_prepend_append_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -192,6 +202,9 @@ fn org_capture_regexp_function_prepend_append_combo() {
         (when (get-buffer buf) (kill-buffer buf)))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
+        expect_test::expect![[
+            r#""OK (nil 9 \"* Inbox\nREGEXP:one\n:marker:\nold\n:end:\n* Tail\n** FUNCTION two\n\")""#
+        ]],
     );
 }
 
@@ -199,7 +212,7 @@ fn org_capture_regexp_function_prepend_append_combo() {
 fn org_capture_clock_target_resume_and_links_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -254,6 +267,9 @@ fn org_capture_clock_target_resume_and_links_combo() {
         (when (get-buffer buf) (kill-buffer buf)))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
+        expect_test::expect![[
+            r#""OK (\"Clocked\" \"NOTE\" t \"Clocked\" t \"* TODO Clocked\n:LOGBOOK:\nCLOCK: [stamp]--[stamp] => [duration]\nCLOCK: [stamp]--[stamp] => [duration]\n:END:\nBody\n** NOTE \n:LOGBOOK:\nCLOCK: [stamp]--[stamp] => [duration]\n:END:\nFrom clock: Clocked\nLink: [[file:<file>::*Clocked][Clocked]]\nInitial: captured text\n* Notes\n\")""#
+        ]],
     );
 }
 
@@ -261,7 +277,7 @@ fn org_capture_clock_target_resume_and_links_combo() {
 fn org_capture_kill_finalize_goto_marker_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_shared_tempdir(
+    crate::common::assert_oracle_parity_with_shared_tempdir_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -319,6 +335,9 @@ fn org_capture_kill_finalize_goto_marker_combo() {
         (when (get-buffer buf) (kill-buffer buf)))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
+        expect_test::expect![[
+            r#""OK ((\"CAPTURE-org-capture-life.org\" t nil \"** TODO transient body\nCaptured from \") \"* Inbox\nOld line\n* Done\n\" (\"CAPTURE-org-capture-life.org\" nil \"** TODO stored body\nCaptured from \") 18 \"org-capture-life.org\" \"** TODO stored body\" \"* Inbox\nOld line\n** TODO stored body\nCaptured from \n* Done\n\")""#
+        ]],
     );
 }
 
@@ -326,7 +345,7 @@ fn org_capture_kill_finalize_goto_marker_combo() {
 fn org_capture_prompt_placeholders_history_tags_props_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -382,6 +401,7 @@ fn org_capture_prompt_placeholders_history_tags_props_combo() {
                 (gethash "Title" org-capture--prompt-history-table)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -389,7 +409,7 @@ fn org_capture_prompt_placeholders_history_tags_props_combo() {
 fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_shared_tempdir(
+    crate::common::assert_oracle_parity_with_shared_tempdir_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -519,6 +539,9 @@ fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
         (when (get-buffer buf) (kill-buffer buf)))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
+        expect_test::expect![[
+            r#""OK ((17 40 t) (\"CAPTURE-org-capture-hooks.org\" t \"*** TODO Hooked Title\nSCHEDULED: <2026-05-27 Wed>\nFrom: [[file:/tmp/nix-shell.XcUf3d/neovm-inline-oracle-sf3ylzib/tmp-25411/org-capture-hooks.org::*Inbox][Inbox]]\nInitial body\n\" nil) (t 17 40 \"** Inbox\n- [ ] Existing\") (\"CAPTURE-org-capture-hooks.org\" \"- Captured checkbox\" 62) ((prompt \"Title (default Default): \" nil) (prepare \"CAPTURE-org-capture-hooks.org\" t 42 218) (before \"CAPTURE-org-capture-hooks.org\" 41 233) (after \"e\" 190 42) (check-after \"c\" 41)) nil 41 \"* Project [stamp]\n** Inbox\n- [ ] Existing\n- Captured checkbox\n\n*** TODO Hooked Title\nSCHEDULED: <2026-05-27 Wed>\nFrom: [[file:/tmp/nix-shell.XcUf3d/neovm-inline-oracle-sf3ylzib/tmp-25411/org-capture-hooks.org::*Inbox][Inbox]]\nInitial body\nPrepared line\n\n** Archive\n\")""#
+        ]],
     );
 }
 
@@ -526,7 +549,7 @@ fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
 fn org_capture_refile_cross_file_marker_link_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_shared_tempdir(
+    crate::common::assert_oracle_parity_with_shared_tempdir_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -644,6 +667,9 @@ fn org_capture_refile_cross_file_marker_link_lifecycle_combo() {
       (dolist (file (list inbox projects))
         (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
         (when (file-exists-p file) (delete-file file))))))"##,
+        expect_test::expect![[
+            r##""OK ((\"CAPTURE-org-capture-refile-inbox.org\" nil \"** TODO captured task\n:PROPERTIES:\n:Source: \n:END:\nBody: \n\") (24 \"org-capture-refile-inbox.org\") \"#+TITLE: Inbox\n* Inbox\n** TODO captured task\n:PROPERTIES:\n:Source: \n:END:\nBody: \n\" ((\"Projects\" \"org-capture-refile-projects.org\" nil) (\"Projects/Projects\" \"org-capture-refile-projects.org\" t) (\"Projects/Projects/Alpha\" \"org-capture-refile-projects.org\" t) (\"Projects/Projects/Beta\" \"org-capture-refile-projects.org\" t)) \"#+TITLE: Inbox\n* Inbox\n\" \"#+TITLE: Projects\n* Projects\n** Alpha\n** Beta\n*** TODO captured task\n:PROPERTIES:\n:Source: \n:END:\nBody: \n\" \"\" \"org-refile-last-stored\" t ((after 24 \"org-capture-refile-inbox.org\")))""##
+        ]],
     );
 }
 
@@ -651,7 +677,7 @@ fn org_capture_refile_cross_file_marker_link_lifecycle_combo() {
 fn org_capture_template_escape_clipboard_elisp_matrix_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -748,6 +774,7 @@ fn org_capture_template_escape_clipboard_elisp_matrix_combo() {
                           (buffer-substring-no-properties
                            (point-min) (point-max)))))))))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument char-or-string-p nil)""#]],
     );
 }
 
@@ -755,7 +782,7 @@ fn org_capture_template_escape_clipboard_elisp_matrix_combo() {
 fn org_capture_template_expand_body_placeholders_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -816,6 +843,9 @@ fn org_capture_template_expand_body_placeholders_deep_state_combo() {
                           final-content)))
                        elements)))))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r##""OK (\"#+TITLE: Tasks\n* Inbox\n** TODO \n:PROPERTIES:\n:Source: \n:Created: [2026-06-29 Mon 06:27]\n:END:\nFirst task\n* Notes\n** Quick\n\" \"#+TITLE: Tasks\n* Inbox\n** TODO \n:PROPERTIES:\n:Source: \n:Created: [2026-06-29 Mon 06:27]\n:END:\nFirst task\n* Notes\n** Quick\n- [2026-06-29 Mon 06:27] \n  \n\" \"#+TITLE: Tasks\n* Inbox\n** TODO \n:PROPERTIES:\n:Source: [src]\n:Created: [stamp]\n:END:\nFirst task\n* Notes\n** Quick\n- [2026-06-29 Mon 06:27] \n  \n\" ((headline 1 \"Inbox\" nil nil) (headline 2 \"\" nil nil) (property-drawer nil nil nil nil) (headline 1 \"Notes\" nil nil) (headline 2 \"Quick\" nil nil) (item nil nil nil nil)))""##
+        ]],
     );
 }
 
@@ -823,7 +853,7 @@ fn org_capture_template_expand_body_placeholders_deep_state_combo() {
 fn org_capture_insert_todo_edit_clock_refile_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -875,6 +905,7 @@ fn org_capture_insert_todo_edit_clock_refile_deep() {
                       target-after
                       refile-after))))))
       (delete-directory root t))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 34)""#]],
     );
 }
 
@@ -882,7 +913,7 @@ fn org_capture_insert_todo_edit_clock_refile_deep() {
 fn org_capture_datetree_insert_edit_clock_refile_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -915,5 +946,8 @@ fn org_capture_datetree_insert_edit_clock_refile_deep() {
                       (point-min) (point-max)))))
               (list after-capture after-second))))
       (delete-directory root t))))"##,
+        expect_test::expect![[
+            r##""OK (\"#+TITLE: Journal\n* 2026\n** 2026-06 June\n*** 2026-06-29 Monday\n**** Journal entry alpha\n[2026-06-29 Mon 06:27]\n\" \"#+TITLE: Journal\n* 2026\n** 2026-06 June\n*** 2026-06-29 Monday\n**** Journal entry alpha\n[2026-06-29 Mon 06:27]\n**** Journal entry beta\n[2026-06-29 Mon 06:27]\n\")""##
+        ]],
     );
 }

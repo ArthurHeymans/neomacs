@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_h6_avl_tree_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((t (avl-tree-create #'<)))
   (avl-tree-enter t 3)
@@ -24,13 +24,14 @@ fn div_h6_avl_tree_ops() {
         (avl-tree-height t)))
 "##,
         &["emacs-lisp/avl-tree.el"],
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
     );
 }
 
 #[test]
 fn div_h6_generator_iter_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((iter (letiter (next) (yield 1) (yield 2) (yield 3))))
   (list (iter-next iter)
@@ -39,13 +40,14 @@ fn div_h6_generator_iter_basic() {
         (iter-next iter)))
 "##,
         &["emacs-lisp/generator.el"],
+        expect_test::expect![[r#""ERR (void-function letiter)""#]],
     );
 }
 
 #[test]
 fn div_h6_generator_iter_do_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((iter (iter-gen (x '(1 2 3 4)) (yield x))))
   (let (out)
@@ -54,13 +56,14 @@ fn div_h6_generator_iter_do_list() {
     (nreverse out)))
 "##,
         &["emacs-lisp/generator.el"],
+        expect_test::expect![[r#""ERR (void-function iter-gen)""#]],
     );
 }
 
 #[test]
 fn div_h6_radix_tree_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((t (radix-tree-insert radix-tree-empty "cat" 'cat)))
   (setq t (radix-tree-insert t "car" 'car))
@@ -72,13 +75,14 @@ fn div_h6_radix_tree_ops() {
         (length (radix-tree-keys t))))
 "##,
         &["emacs-lisp/radix-tree.el"],
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
     );
 }
 
 #[test]
 fn div_h6_avl_tree_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((t (avl-tree-create #'<)))
   (dolist (n '(5 3 7 1 4 6 8)) (avl-tree-enter t n))
@@ -88,5 +92,6 @@ fn div_h6_avl_tree_delete() {
         (avl-tree-member t 4)))
 "##,
         &["emacs-lisp/avl-tree.el"],
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
     );
 }

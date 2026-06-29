@@ -9,12 +9,13 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn proc_kill_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((proc (start-process "neo-kp-xxx" nil "sleep" "30")))
   (set-process-query-on-exit-flag proc nil)
   (kill-process proc)
   (while (process-live-p proc) (accept-process-output proc 0.1))
   (list (process-status proc) (memq (process-exit-status proc) '(9 15))))"##,
+        expect_test::expect![[r#""OK (signal (9 15))""#]],
     );
 }
 
@@ -22,12 +23,13 @@ fn proc_kill_process() {
 fn proc_signal_process_numeric() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((proc (start-process "neo-sn9-xxx" nil "sleep" "30")))
   (set-process-query-on-exit-flag proc nil)
   (signal-process proc 9)
   (while (process-live-p proc) (accept-process-output proc 0.1))
   (list (process-status proc) (process-exit-status proc)))"##,
+        expect_test::expect![[r#""OK (signal 9)""#]],
     );
 }
 
@@ -35,11 +37,12 @@ fn proc_signal_process_numeric() {
 fn proc_running_child_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((proc (start-process "neo-rc-xxx" nil "sleep" "30")))
   (set-process-query-on-exit-flag proc nil)
   (prog1 (condition-case e (progn (process-running-child-p proc) 'ok) (error (car e)))
     (delete-process proc)))"##,
+        expect_test::expect![[r#""OK ok""#]],
     );
 }
 
@@ -47,9 +50,10 @@ fn proc_running_child_p() {
 fn proc_list_system_processes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((ps (list-system-processes)))
   (list (listp ps) (> (length ps) 0) (cl-every #'integerp ps)))"##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -57,9 +61,10 @@ fn proc_list_system_processes() {
 fn proc_attributes_self() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((attrs (process-attributes (emacs-pid))))
   (list (listp attrs) (stringp (cdr (assq 'comm attrs))) (integerp (cdr (assq 'ppid attrs)))))"##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
@@ -68,7 +73,7 @@ fn proc_attributes_self() {
 fn divergence_signal_process_signal0_noop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(let ((proc (start-process "neo-s0-xxx" nil "sleep" "30")))
   (set-process-query-on-exit-flag proc nil)
   (sit-for 0.1)
@@ -78,5 +83,8 @@ fn divergence_signal_process_signal0_noop() {
         (status (process-status proc)))
     (delete-process proc)
     (list 'before before 'ret ret 'after after 'status status)))"##,
+        expect_test::expect![[
+            r#""OK (before (run open listen connect stop) ret 0 after (run open listen connect stop) status run)""#
+        ]],
     );
 }

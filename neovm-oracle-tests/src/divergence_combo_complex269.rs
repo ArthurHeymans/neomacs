@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx269_backquote_deeply_nested_splicing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((inner '(a b c))
       (middle '(d e f))
@@ -17,13 +17,16 @@ fn div_cx269_backquote_deeply_nested_splicing() {
         `((,@inner ,@middle ,@outer))
         `(nested (deep (,inner)) ,@middle ,@outer)))
 "##,
+        expect_test::expect![[
+            r#""OK ((start (a b c) 1 2 3 (d e f) 11 21 (g h i) end) ((a b c d e f g h i)) (nested (deep ((a b c))) d e f g h i))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx269_defmacro_with_environment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (defmacro neo-cx269-env-macro (form &environment env)
   (list 'quote (list :lexical (bound-and-true-p lexical-binding)
@@ -33,13 +36,14 @@ fn div_cx269_defmacro_with_environment() {
         (let ((lexical-binding nil))
           (neo-cx269-env-macro test2))))
 "##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 54)""#]],
     )
 }
 
 #[test]
 fn div_cx269_cl_macrolet_with_body() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-macrolet ((double-when (cond &body body)
                 `(if ,cond (progn ,@body) nil)))
@@ -47,25 +51,27 @@ fn div_cx269_cl_macrolet_with_body() {
     (list (double-when (> x 5) (cl-incf x) (cl-incf x))
           x)))
 "##,
+        expect_test::expect![[r#""OK (12 12)""#]],
     )
 }
 
 #[test]
 fn div_cx269_cl_macrolet_with_whole() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (cl-macrolet ((trace-call (&whole form name &rest args)
                 `(list :traced ',name (list ,@args) :form ',form)))
   (trace-call alpha 1 2 3))
 "##,
+        expect_test::expect![[r#""ERR (error \"&whole not currently implemented\")""#]],
     )
 }
 
 #[test]
 fn div_cx269_with_silent_modifications_suppression() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (with-temp-buffer
@@ -82,13 +88,14 @@ fn div_cx269_with_silent_modifications_suppression() {
         (insert "after")
         (list before-silent during-silent (length calls))))))
 "##,
+        expect_test::expect![[r#""OK (1 0 1)""#]],
     )
 }
 
 #[test]
 fn div_cx269_combine_change_calls_batch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (with-temp-buffer
@@ -104,13 +111,14 @@ fn div_cx269_combine_change_calls_batch() {
       (insert "YY"))
     (list (nreverse calls) (buffer-string))))
 "##,
+        expect_test::expect![[r#""OK (((3 8 4)) \"ABXYYEFGHIJ\")""#]],
     )
 }
 
 #[test]
 fn div_cx269_backquote_with_conditional_splicing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((include-a t)
       (include-b nil)
@@ -118,13 +126,14 @@ fn div_cx269_backquote_with_conditional_splicing() {
   (list `(start ,@(when include-a '(:a)) ,@(when include-b '(:b)) ,@items end)
         `(data ,@(mapcan (lambda (x) (list x x)) '(1 2 3)))))
 "##,
+        expect_test::expect![[r#""OK ((start :a x y z end) (data 1 1 2 2 3 3))""#]],
     )
 }
 
 #[test]
 fn div_cx269_defmacro_recursive_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (defmacro neo-cx269-my-while (cond &rest body)
   (declare (indent 1))
@@ -132,13 +141,14 @@ fn div_cx269_defmacro_recursive_expansion() {
 (let ((result (macroexpand '(neo-cx269-my-while (> x 0) (cl-decf x)))))
   (list (consp result) (eq (car result) 'if)))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     )
 }
 
 #[test]
 fn div_cx269_pcase_with_let_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
           (pcase v
@@ -147,13 +157,16 @@ fn div_cx269_pcase_with_let_pattern() {
             (_ :other)))
         '("alpha" "beta" 42))
 "##,
+        expect_test::expect![[
+            r#""OK ((:expanded \"ALPHA\") (:expanded \"BETA\") (:expanded \"42\"))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx269_backquote_macro_silent_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((items '(alpha beta gamma))
       (calls nil))
@@ -181,5 +194,6 @@ fn div_cx269_backquote_macro_silent_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     )
 }

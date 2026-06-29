@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx112_abbrev_table_basic_define_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((table (make-abbrev-table)))
@@ -20,13 +20,14 @@ fn div_cx112_abbrev_table_basic_define_lookup() {
             (abbrev-symbol "abc" table)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t \"alpha beta gamma\" \"X-ray Yankee Zulu\" nil abc)""#]],
     );
 }
 
 #[test]
 fn div_cx112_global_abbrev_table_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((before (abbrev-table-p global-abbrev-table)))
@@ -36,13 +37,14 @@ fn div_cx112_global_abbrev_table_query() {
               (abbrev-symbol "neoCx112abc" global-abbrev-table))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t \"expanded abc\" neoCx112abc)""#]],
     );
 }
 
 #[test]
 fn div_cx112_dabbrev_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -53,13 +55,14 @@ fn div_cx112_dabbrev_availability() {
             (boundp 'dabbrev-case-fold-search)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx112_hippie_expand_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -69,13 +72,14 @@ fn div_cx112_hippie_expand_availability() {
             (fboundp 'try-expand-dabbrev)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx112_completion_at_point_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'completion-at-point)
@@ -84,13 +88,14 @@ fn div_cx112_completion_at_point_functions() {
           (boundp 'completion-at-point-functions))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx112_completion_styles_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((styles '(basic partial-completion substring initials emacs22
@@ -100,13 +105,16 @@ fn div_cx112_completion_styles_matrix() {
               styles))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK ((basic (basic partial-completion emacs22)) (partial-completion (partial-completion emacs22)) (substring nil) (initials nil) (emacs22 (emacs22)) (emacs21 nil))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx112_try_completion_basic_with_metadata() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((coll '("alpha" "alphabet" "alpine" "amplitude" "antelope")))
   (list (try-completion "al" coll)
@@ -115,13 +123,14 @@ fn div_cx112_try_completion_basic_with_metadata() {
         (try-completion "anti" coll)
         (try-completion "z" coll)))
 "##,
+        expect_test::expect![[r#""OK (\"alp\" \"alpha\" \"amplitude\" nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx112_all_completions_with_metadata() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((coll '("apple" "apricot" "avocado" "banana" "blueberry")))
   (list (all-completions "a" coll)
@@ -129,13 +138,16 @@ fn div_cx112_all_completions_with_metadata() {
         (all-completions "b" coll)
         (all-completions "av" coll)))
 "##,
+        expect_test::expect![[
+            r#""OK ((\"apple\" \"apricot\" \"avocado\") (\"apple\" \"apricot\") (\"banana\" \"blueberry\") (\"avocado\"))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx112_completion_with_obarray() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ob (make-obarray 31)))
   (intern "alpha" ob)
@@ -146,13 +158,14 @@ fn div_cx112_completion_with_obarray() {
         (all-completions "amp" ob)
         (try-completion "al" ob)))
 "##,
+        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
     );
 }
 
 #[test]
 fn div_cx112_completion_case_insensitive_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((coll '("Alpha" "ALPHA" "alpha" "Beta"))
       (completion-ignore-case t))
@@ -161,13 +174,14 @@ fn div_cx112_completion_case_insensitive_variants() {
         (try-completion "a" coll)
         (try-completion "A" coll)))
 "##,
+        expect_test::expect![[r#""OK (3 3 \"alpha\" \"Alpha\")""#]],
     );
 }
 
 #[test]
 fn div_cx112_completion_with_hash_table_via_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
   (puthash "alpha" 1 ht)
@@ -178,13 +192,14 @@ fn div_cx112_completion_with_hash_table_via_function() {
     (list (sort (all-completions "al" keys) #'string<)
           (try-completion "al" keys))))
 "##,
+        expect_test::expect![[r#""OK ((\"alpha\" \"alphabet\") \"alpha\")""#]],
     );
 }
 
 #[test]
 fn div_cx112_completion_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((coll '("alpha" "alphabet" "alpine" "amplitude")))
   (with-temp-buffer
@@ -208,5 +223,6 @@ fn div_cx112_completion_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

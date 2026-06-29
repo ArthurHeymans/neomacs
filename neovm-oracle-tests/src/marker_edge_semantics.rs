@@ -11,28 +11,37 @@ use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_make_marker_creates_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(markerp (make-marker))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(markerp (make-marker))",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_marker_without_buffer_returns_nil_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(marker-position (make-marker))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(marker-position (make-marker))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_marker_without_buffer_returns_nil_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(marker-buffer (make-marker))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(marker-buffer (make-marker))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_set_marker_assigns_position_and_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (switch-to-buffer (get-buffer-create "*neovm-test-mark*"))
   (erase-buffer)
@@ -41,6 +50,7 @@ fn oracle_set_marker_assigns_position_and_buffer() {
     (set-marker m 5)
     (list (marker-position m)
           (not (null (marker-buffer m))))))"#,
+        expect_test::expect![[r#""OK (5 t)""#]],
     );
     assert_ok_eq("(5 t)", &oracle, &neovm);
 }
@@ -48,14 +58,17 @@ fn oracle_set_marker_assigns_position_and_buffer() {
 #[test]
 fn oracle_marker_insertion_type_default_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(marker-insertion-type (make-marker))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(marker-insertion-type (make-marker))",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_copy_marker_preserves_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (switch-to-buffer (get-buffer-create "*neovm-test-copymark*"))
   (erase-buffer)
@@ -64,6 +77,7 @@ fn oracle_copy_marker_preserves_position() {
          (c (copy-marker m)))
     (list (marker-position c)
           (eq (marker-buffer c) (marker-buffer m)))))"#,
+        expect_test::expect![[r#""OK (3 t)""#]],
     );
     assert_ok_eq("(3 t)", &oracle, &neovm);
 }
@@ -71,12 +85,13 @@ fn oracle_copy_marker_preserves_position() {
 #[test]
 fn oracle_set_marker_nil_detaches() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (switch-to-buffer (get-buffer-create "*neovm-test-detach*"))
   (let ((m (set-marker (make-marker) 10)))
     (set-marker m nil)
     (list (marker-position m) (marker-buffer m))))"#,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
     assert_ok_eq("(nil nil)", &oracle, &neovm);
 }
@@ -84,7 +99,9 @@ fn oracle_set_marker_nil_detaches() {
 #[test]
 fn oracle_markerp_on_non_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) =
-        eval_oracle_and_neovm(r#"(list (markerp nil) (markerp 42) (markerp "hello"))"#);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(list (markerp nil) (markerp 42) (markerp "hello"))"#,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
+    );
     assert_ok_eq("(nil nil nil)", &oracle, &neovm);
 }

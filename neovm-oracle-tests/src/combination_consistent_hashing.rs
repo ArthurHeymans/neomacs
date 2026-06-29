@@ -166,7 +166,7 @@ fn oracle_prop_consistent_hash_basics() {
         prelude = hash_ring_prelude(),
         cleanup = hash_ring_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ fn oracle_prop_consistent_hash_node_addition() {
         prelude = hash_ring_prelude(),
         cleanup = hash_ring_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +270,7 @@ fn oracle_prop_consistent_hash_node_removal() {
         prelude = hash_ring_prelude(),
         cleanup = hash_ring_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -324,7 +324,7 @@ fn oracle_prop_consistent_hash_load_distribution() {
         prelude = hash_ring_prelude(),
         cleanup = hash_ring_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +369,7 @@ fn oracle_prop_consistent_hash_vnode_impact() {
         prelude = hash_ring_prelude(),
         cleanup = hash_ring_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -423,5 +423,5 @@ fn oracle_prop_consistent_hash_full_lifecycle() {
         prelude = hash_ring_prelude(),
         cleanup = hash_ring_cleanup()
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }

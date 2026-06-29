@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf32_habit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO Exercise\nSCHEDULED: <2026-01-15 .+2d/4d>\n:PROPERTIES:\n:STYLE: habit\n:END:")
@@ -19,6 +19,7 @@ fn uf32_habit() {
   (condition-case nil
       (org-habit-parse-todo)
     (error nil)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -29,7 +30,7 @@ fn uf32_habit() {
 #[test]
 fn uf32_habit_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO Exercise\nSCHEDULED: <2026-01-15 .+2d/4d>\n:PROPERTIES:\n:STYLE: habit\n:END:\n:LOGBOOK:\n- State \"DONE\" from \"TODO\" [2026-01-13]\n:END:")
@@ -37,6 +38,7 @@ fn uf32_habit_parse() {
   (condition-case nil
       (org-habit-parse-todo)
     (error nil)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -47,7 +49,7 @@ fn uf32_habit_parse() {
 #[test]
 fn uf32_habit_graph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO Exercise\nSCHEDULED: <2026-01-15 .+2d/4d>\n:PROPERTIES:\n:STYLE: habit\n:END:")
@@ -55,6 +57,7 @@ fn uf32_habit_graph() {
   (condition-case nil
       (org-habit-build-consistency-graph)
     (error nil)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -65,7 +68,7 @@ fn uf32_habit_graph() {
 #[test]
 fn uf32_habit_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO Exercise\nSCHEDULED: <2026-01-15 .+2d/4d>\n:PROPERTIES:\n:STYLE: habit\n:END:")
@@ -73,6 +76,7 @@ fn uf32_habit_toggle() {
   (condition-case nil
       (org-habit-toggle-display)
     (error nil)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -83,10 +87,11 @@ fn uf32_habit_toggle() {
 #[test]
 fn uf32_registry() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-registry)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -97,10 +102,11 @@ fn uf32_registry() {
 #[test]
 fn uf32_registry_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-registry-create)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -111,10 +117,11 @@ fn uf32_registry_create() {
 #[test]
 fn uf32_registry_find() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-registry-find "test-file.org")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -125,10 +132,11 @@ fn uf32_registry_find() {
 #[test]
 fn uf32_registry_id() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-registry-find-id "test-id")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -139,10 +147,11 @@ fn uf32_registry_id() {
 #[test]
 fn uf32_registry_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-registry-find-link "test-link")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -153,10 +162,11 @@ fn uf32_registry_link() {
 #[test]
 fn uf32_git_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-git-link "http://github.com/user/repo" "main" "file.el" "1" "10")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -167,10 +177,11 @@ fn uf32_git_link() {
 #[test]
 fn uf32_git_link_open() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-git-link-open "org-git:http://github.com/user/repo.git:main:file.el::1-10")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -181,10 +192,11 @@ fn uf32_git_link_open() {
 #[test]
 fn uf32_git_link_store() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-git-link-store)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -195,10 +207,11 @@ fn uf32_git_link_store() {
 #[test]
 fn uf32_git_link_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-git-link-insert "http://github.com/user/repo.git" "main" "file.el" "1" "10")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -209,10 +222,11 @@ fn uf32_git_link_insert() {
 #[test]
 fn uf32_annotate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-annotate-file "/tmp/test.txt")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -223,10 +237,11 @@ fn uf32_annotate() {
 #[test]
 fn uf32_annotate_sections() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-annotate-file-show-sections)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -237,10 +252,11 @@ fn uf32_annotate_sections() {
 #[test]
 fn uf32_annotate_add() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-annotate-file-add-annotation "test annotation")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -251,10 +267,11 @@ fn uf32_annotate_add() {
 #[test]
 fn uf32_annotate_clear() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-annotate-file-clear-annotations)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -265,10 +282,11 @@ fn uf32_annotate_clear() {
 #[test]
 fn uf32_annotate_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-annotate-file-export)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -279,10 +297,11 @@ fn uf32_annotate_export() {
 #[test]
 fn uf32_wikinodes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-wikinodes)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -293,10 +312,11 @@ fn uf32_wikinodes() {
 #[test]
 fn uf32_wikinodes_find() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-wikinodes-find "TestPage")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -307,10 +327,11 @@ fn uf32_wikinodes_find() {
 #[test]
 fn uf32_wikinodes_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-wikinodes-create "TestPage")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -321,10 +342,11 @@ fn uf32_wikinodes_create() {
 #[test]
 fn uf32_wikinodes_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-wikinodes-insert "TestPage")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -335,10 +357,11 @@ fn uf32_wikinodes_insert() {
 #[test]
 fn uf32_wikinodes_rename() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-wikinodes-rename "OldPage" "NewPage")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -349,10 +372,11 @@ fn uf32_wikinodes_rename() {
 #[test]
 fn uf32_wikinodes_update() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-wikinodes-update)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -363,10 +387,11 @@ fn uf32_wikinodes_update() {
 #[test]
 fn uf32_wikinodes_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-wikinodes-export)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -377,7 +402,7 @@ fn uf32_wikinodes_export() {
 #[test]
 fn uf32_eval_light() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_SRC emacs-lisp\n(+ 1 2)\n#+END_SRC")
@@ -385,6 +410,7 @@ fn uf32_eval_light() {
   (condition-case nil
       (org-eval-light)
     (error nil)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -395,7 +421,7 @@ fn uf32_eval_light() {
 #[test]
 fn uf32_eval_light_1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_SRC emacs-lisp\n(+ 1 2)\n#+END_SRC")
@@ -403,6 +429,7 @@ fn uf32_eval_light_1() {
   (condition-case nil
       (org-eval-light-1)
     (error nil)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -413,7 +440,7 @@ fn uf32_eval_light_1() {
 #[test]
 fn uf32_eval_light_2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_SRC emacs-lisp\n(+ 1 2)\n#+END_SRC")
@@ -421,6 +448,7 @@ fn uf32_eval_light_2() {
   (condition-case nil
       (org-eval-light-2)
     (error nil)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -431,7 +459,7 @@ fn uf32_eval_light_2() {
 #[test]
 fn uf32_eval_light_3() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN_SRC emacs-lisp\n(+ 1 2)\n#+END_SRC")
@@ -439,5 +467,6 @@ fn uf32_eval_light_3() {
   (condition-case nil
       (org-eval-light-3)
     (error nil)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

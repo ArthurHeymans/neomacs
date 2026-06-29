@@ -31,7 +31,12 @@ fn oracle_prop_type_predicates_systematic_matrix() {
                     preds))
           values))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t nil t nil nil nil nil nil nil nil t nil nil nil nil) (nil t t nil nil nil nil nil nil nil t nil nil nil nil) (nil nil nil t nil nil nil nil t t t nil nil nil nil) (nil nil nil nil t nil nil nil nil nil t nil nil nil nil) (nil nil nil nil t nil t nil nil t t t t nil nil) (nil nil nil nil t nil nil nil nil nil t nil t nil nil) (nil nil nil nil t nil nil nil nil nil t nil nil t nil) (nil nil nil nil nil t t nil nil t nil nil nil nil nil) (nil nil nil nil nil nil nil t t t t nil nil nil nil) (nil nil nil nil nil nil nil nil nil nil t nil nil nil nil) (nil nil nil nil nil nil nil nil nil nil t nil nil nil t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +58,12 @@ fn oracle_prop_type_of_exhaustive() {
                     (make-hash-table))))
   (mapcar #'type-of values))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (integer integer integer integer float float float string string symbol symbol symbol symbol symbol cons cons vector vector hash-table)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +99,12 @@ fn oracle_prop_predicate_algebra_identities() {
         (setq results (cons (list id1 id2 id3 id4 id5) results))))
     (nreverse results)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t t t t t) (t t t t t) (t t t t t) (t t t t t) (t t t t t) (t t t t t) (t t t t t) (t t t t t) (t t t t t) (t t t t t) (t t t t t) (t t t t t) (t t t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +128,12 @@ fn oracle_prop_null_not_consp_relationships() {
                   (and (atom v) (not (null v)))))
           values))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t t nil t nil nil) (t t nil t nil nil) (nil nil nil nil nil t) (nil nil nil nil nil t) (nil nil nil nil nil t) (nil nil t nil t nil) (nil nil t nil t nil) (nil nil t nil t nil) (nil nil t nil t nil) (nil nil nil nil nil t) (nil nil nil nil nil t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +178,10 @@ fn oracle_prop_type_safe_generic_dispatch() {
             (funcall 'neovm--td-size 'hello))
     (fmakunbound 'neovm--td-size)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (0 11 5 3 2 42 3 5)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +238,12 @@ fn oracle_prop_value_serializer() {
             (funcall 'neovm--ts-serialize (make-hash-table)))
     (fmakunbound 'neovm--ts-serialize)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"null\" \"true\" \"int(42)\" \"float(2.718)\" \"str(\\\"hello\\\")\" \"kw(:test)\" \"sym(foo)\" \"vec[int(1),str(\\\"two\\\"),null]\" \"list(sym(a),list(sym(b),sym(c)),sym(d))\" \"cons(int(1).int(2))\" \"hash(0)\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +298,10 @@ fn oracle_prop_type_coercion_graph() {
     (string-match-p "\\." (number-to-string float-val))
     (not (string-match-p "\\." (number-to-string int-val)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t t t t t t t 1 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -337,5 +368,8 @@ fn oracle_prop_type_aware_equality() {
         (funcall 'neovm--te-smart-equal '(1 [2 3.0] "x") '(1.0 [2.0 3] "x")))
     (fmakunbound 'neovm--te-smart-equal)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t nil t nil t nil t nil nil t t)""#]],
+    );
 }

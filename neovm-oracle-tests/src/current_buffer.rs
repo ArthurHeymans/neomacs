@@ -12,17 +12,26 @@ use super::common::{
 fn oracle_prop_current_buffer_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(bufferp (current-buffer))");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(bufferp (current-buffer))",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &oracle, &neovm);
 
-    assert_oracle_parity("(eq (current-buffer) (current-buffer))");
+    crate::common::assert_oracle_parity_expect(
+        "(eq (current-buffer) (current-buffer))",
+        expect_test::expect![[r#""OK t""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_current_buffer_wrong_arity_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(current-buffer nil)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(current-buffer nil)",
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments current-buffer 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-number-of-arguments");
 }
 

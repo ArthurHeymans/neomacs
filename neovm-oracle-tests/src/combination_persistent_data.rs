@@ -103,7 +103,12 @@ fn oracle_prop_persistent_data_list_operations() {
     (fmakunbound 'neovm--pdl-split)
     (fmakunbound 'neovm--pdl-insert-at)
     (fmakunbound 'neovm--pdl-remove-at)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((5 10 20 30 40 50) (0 10 20 30 40 50) (30 40 50) (10 20 30) ((10 20) 30 40 50) (10 20 25 30 40 50) (10 30 40 50) t t t t t t t 6 6 3 3 6 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +217,12 @@ fn oracle_prop_persistent_data_alist_versioned() {
     (fmakunbound 'neovm--pda-merge)
     (fmakunbound 'neovm--pda-keys)
     (fmakunbound 'neovm--pda-to-alist)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Alice\" nil 30 31 \"NYC\" nil \"Bob\" \"Alice\" (:age :city :name) ((:age . 31) (:city . \"NYC\") (:name . \"Alice\")) ((:age . 31) (:name . \"Alice\")) ((:name . \"Bob\") (:city . \"NYC\") (:age . 30)) \"alice@example.com\" \"Alice\" (:email :phone :age :name) t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -356,7 +366,12 @@ fn oracle_prop_persistent_data_vector_path_copy() {
     (fmakunbound 'neovm--pdv-set)
     (fmakunbound 'neovm--pdv-to-list)
     (fmakunbound 'neovm--pdv-push)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((0 1 2 3 4 5 6 7) (0 1 99 3 4 5 6 7) (0 1 2 3 4 5 66 7) (0 1 99 3 4 55 6 7) (-1 1 2 3 4 5 6 7) (-2 1 2 3 4 5 6 7) (0 1 2 3 4 5 6 7 8) 8 9 2 99 66 6 t t t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -415,7 +430,10 @@ fn oracle_prop_persistent_data_sharing_stress() {
    (length chain0) (length chain1) (length chain4)
    ;; Count versions
    (length versions)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t t t t t 10 11 14 10)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -541,7 +559,12 @@ fn oracle_prop_persistent_data_undo_history() {
     (fmakunbound 'neovm--puh-undo)
     (fmakunbound 'neovm--puh-can-undo)
     (fmakunbound 'neovm--puh-history-path)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:text \"\") (:text \"Hello\") (:text \"Hello World\") (:text \"Hello World!\") (:text \"Hello World\") (:text \"Hello\") (:text \"Hello Emacs\") (:text \"Hello Emacs!\") (:text \"\") ((:text \"\") (:text \"Hello\") (:text \"Hello World\") (:text \"Hello World!\")) ((:text \"\") (:text \"Hello\") (:text \"Hello Emacs\") (:text \"Hello Emacs!\")) ((:text \"\") (:text \"Hello\")) nil t nil 1 4 6 t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -661,7 +684,12 @@ fn oracle_prop_persistent_data_sorted_map() {
     (fmakunbound 'neovm--psm-values)
     (fmakunbound 'neovm--psm-range)
     (fmakunbound 'neovm--psm-merge)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 3 5 7 9) (\"one\" \"three\" \"five\" \"seven\" \"nine\") \"three\" \"five\" nil \"FIVE\" \"five\" (1 5 7 9) nil \"cinq\" ((3 . \"three\") (5 . \"five\") (7 . \"seven\")) ((1 . \"one\") (3 . \"three\") (5 . \"five\")) (1 2 3 4 5 7 9) \"two\" \"four\" \"five\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -798,5 +826,8 @@ fn oracle_prop_persistent_data_zipper() {
     (fmakunbound 'neovm--pz-go-up)
     (fmakunbound 'neovm--pz-edit)
     (fmakunbound 'neovm--pz-to-tree)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+    );
 }

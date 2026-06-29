@@ -309,7 +309,7 @@ fn oracle_prop_rbtree_adv_insert_rebalancing() {
          (not (null (funcall 'neovm--rb2-black-height tree)))))
     {RB_CLEANUP}))"#
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -351,7 +351,7 @@ fn oracle_prop_rbtree_adv_insertion_orders() {
                  (funcall 'neovm--rb2-valid-p dup-tree)))))
     {RB_CLEANUP}))"#
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -385,7 +385,7 @@ fn oracle_prop_rbtree_adv_delete_min() {
            (funcall 'neovm--rb2-size tree4))))
     {RB_CLEANUP}))"#
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -425,7 +425,7 @@ fn oracle_prop_rbtree_adv_inorder_traversal() {
          (list is-sorted (length sorted))))
     {RB_CLEANUP}))"#
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -466,7 +466,7 @@ fn oracle_prop_rbtree_adv_black_height_validation() {
                (funcall 'neovm--rb2-valid-p tree2))))
     {RB_CLEANUP}))"#
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -510,7 +510,7 @@ fn oracle_prop_rbtree_adv_range_queries() {
          (funcall 'neovm--rb2-max tree)))
     {RB_CLEANUP}))"#
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -562,5 +562,5 @@ fn oracle_prop_rbtree_adv_bulk_operations() {
                  (funcall 'neovm--rb2-search tree2 100)))))
     {RB_CLEANUP}))"#
     );
-    assert_oracle_parity(&form);
+    crate::common::assert_oracle_parity(&form);
 }

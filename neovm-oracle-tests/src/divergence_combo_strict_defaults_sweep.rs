@@ -10,7 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_f5_frame_parameter_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (frame-parameters)))
   (list (assq 'vertical-scroll-bars p)
@@ -23,6 +23,7 @@ fn div_f5_frame_parameter_sweep() {
         (assq 'z-group p)
         (assq 'inhibit-double-buffering p)))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil nil nil nil nil nil)""#]],
     );
 }
 
@@ -34,17 +35,18 @@ fn div_f5_explicit_name_frame_param() {
     // Neomacs:   OK (explicit-name)
     // The batch frame's explicit-name parameter is absent (nil) in GNU Emacs
     // but present in Neomacs.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (assq 'explicit-name (frame-parameters))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_f5_window_parameter_obscure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-wpo*")))
   (unwind-protect
@@ -60,13 +62,14 @@ fn div_f5_window_parameter_obscure() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_f5_buffer_local_var_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (default-value 'bidi-display-reordering)
       (default-value 'bidi-paragraph-direction)
@@ -79,13 +82,14 @@ fn div_f5_buffer_local_var_defaults() {
       (default-value 'bidi-paragraph-separate-re)
       (default-value 'enable-multibyte-characters))
 "##,
+        expect_test::expect![[r#""ERR (void-variable right-margin)""#]],
     );
 }
 
 #[test]
 fn div_f5_face_attribute_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (face-attribute 'region :background nil 'default)
       (face-attribute 'highlight :background nil 'default)
@@ -96,13 +100,16 @@ fn div_f5_face_attribute_sweep() {
       (face-attribute 'success :foreground nil 'default)
       (face-attribute 'shadow :foreground nil 'default))
 "##,
+        expect_test::expect![[
+            r#""OK (\"unspecified-bg\" \"unspecified-bg\" \"unspecified-bg\" \"unspecified-fg\" \"unspecified-fg\" \"unspecified-fg\" \"unspecified-fg\" \"unspecified-fg\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_f5_window_resize_config_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (default-value 'window-resize-pixelwise)
       (default-value 'window-combination-resize)
@@ -112,6 +119,7 @@ fn div_f5_window_resize_config_defaults() {
       (default-value 'recenter-redisplay)
       (default-value 'auto-window-vscroll))
 "##,
+        expect_test::expect![[r#""OK (nil nil window-size 10 4 tty t)""#]],
     );
 }
 
@@ -123,30 +131,34 @@ fn div_f5_even_window_heights_default() {
     // Neomacs:   OK width-only
     // (default-value 'even-window-heights) is t in GNU Emacs but width-only
     // in Neomacs.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (default-value 'even-window-heights)
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
 #[test]
 fn div_f5_line_number_face_and_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (facep 'line-number)
       (facep 'line-number-current-line)
       (face-attribute 'line-number :foreground nil 'default)
       (face-attribute 'line-number-current-line :foreground nil 'default))
 "##,
+        expect_test::expect![[
+            r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] \"unspecified-fg\" \"unspecified-fg\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_f5_obarray_global_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((n 0))
   (mapatoms (lambda (_) (setq n (1+ n))))
@@ -155,5 +167,6 @@ fn div_f5_obarray_global_count() {
         (intern-soft "defun")
         (intern-soft "nonexistent-probe-sym-xyz")))
 "##,
+        expect_test::expect![[r#""OK (t car defun nil)""#]],
     );
 }

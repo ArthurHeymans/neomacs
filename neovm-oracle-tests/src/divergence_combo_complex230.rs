@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx230_make_network_process_ipv4() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((p (make-network-process :name "neo-cx230-net"
@@ -21,13 +21,14 @@ fn div_cx230_make_network_process_ipv4() {
         (delete-process p)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored file-error)""#]],
     );
 }
 
 #[test]
 fn div_cx230_network_process_family_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'make-network-process)
@@ -36,13 +37,14 @@ fn div_cx230_network_process_family_variants() {
           (fboundp 'network-interface-info))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx230_network_interface_list_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((ifaces (network-interface-list)))
@@ -50,13 +52,14 @@ fn div_cx230_network_interface_list_query() {
             (when ifaces (> (length ifaces) 0))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx230_network_interface_info_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((ifaces (network-interface-list))
@@ -67,26 +70,28 @@ fn div_cx230_network_interface_info_query() {
                 first-iface))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
     );
 }
 
 #[test]
 fn div_cx230_datagram_process_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'make-network-process)
           (fboundp 'process-datagram-address))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx230_x_clipboard_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'x-set-selection)
@@ -96,13 +101,14 @@ fn div_cx230_x_clipboard_availability() {
           (boundp 'selection-coding-system))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx230_clipboard_manager_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'clipboard-kill-region)
@@ -111,39 +117,42 @@ fn div_cx230_clipboard_manager_availability() {
           (fboundp 'gui-backend-select-text))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx230_x_get_selection_owns_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'x-selection-owner-p)
           (fboundp 'gui-selection-owner-p))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx230_interprogram_cut_paste_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'interprogram-cut-function)
       (boundp 'interprogram-paste-function)
       (functionp interprogram-cut-function)
       (functionp interprogram-paste-function))
 "##,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx230_network_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((ifaces (network-interface-list)))
@@ -170,5 +179,6 @@ fn div_cx230_network_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

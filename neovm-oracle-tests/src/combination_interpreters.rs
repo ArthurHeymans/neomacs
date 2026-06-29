@@ -50,7 +50,10 @@ fn oracle_prop_interp_pattern_match() {
         (funcall 'neovm--test-pmatch '(or 1 2 3) 2)
         (funcall 'neovm--test-pmatch '(or 1 2 3) 5))
     (fmakunbound 'neovm--test-pmatch)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t nil t t nil t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +99,10 @@ fn oracle_prop_interp_rule_engine() {
                         (gethash 'slippery facts)
                         (gethash 'ice-risk facts)
                         (gethash 'sunny facts)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +155,10 @@ fn oracle_prop_interp_fsm_with_actions() {
                           (funcall run-fsm "abc")
                           (funcall run-fsm "1.2.3")
                           (funcall run-fsm "")))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -217,7 +226,10 @@ fn oracle_prop_interp_arithmetic_evaluator() {
                     (+ (* a a) (* b b)))
                  nil))
     (fmakunbound 'neovm--test-arith-eval)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 30 25 25)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +269,12 @@ fn oracle_prop_interp_event_system() {
                     (funcall emit 'click 'button-2)
                     (funcall emit 'keypress nil)
                     (nreverse log)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((click-b button-1) (click-a button-1) (hover menu) (click-b button-2) (click-a button-2))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -299,5 +316,8 @@ fn oracle_prop_interp_visitor_pattern() {
                          (string-lessp (symbol-name (car a))
                                        (symbol-name (car b)))))))
     (fmakunbound 'neovm--test-visit)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((group . 1) (num . 2) (seq . 1) (text . 2))""#]],
+    );
 }

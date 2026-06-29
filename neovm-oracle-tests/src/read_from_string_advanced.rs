@@ -39,7 +39,12 @@ fn oracle_prop_read_adv_basic_types() {
   ;; Keywords
   (car (read-from-string ":key"))
   (car (read-from-string ":another-key")))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (0 42 -100 7 3.14 -0.001 2500.0 1e-05 \"hello\" \"\" \"with \\\"quotes\\\"\" \"line1\nline2\" foo my-var nil t :key :another-key)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +76,12 @@ fn oracle_prop_read_adv_compound_types() {
   (car (read-from-string "[[1 2] [3 4]]"))
   ;; Alist
   (car (read-from-string "((a . 1) (b . 2) (c . 3))")))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3) ((a b) (c d)) (1 \"two\" three 4.0) nil nil (a . b) (1 . 2) (1 2 . 3) [] [1 2 3] [[1 2] [3 4]] ((a . 1) (b . 2) (c . 3)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +109,12 @@ fn oracle_prop_read_adv_quoted_forms() {
   (car (read-from-string "'(a 'b 'c)"))
   ;; backquote with unquote
   (car (read-from-string "`(a ,b ,@c)")))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ('foo '(1 2 3) #'car #'+ `(a b c) t t ''x '(a 'b 'c) `(a ,b ,@c))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +147,10 @@ fn oracle_prop_read_adv_index_tracking() {
   (car (read-from-string "aaa bbb ccc" 4))
   (cdr (read-from-string "aaa bbb ccc" 8))
   (car (read-from-string "aaa bbb ccc" 8)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (2 5 10 7 5 7 2 5 (hello 5 \" world\") 7 bbb 11 ccc)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +196,12 @@ fn oracle_prop_read_adv_sequential_reads() {
         ;; Empty string
         (funcall 'neovm--test-read-all ""))
     (fmakunbound 'neovm--test-read-all)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5) (42 \"hello\" (a b) [1 2] :key) ((+ 1 2) (* 3 4) (list 'a 'b)) (10 20 30) ((only-one)) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -217,7 +240,12 @@ fn oracle_prop_read_adv_error_handling() {
   (condition-case err
       (read-from-string "#<invalid>")
     (error (list 'error (car err)))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((error end-of-file) (error end-of-file) (error end-of-file) (42 2) (error end-of-file) (error end-of-file) (error invalid-read-syntax))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +332,10 @@ fn oracle_prop_read_adv_mini_language_parser() {
                  "(define n 5) (if n (+ n 10) 0) (if 0 999 42)"))
     (fmakunbound 'neovm--test-mini-eval)
     (fmakunbound 'neovm--test-run-program)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((3 7 20) (30 10) (25) (15 42))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -333,5 +364,8 @@ fn oracle_prop_read_adv_hash_table_roundtrip() {
       (gethash "delta" restored)
       ;; Test type preserved
       (hash-table-test restored))))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t 3 1 2 3 nil equal)""#]],
+    );
 }

@@ -32,7 +32,7 @@ fn oracle_prop_coding_system_put_basic_roundtrip() {
                    'utf-8))))
     ;; Cleanup: remove the property by setting nil
     (coding-system-put 'utf-8 :neovm-cspa-test-key nil)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +73,10 @@ fn oracle_prop_coding_system_put_value_types() {
   (coding-system-put 'utf-8 :neovm-cspa-list-prop nil)
   (coding-system-put 'utf-8 :neovm-cspa-cons-prop nil)
   (coding-system-put 'utf-8 :neovm-cspa-nil-prop nil))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 \"test-string\" (a b c) (1 . 2) nil t t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +120,10 @@ fn oracle_prop_coding_system_put_various_keys() {
   (coding-system-put 'utf-8 :neovm-cspa-key-e nil)
   (coding-system-put 'latin-1 :neovm-cspa-key-b nil)
   (coding-system-put 'raw-text :neovm-cspa-key-c nil))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (value-a value-b value-c value-d value-e nil overwritten)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +155,12 @@ fn oracle_prop_coding_system_put_inspect_intrinsic_props() {
         ;; plist length should be even (key-value pairs)
         (= 0 (mod (length plist) 2)))))
    systems))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((utf-8 utf-8 t t t t t) (latin-1 iso-latin-1 t t t t t) (raw-text raw-text t t t t t) (no-conversion no-conversion t t t t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +201,12 @@ fn oracle_prop_coding_system_put_overwrite_semantics() {
                   results))
       (nreverse results))
   (coding-system-put 'utf-8 :neovm-cspa-ow-test nil))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (initial second 999 ((nested . structure) (with . alist)) nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +289,12 @@ fn oracle_prop_coding_system_put_inspection_report() {
          :latin1-base (coding-system-base 'latin-1)))
     (coding-system-put 'utf-8 :neovm-cspa-annotation nil)
     (fmakunbound 'neovm--cspa-build-report)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:report-length 6 :all-have-name t :base-systems (utf-8 raw-text no-conversion) :annotation \"test-note\" :utf8-base utf-8 :latin1-base iso-latin-1)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -337,5 +358,10 @@ fn oracle_prop_coding_system_put_hash_registry() {
     (fmakunbound 'neovm--cspa-register)
     (fmakunbound 'neovm--cspa-query-by-type)
     (makunbound 'neovm--cspa-registry)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (:total 5 :utf-systems (utf-8 utf-8-unix) :raw-systems (no-conversion raw-text) :cross-ref ((latin-1 iso-latin-1 nil) (no-conversion no-conversion t) (raw-text raw-text t) (utf-8 utf-8 t) (utf-8-unix utf-8 t)))""#
+        ]],
+    );
 }

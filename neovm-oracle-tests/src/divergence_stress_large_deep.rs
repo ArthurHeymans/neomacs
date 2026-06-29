@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_large_buffer_insert_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 1000 ?A))
   (insert "TARGET")
@@ -17,6 +17,9 @@ fn divergence_large_buffer_insert_search() {
   (list (point)
         (= (point) 1001)
         (buffer-size)))"#,
+        expect_test::expect![[
+            r#""AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATARGETBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBOK (1007 nil 2006)""#
+        ]],
     );
 }
 
@@ -24,13 +27,14 @@ fn divergence_large_buffer_insert_search() {
 fn divergence_deeply_nested_let() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((a 1))
   (let ((b (+ a 1)))
     (let ((c (+ b 1)))
       (let ((d (+ c 1)))
         (let ((e (+ d 1)))
           (list a b c d e))))))"#,
+        expect_test::expect![[r#""OK (1 2 3 4 5)""#]],
     );
 }
 
@@ -38,7 +42,7 @@ fn divergence_deeply_nested_let() {
 fn divergence_deeply_nested_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(condition-case e1
   (condition-case e2
     (condition-case e3
@@ -46,6 +50,7 @@ fn divergence_deeply_nested_condition_case() {
       (error (signal 'outer-error (list e3))))
     (error (signal 'outer-error (list e2))))
   (outer-error (list 'caught (cdr (car (cdr e1))))))"#,
+        expect_test::expect![[r#""ERR (error \"Invalid error symbol\" outer-error)""#]],
     );
 }
 
@@ -53,12 +58,13 @@ fn divergence_deeply_nested_condition_case() {
 fn divergence_large_list_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((lst (number-sequence 1 100)))
   (list (length lst)
         (nth 50 lst)
         (car (last lst))
         (reverse (take 5 lst))))"#,
+        expect_test::expect![[r#""OK (100 51 100 (5 4 3 2 1))""#]],
     );
 }
 
@@ -66,13 +72,16 @@ fn divergence_large_list_operations() {
 fn divergence_many_consecutive_inserts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (dotimes (i 50)
     (insert (format "line%d\n" i)))
   (list (count-lines 1 (point-max))
         (goto-char 1)
         (line-number-at-pos (point-max))))"#,
+        expect_test::expect![[
+            r#""line0\nline1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\nline13\nline14\nline15\nline16\nline17\nline18\nline19\nline20\nline21\nline22\nline23\nline24\nline25\nline26\nline27\nline28\nline29\nline30\nline31\nline32\nline33\nline34\nline35\nline36\nline37\nline38\nline39\nline40\nline41\nline42\nline43\nline44\nline45\nline46\nline47\nline48\nline49\nOK (50 1 51)""#
+        ]],
     );
 }
 
@@ -80,7 +89,7 @@ fn divergence_many_consecutive_inserts() {
 fn divergence_nested_save_excursion_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (goto-char 5)
@@ -91,6 +100,7 @@ fn divergence_nested_save_excursion_restore() {
       (insert "X"))
     (list (point)))
   (list (point)))"#,
+        expect_test::expect![[r#""ABCDEFGHIXJOK (5)""#]],
     );
 }
 
@@ -98,7 +108,7 @@ fn divergence_nested_save_excursion_restore() {
 fn divergence_large_hash_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((ht (make-hash-table :test 'eql)))
   (dotimes (i 100)
     (puthash i (format "val%d" i) ht))
@@ -106,6 +116,7 @@ fn divergence_large_hash_table() {
         (gethash 50 ht)
         (gethash 99 ht)
         (gethash 100 ht 'missing)))"#,
+        expect_test::expect![[r#""OK (100 \"val50\" \"val99\" missing)""#]],
     );
 }
 
@@ -113,7 +124,7 @@ fn divergence_large_hash_table() {
 fn divergence_many_text_property_regions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 50 ?X))
   (dotimes (i 10)
@@ -123,6 +134,9 @@ fn divergence_many_text_property_regions() {
         (get-text-property 8 'face)
         (get-text-property 13 'face)
         (next-property-change 1)))"#,
+        expect_test::expect![[
+            r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXOK ((bold \"region0\") (bold \"region1\") (bold \"region2\") 4)""#
+        ]],
     );
 }
 
@@ -130,7 +144,7 @@ fn divergence_many_text_property_regions() {
 fn divergence_undo_many_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
   (dotimes (i 20)
@@ -141,6 +155,9 @@ fn divergence_undo_many_boundaries() {
     (list (> boundary-count 0)
           (<= boundary-count 20)
           (buffer-string))))"#,
+        expect_test::expect![[
+            r#""012345678910111213141516171819OK (t t \"012345678910111213141516171819\")""#
+        ]],
     );
 }
 
@@ -148,7 +165,7 @@ fn divergence_undo_many_boundaries() {
 fn divergence_many_overlays_on_same_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 20 ?X))
   (let (ovs)
@@ -159,5 +176,6 @@ fn divergence_many_overlays_on_same_range() {
     (list (length (overlays-in 1 20))
           (length (overlays-at 5))
           (>= (length (overlays-at 5)) 5))))"#,
+        expect_test::expect![[r#""XXXXXXXXXXXXXXXXXXXXOK (10 4 nil)""#]],
     );
 }

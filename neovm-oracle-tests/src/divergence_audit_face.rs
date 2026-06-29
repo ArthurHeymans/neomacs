@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_aface_inherit_list_resolution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defface neo-fi-p1 '((t :foreground "green")) "d")
@@ -22,6 +22,7 @@ fn div_aface_inherit_list_resolution() {
         (face-attribute 'neo-fi-c :background)
         (face-attribute 'neo-fi-c :inherit)))
 "##,
+        expect_test::expect![[r#""OK (unspecified unspecified (neo-fi-p1 neo-fi-p2))""#]],
     );
 }
 
@@ -29,7 +30,7 @@ fn div_aface_inherit_list_resolution() {
 fn div_aface_attribute_inherit_flag_unresolved() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // 3rd arg inherit-flag = 'unspecified -> don't resolve through inherit.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defface neo-fa-p '((t :foreground "red")) "d")
@@ -37,13 +38,14 @@ fn div_aface_attribute_inherit_flag_unresolved() {
   (list (face-attribute 'neo-fa-c :foreground)
         (face-attribute 'neo-fa-c :foreground nil 'unspecified)))
 "##,
+        expect_test::expect![[r#""OK (unspecified \"red\")""#]],
     );
 }
 
 #[test]
 fn div_aface_defface_multiple_display_specs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defface neo-dm '((((class color) (background light)) :foreground "red")
@@ -52,26 +54,28 @@ fn div_aface_defface_multiple_display_specs() {
   (list (face-attribute 'neo-dm :foreground)
         (face-attribute 'neo-dm :distant-foreground)))
 "##,
+        expect_test::expect![[r#""OK (\"yellow\" unspecified)""#]],
     );
 }
 
 #[test]
 fn div_aface_face_spec_set_programmatic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (face-spec-set 'neo-fss '((t :foreground "magenta" :weight bold)) nil)
   (list (face-attribute 'neo-fss :foreground)
         (face-attribute 'neo-fss :weight)))
 "##,
+        expect_test::expect![[r#""OK (\"magenta\" bold)""#]],
     );
 }
 
 #[test]
 fn div_aface_face_remap_add_relative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((cookie (face-remap-add-relative 'default :weight 'bold)))
@@ -80,44 +84,48 @@ fn div_aface_face_remap_add_relative() {
           (face-remap-remove-relative cookie)
           (face-attribute 'default :weight))))
 "##,
+        expect_test::expect![[r#""OK (t normal (:weight bold) normal)""#]],
     );
 }
 
 #[test]
 fn div_aface_face_remap_set_base() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (face-remap-set-base 'default :foreground "cyan")
   (list (face-attribute 'default :foreground)
         (face-remap-reset-base 'default)))
 "##,
+        expect_test::expect![[r#""OK (\"unspecified-fg\" nil)""#]],
     );
 }
 
 #[test]
 fn div_aface_color_supported_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (color-supported-p "red")
       (color-supported-p "nonexistent")
       (color-supported-p "#ff0000")
       (color-supported-p "#abc"))
 "##,
+        expect_test::expect![[r#""OK (t nil t t)""#]],
     );
 }
 
 #[test]
 fn div_aface_tty_color_canonicalize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (tty-color-canonicalize "red")
       (tty-color-canonicalize "RED")
       (condition-case e (tty-color-canonicalize "nonexistent") (error (car e))))
 "##,
+        expect_test::expect![[r#""OK (\"red\" \"red\" \"nonexistent\")""#]],
     );
 }
 
@@ -125,18 +133,19 @@ fn div_aface_tty_color_canonicalize() {
 fn div_aface_inherit_unspecified_cell() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Direct face-attribute :inherit on a face with no inherit.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-face 'neo-inh-unsp)))
   (eq (face-attribute f :inherit) 'unspecified))
 "##,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
 #[test]
 fn div_aface_attribute_unspecified_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-face 'neo-defs-unsp)))
   (list (eq (face-attribute f :box) 'unspecified)
@@ -145,38 +154,41 @@ fn div_aface_attribute_unspecified_defaults() {
         (eq (face-attribute f :underline) 'unspecified)
         (eq (face-attribute f :overline) 'unspecified)))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_aface_font_attribute_tty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (face-attribute 'default :font)
       (face-font 'default)
       (face-font 'bold)
       (face-font 'italic))
 "##,
+        expect_test::expect![[r#""OK (unspecified nil nil nil)""#]],
     );
 }
 
 #[test]
 fn div_aface_merge_face_attribute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (merge-face-attribute :weight 'bold 'extra-bold)
       (merge-face-attribute :weight 'bold nil)
       (merge-face-attribute :foreground "red" "blue"))
 "##,
+        expect_test::expect![[r#""OK (bold bold \"red\")""#]],
     );
 }
 
 #[test]
 fn div_aface_face_all_attributes_inherited() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (defface neo-faa-p '((t :foreground "red" :weight bold)) "d")
@@ -184,17 +196,19 @@ fn div_aface_face_all_attributes_inherited() {
   (list (face-attribute 'neo-faa-c :weight)
         (face-attribute 'neo-faa-c :foreground)))
 "##,
+        expect_test::expect![[r#""OK (unspecified unspecified)""#]],
     );
 }
 
 #[test]
 fn div_aface_frame_parameter_font_vs_face_font() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (frame-parameter nil 'font)
       (face-attribute 'default :font)
       (face-attribute 'default :family))
 "##,
+        expect_test::expect![[r#""OK (\"tty\" unspecified \"default\")""#]],
     );
 }

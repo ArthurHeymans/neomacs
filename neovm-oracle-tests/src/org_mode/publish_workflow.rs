@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_publish_sitemap_recursive_sorting_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-publish)
   (let* ((root (make-temp-file "org-publish-site" t))
@@ -61,6 +61,9 @@ fn org_publish_sitemap_recursive_sorting_combo() {
                        "draft.html" "index.html")))))
       (delete-directory root t)
       (delete-directory pub t))))"##,
+        expect_test::expect![[
+            r##""OK ((\"alpha.html\" \"index.html\" \"notes/beta.html\" \"notes/gamma.html\") \"#+TITLE: Site Map\n\n- [[file:alpha.org][Alpha]]\n- notes\n  - [[file:notes/beta.org][Beta]]\n  - [[file:notes/gamma.org][Gamma]]\" ((\"alpha.html\" t t) (\"notes/beta.html\" t t) (\"notes/gamma.html\" t t) (\"draft.html\" nil nil) (\"index.html\" t t)))""##
+        ]],
     );
 }
 
@@ -68,7 +71,7 @@ fn org_publish_sitemap_recursive_sorting_combo() {
 fn org_publish_attachment_include_and_project_lookup_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-publish)
   (let* ((root (make-temp-file "org-publish-assets" t))
@@ -115,6 +118,9 @@ fn org_publish_attachment_include_and_project_lookup_combo() {
                      '("logo.txt" "manual.dat" "secret.txt")))))
       (delete-directory root t)
       (delete-directory pub t))))"##,
+        expect_test::expect![[
+            r#""OK ((\"assets/logo.txt\" \"manual.dat\") (\"assets\" \"assets\" nil) ((\"logo.txt\" nil nil) (\"manual.dat\" t \"manual\") (\"secret.txt\" nil nil)))""#
+        ]],
     );
 }
 
@@ -122,7 +128,7 @@ fn org_publish_attachment_include_and_project_lookup_combo() {
 fn org_publish_needed_timestamp_cache_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-publish)
   (let* ((root (make-temp-file "org-publish-cache" t))
@@ -163,6 +169,7 @@ fn org_publish_needed_timestamp_cache_combo() {
                       (car project))))))
       (delete-directory root t)
       (delete-directory pub t))))"##,
+        expect_test::expect![[r#""OK (t t t nil t \"cache\")""#]],
     );
 }
 
@@ -170,7 +177,7 @@ fn org_publish_needed_timestamp_cache_combo() {
 fn org_publish_components_index_file_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-publish)
   (let* ((root (make-temp-file "org-publish-components" t))
@@ -248,6 +255,9 @@ fn org_publish_components_index_file_combo() {
                            (buffer-string)))))))
       (delete-directory root t)
       (delete-directory pub t))))"##,
+        expect_test::expect![[
+            r#""ERR (file-missing \"Opening output file\" \"No such file or directory\" \"/tmp/nix-shell.XcUf3d/org-publish-cacheRFu0dV/timestampscache.cache\")""#
+        ]],
     );
 }
 
@@ -255,7 +265,7 @@ fn org_publish_components_index_file_combo() {
 fn org_publish_custom_hooks_cache_sitemap_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-publish)
   (let* ((root (make-temp-file "org-publish-custom" t))
@@ -363,6 +373,9 @@ fn org_publish_custom_hooks_cache_sitemap_combo() {
                      (list a-out b-out))))))
       (delete-directory root t)
       (delete-directory pub t))))"##,
+        expect_test::expect![[
+            r##""OK ((\"a.org\" \"b.org\" \"map.org\") (\"custom\") \"value\" nil nil ((prepare \"org-publish-custom5S43Ja\") (sitemap \"Custom Map\" (unordered (\"ENTRY[a.org:list:Aye:(27158 27712)]\") (\"ENTRY[b.org:list:Bee:(27159 48576)]\"))) (publish \"b.org\" \"../org-publish-custom-outGSCGjc/\" \"value\") (publish \"a.org\" \"../org-publish-custom-outGSCGjc/\" \"value\") (publish \"map.org\" \"../org-publish-custom-outGSCGjc/\" \"value\") (complete \"org-publish-custom-outGSCGjc\")) \"#+TITLE: Custom Map\n- ENTRY[a.org:list:Aye:(27158 27712)]\n- ENTRY[b.org:list:Bee:(27159 48576)]\" ((\"a.txt\" t \"PUBLISHED:a.org:value\") (\"b.txt\" t \"PUBLISHED:b.org:value\")))""##
+        ]],
     );
 }
 
@@ -370,7 +383,7 @@ fn org_publish_custom_hooks_cache_sitemap_combo() {
 fn org_publish_crossref_current_project_cache_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-publish)
   (require 'ox-html)
@@ -482,5 +495,8 @@ fn org_publish_crossref_current_project_cache_combo() {
         (kill-buffer (get-file-buffer (expand-file-name "about.org" root))))
       (delete-directory root t)
       (delete-directory pub t))))"##,
+        expect_test::expect![[
+            r##""OK ((\"about.org\" \"index.org\" \"sitemap.org\") \"pages\" (t nil (\"index.org\") nil nil) \"about-target\" (\"about.org\" \"index.org\" \"sitemap.org\") (\"about.html\" \"index.html\" \"sitemap.html\") \"#+TITLE: Crossrefs\n\n- [[file:about.org][About]]\n- [[file:index.org][Index]]\" ((\"index.html\" t (t t nil)) (\"about.html\" t (t t t)) (\"sitemap.html\" t (t t nil))) \"About\" nil)""##
+        ]],
     );
 }

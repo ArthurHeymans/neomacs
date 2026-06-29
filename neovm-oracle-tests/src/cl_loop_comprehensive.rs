@@ -44,7 +44,12 @@ fn oracle_prop_cl_loop_for_eq_then() {
     (cl-loop for x = 1 then (+ x (% x 7))
              repeat 8
              collect x)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((1 2 4 8 16 32 64 128 256 512) (7 22 11 34 17 52 26 13 40 20 10 5 16 8 4 2) (10 40 80 130 190) (0 1 2 4 8 16 32 64 128 256 512 1024) 1994 (1 2 4 8 9 11 15 16))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +85,12 @@ fn oracle_prop_cl_loop_destructuring() {
     (cl-loop for (key . val) in '((x . 10) (y . 20) (z . 30))
              for i from 1
              collect (list i key (* val i)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 a) (2 b) (3 c) (4 d)) (\"Alice (30) from NYC\" \"Bob (25) from LA\" \"Carol (35) from SF\") (6 15 24) ((1 2 3) (4 5 nil) (6 nil nil)) ((1 2 5) (2 3 4) (3 4 3) (4 5 2) (5 6 1) (6 7 0)) ((1 x 10) (2 y 40) (3 z 90)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +137,12 @@ fn oracle_prop_cl_loop_while_until() {
              for i from 0
              while (< i 6)
              maximize x)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((3 7 2) (5 3 8 2) (1 2 3 4 5) 4 (4 16 36 64 100) (1 1 2 3 5 8 13 21 34 55 89) 18)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +194,12 @@ fn oracle_prop_cl_loop_multiple_accumulators() {
                append (cdr pair) into values
              end
              finally return values)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((2 4 6 8 10) (1 3 5 7 9)) (22 6 4) ((\"a\" \"e\" \"h\") (\"bb\" \"dd\" \"gg\") (\"ccc\" \"fff\")) ((16 4 49 1 64 9 36 25) 8 1) (1 2 3 4 5 6 7 8))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +242,12 @@ fn oracle_prop_cl_loop_parallel_iteration_complex() {
              for running-max = x then (max running-max x)
              when (= x running-max)
              collect (list i x))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((111 222 333) ((0 a 10) (1 b 20) (2 c 30) (3 d 40)) ((1 1) (2 1) (3 4) (4 9) (5 16) (6 25) (7 36) (8 49)) ((a 1 5) (b 2 4) (c 3 3) (d 4 2) (e 5 1)) 35 ((0 3) (2 4) (4 5) (5 9)))""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +287,12 @@ fn oracle_prop_cl_loop_finally_clause() {
              collect (cons k v) into pairs
              finally return (list pairs (length pairs)
                                   (assq 'city pairs)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (120 (1 42 115 16) (found-gt-9 4 10) (((name . \"Alice\") (age . 30) (city . \"NYC\") (email . \"alice@example.com\")) 4 (city . \"NYC\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +329,12 @@ fn oracle_prop_cl_loop_nconc_append_advanced() {
     ;; nconc with reverse of each sublist
     (cl-loop for sub in '((1 2 3) (4 5 6) (7 8 9))
              nconc (reverse (copy-sequence sub)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 7 8 9 10) (\"hello\" \" \" \"beautiful\" \" \" \"world\") ((1 1) (2 1) (2 2) (3 1) (3 2) (3 3) (4 1) (4 2) (4 3) (4 4) (5 1) (5 2) (5 3) (5 4) (5 5)) (1 3 5 7 9) (a b c d e f g h i j) (3 2 1 6 5 4 9 8 7))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -364,7 +399,12 @@ fn oracle_prop_cl_loop_data_pipeline() {
                                     (- balance amount)
                                   (+ balance amount)))
                and collect (list id balance)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1115 400 ((\"Alice\" . 4) (\"Bob\" . 3) (\"Carol\" . 3)) 300 (\"Alice\" \"Bob\" \"Carol\") ((1 -100) (3 -250) (6 -170) (9 -260)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -415,5 +455,10 @@ fn oracle_prop_cl_loop_nested_and_control() {
                collect (list x 'buzz) into result
              end
              finally return result)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (((1 2 3 4) (2 4 6 8) (3 6 9 12) (4 8 12 16)) (1 9) (t nil) (t nil) (found-at 2) ((1 4 7) (2 5 8) (3 6 9)) ((3 fizz) (5 buzz) (6 fizz) (9 fizz) (10 buzz) (12 fizz) (15 fizz) (18 fizz) (20 buzz)))""#
+        ],
+    );
 }

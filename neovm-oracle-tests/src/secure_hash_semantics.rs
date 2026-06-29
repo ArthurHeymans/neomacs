@@ -26,5 +26,10 @@ fn oracle_secure_hash_ranges_binary_and_error_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"a6b0f90d2ac2b8d1f250c687301aef132049e9016df936680e81fa7bc7d81d70\" \"a6b0f90d2ac2b8d1f250c687301aef132049e9016df936680e81fa7bc7d81d70\" 32 nil \"4a99557e4033c3539de2eb65472017cad5f9557f7a0625a09f1c3f6e2ba69c4c\" (wrong-type-argument (symbolp 42)) (error (\"Invalid algorithm arg: bad\")))""#
+        ]],
+    );
 }

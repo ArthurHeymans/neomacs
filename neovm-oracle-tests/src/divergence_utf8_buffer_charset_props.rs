@@ -15,7 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_utf8_fileread_utf8_no_charset_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((tmp (make-temp-file "u8p-")))
   (unwind-protect
@@ -30,6 +30,7 @@ fn div_utf8_fileread_utf8_no_charset_property() {
                 (buffer-string) (point-max))))
     (delete-file tmp)))
 "#,
+        expect_test::expect![[r#""OK (nil nil \"café世界\" 7)""#]],
     );
 }
 
@@ -38,7 +39,7 @@ fn div_utf8_fileread_latin1_multibyte_buffer_charset_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Reading latin-1 into a *multibyte* (default) buffer — does Neomacs
     // attach charset properties that GNU does not?
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((tmp (make-temp-file "l1p-")))
   (unwind-protect
@@ -53,6 +54,9 @@ fn div_utf8_fileread_latin1_multibyte_buffer_charset_property() {
                 (buffer-string) (point-max))))
     (delete-file tmp)))
 "#,
+        expect_test::expect![[
+            r#""OK ((charset iso-8859-1) (charset iso-8859-1) #(\"café\" 0 4 (charset iso-8859-1)) 5)""#
+        ]],
     );
 }
 
@@ -60,7 +64,7 @@ fn div_utf8_fileread_latin1_multibyte_buffer_charset_property() {
 fn div_utf8_fileread_latin1_unibyte_buffer_charset_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // The original #1 case: latin-1 into a unibyte buffer.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((tmp (make-temp-file "l1u-")))
   (unwind-protect
@@ -77,6 +81,7 @@ fn div_utf8_fileread_latin1_unibyte_buffer_charset_property() {
                 (append (buffer-string) nil))))
     (delete-file tmp)))
 "#,
+        expect_test::expect![[r#""OK (nil \"caf\\351\" 5 (99 97 102 233))""#]],
     );
 }
 
@@ -86,7 +91,7 @@ fn div_utf8_fileread_latin1_unibyte_buffer_charset_property() {
 fn div_utf8_position_bytes_buffer_recovered_eightbit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // Decode-recovered eight-bit chars (3 bytes in Neomacs) in a buffer.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert (decode-coding-string (unibyte-string 200 201 65) 'utf-8))
@@ -97,6 +102,7 @@ fn div_utf8_position_bytes_buffer_recovered_eightbit() {
         (byte-to-position 4)
         (char-after 1) (char-after 2)))
 "#,
+        expect_test::expect![[r#""OK (4 6 3 5 2 4194248 4194249)""#]],
     );
 }
 
@@ -104,7 +110,7 @@ fn div_utf8_position_bytes_buffer_recovered_eightbit() {
 fn div_utf8_position_bytes_buffer_constructed_eightbit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // CONTROL: constructed eight-bit chars (2 bytes in both) should agree.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert (string-make-multibyte (unibyte-string 200 201 65)))
@@ -113,13 +119,14 @@ fn div_utf8_position_bytes_buffer_constructed_eightbit() {
         (position-bytes 2)
         (position-bytes 3)))
 "#,
+        expect_test::expect![[r#""OK (4 6 3 5)""#]],
     );
 }
 
 #[test]
 fn div_utf8_buffer_narrow_recovered_eightbit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
   (insert (concat "AB" (decode-coding-string (unibyte-string 200 201) 'utf-8) "CD"))
@@ -127,6 +134,7 @@ fn div_utf8_buffer_narrow_recovered_eightbit() {
   (list (point-min) (point-max) (buffer-string)
         (position-bytes (point-max))))
 "#,
+        expect_test::expect![[r#""OK (2 5 \"B\\310\\311\" 7)""#]],
     );
 }
 
@@ -135,7 +143,7 @@ fn div_utf8_buffer_narrow_recovered_eightbit() {
 #[test]
 fn div_utf8_raw_byte_file_no_conversion_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"
 (let ((tmp (make-temp-file "8bit-"))
       (s (decode-coding-string (unibyte-string 200 201 255) 'utf-8)))
@@ -149,5 +157,6 @@ fn div_utf8_raw_byte_file_no_conversion_roundtrip() {
           (append (buffer-string) nil)))
     (delete-file tmp)))
 "#,
+        expect_test::expect![[r#""OK (200 201 255)""#]],
     );
 }

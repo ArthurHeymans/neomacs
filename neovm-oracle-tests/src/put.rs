@@ -10,12 +10,16 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_put_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_return, neovm_return) =
-        eval_oracle_and_neovm("(let ((s 'oracle-prop-put)) (put s 'k 99))");
+    let (oracle_return, neovm_return) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((s 'oracle-prop-put)) (put s 'k 99))",
+        expect_test::expect![[r#""OK 99""#]],
+    );
     assert_ok_eq("99", &oracle_return, &neovm_return);
 
-    let (oracle_get, neovm_get) =
-        eval_oracle_and_neovm("(let ((s 'oracle-prop-put)) (put s 'k 99) (get s 'k))");
+    let (oracle_get, neovm_get) = crate::common::eval_oracle_and_neovm_expect(
+        "(let ((s 'oracle-prop-put)) (put s 'k 99) (get s 'k))",
+        expect_test::expect![[r#""OK 99""#]],
+    );
     assert_ok_eq("99", &oracle_get, &neovm_get);
 }
 
@@ -23,7 +27,10 @@ fn oracle_prop_put_basics() {
 fn oracle_prop_put_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(put 1 'k 2)");
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        "(put 1 'k 2)",
+        expect_test::expect![[r#""ERR (wrong-type-argument symbolp 1)""#]],
+    );
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 

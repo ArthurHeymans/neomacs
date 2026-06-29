@@ -14,7 +14,7 @@ fn _u() {}
 fn div_fa_attributes_full_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     _u();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-fa-")))
   (write-region "hello" nil f nil 0)
@@ -24,13 +24,16 @@ fn div_fa_attributes_full_structure() {
               (file-attributes f))
     (ignore-errors (delete-file f))))
 "##,
+        expect_test::expect![[
+            r#""OK (:nil :num :num :num :cons :cons :cons :num :str :other :num :num)""#
+        ]],
     );
 }
 
 #[test]
 fn div_fa_uid_gid_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-fau-")))
   (unwind-protect
@@ -39,13 +42,14 @@ fn div_fa_uid_gid_type() {
               (numberp (nth 2 a)) (numberp (nth 3 a))))
     (ignore-errors (delete-file f))))
 "##,
+        expect_test::expect![[r#""OK (nil nil t t)""#]],
     );
 }
 
 #[test]
 fn div_fa_mode_string_and_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-fam-")))
   (write-region "hello" nil f nil 0)
@@ -54,13 +58,14 @@ fn div_fa_mode_string_and_size() {
         (list (nth 7 a) (nth 8 a)))
     (ignore-errors (delete-file f))))
 "##,
+        expect_test::expect![[r#""OK (5 \"-rw-------\")""#]],
     );
 }
 
 #[test]
 fn div_fa_mod_time_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-fat-")))
   (write-region "x" nil f nil 0)
@@ -70,26 +75,28 @@ fn div_fa_mod_time_format() {
             (length (nth 6 (file-attributes f))))
     (ignore-errors (delete-file f))))
 "##,
+        expect_test::expect![[r#""OK (4 4 4)""#]],
     );
 }
 
 #[test]
 fn div_fa_attribute_modes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-faam-")))
   (write-region "x" nil f nil 0)
   (unwind-protect (file-attribute-modes (file-attributes f))
     (ignore-errors (delete-file f))))
 "##,
+        expect_test::expect![[r#""OK \"-rw-------\"""#]],
     );
 }
 
 #[test]
 fn div_fa_directory_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((d (make-temp-file "neo-fad-" t)))
   (unwind-protect
@@ -97,13 +104,14 @@ fn div_fa_directory_attributes() {
             (file-attribute-modes (file-attributes d)))
     (ignore-errors (delete-directory d))))
 "##,
+        expect_test::expect![[r#""OK (t \"drwx------\")""#]],
     );
 }
 
 #[test]
 fn div_fa_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-fap-")))
   (unwind-protect
@@ -111,13 +119,14 @@ fn div_fa_predicates() {
             (file-symlink-p f) (file-exists-p f))
     (ignore-errors (delete-file f))))
 "##,
+        expect_test::expect![[r#""OK (t nil nil t)""#]],
     );
 }
 
 #[test]
 fn div_fa_file_modes_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-famr-")))
   (unwind-protect
@@ -126,5 +135,6 @@ fn div_fa_file_modes_roundtrip() {
         (list m (file-modes f)))
     (ignore-errors (delete-file f))))
 "##,
+        expect_test::expect![[r#""OK (384 493)""#]],
     );
 }

@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_undo_replace_narrow_overlay_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 200 ?X))
   (dotimes (i 5)
@@ -43,6 +43,9 @@ fn divergence_undo_replace_narrow_overlay_boundary() {
             (get-text-property 81 'zone) (= (get-text-property 81 'zone) 3)
             (get-text-property 121 'zone) (= (get-text-property 121 'zone) 4)
             (get-text-property 161 'zone) (= (get-text-property 161 'zone) 5))))) "#,
+        expect_test::expect![[
+            r#""QQQQRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRXXXERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -50,7 +53,7 @@ fn divergence_undo_replace_narrow_overlay_boundary() {
 fn divergence_multi_kill_ring_yank_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ALPHA-BETA-GAMMA-DELTA-EPSILON-ZETA-ETA-THETA")
   (put-text-property 1 5 'greek 'a)
@@ -89,6 +92,9 @@ fn divergence_multi_kill_ring_yank_undo() {
             (get-text-property 19 'greek) (eq (get-text-property 19 'greek) 'd)
             (get-text-property 26 'greek) (eq (get-text-property 26 'greek) 'e)
             (overlay-get ov 'scope) (eq (overlay-get ov 'scope) 'all))))) "#,
+        expect_test::expect![[
+            r#""ALPHA-BETA-GAMMA-DELTA-EPSILON-ZETA-ETA-THETAERR (args-out-of-range 43 47)""#
+        ]],
     );
 }
 
@@ -96,7 +102,7 @@ fn divergence_multi_kill_ring_yank_undo() {
 fn divergence_overlay_before_string_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA\nBBBB\nCCCC\nDDDD\nEEEE\nFFFF\nGGGG\nHHHH")
   (dotimes (i 8)
@@ -134,6 +140,9 @@ fn divergence_overlay_before_string_undo_chain() {
             (get-text-property 26 'line) (= (get-text-property 26 'line) 6)
             (get-text-property 31 'line) (= (get-text-property 31 'line) 7)
             (get-text-property 36 'line) (= (get-text-property 36 'line) 8))))) "#,
+        expect_test::expect![[
+            r#""AAAA\nXXXX\nCCCC\nYYYY\nEEEE\nZZZZ\nGGGG\nHHHHERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -141,7 +150,7 @@ fn divergence_overlay_before_string_undo_chain() {
 fn divergence_undo_transpose_regions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE-FFF-GGG-HHH-III-JJJ")
   (put-text-property 1 3 'idx 1)
@@ -181,6 +190,9 @@ fn divergence_undo_transpose_regions() {
               (get-text-property 17 'idx) (= (get-text-property 17 'idx) 5)
               (overlay-get ov1 'grp) (eq (overlay-get ov1 'grp) 'a)
               (overlay-get ov2 'grp) (eq (overlay-get ov2 'grp) 'b)))))) "#,
+        expect_test::expect![[
+            r#""BBA-AAB-DDC-CCD-FFE-EEF-GGG-HHH-III-JJJERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -188,7 +200,7 @@ fn divergence_undo_transpose_regions() {
 fn divergence_undo_after_multiple_narrow_widen() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAXBBBXCCCXDDDXEEE")
   (put-text-property 1 3 'sec 'a)
@@ -225,6 +237,7 @@ fn divergence_undo_after_multiple_narrow_widen() {
             (get-text-property 13 'sec) (eq (get-text-property 13 'sec) 'd)
             (get-text-property 17 'sec) (eq (get-text-property 17 'sec) 'e)
             (overlay-get ov 'wrap) (eq (overlay-get ov 'wrap) 'all))))) "#,
+        expect_test::expect![[r#""YYAAAXZZRRRXCCCXDDDXEEEERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -232,7 +245,7 @@ fn divergence_undo_after_multiple_narrow_widen() {
 fn divergence_50_overlay_undo_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 250 ?M))
   (let ((ovs nil) (ms nil))
@@ -266,6 +279,9 @@ fn divergence_50_overlay_undo_stress() {
               (string= (buffer-string) (make-string 250 ?M))
               all-ok
               (= (buffer-size) 250)))))) "#,
+        expect_test::expect![[
+            r#""PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -273,7 +289,7 @@ fn divergence_50_overlay_undo_stress() {
 fn divergence_undo_delete_insert_interleaved() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ONE-TWO-THREE-FOUR-FIVE-SIX-SEVEN")
   (put-text-property 1 3 'num 1)
@@ -311,6 +327,9 @@ fn divergence_undo_delete_insert_interleaved() {
             (get-text-property 25 'num) (= (get-text-property 25 'num) 6)
             (get-text-property 29 'num) (= (get-text-property 29 'num) 7)
             (overlay-get ov 'chain) (eq (overlay-get ov 'chain) 'all))))) "#,
+        expect_test::expect![[
+            r#""ONE-TWOPOINTFIFOURPOINTFIVE-THREE-FOUR-FIVE-SIX-SEVENERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -318,7 +337,7 @@ fn divergence_undo_delete_insert_interleaved() {
 fn divergence_undo_with_buffer_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "HEADER-ALPHA-BETA-GAMMA-DELTA-FOOTER")
   (put-text-property 1 6 'role 'header)
@@ -350,6 +369,9 @@ fn divergence_undo_with_buffer_substring() {
               (get-text-property 31 'role) (eq (get-text-property 31 'role) 'footer)
               (overlay-get ov-h 'kind) (eq (overlay-get ov-h 'kind) 'header)
               (overlay-get ov-f 'kind) (eq (overlay-get ov-f 'kind) 'footer)))))) "#,
+        expect_test::expect![[
+            r#""HEADER-ALPHA-BETA-GAMMA-DELTA-FOOTERERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -357,7 +379,7 @@ fn divergence_undo_with_buffer_substring() {
 fn divergence_undo_cl_loop_transform() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "apple-banana-cherry-date-elderberry-fig-grape")
   (put-text-property 1 5 'fruit 1)
@@ -389,6 +411,9 @@ fn divergence_undo_cl_loop_transform() {
               (get-text-property 36 'fruit) (= (get-text-property 36 'fruit) 6)
               (get-text-property 40 'fruit) (= (get-text-property 40 'fruit) 7)
               (overlay-get ov 'category) (eq (overlay-get ov 'category) 'fruits)))))) "#,
+        expect_test::expect![[
+            r#""APPLE-BANANA-CHERRY-DATE-ELDERBERRY-FIG-GRAPEERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -396,7 +421,7 @@ fn divergence_undo_cl_loop_transform() {
 fn divergence_undo_nested_delete_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH")
   (put-text-property 1 4 'block 1)
@@ -437,5 +462,8 @@ fn divergence_undo_nested_delete_region() {
             (get-text-property 36 'block) (= (get-text-property 36 'block) 8)
             (overlay-get ov1 'half) (eq (overlay-get ov1 'half) 'first)
             (overlay-get ov2 'half) (eq (overlay-get ov2 'half) 'second))))) "#,
+        expect_test::expect![[
+            r#""AAAA-BBBB-D-EEEE-FFFF-GGGG-HHHHERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 26 34)""#
+        ]],
     );
 }

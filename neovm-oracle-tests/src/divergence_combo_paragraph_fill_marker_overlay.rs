@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_paragraph_nav_fill_prefix_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "pfn")))
     (with-current-buffer buf
@@ -35,6 +35,7 @@ fn combo_paragraph_nav_fill_prefix_marker_overlay() {
             (let ((p3 (point)))
               (list p1 p2 p3 mp os oe k1 k2))))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -42,7 +43,7 @@ fn combo_paragraph_nav_fill_prefix_marker_overlay() {
 fn combo_paragraph_narrow_overlay_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "pnu")))
     (with-current-buffer buf
@@ -70,6 +71,7 @@ fn combo_paragraph_narrow_overlay_marker_undo() {
                 (buffer-string)
                 (marker-position m)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -77,7 +79,7 @@ fn combo_paragraph_narrow_overlay_marker_undo() {
 fn combo_paragraph_fill_prefix_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ppt")))
     (with-current-buffer buf
@@ -106,6 +108,7 @@ fn combo_paragraph_fill_prefix_textprop() {
             (let ((p3 (point)))
               (list p1 p2 p3 mp os oe sa sb))))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range 31 41)""#]],
     );
 }
 
@@ -113,7 +116,7 @@ fn combo_paragraph_fill_prefix_textprop() {
 fn combo_paragraph_undo_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "pum")))
     (with-current-buffer buf
@@ -143,6 +146,7 @@ fn combo_paragraph_undo_marker_overlay() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -150,7 +154,7 @@ fn combo_paragraph_undo_marker_overlay() {
 fn combo_paragraph_fill_prefix_narrow_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "pno")))
     (with-current-buffer buf
@@ -177,5 +181,6 @@ fn combo_paragraph_fill_prefix_narrow_overlay() {
                 (buffer-string)
                 (marker-position m)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }

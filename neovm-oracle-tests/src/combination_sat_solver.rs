@@ -96,7 +96,10 @@ fn oracle_prop_sat_cnf_representation() {
     (fmakunbound 'neovm--sat-unit-clause-p)
     (fmakunbound 'neovm--sat-variables)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (-3 3 t nil t 3 nil nil (1 2 3 4) nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +208,10 @@ fn oracle_prop_sat_unit_propagation() {
     (fmakunbound 'neovm--sat-up-clause-falsified-p)
     (fmakunbound 'neovm--sat-unit-propagate)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((ok t t t) conflict (ok 0) (ok nil t t t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +297,12 @@ fn oracle_prop_sat_pure_literal_elimination() {
     (fmakunbound 'neovm--sat-ple-find-pure)
     (fmakunbound 'neovm--sat-ple-eliminate)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . t) (2)) ((1 . t) (2 . t) (3 . t)) nil ((2)) (t nil unset))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -452,7 +463,10 @@ fn oracle_prop_sat_dpll_algorithm() {
     (fmakunbound 'neovm--sat-d-copy-assign)
     (fmakunbound 'neovm--sat-d-solve)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t t) t t t (t t) t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -578,7 +592,10 @@ fn oracle_prop_sat_model_extraction() {
     (fmakunbound 'neovm--sat-m-extract)
     (fmakunbound 'neovm--sat-m-verify)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((((1 . true) (2 . false) (3 . true)) t) (t t) t t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -711,7 +728,10 @@ fn oracle_prop_sat_graph_coloring_encoding() {
     (fmakunbound 'neovm--sat-gc-solve)
     (fmakunbound 'neovm--sat-gc-decode)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((t t) t (t t) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -813,5 +833,8 @@ fn oracle_prop_sat_two_sat() {
     (fmakunbound 'neovm--sat2-reachable)
     (fmakunbound 'neovm--sat2-satisfiable-p)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t nil t t)""#]],
+    );
 }

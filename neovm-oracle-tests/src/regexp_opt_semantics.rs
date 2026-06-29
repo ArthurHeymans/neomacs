@@ -25,7 +25,12 @@ fn oracle_prop_regexp_opt_grouping_modes_and_empty_input() {
    (regexp-opt '("if" "in" "while" "when") "\\(?1:")))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\\\\`a\\\\`\" \"\\\\(?:\\\\`a\\\\`\\\\)\" \"\\\\(\\\\`a\\\\`\\\\)\" \"\\\\(?:i[fn]\\\\|wh\\\\(?:en\\\\|ile\\\\)\\\\)\" \"\\\\(i[fn]\\\\|wh\\\\(?:en\\\\|ile\\\\)\\\\)\" \"\\\\<\\\\(i[fn]\\\\|wh\\\\(?:en\\\\|ile\\\\)\\\\)\\\\>\" \"\\\\_<\\\\(i[fn]\\\\|wh\\\\(?:en\\\\|ile\\\\)\\\\)\\\\_>\" \"\\\\(?1:i[fn]\\\\|wh\\\\(?:en\\\\|ile\\\\)\\\\)\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -48,7 +53,12 @@ fn oracle_prop_regexp_opt_longest_match_and_equivalence() {
      (string-match-p (concat "\\`" re "\\'") "ac"))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"\\\\(?:a\\\\(?:aa\\\\|bcd?\\\\|[ab]\\\\)?\\\\)\" 0 \"abcd\" 0 \"aaa\" (\"a\" \"aa\" \"aaa\" \"ab\" \"abc\" \"abcd\") nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -72,7 +82,12 @@ fn oracle_prop_regexp_opt_charset_and_quoting() {
      (string-match-p (concat "\\`" mixed-re "\\'") "a."))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"[]*+.?[\\\\^-]\" (\".\" \"*\" \"+\" \"?\" \"[\" \"]\" \"^\" \"-\" \"\\\\\") \"\\\\(a[*+?]\\\\|b[].[]\\\\)\" (\"a+\" \"a*\" \"a?\" \"b.\" \"b[\" \"b]\") nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -93,5 +108,8 @@ fn oracle_prop_regexp_opt_depth_counts_only_capturing_groups() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 0 0 2 1 (invalid-regexp \"Unmatched ( or \\\\(\"))""#]],
+    );
 }

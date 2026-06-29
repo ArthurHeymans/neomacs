@@ -15,7 +15,7 @@ fn combo_process_sentinel_buffer_state_after_finish() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Process sentinel modifies buffer, markers/overlays must track.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-ps"))
         (sentinel-result nil))
@@ -43,6 +43,9 @@ fn combo_process_sentinel_buffer_state_after_finish() {
           (sit-for 0.5)
           (kill-buffer buf)
           sentinel-result))))) "#,
+        expect_test::expect![[
+            r#""OK (\"finished\" #(\"BEFORE-PROCESS-RUN-AFTEROUTPUT-TEXT\n\" 0 6 (sect before) 18 24 (sect after)) 7 19 t middle before)""#
+        ]],
     );
 }
 
@@ -51,7 +54,7 @@ fn combo_process_filter_insert_with_markers_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Process filter inserts text incrementally; markers must track.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-pf"))
         (filter-outputs nil))
@@ -81,6 +84,9 @@ fn combo_process_filter_insert_with_markers_overlays() {
                              (get-text-property 1 'kind))))
             (kill-buffer buf)
             (list (nreverse filter-outputs) final))))))) "#,
+        expect_test::expect![[
+            r#""OK (((\"1\n2\n3\n4\n5\n\" 1 6 t)) (#(\"START-END\nProcess seq-test finished\n\" 0 5 (kind init)) 1 6 t all init))""#
+        ]],
     );
 }
 
@@ -89,7 +95,7 @@ fn combo_process_pipe_buffer_local_overlay_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // shell-command-on-region with buffer-local vars, overlays, markers.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-pipe")))
     (with-current-buffer buf
@@ -118,6 +124,7 @@ fn combo_process_pipe_buffer_local_overlay_marker_undo() {
                                   (get-text-property 1 'word))))
             (kill-buffer buf)
             (list after-cmd after-undo))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -126,7 +133,7 @@ fn combo_process_insert_with_narrow_undo_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Process output into narrowed buffer, then undo.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-pnarrow")))
     (with-current-buffer buf
@@ -157,5 +164,6 @@ fn combo_process_insert_with_narrow_undo_textprop() {
                                   (get-text-property 6 'zone))))
             (kill-buffer buf)
             (list after-insert after-undo))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

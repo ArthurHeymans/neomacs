@@ -11,7 +11,10 @@ fn oracle_prop_with_temp_buffer_basic() {
     let form = r####"(with-temp-buffer
                     (insert "hello world")
                     (buffer-string))"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK \"hello world\"""#]],
+    );
     assert_ok_eq(r#""hello world""#, &o, &n);
 }
 
@@ -24,7 +27,8 @@ fn oracle_prop_with_temp_buffer_point_operations() {
                     (goto-char (point-min))
                     (forward-char 5)
                     (point))"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 6""#]]);
     assert_ok_eq("6", &o, &n);
 }
 
@@ -38,7 +42,10 @@ fn oracle_prop_with_temp_buffer_insert_delete() {
                     (delete-region 6 12)
                     (insert "emacs")
                     (buffer-string))"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK \"helloemacs\"""#]],
+    );
     assert_ok_eq(r#""helloemacs""#, &o, &n);
 }
 
@@ -51,7 +58,10 @@ fn oracle_prop_with_temp_buffer_multiple_inserts() {
                     (insert "b")
                     (insert "c")
                     (buffer-string))"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK \"abc\"""#]],
+    );
     assert_ok_eq(r#""abc""#, &o, &n);
 }
 
@@ -62,7 +72,8 @@ fn oracle_prop_with_temp_buffer_point_min_max() {
     let form = r####"(with-temp-buffer
                     (insert "12345")
                     (list (point-min) (point-max)))"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (1 6)""#]]);
     assert_ok_eq("(1 6)", &o, &n);
 }
 
@@ -73,7 +84,10 @@ fn oracle_prop_with_temp_buffer_buffer_substring() {
     let form = r####"(with-temp-buffer
                     (insert "hello world")
                     (buffer-substring 1 6))"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK \"hello\"""#]],
+    );
     assert_ok_eq(r#""hello""#, &o, &n);
 }
 
@@ -84,7 +98,8 @@ fn oracle_prop_with_temp_buffer_returns_last_value() {
     let form = r####"(with-temp-buffer
                     (insert "ignored")
                     42)"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 42""#]]);
     assert_ok_eq("42", &o, &n);
 }
 
@@ -98,7 +113,7 @@ fn oracle_prop_with_temp_buffer_re_search() {
                     (if (re-search-forward "bar" nil t)
                         (match-beginning 0)
                       nil))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 5""#]]);
 }
 
 #[test]
@@ -113,6 +128,9 @@ fn oracle_prop_with_temp_buffer_line_operations() {
                     (let ((start (point)))
                       (end-of-line)
                       (buffer-substring start (point))))"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK \"line2\"""#]],
+    );
     assert_ok_eq(r#""line2""#, &o, &n);
 }

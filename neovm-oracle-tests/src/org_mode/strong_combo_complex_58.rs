@@ -12,7 +12,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo58_babel_cache_and_drawer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ob-emacs-lisp)
@@ -24,13 +24,14 @@ fn combo58_babel_cache_and_drawer() {
       (push (org-babel-execute-src-block) r)
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[r#""OK (60 (:result-count 0))""#]],
     );
 }
 
 #[test]
 fn combo58_map_entries_with_region_scope() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* A\n** A1\n** A2\n* B\n** B1\n** B2\n")
@@ -52,13 +53,16 @@ fn combo58_map_entries_with_region_scope() {
                        (lambda () (org-get-heading t t t t))
                        nil 'tree)) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:full (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"B2\")) (:region nil) (:tree (\"A\" \"A1\" \"A2\")))""#
+        ]],
     );
 }
 
 #[test]
 fn combo58_timestamp_range_days_between() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Event <2024-01-01 Mon>--<2024-01-10 Wed>\n")
@@ -86,13 +90,16 @@ fn combo58_timestamp_range_days_between() {
                   (push (list :days-approx (round days)) r))
               (error (push (list :calc-error t) r)))))))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:range-properties (2024 1 1 2024 1 10)) (:type active-range) (:seconds-diff 0) (:days-approx 0))""#
+        ]],
     );
 }
 
 #[test]
 fn combo58_table_formula_if_conditional() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| Score | Grade |\n|-------+-------|\n")
@@ -115,13 +122,14 @@ fn combo58_table_formula_if_conditional() {
     (goto-char (point-min))
     (push (list :to-lisp (org-table-to-lisp)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \"Grade\")""#]],
     );
 }
 
 #[test]
 fn combo58_footnote_label_collisions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Ref[fn:1] and [fn:1] again.\n[fn:1] The definition.\n")
@@ -137,13 +145,14 @@ fn combo58_footnote_label_collisions() {
                                               (org-element-map (org-element-parse-buffer) 'footnote-reference #'identity))) r)
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments (0 . 0) 1)""#]],
     );
 }
 
 #[test]
 fn combo58_cycle_with_plain_lists() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (let ((org-cycle-include-plain-lists t))
@@ -163,13 +172,16 @@ fn combo58_cycle_with_plain_lists() {
       (push (list :after-show-headlines (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
       (push (list :after-show-items (length (org-element-map (org-element-parse-buffer) 'item #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:heading headline) (:after-fold-invisible nil) (:after-children-invisible nil) (:after-subtree-invisible nil) (:after-show-headlines 1) (:after-show-items 5))""#
+        ]],
     );
 }
 
 #[test]
 fn combo58_agenda_list_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'org-agenda)
@@ -195,13 +207,16 @@ fn combo58_agenda_list_basic() {
                                      "TODO=\"TODO\"")) r))
       (error (push (list :agenda-error t) r)))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:agenda-fbound t) (:get-day-fbound t) (:agenda-error t))""#
+        ]],
     );
 }
 
 #[test]
 fn combo58_store_link_custom_id_fallback() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ol)
@@ -225,13 +240,16 @@ fn combo58_store_link_custom_id_fallback() {
       (push (list :final-links (mapcar (lambda (l) (org-element-property :type l))
                                        (org-element-map (org-element-parse-buffer) 'link #'identity))) r)
       (nreverse r))))"##,
+        expect_test::expect![[
+            r#""OK ((:link-created nil) (:link-has-custom-id nil) (:insert-error t) (:final-links nil))""#
+        ]],
     );
 }
 
 #[test]
 fn combo58_export_metadata_extraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (require 'ox)
@@ -257,13 +275,16 @@ fn combo58_export_metadata_extraction() {
                     (sort (mapcar #'car (org-export-backend-transcoders ascii-backend))
                           #'string-lessp))) r))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:title (#(\"Test Doc\" 0 8 (:parent (#(\"Test Doc\" 0 8 (:parent #5))))))) (:author (#(\"Alice<br>Bob\" 0 12 (:parent (#(\"Alice<br>Bob\" 0 12 (:parent #5))))))) (:date ((timestamp (:standard-properties [1 nil nil nil 17 0 nil nil nil nil nil nil nil nil #<buffer  *Org parse*> nil nil #2] :type active :range-type nil :raw-value \"<2024-06-15 Sat>\" :year-start 2024 :month-start 6 :day-start 15 :hour-start nil :minute-start nil :year-end 2024 :month-end 6 :day-end 15 :hour-end nil :minute-end nil)))) (:creator \"Emacs\") (:description nil) (:keywords nil) (:backends 10) (:ascii-transcoders nil))""#
+        ]],
     );
 }
 
 #[test]
 fn combo58_list_to_generic_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "- item one\n")
@@ -292,5 +313,8 @@ fn combo58_list_to_generic_conversion() {
                                                 ""))))
                           items)) r))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:item-count 6) (:list-count 3) (:list-types (unordered unordered ordered)) (:item-structure ((nil nil \"- item one\n  - neste\") (nil nil \"  - nested 1a\n\") (nil nil \"  - nested 1b\n\") (nil nil \"- item two\n  1. orde\") (nil nil \"  1. ordered a\n\") (nil nil \"  2. ordered b\n\"))))""#
+        ]],
     );
 }

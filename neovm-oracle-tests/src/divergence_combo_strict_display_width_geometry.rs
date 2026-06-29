@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_e8_string_width_with_display_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-width "abc")
       (string-width (propertize "x" 'display "longer-text"))
@@ -20,13 +20,14 @@ fn div_e8_string_width_with_display_props() {
       (string-width (propertize "abc" 'display '(space :width 5)))
       (string-width (propertize "abc" 'display '(space :align-to 10))))
 "##,
+        expect_test::expect![[r#""OK (3 1 2 0 3 3)""#]],
     );
 }
 
 #[test]
 fn div_e8_window_internal_metrics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-wim*")))
   (unwind-protect
@@ -42,13 +43,14 @@ fn div_e8_window_internal_metrics() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK ((nil) (0 0 nil nil) (nil 0 t nil 0 t nil) 0 80 80)""#]],
     );
 }
 
 #[test]
 fn div_e8_justification_fill_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abc")
@@ -57,6 +59,7 @@ fn div_e8_justification_fill_column() {
         (current-justification)
         (current-indentation)))
 "##,
+        expect_test::expect![[r#""OK (70 0 left 0)""#]],
     );
 }
 
@@ -69,7 +72,7 @@ fn div_e8_geometry_count_screen_lines_wrapped() {
     // count-screen-lines does not wrap long lines in Neomacs: a 200-char line
     // on an 80-column body (window-body-width agrees at 80) is 3 screen lines
     // in GNU but Neomacs counts it as a single screen line.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-csl*")))
   (unwind-protect
@@ -83,6 +86,7 @@ fn div_e8_geometry_count_screen_lines_wrapped() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (3 80 23)""#]],
     );
 }
 
@@ -94,7 +98,7 @@ fn div_e8_geometry_pos_visible_in_window() {
     // Neomacs:   OK (nil nil 1 152)
     // window-end (with update) reports a far smaller position in Neomacs; the
     // visible-region geometry for a many-line buffer diverges from GNU.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-pvw*")))
   (unwind-protect
@@ -112,6 +116,7 @@ fn div_e8_geometry_pos_visible_in_window() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (nil nil 1 411)""#]],
     );
 }
 
@@ -124,7 +129,7 @@ fn div_e8_geometry_move_to_window_line() {
     // vertical-motion across a long unwrapped line: GNU advances by one screen
     // line (to the body width, char 80); Neomacs does not wrap and stays at
     // point 1.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-mtwl*")))
   (unwind-protect
@@ -143,13 +148,14 @@ fn div_e8_geometry_move_to_window_line() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
+        expect_test::expect![[r#""OK (1 80 1 80)""#]],
     );
 }
 
 #[test]
 fn div_e8_format_control_char_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%s" (make-string 3 7))
       (prin1-to-string (make-string 3 7))
@@ -157,5 +163,8 @@ fn div_e8_format_control_char_strings() {
       (format "%s" (string 9 10 13))
       (prin1-to-string (string 9 10 13)))
 "##,
+        expect_test::expect![[
+            r#""OK (\"\u{7}\u{7}\u{7}\" \"\\\"\u{7}\u{7}\u{7}\\\"\" \"\\\"\u{7}\u{8}\\\"\" \"\t\n\\r\" \"\\\"\t\n\\r\\\"\")""#
+        ]],
     );
 }

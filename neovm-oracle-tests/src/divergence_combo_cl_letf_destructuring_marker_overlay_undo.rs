@@ -15,7 +15,7 @@ fn combo_cl_letf_marker_overlay_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // cl-letf with function rebinding; markers/overlays track.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'cl-lib)
   (let ((buf (generate-new-buffer " combo-clletf")))
@@ -49,6 +49,7 @@ fn combo_cl_letf_marker_overlay_textprop_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -57,7 +58,7 @@ fn combo_cl_letf_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // cl-letf with buffer-local variable rebinding.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'cl-lib)
   (setq cl-letf-global 'original)
@@ -92,6 +93,7 @@ fn combo_cl_letf_buffer_local_marker_overlay_undo() {
                                     (get-text-property 7 'word))))
               (kill-buffer buf)
               (list in-letf after-undo)))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -100,7 +102,7 @@ fn combo_cl_destructuring_bind_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // cl-destructuring-bind with edit inside.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'cl-lib)
   (let ((buf (generate-new-buffer " combo-cldb")))
@@ -137,6 +139,7 @@ fn combo_cl_destructuring_bind_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -145,7 +148,7 @@ fn combo_cl_multiple_value_bind_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // cl-multiple-value-bind with edit inside.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'cl-lib)
   (let ((buf (generate-new-buffer " combo-clmvb")))
@@ -181,6 +184,7 @@ fn combo_cl_multiple_value_bind_marker_overlay_undo() {
                                 (get-text-property 15 'part))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (void-function values)""#]],
     );
 }
 
@@ -189,7 +193,7 @@ fn combo_cl_letf_nested_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Nested cl-letf with edits.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'cl-lib)
   (let ((buf (generate-new-buffer " combo-clletfn")))
@@ -228,5 +232,6 @@ fn combo_cl_letf_nested_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

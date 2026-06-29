@@ -7,13 +7,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_gc_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'garbage-collect)
   (fboundp 'memory-info)
   (fboundp 'memory-use-counts)
   (consp (garbage-collect))
   (consp (memory-use-counts)))"#,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
@@ -21,12 +22,13 @@ fn divergence_gc_functions() {
 fn divergence_gc_cons_threshold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (integerp gc-cons-threshold)
   (> gc-cons-threshold 0)
   (integerp gc-cons-percentage)
   (>= gc-cons-percentage 0.0))"#,
+        expect_test::expect![[r#""OK (t t nil t)""#]],
     );
 }
 
@@ -34,12 +36,13 @@ fn divergence_gc_cons_threshold() {
 fn divergence_gc_elapsed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (integerp gcs-done)
   (>= gcs-done 0)
   (numberp gc-elapsed)
   (>= gc-elapsed 0))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -47,11 +50,12 @@ fn divergence_gc_elapsed() {
 fn divergence_dynamic_modules() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (featurep 'dynamic-modules)
   (fboundp 'module-load)
   (fboundp 'load))"#,
+        expect_test::expect![[r#""OK (nil t t)""#]],
     );
 }
 
@@ -59,11 +63,12 @@ fn divergence_dynamic_modules() {
 fn divergence_dump_emacs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'dump-emacs)
   (fboundp 'dump-mode)
   (fboundp 'pdumper-load))"#,
+        expect_test::expect![[r#""OK (nil nil nil)""#]],
     );
 }
 
@@ -71,12 +76,13 @@ fn divergence_dump_emacs() {
 fn divergence_pure_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'purecopy)
   (fboundp 'make-pure-string)
   (fboundp 'pure?)
   (listp pure-bytes-used))"#,
+        expect_test::expect![[r#""OK (t nil nil nil)""#]],
     );
 }
 
@@ -84,13 +90,14 @@ fn divergence_pure_functions() {
 fn divergence_memory_limits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (integerp most-positive-fixnum)
   (integerp most-negative-fixnum)
   (> most-positive-fixnum 0)
   (< most-negative-fixnum 0)
   (= (1+ most-positive-fixnum) most-negative-fixnum))"#,
+        expect_test::expect![[r#""OK (t t t t nil)""#]],
     );
 }
 
@@ -98,7 +105,7 @@ fn divergence_memory_limits() {
 fn divergence_bool_vector_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((a (make-bool-vector 8 t))
         (b (make-bool-vector 8 nil)))
   (aset b 0 t)
@@ -108,6 +115,7 @@ fn divergence_bool_vector_ops() {
         (bool-vector-count-matches b t)
         (bool-vector-count-matches a nil)
         (bool-vector-count-matches b nil)))"#,
+        expect_test::expect![[r#""ERR (void-function bool-vector-count-matches)""#]],
     );
 }
 
@@ -115,7 +123,7 @@ fn divergence_bool_vector_ops() {
 fn divergence_record_type_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let ((r (record 'cl-struct-tag 1 2 3)))
   (list (recordp r)
         (length r)
@@ -123,6 +131,7 @@ fn divergence_record_type_p() {
         (aref r 1)
         (aref r 2)
         (aref r 3)))"#,
+        expect_test::expect![[r#""OK (t 4 cl-struct-tag 1 2 3)""#]],
     );
 }
 
@@ -130,11 +139,12 @@ fn divergence_record_type_p() {
 fn divergence_compiled_function_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (compiled-function-p (symbol-function 'car))
   (compiled-function-p (lambda (x) x))
   (compiled-function-p 'not-a-function-xyz)
   (subrp (symbol-function 'car)))"#,
+        expect_test::expect![[r#""OK (t nil nil t)""#]],
     );
 }

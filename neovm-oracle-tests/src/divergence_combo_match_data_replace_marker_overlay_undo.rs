@@ -15,7 +15,7 @@ fn combo_match_data_preserved_across_let_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // match-data must survive let-binding of dynamic variables.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "aaa:111 bbb:222 ccc:333")
   (re-search-forward "\\([a-z]+\\):\\([0-9]+\\)")
@@ -30,6 +30,9 @@ fn combo_match_data_preserved_across_let_binding() {
     (list (match-string 1)
           (match-string 2)
           (equal (match-data) saved-match)))) "#,
+        expect_test::expect![[
+            r#""aaa:111 bbb:222 ccc:333ERR (search-failed \"\\\\([a-z]+\\\\):\\\\([0-9]+\\\\)\")""#
+        ]],
     );
 }
 
@@ -38,7 +41,7 @@ fn combo_match_data_preserved_across_re_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Outer match data preserved when inner re-search fails.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "alpha:100 beta:200")
   (re-search-forward "\\([a-z]+\\):\\([0-9]+\\)")
@@ -49,6 +52,9 @@ fn combo_match_data_preserved_across_re_search() {
     (list outer-match
           (match-string 1)
           (match-string 2)))) "#,
+        expect_test::expect![[
+            r#""alpha:100 beta:200ERR (search-failed \"\\\\([a-z]+\\\\):\\\\([0-9]+\\\\)\")""#
+        ]],
     );
 }
 
@@ -57,7 +63,7 @@ fn combo_replace_match_marker_overlay_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // replace-match with fixedcase and literal, markers/overlays track.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello WORLD hello WORLD hello")
   (let ((m1 (copy-marker 7 nil))
@@ -90,6 +96,9 @@ fn combo_replace_match_marker_overlay_undo_chain() {
                               (get-text-property 7 'word)
                               (get-text-property 19 'word))))
         (list after-replace after-undo))))) "#,
+        expect_test::expect![[
+            r#""hello UNIVERSE hello UNIVERSE helloERR (wrong-type-argument listp t)""#
+        ]],
     );
 }
 
@@ -98,7 +107,7 @@ fn combo_replace_match_shorter_markers_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Replace with shorter string; markers after match must retreat.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-XXXXXXX-BBB-XXXXXXX-CCC")
   (let ((m-a (copy-marker 4 nil))
@@ -131,6 +140,7 @@ fn combo_replace_match_shorter_markers_textprop_undo() {
                             (get-text-property 4 'sect)
                             (get-text-property 5 'sect))))
         (list after restored))))) "#,
+        expect_test::expect![[r#""AAA-X-BBB-X-CCCERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -139,7 +149,7 @@ fn combo_match_data_with_group_replacement_and_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Group capture + backreference replacement in narrowed buffer.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "alpha:100 beta:200 gamma:300 delta:400")
   (let ((m1 (copy-marker 10 nil))
@@ -168,6 +178,9 @@ fn combo_match_data_with_group_replacement_and_narrow() {
               (m2-restored (marker-position m2)))
           (list narrowed match-after full m1-pos m2-pos ov-range
                 restored m1-restored m2-restored)))))) "#,
+        expect_test::expect![[
+            r#""alpha:100 beta:200 gamma:300 delta:400ERR (args-out-of-range 31 40)""#
+        ]],
     );
 }
 
@@ -176,7 +189,7 @@ fn combo_match_data_replace_loop_with_overlay_evaporate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Loop replace with evaporate overlays; some should vanish.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AA BB CC DD EE FF")
   (let ((ovs nil))
@@ -205,5 +218,6 @@ fn combo_match_data_replace_loop_with_overlay_evaporate() {
                                                  (overlay-get ov 'tag))))
                                     (nreverse ovs)))))
         (list after restored))))) "#,
+        expect_test::expect![[r#""XX XX XX XX XX XXERR (wrong-type-argument listp t)""#]],
     );
 }

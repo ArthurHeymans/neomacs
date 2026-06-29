@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_defvarlocal_setqdefault_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dvl-test-var 'default-val)
   (let ((buf (generate-new-buffer "dvl")))
@@ -41,6 +41,7 @@ fn combo_defvarlocal_setqdefault_marker_overlay_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -48,7 +49,7 @@ fn combo_defvarlocal_setqdefault_marker_overlay_undo() {
 fn combo_defvarlocal_narrow_clone_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dvl-clone-var 'base)
   (let ((buf (generate-new-buffer "dvc")))
@@ -84,6 +85,7 @@ fn combo_defvarlocal_narrow_clone_overlay() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -91,7 +93,7 @@ fn combo_defvarlocal_narrow_clone_overlay() {
 fn combo_defvarlocal_multi_buffer_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dvl-multi-var 'shared)
   (let ((b1 (generate-new-buffer "dvm1"))
@@ -134,6 +136,7 @@ fn combo_defvarlocal_multi_buffer_overlay_undo() {
           (list v mp s))))
     (kill-buffer b1)
     (kill-buffer b2)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -141,7 +144,7 @@ fn combo_defvarlocal_multi_buffer_overlay_undo() {
 fn combo_defvarlocal_setq_default_local_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dvl-sdl-var 'init)
   (let ((buf (generate-new-buffer "dsl")))
@@ -171,6 +174,7 @@ fn combo_defvarlocal_setq_default_local_marker() {
                 dvl-sdl-var
                 (default-value 'dvl-sdl-var)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -178,7 +182,7 @@ fn combo_defvarlocal_setq_default_local_marker() {
 fn combo_defvarlocal_overlay_narrow_undo_clone() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dvl-onuc-var 'base)
   (let ((buf (generate-new-buffer "don")))
@@ -213,5 +217,6 @@ fn combo_defvarlocal_overlay_narrow_undo_clone() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

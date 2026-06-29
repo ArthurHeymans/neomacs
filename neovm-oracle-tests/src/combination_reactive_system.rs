@@ -105,7 +105,12 @@ fn oracle_prop_combination_reactive_observable_observer() {
     (fmakunbound 'neovm--rs-get-value)
     (makunbound 'neovm--rs-observables)
     (makunbound 'neovm--rs-event-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (10 3 5 ((logger temp 20 25 \"20->25\") (alarm temp 20 25 ok) (logger temp 25 35 \"25->35\") (alarm temp 25 35 hot) (logger temp 35 10 \"35->10\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +186,12 @@ fn oracle_prop_combination_reactive_signal_slot() {
     (fmakunbound 'neovm--rs2-emit)
     (makunbound 'neovm--rs2-signals)
     (makunbound 'neovm--rs2-results)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (4 ((on-click handler-a (10 20) \"click@(10,20)\") (on-click handler-b (10 20) 200) (on-hover tooltip (5 15) \"hover@5\") (on-click handler-a (30 40) \"click@(30,40)\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +288,10 @@ fn oracle_prop_combination_reactive_computed_properties() {
     (makunbound 'neovm--rs3-cells)
     (makunbound 'neovm--rs3-computeds)
     (makunbound 'neovm--rs3-eval-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (50 30 100 50 160 56 4)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -398,7 +411,10 @@ fn oracle_prop_combination_reactive_dataflow_graph() {
     (makunbound 'neovm--rs4-nodes)
     (makunbound 'neovm--rs4-edges)
     (makunbound 'neovm--rs4-prop-order)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (6 12 0 15 15 18 3)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -500,7 +516,10 @@ fn oracle_prop_combination_reactive_glitch_prevention() {
     (fmakunbound 'neovm--rs5-set-a-glitchy)
     (makunbound 'neovm--rs5-vals)
     (makunbound 'neovm--rs5-snapshots)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 2 3) (correct 10 11 21) (glitchy 10 11 12) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -605,7 +624,12 @@ fn oracle_prop_combination_reactive_batch_updates() {
     (makunbound 'neovm--rs6-batch-mode)
     (makunbound 'neovm--rs6-dirty)
     (makunbound 'neovm--rs6-notify-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (2 6 (\"x:0->1\" \"x:1->2\" \"x:2->15\" \"x:5->15\" \"x:10->15\" \"y:0->100\") 15 100)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -695,5 +719,10 @@ fn oracle_prop_combination_reactive_dispose_pattern() {
     (makunbound 'neovm--rs7-subs)
     (makunbound 'neovm--rs7-active)
     (makunbound 'neovm--rs7-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (3 0 4 ((sub-1 data-source 5 10) (sub-2 data-source 5 105) (sub-2 data-source 10 110) (sub-3 other-source \"hello\" \"got:hello\")))""#
+        ]],
+    );
 }

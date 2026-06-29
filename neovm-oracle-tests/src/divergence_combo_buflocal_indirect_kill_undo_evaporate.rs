@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_buflocal_indirect_kill_undo_marker_evaporate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq bl-global 'outside)
   (let ((base (generate-new-buffer " combo-base")))
@@ -62,6 +62,7 @@ fn combo_buflocal_indirect_kill_undo_marker_evaporate() {
                     (list ind-bl ind-zone-1 ind-zone-15
                           after-del after-undo base-after-kill
                           bl-global)))))))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -69,7 +70,7 @@ fn combo_buflocal_indirect_kill_undo_marker_evaporate() {
 fn combo_buflocal_multi_buffer_switch_undo_prop_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq switch-var 'global)
   (let ((b1 (generate-new-buffer " combo-sw1"))
@@ -130,6 +131,7 @@ fn combo_buflocal_multi_buffer_switch_undo_prop_marker() {
       (kill-buffer b2)
       (kill-buffer b3)
       (list (nreverse results) switch-var)))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }
 
@@ -137,7 +139,7 @@ fn combo_buflocal_multi_buffer_switch_undo_prop_marker() {
 fn combo_buflocal_indirect_shared_textprop_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((base (generate-new-buffer " combo-shbase")))
     (with-current-buffer base
@@ -170,6 +172,7 @@ fn combo_buflocal_indirect_shared_textprop_marker_undo() {
               (kill-buffer base)
               (list ind2-sees ind2-prop m-pos
                     ind2-after-undo ind2-prop-undo m-after))))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -177,7 +180,7 @@ fn combo_buflocal_indirect_shared_textprop_marker_undo() {
 fn combo_buflocal_kill_restore_default_overlay_evaporate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq kill-test-var 'original)
   (let ((buf (generate-new-buffer " combo-kill")))
@@ -201,6 +204,7 @@ fn combo_buflocal_kill_restore_default_overlay_evaporate() {
                               (overlay-get ov3 'kind))))
           (kill-buffer buf)
           (list pre-kill kill-test-var))))) "#,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -208,7 +212,7 @@ fn combo_buflocal_kill_restore_default_overlay_evaporate() {
 fn combo_buflocal_narrow_regex_replace_undo_marker_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq chain-var 'global)
   (let ((buf (generate-new-buffer " combo-chain")))
@@ -261,5 +265,6 @@ fn combo_buflocal_narrow_regex_replace_undo_marker_chain() {
                       prop-1 prop-13
                       restored m1-after m2-after m3-after
                       prop-1-restored prop-13-restored))))))))) "#,
+        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
     );
 }

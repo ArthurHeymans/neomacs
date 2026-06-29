@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx179_timer_creation_and_cancel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (fired)
   (let ((timer (run-with-timer 0 nil (lambda () (push :fired fired)))))
@@ -16,13 +16,14 @@ fn div_cx179_timer_creation_and_cancel() {
     (cancel-timer timer)
     (list (nreverse fired))))
 "##,
+        expect_test::expect![[r#""OK ((:fired))""#]],
     );
 }
 
 #[test]
 fn div_cx179_repeat_timer_fires_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (fired)
   (let ((timer (run-with-timer 0 0.001 (lambda () (push :tick fired)))))
@@ -31,13 +32,16 @@ fn div_cx179_repeat_timer_fires_multiple() {
   (list (>= (length fired) 1)
         (nreverse fired)))
 "##,
+        expect_test::expect![[
+            r#""OK (t (:tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx179_idle_timer_does_not_fire_during_busy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (fired)
   (let ((idle (run-with-idle-timer 0.05 nil (lambda () (push :idle fired)))))
@@ -47,38 +51,41 @@ fn div_cx179_idle_timer_does_not_fire_during_busy() {
       (cancel-timer idle)
       (list short (nreverse fired)))))
 "##,
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
 #[test]
 fn div_cx179_input_pending_p_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((unread-command-events nil))
   (list (input-pending-p)
         (fboundp 'input-pending-p)
         (fboundp 'sit-for)))
 "##,
+        expect_test::expect![[r#""OK (nil t t)""#]],
     );
 }
 
 #[test]
 fn div_cx179_sit_for_returns_t() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (sit-for 0)
       (sit-for 0.001)
       (fboundp 'sit-for))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx179_timer_list_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((before timer-list))
   (let ((timer (run-with-timer 100 nil (lambda () :never))))
@@ -88,13 +95,14 @@ fn div_cx179_timer_list_query() {
         (list (>= after-add (1+ (length before)))
               (<= after-cancel after-add)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx179_idle_timer_list_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((before timer-idle-list))
   (let ((idle (run-with-idle-timer 100 nil (lambda () :never))))
@@ -104,13 +112,14 @@ fn div_cx179_idle_timer_list_query() {
         (list (>= after-add (1+ (length before)))
               (<= after-cancel after-add)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx179_timer_predicate_and_metadata() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer (run-with-timer 100 nil (lambda () :never))))
   (list (timerp timer)
@@ -119,13 +128,14 @@ fn div_cx179_timer_predicate_and_metadata() {
         (timer--function timer))
   (cancel-timer timer))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx179_with_timeout_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'with-timeout)
@@ -133,13 +143,14 @@ fn div_cx179_with_timeout_availability() {
           (fboundp 'with-timeout-unsuspend))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx179_timer_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (fired)
   (let ((timer (run-with-timer 0 nil (lambda () (push :fired fired)))))
@@ -166,5 +177,6 @@ fn div_cx179_timer_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

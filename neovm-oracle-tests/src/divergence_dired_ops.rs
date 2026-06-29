@@ -13,7 +13,7 @@ macro_rules! diredt {
         #[test]
         fn $name() {
             return_if_neovm_enable_oracle_proptest_not_set!();
-            assert_oracle_parity($body);
+            crate::common::assert_oracle_parity($body);
         }
     };
 }

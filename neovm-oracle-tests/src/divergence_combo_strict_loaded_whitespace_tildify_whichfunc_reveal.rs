@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_i3_whitespace_mode_active_style() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (insert "foo bar   ")
@@ -22,13 +22,14 @@ fn div_i3_whitespace_mode_active_style() {
         (boundp 'whitespace-active-style)))
 "##,
         &["whitespace.el"],
+        expect_test::expect![[r#""OK (nil t)""#]],
     );
 }
 
 #[test]
 fn div_i3_tildify_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (insert "hello world")
@@ -36,13 +37,14 @@ fn div_i3_tildify_region() {
   (buffer-string))
 "##,
         &["textmodes/tildify.el"],
+        expect_test::expect![[r#""OK \"hello world\"""#]],
     );
 }
 
 #[test]
 fn div_i3_which_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -52,13 +54,14 @@ fn div_i3_which_function() {
   (list (which-function)))
 "##,
         &["progmodes/which-func.el"],
+        expect_test::expect![[r#""OK (\"foo\")""#]],
     );
 }
 
 #[test]
 fn div_i3_reveal_over_outline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (outline-mode)
@@ -70,13 +73,14 @@ fn div_i3_reveal_over_outline() {
         (next-single-property-change 1 'invisible)))
 "##,
         &["reveal.el", "outline.el"],
+        expect_test::expect![[r#""OK (nil nil)""#]],
     );
 }
 
 #[test]
 fn div_i3_whitespace_trailing_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity_with_load(
+    crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
   (insert "ok   \nclean\n\t tabbed\n")
@@ -87,5 +91,6 @@ fn div_i3_whitespace_trailing_detection() {
         (get-text-property 3 'font-lock-face)))
 "##,
         &["whitespace.el"],
+        expect_test::expect![[r#""OK (nil 0 nil)""#]],
     );
 }

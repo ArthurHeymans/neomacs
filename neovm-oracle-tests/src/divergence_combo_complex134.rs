@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx134_outline_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -17,13 +17,14 @@ fn div_cx134_outline_mode_availability() {
             (boundp 'outline-level)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx134_outline_basic_hide_reveal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -38,13 +39,16 @@ fn div_cx134_outline_basic_hide_reveal() {
           (list after-hide after-show invisibility-spec))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"* Top\n** Sub1\n** Sub2\n*** SubSub1\n* Second\nbody\n\" \"* Top\n** Sub1\n** Sub2\n*** SubSub1\n* Second\nbody\n\" ((outline . t) t))""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx134_outline_visible_only_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -57,13 +61,16 @@ fn div_cx134_outline_visible_only_substring() {
         (list visible (buffer-string))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (\"* Top\nhidden body 1\n* Second\nhidden body 2\n\" \"* Top\nhidden body 1\n* Second\nhidden body 2\n\")""#
+        ]],
     );
 }
 
 #[test]
 fn div_cx134_allout_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -73,13 +80,14 @@ fn div_cx134_allout_availability() {
             (boundp 'allout-auto-activation)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil t)""#]],
     );
 }
 
 #[test]
 fn div_cx134_foldout_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -87,13 +95,14 @@ fn div_cx134_foldout_availability() {
       (list (fboundp 'foldout-zoom-subtree)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t)""#]],
     );
 }
 
 #[test]
 fn div_cx134_hideif_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -102,13 +111,14 @@ fn div_cx134_hideif_availability() {
             (boundp 'hide-ifdef-env)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx134_page_delimiter_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "page 1 content\n\x0cpage 2 content\n\x0cpage 3 content")
@@ -121,13 +131,14 @@ fn div_cx134_page_delimiter_navigation() {
         (backward-page 1)
         (list delim after-page-1 after-page-2 (point) (char-after))))))
 "##,
+        expect_test::expect![[r#""OK (\"^\u{c}\" 17 33 17 112)""#]],
     );
 }
 
 #[test]
 fn div_cx134_outline_promote_demote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -142,13 +153,14 @@ fn div_cx134_outline_promote_demote() {
           (list after-demote after-promote))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }
 
 #[test]
 fn div_cx134_newsticker_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -157,13 +169,14 @@ fn div_cx134_newsticker_availability() {
             (boundp 'newsticker-url-list)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx134_outline_next_prev_heading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -178,13 +191,14 @@ fn div_cx134_outline_next_prev_heading() {
           (list h2 h3 (point) (line-beginning-position)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (14 28 14 14)""#]],
     );
 }
 
 #[test]
 fn div_cx134_eww_render_hook_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -194,13 +208,14 @@ fn div_cx134_eww_render_hook_availability() {
             (boundp 'eww-history-limit)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil t t)""#]],
     );
 }
 
 #[test]
 fn div_cx134_outline_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (with-temp-buffer
@@ -228,5 +243,6 @@ fn div_cx134_outline_with_marker_overlay_undo_narrow_mega() {
                 (text-properties-at 1)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored outline-before-first-heading)""#]],
     );
 }

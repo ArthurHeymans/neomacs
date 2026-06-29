@@ -11,7 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_f0_print_quoted_and_macros() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (let ((print-quoted t)) (prin1-to-string '(quote x)))
       (let ((print-quoted t)) (prin1-to-string (list 'function 'foo)))
@@ -20,13 +20,14 @@ fn div_f0_print_quoted_and_macros() {
       (read "'x")
       (read "#'foo"))
 "##,
+        expect_test::expect![[r##""OK (\"'x\" \"#'foo\" \"'(a b c)\" \"(quote x)\" 'x #'foo)""##]],
     );
 }
 
 #[test]
 fn div_f0_void_and_bound_checks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'tab-width)
       (boundp 'nonexistent-probe-var-xyz)
@@ -40,13 +41,14 @@ fn div_f0_void_and_bound_checks() {
       (condition-case err (nonexistent-probe-fn-call-f0 1)
         (void-function (car err))))
 "##,
+        expect_test::expect![[r#""OK (t nil t nil t 1 void-variable void-function)""#]],
     );
 }
 
 #[test]
 fn div_f0_make_symbol_vs_intern_identity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s1 (make-symbol "probe"))
       (s2 (make-symbol "probe")))
@@ -57,13 +59,14 @@ fn div_f0_make_symbol_vs_intern_identity() {
         (intern-soft "car")
         (not (eq s1 (intern "probe")))))
 "##,
+        expect_test::expect![[r#""OK (nil t \"probe\" t car t)""#]],
     );
 }
 
 #[test]
 fn div_f0_let_lexical_shadowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (let ((x 1) (y 2)) (let ((x 3)) (list x y)))
       (let* ((x 1) (y (1+ x))) (list x y))
@@ -72,13 +75,14 @@ fn div_f0_let_lexical_shadowing() {
         (let ((f1 (lambda () (setq counter (1+ counter)))))
           (list (funcall f1) (funcall f1) (funcall f1)))))
 "##,
+        expect_test::expect![[r#""ERR (void-function lexical-let)""#]],
     );
 }
 
 #[test]
 fn div_f0_format_error_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case err (format "%") (error (car err)))
       (condition-case err (format "%5") (error (car err)))
@@ -87,13 +91,14 @@ fn div_f0_format_error_cases() {
       (condition-case err (format "%s" 1 2) (error (car err)))
       (format "%s" 1))
 "##,
+        expect_test::expect![[r#""OK (error error \"1\" error \"1\" \"1\")""#]],
     );
 }
 
 #[test]
 fn div_f0_string_invalid_codepoints() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case err (make-string 3 1114112) (error (car err)))
       (condition-case err (string 1114112) (error (car err)))
@@ -102,17 +107,19 @@ fn div_f0_string_invalid_codepoints() {
       (string 65 66 67)
       (length (make-string 3 128578)))
 "##,
+        expect_test::expect![[r#""OK (\"������������\" \"����\" \"����\" \"AAA\" \"ABC\" 3)""#]],
     );
 }
 
 #[test]
 fn div_f0_with_output_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-output-to-string (princ "hello") (princ " world"))
       (with-output-to-string (print 'a) (princ "b"))
       (with-temp-message "probe-temp-msg" (current-message)))
 "##,
+        expect_test::expect![[r#""OK (\"hello world\" \"\na\nb\" nil)""#]],
     );
 }

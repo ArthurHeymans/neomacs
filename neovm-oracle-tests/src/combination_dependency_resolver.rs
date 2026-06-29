@@ -97,7 +97,12 @@ fn oracle_prop_depresolver_topological_sort() {
                  '(a b c d e f)
                  '((a . b) (a . c) (b . d) (c . d) (c . e) (d . f) (e . f))))
     (fmakunbound 'neovm--dep-topo-sort)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok a b c d) (ok a b c d) (ok x y z) (cycle a b c) (cycle c d) (ok solo) (ok a b c d e f))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +179,10 @@ fn oracle_prop_depresolver_version_constraints() {
     (fmakunbound 'neovm--dep-version-compare)
     (fmakunbound 'neovm--dep-check-constraint)
     (fmakunbound 'neovm--dep-check-all-constraints)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable required)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +261,12 @@ fn oracle_prop_depresolver_full_resolution() {
             (funcall 'neovm--dep-resolve 'cycle-a))))
     (fmakunbound 'neovm--dep-resolve)
     (makunbound 'neovm--dep-registry)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok http-lib html-parser template-engine web-framework connection-pool database app) (ok http-lib) (ok http-lib html-parser template-engine web-framework) (error . \"unknown: nonexistent\") (error . \"cycle: cycle-a\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -344,7 +357,12 @@ fn oracle_prop_depresolver_conflict_detection() {
                    (lib-q . ((1 0 0) . (2 0 0))))))
     (fmakunbound 'neovm--dep-ranges-overlap)
     (fmakunbound 'neovm--dep-find-conflicts)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t nil t ((lib-y ((2 0 0) 3 0 0) ((1 0 0) 1 5 0))) nil nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -459,7 +477,12 @@ fn oracle_prop_depresolver_optional_deps_build_order() {
                    'app registry '(analytics))))
     (fmakunbound 'neovm--dep-build-layers)
     (fmakunbound 'neovm--dep-resolve-with-optional)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((a b) (c d) (e) (f)) ((x y z)) ((a) (b) (c) (d)) cycle (utils core theme ui analytics app) (utils core ui app) (utils core ui analytics app))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -524,7 +547,12 @@ fn oracle_prop_depresolver_reverse_deps_impact() {
             (funcall 'neovm--dep-impact 'app rev))))
     (fmakunbound 'neovm--dep-reverse-deps)
     (fmakunbound 'neovm--dep-impact)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((api app) (web) nil (api app http web) (api app db) (api app db pool) (app))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -591,5 +619,10 @@ fn oracle_prop_depresolver_install_simulation() {
                    '(html-parser)
                    deps-map)))
     (fmakunbound 'neovm--dep-install-plan)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((http-server html-parser template-engine web-framework connection-pool database logger app) ((install http-server 2) (install html-parser 3) (install template-engine 2) (install web-framework 1) (install connection-pool 2) (install database 1) (install logger 1) (install app 0))) ((template-engine web-framework database logger app) ((skip http-server already-installed 2) (skip html-parser already-installed 3) (install template-engine 2) (install web-framework 1) (skip connection-pool already-installed 2) (install database 1) (install logger 1) (install app 0))) (nil ((skip app already-installed 0))) ((html-parser) ((install html-parser 0))) ((http-server template-engine web-framework) ((install http-server 1) (skip html-parser already-installed 2) (install template-engine 1) (install web-framework 0))))""#
+        ]],
+    );
 }

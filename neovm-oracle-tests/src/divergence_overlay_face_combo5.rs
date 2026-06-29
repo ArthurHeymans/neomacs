@@ -12,7 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_combo5_font_lock_elisp_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -22,13 +22,14 @@ fn div_combo5_font_lock_elisp_defun() {
         (get-text-property 9 'face)
         (get-text-property 15 'face)))
 "##,
+        expect_test::expect![[r#""OK (font-lock-keyword-face font-lock-function-name-face nil)""#]],
     );
 }
 
 #[test]
 fn div_combo5_font_lock_elisp_defvar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -38,13 +39,14 @@ fn div_combo5_font_lock_elisp_defvar() {
         (get-text-property 9 'face)
         (get-text-property 15 'face)))
 "##,
+        expect_test::expect![[r#""OK (font-lock-keyword-face font-lock-variable-name-face nil)""#]],
     );
 }
 
 #[test]
 fn div_combo5_font_lock_elisp_string_comment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -53,13 +55,14 @@ fn div_combo5_font_lock_elisp_string_comment() {
   (list (get-text-property 10 'face)
         (get-text-property 16 'face)))
 "##,
+        expect_test::expect![[r#""OK (font-lock-string-face font-lock-comment-delimiter-face)""#]],
     );
 }
 
 #[test]
 fn div_combo5_font_lock_mode_toggled() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -68,13 +71,14 @@ fn div_combo5_font_lock_mode_toggled() {
   (font-lock-fontify-buffer)
   (get-text-property 2 'face))
 "##,
+        expect_test::expect![[r#""OK font-lock-keyword-face""#]],
     );
 }
 
 #[test]
 fn div_combo5_font_lock_region_partial() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
@@ -83,6 +87,7 @@ fn div_combo5_font_lock_region_partial() {
   (list (get-text-property 2 'face)
         (get-text-property 14 'face)))
 "##,
+        expect_test::expect![[r#""OK (font-lock-keyword-face nil)""#]],
     );
 }
 
@@ -91,7 +96,7 @@ fn div_combo5_font_lock_region_partial() {
 #[test]
 fn div_combo5_marker_overlay_positions_after_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -104,13 +109,14 @@ fn div_combo5_marker_overlay_positions_after_insert() {
     (list (overlay-start ov) (overlay-end ov)
           (marker-position m1) (marker-position m2))))
 "##,
+        expect_test::expect![[r#""OK (2 8 2 8)""#]],
     );
 }
 
 #[test]
 fn div_combo5_marker_insertion_type_advance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -120,13 +126,14 @@ fn div_combo5_marker_insertion_type_advance() {
     (insert "X")
     (marker-position m)))
 "##,
+        expect_test::expect![[r#""OK 3""#]],
     );
 }
 
 #[test]
 fn div_combo5_marker_in_overlay_extent_deletion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdef")
@@ -136,13 +143,14 @@ fn div_combo5_marker_in_overlay_extent_deletion() {
     (delete-region 3 4)
     (list (overlay-start ov) (overlay-end ov) (marker-position m))))
 "##,
+        expect_test::expect![[r#""OK (2 4 3)""#]],
     );
 }
 
 #[test]
 fn div_combo5_marker_relocated_overlay_extents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -153,6 +161,7 @@ fn div_combo5_marker_relocated_overlay_extents() {
     (insert "X")
     (list (overlay-start ov) (overlay-end ov))))
 "##,
+        expect_test::expect![[r#""OK (3 6)""#]],
     );
 }
 
@@ -161,7 +170,7 @@ fn div_combo5_marker_relocated_overlay_extents() {
 #[test]
 fn div_combo5_undo_prop_and_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -174,13 +183,14 @@ fn div_combo5_undo_prop_and_insert() {
   (undo)
   (list (buffer-string) (text-properties-at 1)))
 "##,
+        expect_test::expect![[r#""OK (#(\"hello\" 0 2 (face nil)) (face nil))""#]],
     );
 }
 
 #[test]
 fn div_combo5_undo_overlay_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -194,13 +204,14 @@ fn div_combo5_undo_overlay_creation() {
     (undo)
     (list (buffer-string) (length (overlays-at 2)))))
 "##,
+        expect_test::expect![[r#""OK (\"\" 0)""#]],
     );
 }
 
 #[test]
 fn div_combo5_undo_set_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -212,13 +223,16 @@ fn div_combo5_undo_set_text_properties() {
   (undo)
   (list (text-properties-at 1) (text-properties-at 2)))
 "##,
+        expect_test::expect![[
+            r#""OK ((font-lock-face nil face nil mouse-face nil) (face nil mouse-face nil))""#
+        ]],
     );
 }
 
 #[test]
 fn div_combo5_undo_multiple_boundaries_to_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (buffer-enable-undo)
@@ -232,6 +246,7 @@ fn div_combo5_undo_multiple_boundaries_to_start() {
   (while (condition-case nil (progn (undo) nil) (error t)))
   (list (buffer-string) (text-properties-at 1)))
 "##,
+        expect_test::expect![[r#""OK (#(\"abc\" 0 1 (face bold)) (face bold))""#]],
     );
 }
 
@@ -240,7 +255,7 @@ fn div_combo5_undo_multiple_boundaries_to_start() {
 #[test]
 fn div_combo5_make_text_button_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "Click here now")
@@ -251,13 +266,14 @@ fn div_combo5_make_text_button_props() {
                    (button-label (button-at 1))))
     (error (cons 'errored (car err)))))
 "##,
+        expect_test::expect![[r#""OK ((t) nil \"Click\")""#]],
     );
 }
 
 #[test]
 fn div_combo5_insert_button_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (with-temp-buffer
@@ -265,13 +281,14 @@ fn div_combo5_insert_button_type() {
       (list (button-at 1) (button-label (button-at 1)) (buffer-string)))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (errored . error)""#]],
     );
 }
 
 #[test]
 fn div_combo5_button_overlay_backed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
     (with-temp-buffer
@@ -280,6 +297,7 @@ fn div_combo5_button_overlay_backed() {
       (list (button-at 2) (button-start (button-at 2)) (button-end (button-at 2))))
   (error (cons 'errored (car err))))
 "##,
+        expect_test::expect![[r#""OK (#<overlay in no buffer> 2 5)""#]],
     );
 }
 
@@ -288,7 +306,7 @@ fn div_combo5_button_overlay_backed() {
 #[test]
 fn div_combo5_narrow_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "0123456789")
@@ -301,13 +319,14 @@ fn div_combo5_narrow_marker_overlay() {
     (list (overlay-start ov) (overlay-end ov)
           (marker-position m) (point-min) (point-max))))
 "##,
+        expect_test::expect![[r#""OK (3 8 4 3 9)""#]],
     );
 }
 
 #[test]
 fn div_combo5_overlay_marker_move_overlay_after_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "abcdefgh")
@@ -318,6 +337,7 @@ fn div_combo5_overlay_marker_move_overlay_after_insert() {
     (insert "XX")
     (list (marker-position m) (overlay-start ov) (overlay-end ov))))
 "##,
+        expect_test::expect![[r#""OK (5 5 8)""#]],
     );
 }
 
@@ -326,7 +346,7 @@ fn div_combo5_overlay_marker_move_overlay_after_insert() {
 #[test]
 fn div_combo5_field_narrow_readonly_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "header\nbody line one\nbody line two")
@@ -338,5 +358,6 @@ fn div_combo5_field_narrow_readonly_combo() {
     (list (line-beginning-position)
           (condition-case err (progn (insert "X") 'inserted) (error (car err))))))
 "##,
+        expect_test::expect![[r#""OK (8 text-read-only)""#]],
     );
 }

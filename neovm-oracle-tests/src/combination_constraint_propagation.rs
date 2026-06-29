@@ -73,7 +73,12 @@ fn oracle_prop_cp_domain_operations() {
     (fmakunbound 'neovm--cp-dom-intersect)
     (fmakunbound 'neovm--cp-dom-union)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 6 9) (1 2 7 8) (5) (1 2 4 5 6 9) (1 2 3 4 5 6 9) t nil (1 2) (1 2 3 4 5 6 7 8 9) 7 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +197,12 @@ fn oracle_prop_cp_peer_network_and_eliminate() {
     (fmakunbound 'neovm--cp-peers-4x4)
     (fmakunbound 'neovm--cp-eliminate)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3 4 5 8 12) (0 1 4 6 7 9 13) (3 7 10 11 12 13 14) 7 7 t (1) nil nil 3)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +310,10 @@ fn oracle_prop_cp_assign_and_propagate() {
     (fmakunbound 'neovm--cp2-eliminate)
     (fmakunbound 'neovm--cp2-assign)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t (1) (4) (3) (2 3) (2 4) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -485,7 +498,10 @@ fn oracle_prop_cp_solve_4x4_sudoku() {
     (fmakunbound 'neovm--cp3-bt)
     (fmakunbound 'neovm--cp3-valid-p)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t [1 2 3 4 4 3 2 1 3 1 4 2 2 4 1 3])""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -588,7 +604,10 @@ fn oracle_prop_cp_detect_contradiction() {
     (fmakunbound 'neovm--cp4-eliminate)
     (fmakunbound 'neovm--cp4-assign)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t (3 4) nil nil (2 3 4) ((1) (1)))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -728,7 +747,10 @@ fn oracle_prop_cp_minimal_clue_sudoku() {
     (fmakunbound 'neovm--cp5-solve)
     (fmakunbound 'neovm--cp5-bt)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t [1 3 4 2 2 4 1 3 4 2 3 1 3 1 2 4])""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -777,5 +799,8 @@ fn oracle_prop_cp_arithmetic_constraint() {
      ;; Sum of all C values
      (apply #'+ (mapcar #'caddr sorted)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (4 ((1 2 3) (1 3 4) (1 4 5) (2 3 5)) t 17)""#]],
+    );
 }

@@ -17,7 +17,7 @@ fn div_r2_syntax_error_handling_deep() {
     // non-scan-error (caught by the generic error fallback → other-error) in
     // Neomacs. scan-lists and forward/backward-sexp error handling agree (nil).
     // Same root cause as batch 97's up-list -1 divergence.
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "(a b (c d))")
@@ -29,13 +29,14 @@ fn div_r2_syntax_error_handling_deep() {
         (condition-case err (forward-sexp 99) (scan-error (car err)) (error 'other-error))
         (condition-case err (backward-sexp 99) (scan-error (car err)) (error 'other-error))))
 "##,
+        expect_test::expect![[r#""OK (nil nil scan-error scan-error nil nil)""#]],
     );
 }
 
 #[test]
 fn div_r2_scan_sexps_error_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "(a) (b) (c)")
@@ -45,5 +46,6 @@ fn div_r2_scan_sexps_error_handling() {
         (scan-sexps 1 1)
         (scan-sexps 1 2)))
 "##,
+        expect_test::expect![[r#""OK (nil nil 4 8)""#]],
     );
 }

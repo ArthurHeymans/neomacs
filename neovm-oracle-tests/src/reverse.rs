@@ -15,7 +15,10 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_
 fn oracle_prop_reverse_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(reverse '(1 2 3 4 5))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(reverse '(1 2 3 4 5))",
+        expect_test::expect![[r#""OK (5 4 3 2 1)""#]],
+    );
     assert_ok_eq("(5 4 3 2 1)", &o, &n);
 }
 
@@ -23,7 +26,10 @@ fn oracle_prop_reverse_basic() {
 fn oracle_prop_reverse_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(reverse nil)");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(reverse nil)",
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -31,7 +37,10 @@ fn oracle_prop_reverse_empty() {
 fn oracle_prop_reverse_single() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(reverse '(42))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(reverse '(42))",
+        expect_test::expect![[r#""OK (42)""#]],
+    );
     assert_ok_eq("(42)", &o, &n);
 }
 
@@ -42,7 +51,10 @@ fn oracle_prop_reverse_does_not_mutate_original() {
     let form = "(let ((lst '(1 2 3)))
                   (reverse lst)
                   lst)";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (1 2 3)""#]],
+    );
     assert_ok_eq("(1 2 3)", &o, &n);
 }
 
@@ -51,7 +63,10 @@ fn oracle_prop_reverse_nested_lists() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // reverse should only reverse top-level, not recurse
-    let (o, n) = eval_oracle_and_neovm("(reverse '((1 2) (3 4) (5 6)))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(reverse '((1 2) (3 4) (5 6)))",
+        expect_test::expect![[r#""OK ((5 6) (3 4) (1 2))""#]],
+    );
     assert_ok_eq("((5 6) (3 4) (1 2))", &o, &n);
 }
 
@@ -60,14 +75,20 @@ fn oracle_prop_reverse_mixed_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(reverse (list 1 "two" 'three 4.0 '(five)))"####;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((five) 4.0 three \"two\" 1)""#]],
+    );
 }
 
 #[test]
 fn oracle_prop_reverse_double_reversal_identity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(equal '(1 2 3 4 5) (reverse (reverse '(1 2 3 4 5))))");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(equal '(1 2 3 4 5) (reverse (reverse '(1 2 3 4 5))))",
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
@@ -76,7 +97,10 @@ fn oracle_prop_reverse_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // reverse also works on strings
-    let (o, n) = eval_oracle_and_neovm(r#"(reverse "hello")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(reverse "hello")"#,
+        expect_test::expect![[r#""OK \"olleh\"""#]],
+    );
     assert_ok_eq(r#""olleh""#, &o, &n);
 }
 
@@ -85,7 +109,10 @@ fn oracle_prop_reverse_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // reverse works on vectors too
-    let (o, n) = eval_oracle_and_neovm("(reverse [1 2 3 4])");
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        "(reverse [1 2 3 4])",
+        expect_test::expect![[r#""OK [4 3 2 1]""#]],
+    );
     assert_ok_eq("[4 3 2 1]", &o, &n);
 }
 
@@ -109,7 +136,12 @@ fn oracle_reverse_copies_supported_sequences_without_mutating_originals() {
    boolv rboolv (eq boolv rboolv)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((a (b) c) (c (b) a) nil t [a (b) c] [c (b) a] nil t \"abé\" \"éba\" nil #&4\"\u{5}\" #&4\"\n\" nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -136,7 +168,12 @@ fn oracle_nreverse_mutates_lists_vectors_and_bool_vectors_but_copies_strings() {
    str rstr (eq str rstr)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((c b a) (a) t nil [c b a] [c b a] t #&4\"\n\" #&4\"\n\" t \"abé\" \"éba\" nil)""#
+        ]],
+    );
 }
 
 #[test]
@@ -153,7 +190,12 @@ fn oracle_reverse_and_nreverse_improper_list_errors() {
    (error err)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((wrong-type-argument listp tail) (wrong-type-argument listp (a)))""#
+        ]],
+    );
 }
 
 #[test]
@@ -172,7 +214,10 @@ fn oracle_nreverse_self_circular_list_error() {
                    (car arg))))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (circular-list t t a)""#]],
+    );
 }
 
 proptest! {

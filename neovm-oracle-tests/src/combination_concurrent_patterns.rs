@@ -55,7 +55,10 @@ fn oracle_prop_concurrent_generator_protocol() {
         (funcall reset-fn)
         (let ((after-reset (funcall take-fn 5)))
           (list first-8 next1 next2 after-reset))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((0 1 1 2 3 5 8 13) 21 34 (0 1 1 2 3))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +106,12 @@ fn oracle_prop_concurrent_round_robin_scheduler() {
         (t2 (funcall make-task 'B 2))
         (t3 (funcall make-task 'C 4)))
     (funcall scheduler (list t1 t2 t3))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 ((A 1) (B 1) (C 1) (A 2) (B 2) (C 2) (A 3) (C 3) (C 4)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +172,10 @@ fn oracle_prop_concurrent_producer_consumer() {
       (list (nreverse processed)
             (length (nreverse log))
             (null queue)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((1 4 9 16 25) 10 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -217,7 +228,12 @@ fn oracle_prop_concurrent_coroutine_cps() {
     (fmakunbound 'neovm--cps-step3)
     (fmakunbound 'neovm--cps-pipeline)
     (makunbound 'neovm--cps-log)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((final 20) ((step1 5) (step2 10) (step3 20)) (final 10) ((step1 0) (step2 0) (step3 10)) (final 210) ((step1 100) (step2 200) (step3 210)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +286,10 @@ fn oracle_prop_concurrent_event_loop() {
     (list (length (nreverse log))
           ;; Return the log in chronological order
           (nreverse log))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (8 ((10 (msg-handled \"DONE\"))))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -330,7 +349,12 @@ fn oracle_prop_concurrent_pipeline_transformers() {
      (funcall (nth 3 s1))
      (funcall (nth 3 s2))
      (funcall (nth 3 s3)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\"12\" \"14\" \"16\" \"18\" \"20\") (double 5) (add10 5) (stringify 5))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -394,7 +418,12 @@ fn oracle_prop_concurrent_actor_model() {
                 (funcall receive-fn 'inc)
                 (funcall process-fn))
               (funcall state-fn))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((incremented 1) (incremented 2) (incremented 3) (decremented 2) (value 2)) 2 ((incremented 3) (incremented 4)) 4)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -463,5 +492,10 @@ fn oracle_prop_concurrent_work_stealing() {
      (funcall size1)
      (funcall size2)
      (length (nreverse log)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((W1 8 64) (W1 7 49) (W1 6 36) (W1 5 25) (W1 4 16)) ((W2 1 1) (W2 2 4) (W2 3 9)) 0 0 8)""#
+        ]],
+    );
 }

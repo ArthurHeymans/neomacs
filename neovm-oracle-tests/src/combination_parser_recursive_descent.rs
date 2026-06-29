@@ -97,7 +97,12 @@ fn oracle_prop_rd_parser_tokenizer() {
     (fmakunbound 'neovm--rdp-is-alnum)
     (fmakunbound 'neovm--rdp-tokenize)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((number . 1) (op . \"+\") (number . 2) (op . \"*\") (number . 3)) ((ident . \"x\") (op . \"+\") (ident . \"y\") (op . \"*\") (lparen . \"(\") (ident . \"z\") (op . \"-\") (number . 1) (rparen . \")\")) ((ident . \"foo\") (lparen . \"(\") (number . 10) (comma . \",\") (number . 20) (rparen . \")\")) ((ident . \"a\") (op . \"<=\") (ident . \"b\") (ident . \"c\") (op . \">=\") (ident . \"d\")) ((number . 3.14) (op . \"+\") (number . 2.0) (op . \"*\") (op . \"-\") (number . 1)) ((op . \"-\") (ident . \"x\") (op . \"+\") (op . \"+\") (ident . \"y\")) nil ((number . 123)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +302,12 @@ fn oracle_prop_rd_parser_ast_construction() {
     (fmakunbound 'neovm--rdp2-parse)
     (makunbound 'neovm--rdp2-tokens)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((num 42) (var \"x\") (binop \"+\" (num 1) (num 2)) (binop \"+\" (num 1) (binop \"*\" (num 2) (num 3))) (binop \"+\" (binop \"*\" (num 1) (num 2)) (num 3)) (binop \"*\" (binop \"+\" (num 1) (num 2)) (num 3)) (unary \"-\" (var \"x\")) (binop \"+\" (unary \"-\" (num 1)) (num 2)) (unary \"-\" (binop \"+\" (num 1) (num 2))) (cmp \"<\" (binop \"+\" (var \"a\") (var \"b\")) (binop \"*\" (var \"c\") (var \"d\"))) (cmp \">=\" (var \"x\") (num 0)) (binop \"/\" (binop \"*\" (binop \"+\" (var \"a\") (var \"b\")) (binop \"-\" (var \"c\") (var \"d\"))) (binop \"+\" (var \"e\") (var \"f\"))) (binop \"+\" (binop \"+\" (binop \"+\" (var \"a\") (var \"b\")) (var \"c\")) (var \"d\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -452,7 +462,12 @@ fn oracle_prop_rd_parser_ast_pretty_print() {
     (fmakunbound 'neovm--rdp3-to-prefix)
     (makunbound 'neovm--rdp3-tokens)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((input \"1 + 2\" ast (binop \"+\" (num 1) (num 2)) full-parens \"(1 + 2)\" prefix \"(+ 1 2)\") (input \"1 + 2 * 3\" ast (binop \"+\" (num 1) (binop \"*\" (num 2) (num 3))) full-parens \"(1 + (2 * 3))\" prefix \"(+ 1 (* 2 3))\") (input \"(1 + 2) * 3\" ast (binop \"*\" (binop \"+\" (num 1) (num 2)) (num 3)) full-parens \"((1 + 2) * 3)\" prefix \"(* (+ 1 2) 3)\") (input \"a + b * c - d / e\" ast (binop \"-\" (binop \"+\" (var \"a\") (binop \"*\" (var \"b\") (var \"c\"))) (binop \"/\" (var \"d\") (var \"e\"))) full-parens \"((a + (b * c)) - (d / e))\" prefix \"(- (+ a (* b c)) (/ d e))\") (input \"-x + y\" ast (binop \"+\" (unary \"-\" (var \"x\")) (var \"y\")) full-parens \"((-x) + y)\" prefix \"(+ (- x) y)\") (input \"a * b + c * d\" ast (binop \"+\" (binop \"*\" (var \"a\") (var \"b\")) (binop \"*\" (var \"c\") (var \"d\"))) full-parens \"((a * b) + (c * d))\" prefix \"(+ (* a b) (* c d))\") (input \"((a + b))\" ast (binop \"+\" (var \"a\") (var \"b\")) full-parens \"(a + b)\" prefix \"(+ a b)\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -648,7 +663,12 @@ fn oracle_prop_rd_parser_ast_evaluator() {
     (fmakunbound 'neovm--rdp4-eval-expr)
     (makunbound 'neovm--rdp4-tokens)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 2 12 13 37 52 20 -7 -13 1 0 0 (error \"division by zero\") (error \"non-numeric operands\" (undefined-var \"w\") 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -806,7 +826,10 @@ fn oracle_prop_rd_parser_algebraic_identities() {
     (fmakunbound 'neovm--rdp5-calc)
     (makunbound 'neovm--rdp5-tokens)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t t t t t t 26 43)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -955,5 +978,10 @@ fn oracle_prop_rd_parser_error_recovery() {
     (makunbound 'neovm--rdp6-tokens)
     (makunbound 'neovm--rdp6-errors)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((program ((binop \"+\" (num 1) (num 2)) (binop \"*\" (num 3) (num 4)) (binop \"-\" (num 5) (num 1))) errors nil) (program ((binop \"+\" (num 1) (num 2)) (binop \"*\" (num 3) (num 4))) errors (\"missing closing paren\")) (program ((binop \"+\" (num 1) (num 2)) (error \"recovered\") (binop \"*\" (num 4) (num 5))) errors (\"unexpected token: (unknown . \\\"@\\\")\")) (program nil errors nil) (program ((num 42)) errors nil) (program ((binop \"+\" (num 1) (error \"recovered\")) (error \"recovered\") (num 3)) errors (\"unexpected token: (semi . \\\";\\\")\" \"unexpected token: (op . \\\"*\\\")\" \"missing closing paren\")) (program ((binop \"*\" (binop \"+\" (num 1) (num 2)) (binop \"-\" (num 3) (num 4))) (binop \"/\" (num 5) (binop \"+\" (num 6) (num 7)))) errors nil))""#
+        ]],
+    );
 }

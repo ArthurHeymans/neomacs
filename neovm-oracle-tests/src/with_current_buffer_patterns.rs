@@ -30,7 +30,10 @@ fn oracle_prop_with_current_buffer_basic_switch() {
                 (eq (current-buffer) buf)
                 (buffer-name buf))))
     (kill-buffer buf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"hello from buf\" nil \" *neovm-wcb-test-1*\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +56,10 @@ fn oracle_prop_with_current_buffer_string_vs_object() {
           (let ((via-str (with-current-buffer (buffer-name buf) (buffer-string))))
             (list via-obj via-str (string= via-obj via-str)))))
     (kill-buffer buf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"content-A\" \"content-A\" t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +92,10 @@ fn oracle_prop_with_current_buffer_nested() {
     (kill-buffer buf-a)
     (kill-buffer buf-b)
     (kill-buffer buf-c)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"AAA\" \"BBB\" \"CCC\" t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +128,10 @@ fn oracle_prop_with_current_buffer_buffer_local_vars() {
           (list x-val y-val)))
     (kill-buffer buf-x)
     (kill-buffer buf-y)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((value-x \"X content\") (value-y \"Y content\"))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +171,12 @@ fn oracle_prop_with_current_buffer_cross_buffer_copy() {
                   count))))
     (kill-buffer src)
     (kill-buffer dst)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"line-2\nline-3\nline-4\n\" \"line-1\nline-2\nline-3\nline-4\nline-5\" 5)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +216,12 @@ fn oracle_prop_with_current_buffer_multi_buffer_state() {
           (nreverse contents)))
     (dolist (b bufs)
       (when (buffer-live-p b) (kill-buffer b)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((\" *neovm-ms-1*\" \"Buffer 1 has 10 items\" 21 1) (\" *neovm-ms-2*\" \"Buffer 2 has 20 items\" 21 1) (\" *neovm-ms-3*\" \"Buffer 3 has 30 items\" 21 1) (\" *neovm-ms-4*\" \"Buffer 4 has 40 items\" 21 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -235,7 +257,12 @@ fn oracle_prop_with_current_buffer_inside_save_excursion() {
                   (with-current-buffer buf2 (buffer-string))
                   (buffer-string)))
         (kill-buffer buf2)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (9 t t \"PREFIX: secondary buffer\" \"original buffer text here\")""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +290,10 @@ fn oracle_prop_with_current_buffer_return_and_side_effects() {
               (with-current-buffer buf (point-max))
               (with-current-buffer buf (buffer-size))))
     (kill-buffer buf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (42 \"say hello\" 1 10 9)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +319,10 @@ fn oracle_prop_with_current_buffer_multiple_body_forms() {
           (list result (nreverse log)
                 (with-current-buffer buf (buffer-string)))))
     (kill-buffer buf)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"first second\" (step1 step2 step3) \"first second\")""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -323,5 +356,8 @@ fn oracle_prop_with_current_buffer_error_propagation() {
                 ;; Main buffer should be unchanged
                 (buffer-string)))
       (kill-buffer buf))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((caught t arith-error) \"some text\" \"main buffer\")""#]],
+    );
 }

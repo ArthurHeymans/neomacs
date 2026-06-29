@@ -49,7 +49,12 @@ fn oracle_prop_keymap_comprehensive_make_variants() {
            (lookup-key prompted [?b])
            (keymap-prompt prompted)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t \"Choose action\" \"Full menu\" t t t t (act-a act-b \"Choose action\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +96,12 @@ fn oracle_prop_keymap_comprehensive_define_key_sequences() {
    ;; Lambda binding is a function
    (functionp (lookup-key m [?l]))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (cmd-a-new nil cmd-ctrl-a cmd-return cmd-xy cmd-xz t cmd-cc-ck t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +143,10 @@ fn oracle_prop_keymap_comprehensive_lookup_key_detailed() {
    ;; Prefix key deeper nesting
    (keymapp (lookup-key m [?b ?e]))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (cmd-a t cmd-bc cmd-bd cmd-bef 1 nil 2 (nil nil) t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +199,12 @@ fn oracle_prop_keymap_comprehensive_parent_inheritance() {
    ;; But gc -> c still works for c's own binding
    (lookup-key gc [?c])))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (gp-a p-b c-c gc-d gp-a p-b c-c gp-d t t t t nil t nil nil c-c)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -235,7 +253,12 @@ fn oracle_prop_keymap_comprehensive_copy_independence_deep() {
        (keymapp orig)
        (keymapp copy)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (new-cmd-a cmd-bc cmd-e cmd-f nil cmd-a cmd-bc copy-cmd-e nil cmd-g parent-p t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +301,12 @@ fn oracle_prop_keymap_comprehensive_keymapp_edge_cases() {
    (set-keymap-parent child (make-sparse-keymap))
    (keymapp child)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t t nil nil nil nil nil nil nil nil nil nil t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +348,12 @@ fn oracle_prop_keymap_comprehensive_keymap_prompt() {
    (list (keymap-prompt child)
          (keymap-prompt parent))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Menu Title\" nil nil \"Full Menu\" \"Copied Menu\" \"Persistent Prompt\" nil (\"Parent Prompt\" \"Parent Prompt\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -383,7 +416,12 @@ fn oracle_prop_keymap_comprehensive_dispatch_system() {
              (lookup-key local-map [?h])       ;; mode-help still in mode-map
              (lookup-key local-map [24 ?f]))))))  ;; nil, global detached
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (local-quit mode-help find-file local-save compile switch-buf nil t t 7 (local-quit mode-help nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -420,5 +458,8 @@ fn oracle_prop_keymap_comprehensive_map_keymap() {
          (map-keymap (lambda (k v) (setq count (1+ count))) empty)
          count)))))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (4 (cmd-a cmd-b cmd-c cmd-d) (97 98 99 100) 0)""#]],
+    );
 }

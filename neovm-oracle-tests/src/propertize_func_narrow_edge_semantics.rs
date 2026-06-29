@@ -9,14 +9,20 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_propertize_returns_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(stringp (propertize "hello" 'face 'bold))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(stringp (propertize "hello" 'face 'bold))"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_propertize_preserves_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(equal (propertize "hello" 'a 1 'b 2) "hello")"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(equal (propertize "hello" 'a 1 'b 2) "hello")"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     // equal by default ignores text properties
     assert_ok_eq("t", &o, &n);
 }
@@ -26,14 +32,20 @@ fn oracle_propertize_preserves_content() {
 #[test]
 fn oracle_functionp_subr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(functionp 'car)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(functionp 'car)"#,
+        expect_test::expect![[r#""OK t""#]],
+    );
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_functionp_non_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(functionp 42)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(functionp 42)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -42,8 +54,9 @@ fn oracle_functionp_non_function() {
 #[test]
 fn oracle_narrow_to_region_changes_point_min_max() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*nrw*")) (erase-buffer) (insert "abcdef") (narrow-to-region 2 5) (list (point-min) (point-max)))"#,
+        expect_test::expect![[r#""OK (2 5)""#]],
     );
     assert_ok_eq("(2 5)", &o, &n);
 }
@@ -51,8 +64,9 @@ fn oracle_narrow_to_region_changes_point_min_max() {
 #[test]
 fn oracle_widen_restores_full_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*nrw2*")) (erase-buffer) (insert "abcdef") (narrow-to-region 2 5) (widen) (point-max))"#,
+        expect_test::expect![[r#""OK 7""#]],
     );
     assert_ok_eq("7", &o, &n);
 }
@@ -62,8 +76,9 @@ fn oracle_widen_restores_full_buffer() {
 #[test]
 fn oracle_indirect_function_resolves_alias() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (defalias 'my-indirect-fn (symbol-function '1+)) (functionp (indirect-function 'my-indirect-fn)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
     assert_ok_eq("t", &o, &n);
 }
@@ -73,7 +88,10 @@ fn oracle_indirect_function_resolves_alias() {
 #[test]
 fn oracle_macrop_subr_is_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(macrop 'car)"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(macrop 'car)"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -82,8 +100,9 @@ fn oracle_macrop_subr_is_nil() {
 #[test]
 fn oracle_define_key_returns_command() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (setq km (make-sparse-keymap)) (define-key km "a" 'forward-char) (lookup-key km "a"))"#,
+        expect_test::expect![[r#""OK forward-char""#]],
     );
     assert_ok_eq("forward-char", &o, &n);
 }
@@ -93,7 +112,9 @@ fn oracle_define_key_returns_command() {
 #[test]
 fn oracle_lookup_key_missing_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) =
-        eval_oracle_and_neovm(r#"(progn (setq km (make-sparse-keymap)) (lookup-key km "x"))"#);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(progn (setq km (make-sparse-keymap)) (lookup-key km "x"))"#,
+        expect_test::expect![[r#""OK nil""#]],
+    );
     assert_ok_eq("nil", &o, &n);
 }

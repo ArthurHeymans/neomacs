@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf36_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\nBody\n** H2\nSub\n*** H3\nDeep")
@@ -23,6 +23,7 @@ fn uf36_indent() {
         (when indent (push (list (line-number-at-pos) indent) r)))
       (forward-line))
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -33,7 +34,7 @@ fn uf36_indent() {
 #[test]
 fn uf36_indent_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\nBody\n** H2\nSub\n*** H3\nDeep")
@@ -45,6 +46,9 @@ fn uf36_indent_buffer() {
         (when indent (push (list (line-number-at-pos) indent) r)))
       (forward-line))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((1 \"\") (2 #(\"  \" 0 2 (face org-indent))) (3 #(\"*\" 0 1 (face org-indent))) (4 #(\"    \" 0 4 (face org-indent))) (5 #(\"**\" 0 2 (face org-indent))) (6 #(\"      \" 0 6 (face org-indent))))""#
+        ]],
     );
 }
 
@@ -55,7 +59,7 @@ fn uf36_indent_buffer() {
 #[test]
 fn uf36_indent_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\nBody\n** H2\nSub\n*** H3\nDeep")
@@ -67,6 +71,7 @@ fn uf36_indent_region() {
         (when indent (push (list (line-number-at-pos) indent) r)))
       (forward-line))
     (nreverse r)))"##,
+        expect_test::expect![[r#""ERR (void-function org-indent-indent-region)""#]],
     );
 }
 
@@ -77,7 +82,7 @@ fn uf36_indent_region() {
 #[test]
 fn uf36_indent_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\nBody\n** H2\nSub")
@@ -89,6 +94,9 @@ fn uf36_indent_props() {
         (when indent (push (list (line-number-at-pos) indent) r)))
       (forward-line))
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((1 \"\") (2 #(\"  \" 0 2 (face org-indent))) (3 #(\"*\" 0 1 (face org-indent))) (4 #(\"    \" 0 4 (face org-indent))))""#
+        ]],
     );
 }
 
@@ -99,7 +107,7 @@ fn uf36_indent_props() {
 #[test]
 fn uf36_indent_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\nBody\n** H2\nSub")
@@ -112,6 +120,7 @@ fn uf36_indent_remove() {
         (when indent (push (list (line-number-at-pos) indent) r)))
       (forward-line))
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -122,7 +131,7 @@ fn uf36_indent_remove() {
 #[test]
 fn uf36_indent_refresh() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\nBody\n** H2\nSub")
@@ -134,6 +143,7 @@ fn uf36_indent_refresh() {
         (when indent (push (list (line-number-at-pos) indent) r)))
       (forward-line))
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -144,11 +154,12 @@ fn uf36_indent_refresh() {
 #[test]
 fn uf36_lint() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nSCHEDULED: <invalid>\nBody [[broken]]")
   (length (org-lint)))"##,
+        expect_test::expect![[r#""OK 1""#]],
     );
 }
 
@@ -159,13 +170,14 @@ fn uf36_lint() {
 #[test]
 fn uf36_lint_report() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nSCHEDULED: <invalid>\nBody [[broken]]")
   (condition-case nil
       (org-lint-report)
     (error nil)))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -176,12 +188,13 @@ fn uf36_lint_report() {
 #[test]
 fn uf36_lint_add() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-lint-add-checker 'test-checker
       :description "Test checker"
       :verify (lambda () nil))
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -192,10 +205,11 @@ fn uf36_lint_add() {
 #[test]
 fn uf36_ctags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-ctags)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -206,10 +220,11 @@ fn uf36_ctags() {
 #[test]
 fn uf36_ctags_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-ctags-create-tags)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -220,10 +235,11 @@ fn uf36_ctags_create() {
 #[test]
 fn uf36_ctags_find() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-ctags-find-tag "test-tag")
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -234,10 +250,11 @@ fn uf36_ctags_find() {
 #[test]
 fn uf36_ctags_gen() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-ctags-generate-tags)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -248,10 +265,11 @@ fn uf36_ctags_gen() {
 #[test]
 fn uf36_ctags_update() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-ctags-update-tags)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -262,10 +280,11 @@ fn uf36_ctags_update() {
 #[test]
 fn uf36_ctags_visit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-ctags-visit-tags-table)
   (error nil))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -276,7 +295,7 @@ fn uf36_ctags_visit() {
 #[test]
 fn uf36_checklist_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n- [X] a\n- [ ] b\n- [X] c")
@@ -284,6 +303,7 @@ fn uf36_checklist_create() {
   (let ((done (org-element-map (org-element-parse-buffer) 'item
                 (lambda (i) (eq (org-element-property :checkbox i) 'on)))))
     (list (length done))))"##,
+        expect_test::expect![[r#""OK (2)""#]],
     );
 }
 
@@ -294,7 +314,7 @@ fn uf36_checklist_create() {
 #[test]
 fn uf36_cache_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H\nBody")
@@ -302,6 +322,7 @@ fn uf36_cache_modify() {
     (insert "\nNew line")
     (let ((s2 (org-element-cache-status)))
       (list (plist-get s1 :size) (plist-get s2 :size)))))"##,
+        expect_test::expect![[r#""ERR (void-function org-element-cache-status)""#]],
     );
 }
 
@@ -312,7 +333,7 @@ fn uf36_cache_modify() {
 #[test]
 fn uf36_cache_level() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** H2")
@@ -322,6 +343,7 @@ fn uf36_cache_level() {
     (push (list :after (org-element-map (org-element-parse-buffer) 'headline
                           (lambda (h) (org-element-property :level h)))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:after (2 2)))""#]],
     );
 }
 
@@ -332,7 +354,7 @@ fn uf36_cache_level() {
 #[test]
 fn uf36_cache_todo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H")
@@ -341,6 +363,7 @@ fn uf36_cache_todo() {
   (let ((r '()))
     (push (list :after (org-element-property :todo-keyword (org-element-at-point))) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:after \"TODO\"))""#]],
     );
 }
 
@@ -351,7 +374,7 @@ fn uf36_cache_todo() {
 #[test]
 fn uf36_cache_tag() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H")
@@ -360,6 +383,7 @@ fn uf36_cache_tag() {
   (let ((r '()))
     (push (list :after (org-get-tags)) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:after (\"tag1\")))""#]],
     );
 }
 
@@ -370,7 +394,7 @@ fn uf36_cache_tag() {
 #[test]
 fn uf36_cache_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H")
@@ -379,6 +403,7 @@ fn uf36_cache_prop() {
   (let ((r '()))
     (push (list :after (org-entry-get nil "A")) r)
     (nreverse r)))"##,
+        expect_test::expect![[r#""OK ((:after \"1\"))""#]],
     );
 }
 
@@ -389,7 +414,7 @@ fn uf36_cache_prop() {
 #[test]
 fn uf36_cache_plan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H")
@@ -399,5 +424,8 @@ fn uf36_cache_plan() {
     (push (list :after (org-element-map (org-element-parse-buffer) 'planning
                           (lambda (p) (org-element-property :scheduled p)))) r)
     (nreverse r)))"##,
+        expect_test::expect![[
+            r#""OK ((:after ((timestamp (:standard-properties [16 nil nil nil 32 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2026-01-15 Thu>\" :year-start 2026 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2026 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)))))""#
+        ]],
     );
 }

@@ -53,7 +53,12 @@ fn oracle_prop_delete_and_extract_various_regions() {
       (setq results (cons (list 'multiline extracted (buffer-string))
                           results))))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((beginning \"ABCD\" \"EFGHIJKLMNOP\" 12 13) (middle \"FGHIJ\" \"ABCDEKLMNOP\" 11) (end \"MNOP\" \"ABCDEFGHIJKL\" 12) (single-char \"H\" \"ABCDEFGIJKLMNOP\") (multiline \"line two\nline thre\" \"line one\ne\nline four\n\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -92,7 +97,12 @@ fn oracle_prop_delete_and_extract_text_properties() {
             ;; Properties on remaining buffer
             (get-text-property 1 'face)
             (get-text-property (- (point-max) 2) 'my-val)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (#(\"BOLD normal ITALIC more CUSTOM\" 0 4 (face bold) 12 18 (face italic) 24 30 (my-val 99)) 30 #(\"LD normal IT\" 0 2 (face bold) 10 12 (face italic)) 12 bold nil italic #(\"BOALIC more CUSTOM\" 0 2 (face bold) 2 6 (face italic) 12 18 (my-val 99)) 18 bold 99)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +136,12 @@ fn oracle_prop_delete_and_extract_narrowed() {
                   (list 'extracted extracted)
                   (list 'narrowed-after narrowed-after narrowed-after-size)
                   (list 'full-after full-after full-after-size))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((full-before \"HEADER:alpha:beta:gamma:delta:FOOTER\") (narrowed \"alpha:beta:gamma:delta\" 8 30) (extracted \"beta:gamma:\") (narrowed-after \"alpha:delta\" 25) (full-after \"HEADER:alpha:delta:FOOTER\" 25))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +183,12 @@ fn oracle_prop_delete_and_extract_entire_buffer() {
   (let ((r1 (cadr (assq 'extract-all (mapcar (lambda (r) (cons (car r) r))
                                               (nreverse results))))))
     results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((grab-erase \"The quick brown fox jumps over the lazy dog.\nSecond line.\n\" \"\" 0 1))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +221,12 @@ fn oracle_prop_delete_and_extract_empty_region() {
               (list 'buffer-unchanged
                     (string= before-text (buffer-string))
                     (= before-size (buffer-size))))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((empty-extracts \"\" \"\" \"\" \"\") (all-empty-strings t t t t) (buffer-unchanged t t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +283,12 @@ Returns the buffer content after the move."
                               results)))
         (nreverse results))
     (fmakunbound 'neovm--test-move-text)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((move-to-end \" World GoodbyeHello\") (move-to-start \"GoodbyeWorld Hello \") (move-mid-fwd \"[A][C][D][B][E]\") (move-mid-bwd \"[A][D][B][C][E]\"))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -298,7 +328,12 @@ fn oracle_prop_delete_and_extract_vs_buffer_substring() {
                           (string= substring-result extract-result))
                     results)))))
   (nreverse results))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((1 . 6) \"Alpha\" \"Alpha\" t) ((7 . 12) \"Bravo\" \"Bravo\" t) ((15 . 30) \"arlie Delta Ech\" \"arlie Delta Ech\" t) ((1 . 44) \"Alpha Bravo Charlie Delta Echo Foxtrot Golf\" \"Alpha Bravo Charlie Delta Echo Foxtrot Golf\" t))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -364,5 +399,10 @@ fn oracle_prop_delete_and_extract_chained_assembly() {
                       (with-current-buffer dst (buffer-string))))))
     (kill-buffer src)
     (kill-buffer dst)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((extracted \"Hello there!\" \"This is the main content.\" \"Goodbye!\") (source-remaining \"[INTRO][/INTRO][BODY][/BODY][FOOTER][/FOOTER]\") (destination \"=== Reversed Document ===\nGoodbye!\n---\nThis is the main content.\n---\nHello there!\n\"))""#
+        ]],
+    );
 }

@@ -32,7 +32,10 @@ fn oracle_prop_hash_table_creation_params() {
                     (hash-table-p h1)
                     (hash-table-p '(not a hash))
                     (hash-table-count h1)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (eq equal eql eql t t nil 0)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +72,10 @@ fn oracle_prop_hash_table_count_cycles() {
                     (list (nreverse counts)
                           (gethash 'new-key h)
                           (gethash 0 h))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((10 5 5 7 0 1) new-val nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +121,12 @@ fn oracle_prop_maphash_cross_modification() {
                         (sort filt-pairs (lambda (a b)
                                            (string-lessp (symbol-name (car a))
                                                          (symbol-name (car b)))))))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 3 a c ((1 . a) (2 . b) (3 . c) (4 . d) (5 . e)) ((a . 1) (c . 3) (e . 5)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +183,10 @@ fn oracle_prop_hash_table_set_operations() {
                                            (puthash k t sym-diff)))
                                        set-b)
                               (funcall collect sym-diff))))))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((a b c d e f g) (c d e) (a b) (a b f g))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +225,10 @@ fn oracle_prop_hash_table_memoization() {
           ;; Verify memoization populated
           (hash-table-count memo)))
     (fmakunbound 'neovm--test-catalan)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (1 1 2 5 14 42 1430 8)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +271,10 @@ fn oracle_prop_copy_hash_table_deep_independence() {
                       (hash-table-count copy)
                       ;; Test preserved
                       (eq (hash-table-test orig) (hash-table-test copy)))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (999 nil 300 500 4 100 200 888 nil 600 5 t)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +314,12 @@ fn oracle_prop_hash_table_eq_vs_equal_keys() {
                                  (gethash 42 h-eq))
                           (progn (puthash 42 'num-equal h-equal)
                                  (gethash 42 h-equal))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (1 1 found-eq found-equal nil found-equal num-eq num-equal)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -373,5 +398,8 @@ fn oracle_prop_hash_table_trie() {
     (fmakunbound 'neovm--trie-insert)
     (fmakunbound 'neovm--trie-search)
     (fmakunbound 'neovm--trie-starts-with)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t t t t nil nil nil t t nil nil)""#]],
+    );
 }

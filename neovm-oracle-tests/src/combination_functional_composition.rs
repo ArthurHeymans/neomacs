@@ -61,7 +61,10 @@ fn oracle_prop_fcomp_compose_right_to_left() {
                   (= (funcall left 4) (funcall right 4))))))
     (fmakunbound 'neovm--test-compose2)
     (fmakunbound 'neovm--test-compose)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (11 12 16 42 (-25 -25 t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +119,10 @@ fn oracle_prop_fcomp_pipe_left_to_right() {
                                    (nreverse r))))))
     (fmakunbound 'neovm--test-pipe)
     (fmakunbound 'neovm--test-pipe-val)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (12 11 \"(8)\" 99 23 (9 8 5))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +187,10 @@ fn oracle_prop_fcomp_partial_application() {
     (fmakunbound 'neovm--test-partial)
     (fmakunbound 'neovm--test-curry)
     (fmakunbound 'neovm--test-curry3)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (15 7 24 \"hello world\" 7 24 15 (5 10 15 20))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +258,12 @@ fn oracle_prop_fcomp_memoize_wrapper() {
           ;; Results are consistent
           (= (funcall memo :call 15) (funcall memo :call 15))))
     (fmakunbound 'neovm--test-memoize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (55 385 1240 (:calls 3 :hits 0 :cached 3) 55 385 55 (:calls 3 :hits 3 :cached 3) 2870 (:calls 4 :hits 3 :cached 4) t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +334,12 @@ fn oracle_prop_fcomp_retry_wrapper() {
                     (car result2)
                     (car result3))))))
     (fmakunbound 'neovm--test-with-retry)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((ok 49 ((1 . \"Transient failure 1\") (2 . \"Transient failure 2\"))) (error \"Permanent failure\" ((1 . \"Permanent failure\") (2 . \"Permanent failure\") (3 . \"Permanent failure\"))) (ok 105 nil) ok error ok)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -414,7 +433,12 @@ fn oracle_prop_fcomp_throttle_debounce_simulation() {
                       (funcall debounced :log)))))))
     (fmakunbound 'neovm--test-make-throttle)
     (fmakunbound 'neovm--test-make-debounce)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((0 . 0) (3 . 9) (6 . 36) (9 . 81)) ((0 . 0) (3 . 9) (6 . 36) (9 . 81)) 130 ((2 . 130) (10 . 150)))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -473,7 +497,12 @@ fn oracle_prop_fcomp_juxtaposition() {
             (funcall both-ops 10 3))))
     (fmakunbound 'neovm--test-juxt)
     (fmakunbound 'neovm--test-juxt-pred)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((6 3 5 27 4.5) (1 42 42 42 42.0) ((0 . t) (1 . t) (2) (3 . t) (4 . t)) ((0 . t) (1) (2 . t) (3 . t) (4)) ((0 . t) (1 . t) (2) (3) (4)) ((0 . t) (1 . t) (2) (3) (4 . t)) (13 7 30 10 3))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -534,5 +563,10 @@ fn oracle_prop_fcomp_middleware_chain() {
     (fmakunbound 'neovm--test-wrap-logging)
     (fmakunbound 'neovm--test-wrap-auth)
     (fmakunbound 'neovm--test-wrap-transform)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((:status 200 :body \"HELLO, /HOME\" :log ((:log-in \"/home\"))) (:status 401 :body \"Unauthorized\" :log ((:log-in \"/admin\"))) (:status 200 :body \"HELLO, /API/DATA\" :log ((:log-in \"/api/data\"))))""#
+        ]],
+    );
 }

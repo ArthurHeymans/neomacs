@@ -25,5 +25,8 @@ fn oracle_1value_macro_expands_to_single_form_unchanged() {
      (macroexpand '(1value 1 2))
    (error (list (car err) (cdr err)))))"#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (void-variable cell)""#]],
+    );
 }

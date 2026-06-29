@@ -7,13 +7,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_sticky_insert_between_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "AAA" 'face 'bold 'rear-nonsticky t))
   (insert (propertize "BBB" 'face 'italic 'front-sticky t))
   (list (get-text-property 3 'face)
         (get-text-property 4 'face)
         (get-text-property 5 'face)))"#,
+        expect_test::expect![[r#""AAABBBOK (bold italic italic)""#]],
     );
 }
 
@@ -21,7 +22,7 @@ fn divergence_sticky_insert_between_props() {
 fn divergence_sticky_delete_at_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "AAAA" 'face 'bold))
   (insert (propertize "BBBB" 'face 'italic))
@@ -29,6 +30,9 @@ fn divergence_sticky_delete_at_boundary() {
   (list (get-text-property 3 'face)
         (get-text-property 4 'face)
         (buffer-string)))"#,
+        expect_test::expect![[
+            r#""AAABBBBOK (bold italic #(\"AAABBBB\" 0 3 (face bold) 3 7 (face italic)))""#
+        ]],
     );
 }
 
@@ -36,7 +40,7 @@ fn divergence_sticky_delete_at_boundary() {
 fn divergence_sticky_insert_with_default_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "___")
   (goto-char 2)
@@ -46,6 +50,9 @@ fn divergence_sticky_insert_with_default_props() {
         (get-text-property 4 'face)
         (get-text-property 5 'face)
         (buffer-string)))"#,
+        expect_test::expect![[
+            r#""_XX__OK (nil bold nil nil #(\"_XX__\" 1 3 (face bold front-sticky t rear-nonsticky nil)))""#
+        ]],
     );
 }
 
@@ -53,7 +60,7 @@ fn divergence_sticky_insert_with_default_props() {
 fn divergence_sticky_propagate_after_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "XXXX" 'face 'bold 'rear-nonsticky '(face)))
   (goto-char 4)
@@ -62,6 +69,7 @@ fn divergence_sticky_propagate_after_insert() {
         (get-text-property 4 'face)
         (get-text-property 5 'face)
         (get-text-property 6 'face)))"#,
+        expect_test::expect![[r#""XXXYYXOK (bold nil nil bold)""#]],
     );
 }
 
@@ -69,7 +77,7 @@ fn divergence_sticky_propagate_after_insert() {
 fn divergence_text_props_after_replace_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "foo bar baz" 'face 'bold))
   (goto-char 1)
@@ -79,6 +87,9 @@ fn divergence_text_props_after_replace_match() {
         (get-text-property 5 'face)
         (get-text-property 9 'face)
         (buffer-string)))"#,
+        expect_test::expect![[
+            r#""foo QUX bazOK (bold nil bold #(\"foo QUX baz\" 0 4 (face bold) 7 11 (face bold)))""#
+        ]],
     );
 }
 
@@ -86,7 +97,7 @@ fn divergence_text_props_after_replace_match() {
 fn divergence_text_props_after_kill_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "Hello " 'face 'bold))
   (insert (propertize "World" 'face 'italic))
@@ -96,6 +107,9 @@ fn divergence_text_props_after_kill_yank() {
   (list (get-text-property 1 'face)
         (get-text-property 7 'face)
         (buffer-string)))"#,
+        expect_test::expect![[
+            r#""Hello WorldOK (bold italic #(\"Hello World\" 0 6 (face bold) 6 10 (face italic) 10 11 (rear-nonsticky t face italic)))""#
+        ]],
     );
 }
 
@@ -103,12 +117,13 @@ fn divergence_text_props_after_kill_yank() {
 fn divergence_text_props_substring_no_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(let* ((s (propertize "Hello" 'face 'bold))
          (sub (substring-no-properties s 1 4)))
   (list (get-text-property 0 'face s)
         (get-text-property 0 'face sub)
         sub))"#,
+        expect_test::expect![[r#""OK (bold nil \"ell\")""#]],
     );
 }
 
@@ -116,7 +131,7 @@ fn divergence_text_props_substring_no_props() {
 fn divergence_sticky_multi_prop_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "XX" 'face 'bold 'mouse-face 'highlight))
   (insert "YY")
@@ -124,6 +139,7 @@ fn divergence_sticky_multi_prop_insert() {
         (get-text-property 1 'mouse-face)
         (get-text-property 3 'face)
         (get-text-property 3 'mouse-face)))"#,
+        expect_test::expect![[r#""XXYYOK (bold highlight nil nil)""#]],
     );
 }
 
@@ -131,7 +147,7 @@ fn divergence_sticky_multi_prop_insert() {
 fn divergence_text_props_field() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "field1" 'field 'f1))
   (insert "nofield")
@@ -141,6 +157,7 @@ fn divergence_text_props_field() {
         (get-text-property 13 'field)
         (field-beginning 7)
         (field-end 7)))"#,
+        expect_test::expect![[r#""field1nofieldfield2OK (f1 nil nil 1 7)""#]],
     );
 }
 
@@ -148,7 +165,7 @@ fn divergence_text_props_field() {
 fn divergence_text_props_intangibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "before")
   (insert (propertize "intangible" 'intangible t))
@@ -157,5 +174,8 @@ fn divergence_text_props_intangibility() {
         (get-text-property 10 'intangible)
         (get-text-property 18 'intangible)
         (buffer-string)))"#,
+        expect_test::expect![[
+            r#""beforeintangibleafterOK (t t nil #(\"beforeintangibleafter\" 6 16 (intangible t)))""#
+        ]],
     );
 }

@@ -30,7 +30,12 @@ fn oracle_prop_closure_capture_lexical_deep_nesting() {
                   ;; Verify independence
                   (funcall f1)
                   (funcall f2))))))))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((1 2 3) (10 2 3 40) (100 200 300 400) (1 2 3) (10 2 3 40))""#
+        ]],
+    );
     assert_ok_eq(
         "((1 2 3) (10 2 3 40) (100 200 300 400) (1 2 3) (10 2 3 40))",
         &o,
@@ -81,7 +86,12 @@ fn oracle_prop_closure_shared_mutable_variable() {
             (funcall get-log)   ;; empty after clear
             (funcall add-entry 'info "restarted")
             (funcall get-log)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (5 (\"started\" \"processing\" \"retrying\") (\"low memory\") (\"disk full\") nil 1 ((info \"restarted\")))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +122,10 @@ fn oracle_prop_closure_mutation_accumulator() {
           (funcall add -50)
           (let ((s2 (funcall stats)))
             (list s1 s2)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((42 7 -2 15 6.0) (92 9 -50 100 10.222222222222221))""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +174,10 @@ fn oracle_prop_closure_nested_composition_pipeline() {
           ;; Verify independence of closures
           (funcall (funcall make-adder 100) 1)
           (funcall (funcall make-multiplier 100) 2))))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        form,
+        expect_test::expect![[r#""OK (16 11 19 (10 12 14 16 18) 101 200)""#]],
+    );
     assert_ok_eq("(16 11 19 (10 12 14 16 18) 101 200)", &o, &n);
 }
 
@@ -223,7 +239,12 @@ fn oracle_prop_closure_rest_and_optional_args() {
           (funcall variadic-math 'product 2 3 4)
           (funcall variadic-math 'max-val 3 7 2 9 1)
           (funcall variadic-math 'min-val 3 7 2 9 1))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\">>hello<<\" \"[hello]\" \"(hello<<\" \"a, b, c\" \"x-y\" \"name=Alice,Bob\" \"score=100,200,300\" 15 24 9 1)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +350,12 @@ fn oracle_prop_closure_iterator_implementation() {
     (fmakunbound 'neovm--make-map-iter)
     (fmakunbound 'neovm--make-filter-iter)
     (fmakunbound 'neovm--iter-collect)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK ((a b c d e) (0 1 2 3 4) (0 3 6 9) (0 1 4 9 16) (0 2 4 6 8) (1 9 25 49 81) nil)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +413,10 @@ fn oracle_prop_closure_memoization() {
                   ;; Verify correctness
                   (mapcar memo-fib '(0 1 2 3 4 5 6 7 8 9 10))))))
     (fmakunbound 'neovm--memoize)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""ERR (void-variable memo-fib)""#],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -445,7 +474,12 @@ fn oracle_prop_closure_event_handler_registration() {
             (list r1 r2 r3 r4 r5 r6
                   click-count total-keys
                   (length (funcall get-log)))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![
+            r#""OK (((distance 30) (click-at 10 20 1)) ((distance 8) (click-at 5 -3 2)) ((key 97 1)) ((key 98 2)) ((distance 0) (click-at 0 0 3)) nil 3 2 6)""#
+        ],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -480,5 +514,8 @@ fn oracle_prop_closure_capture_loop_variables() {
                     (let ((captured k))
                       (setq makers (cons (lambda (x) (+ x captured)) makers))))
                   (mapcar (lambda (f) (funcall f 100)) makers))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK ((4 3 2 1 0) (16 9 4 1 0) (102 101 100))""#],
+    );
 }

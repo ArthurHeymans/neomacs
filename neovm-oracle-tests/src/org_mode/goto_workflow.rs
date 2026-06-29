@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_goto_local_search_keymap_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-goto)
@@ -45,6 +45,9 @@ fn org_goto_local_search_keymap_combo() {
               missing
               bindings
               (keymapp org-goto-map))))))"##,
+        expect_test::expect![[
+            r#""OK ((3 \"** TODO Deep Target :tag:\n\") (5 \"* Beta Deep Target\n\") nil ((\"q\" org-goto-quit) (\"n\" outline-next-visible-heading) (\"p\" outline-previous-visible-heading) (\"f\" outline-forward-same-level) (\"b\" outline-backward-same-level) (\"u\" outline-up-heading) (\"/\" org-occur) (\"\\r\" org-goto-ret)) t)""#
+        ]],
     );
 }
 
@@ -52,7 +55,7 @@ fn org_goto_local_search_keymap_combo() {
 fn org_goto_location_indirect_return_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-goto)
@@ -92,6 +95,7 @@ fn org_goto_location_indirect_return_combo() {
                   (get-buffer "*org-goto*")
                   (get-buffer "*Org Help*")
                   (thing-at-point 'line t)))))))"##,
+        expect_test::expect![[r#""ERR (invalid-function (symbol-function 'pop-to-buffer))""#]],
     );
 }
 
@@ -99,7 +103,7 @@ fn org_goto_location_indirect_return_combo() {
 fn org_goto_outline_path_completion_command_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-goto)
@@ -146,6 +150,7 @@ fn org_goto_outline_path_completion_command_combo() {
                       (line-number-at-pos)
                       (thing-at-point 'line t)
                       (mapcar #'marker-position org-mark-ring))))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -153,7 +158,7 @@ fn org_goto_outline_path_completion_command_combo() {
 fn org_goto_exit_commands_and_tag_search_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-goto)
@@ -233,6 +238,9 @@ fn org_goto_exit_commands_and_tag_search_combo() {
             (nreverse backward)
             (nreverse exits)
             (nreverse errors)))))"##,
+        expect_test::expect![[
+            r#""OK ((org-goto-local-auto-isearch nil nil org-goto-ret) (nil digit-argument org-goto-quit outline-next-visible-heading org-goto-ret) ((1 \"* Match in title\") (4 \"** Nested Match\") (4 \"** Nested Match\")) ((4 \"** Nested Match\")) (nil (org-goto-left left 4) nil (org-goto-right right 4) nil (org-goto-quit quit nil)) ((user-error \"Not on a heading\") (user-error \"Not on a heading\")))""#
+        ]],
     );
 }
 
@@ -240,7 +248,7 @@ fn org_goto_exit_commands_and_tag_search_combo() {
 fn org_heading_navigation_level_position_tracking_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -299,5 +307,6 @@ fn org_heading_navigation_level_position_tracking_combo() {
                        (line-number-at-pos))
                  levels))
          (nreverse levels)))))))"##,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 58 32)""#]],
     );
 }

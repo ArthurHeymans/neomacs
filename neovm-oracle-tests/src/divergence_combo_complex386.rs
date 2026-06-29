@@ -9,7 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx386_eieio_multiple_inheritance_and_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -24,13 +24,14 @@ fn div_cx386_eieio_multiple_inheritance_and_dispatch() {
               (neo-cx386-who inst) (class-of inst))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (11 22 :a neo-cx386-c)""#]],
     )
 }
 
 #[test]
 fn div_cx386_eieio_4_level_call_next_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -53,13 +54,14 @@ fn div_cx386_eieio_4_level_call_next_method() {
             (neo-cx386-chain (make-instance 'neo-cx386-l1))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     )
 }
 
 #[test]
 fn div_cx386_eieio_method_combination_plus_max_min() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -81,13 +83,14 @@ fn div_cx386_eieio_method_combination_plus_max_min() {
         (list (neo-cx386-plus inst) (neo-cx386-maxg inst) (neo-cx386-ming inst))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored error)""#]],
     )
 }
 
 #[test]
 fn div_cx386_eieio_eql_specializer_and_class_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -104,13 +107,14 @@ fn div_cx386_eieio_eql_specializer_and_class_slots() {
               (slot-value a 'id) (slot-value b 'id))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (5 5 10 10 1 2)""#]],
     )
 }
 
 #[test]
 fn div_cx386_eieio_print_object_and_change_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -130,13 +134,14 @@ fn div_cx386_eieio_print_object_and_change_class() {
                 (princ-to-string po)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
     )
 }
 
 #[test]
 fn div_cx386_eieio_slot_boundp_makunbound_with_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -155,13 +160,14 @@ fn div_cx386_eieio_slot_boundp_makunbound_with_slots() {
               (slot-boundp inst 'y))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t 0 unbound 99 99 eieio--unbound nil)""#]],
     )
 }
 
 #[test]
 fn div_cx386_eieio_initialize_instance_and_parents_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -180,13 +186,16 @@ fn div_cx386_eieio_initialize_instance_and_parents_query() {
               (eieio-class-children 'neo-cx386-root))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[
+            r#""OK (:init-ran (#s(eieio--class neo-cx386-mid nil (#s(eieio--class neo-cx386-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx386-root neo-cx386-init neo-cx386-sb neo-cx386-po neo-cx386-v2 neo-cx386-v1 neo-cx386-static neo-cx386-mc neo-cx386-l1 neo-cx386-b neo-cx386-a) nil [] [] #s(#6) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx386-mid) nil [] [] #s(#4) (:custom-groups nil))) [] #s(hash-table test eq) (neo-cx386-leaf) nil [] [] #s(#2) (:custom-groups nil))) (#s(eieio--class neo-cx386-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx386-root neo-cx386-init neo-cx386-sb neo-cx386-po neo-cx386-v2 neo-cx386-v1 neo-cx386-static neo-cx386-mc neo-cx386-l1 neo-cx386-b neo-cx386-a) nil [] [] #s(#4) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx386-mid) nil [] [] #s(#2) (:custom-groups nil))) (neo-cx386-mid))""#
+        ]],
     )
 }
 
 #[test]
 fn div_cx386_eieio_no_primary_and_no_applicable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -201,13 +210,14 @@ fn div_cx386_eieio_no_primary_and_no_applicable() {
           (error (list :caught-other (car err))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:caught-no-primary)""#]],
     )
 }
 
 #[test]
 fn div_cx386_eieio_keyword_args_and_with_accessors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -228,13 +238,14 @@ fn div_cx386_eieio_keyword_args_and_with_accessors() {
                 (list gx gy)))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     )
 }
 
 #[test]
 fn div_cx386_eieio_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -274,5 +285,6 @@ fn div_cx386_eieio_with_marker_overlay_undo_narrow_mega() {
                       (text-properties-at 1)))))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
     )
 }

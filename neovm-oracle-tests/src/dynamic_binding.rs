@@ -25,7 +25,7 @@ fn oracle_prop_dynamic_let_rebinding() {
                           (let ((inner (funcall read-outer)))
                             (list neovm--test-dyn-var inner))))
                     (makunbound 'neovm--test-dyn-var)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (20 20)""#]]);
 }
 
 #[test]
@@ -42,7 +42,8 @@ fn oracle_prop_dynamic_nested_rebinding() {
                               ;; Unwind and check each level restores
                               deep))))
                     (makunbound 'neovm--test-stack-var)))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 3""#]]);
     assert_ok_eq("3", &o, &n);
 }
 
@@ -61,7 +62,7 @@ fn oracle_prop_dynamic_restore_on_error() {
                           (error nil))
                         neovm--test-restore-var)
                     (makunbound 'neovm--test-restore-var)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK original""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +79,7 @@ fn oracle_prop_symbol_value_basic() {
                       (list (symbol-value 'neovm--test-sv-var)
                             (boundp 'neovm--test-sv-var))
                     (makunbound 'neovm--test-sv-var)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (42 t)""#]]);
 }
 
 #[test]
@@ -95,7 +96,7 @@ fn oracle_prop_set_and_symbol_value() {
                           (list via-sv via-name
                                 (= via-sv via-name))))
                     (makunbound 'neovm--test-set-var)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (99 99 t)""#]]);
 }
 
 #[test]
@@ -107,7 +108,7 @@ fn oracle_prop_makunbound_then_boundp() {
                   (let ((before (boundp 'neovm--test-mkub-var)))
                     (makunbound 'neovm--test-mkub-var)
                     (list before (boundp 'neovm--test-mkub-var))))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -141,7 +142,10 @@ fn oracle_prop_dynamic_callback_pattern() {
                           ;; Back to default
                           (funcall formatter \"hello\")))
                     (makunbound 'neovm--test-output-format)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\"hello\" \"'hello'\" \"HELLO\" \"hello\")""#]],
+    );
 }
 
 #[test]
@@ -168,7 +172,7 @@ fn oracle_prop_dynamic_with_multiple_vars() {
                     (makunbound 'neovm--test-mv-a)
                     (makunbound 'neovm--test-mv-b)
                     (makunbound 'neovm--test-mv-c)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (6 60 60)""#]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -202,5 +206,10 @@ fn oracle_prop_dynamic_context_stack() {
                           (funcall emit \"root-end\"))
                         (nreverse lines))
                     (makunbound 'neovm--test-indent-level)))";
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"root\" \"  child-1\" \"    grandchild\" \"  child-2\" \"root-end\")""#
+        ]],
+    );
 }

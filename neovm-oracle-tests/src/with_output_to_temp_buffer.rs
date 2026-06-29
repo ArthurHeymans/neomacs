@@ -40,7 +40,12 @@ fn oracle_prop_with_output_to_temp_buffer_body_not_current() {
       (kill-buffer name))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((t t \" *neovm-oracle-stdout*\" :done) (\"alpha(1 \\\"two\\\")\nomega\n\" 1 nil nil t))""#
+        ]],
+    );
 }
 
 #[test]
@@ -71,7 +76,10 @@ fn oracle_prop_with_output_to_temp_buffer_clears_existing_buffer() {
       (kill-buffer name))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (\" *neovm-oracle-stdout*\" (\"fresh\n\" nil t nil 1 7))""#]],
+    );
 }
 
 #[test]
@@ -103,7 +111,12 @@ fn oracle_prop_with_output_to_temp_buffer_setup_hook_current_buffer() {
       (kill-buffer name))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (body-value (\" *neovm-output-setup-hook*\" t nil nil nil t) \"hook:body\")""#
+        ]],
+    );
 }
 
 #[test]
@@ -132,5 +145,8 @@ fn oracle_prop_with_output_to_temp_buffer_no_show_on_error() {
       (kill-buffer name))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((error \"boom\") nil (\"partial\" t 8))""#]],
+    );
 }

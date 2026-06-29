@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx229_server_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -19,13 +19,14 @@ fn div_cx229_server_availability() {
             (boundp 'server-window)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx229_mailcap_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -35,13 +36,14 @@ fn div_cx229_mailcap_availability() {
             (boundp 'mailcap-mime-data)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx229_mime_type_to_extension() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (fboundp 'mailcap-extension-to-mime)
@@ -49,13 +51,14 @@ fn div_cx229_mime_type_to_extension() {
           (boundp 'mailcap-mime-extensions))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t t)""#]],
     );
 }
 
 #[test]
 fn div_cx229_mm_decode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -66,13 +69,14 @@ fn div_cx229_mm_decode_availability() {
             (boundp 'mm-text-html-renderer)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil t t)""#]],
     );
 }
 
 #[test]
 fn div_cx229_mm_encode_decode_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -84,13 +88,14 @@ fn div_cx229_mm_encode_decode_round_trip() {
         (list enc dec (string= text dec))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored void-function)""#]],
     );
 }
 
 #[test]
 fn div_cx229_message_rfc822_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -99,13 +104,14 @@ fn div_cx229_message_rfc822_parsing() {
             (fboundp 'rfc822-parse-string)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t nil)""#]],
     );
 }
 
 #[test]
 fn div_cx229_flatten_rfc822_addresses() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -114,13 +120,14 @@ fn div_cx229_flatten_rfc822_addresses() {
             (fboundp 'mail-strip-quoted-names)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (t t)""#]],
     );
 }
 
 #[test]
 fn div_cx229_rfc2047_encode_decode_headers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -130,25 +137,27 @@ fn div_cx229_rfc2047_encode_decode_headers() {
             (fboundp 'rfc2047-decode-string)))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (\"plain\" \"=?utf-8?B?Y2Fmw6kg5LiW55WM?=\" t)""#]],
     );
 }
 
 #[test]
 fn div_cx229_server_running_p_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (list (server-running-p))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (nil)""#]],
     );
 }
 
 #[test]
 fn div_cx229_server_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -177,5 +186,6 @@ fn div_cx229_server_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
     );
 }

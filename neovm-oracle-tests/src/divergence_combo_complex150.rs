@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx150_mega_buflocal_textprop_overlay_marker_undo_narrow_process_env_timer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX150=v" process-environment)))
@@ -50,13 +50,14 @@ fn div_cx150_mega_buflocal_textprop_overlay_marker_undo_narrow_process_env_timer
           (kill-buffer buf)
           (list state)))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx150_mega_clloop_eieio_hash_pcase_textprop_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (progn
@@ -96,13 +97,14 @@ fn div_cx150_mega_clloop_eieio_hash_pcase_textprop_marker_overlay() {
                       (text-properties-at 1)))))))
   (error (list :errored (car e))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx150_mega_eval_macro_closure_marker_overlay_undo_narrow_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
       (timer-fired nil))
@@ -142,13 +144,14 @@ fn div_cx150_mega_eval_macro_closure_marker_overlay_undo_narrow_process() {
               (kill-buffer buf)
               (list state (buffer-string)))))))))
 "##,
+        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
     );
 }
 
 #[test]
 fn div_cx150_mega_coding_charset_print_circle_secure_hash_obarray() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((text "Hello café 世界 😀")
        (encoded (encode-coding-string text 'utf-8))
@@ -170,13 +173,14 @@ fn div_cx150_mega_coding_charset_print_circle_secure_hash_obarray() {
         (get sym1 'neo-cx150-prop)
         (get sym2 'neo-cx150-prop)))
 "##,
+        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
     );
 }
 
 #[test]
 fn div_cx150_mega_advice_kmacro_register_window_config_buflocal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
   (defun neo-cx150-mega-target (x) (push (list :primary x) calls) (* x 2))
@@ -209,13 +213,14 @@ fn div_cx150_mega_advice_kmacro_register_window_config_buflocal() {
             (kill-buffer buf)
             (list state (buffer-live-p buf)))))))
 "##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
 #[test]
 fn div_cx150_mega_subprocess_marker_overlay_textprop_undo_narrow_env_exitcode_timer_weak_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX150=v2" process-environment)))
@@ -252,5 +257,8 @@ fn div_cx150_mega_subprocess_marker_overlay_textprop_undo_narrow_env_exitcode_ti
         (kill-buffer buf)
         (list state (buffer-string))))))
 "##,
+        expect_test::expect![[
+            r#""ERR (error \"`let' bindings can have only one value-form\" exit-code (let ((p (make-process :name \"neo-cx150-final-ec\" :command '(\"sh\" \"-c\" \"exit 5\"))) (weak-ht (make-hash-table :weakness 'key :test 'eq)))) (puthash (cons 1 nil) :v weak-ht) (garbage-collect) (accept-process-output p 2) (process-exit-status p))""#
+        ]],
     );
 }

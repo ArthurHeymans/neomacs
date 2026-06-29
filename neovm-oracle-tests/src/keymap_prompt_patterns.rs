@@ -41,7 +41,12 @@ fn oracle_prop_keymapp_comprehensive() {
                     (keymapp (car (list (make-sparse-keymap))))
                     ;; Copy of a keymap is still a keymap
                     (keymapp (copy-keymap (make-sparse-keymap))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t t t t nil nil nil nil nil nil nil nil nil nil nil t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +77,10 @@ fn oracle_prop_keymap_parent_basic() {
                         (let ((r3 (list (keymap-parent m1)
                                         (eq (keymap-parent m2) m3))))
                           (list r1 r2 r3)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK ((nil nil nil) (t t nil) (nil t))""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +105,12 @@ fn oracle_prop_keymap_prompt_basic() {
                     (keymap-prompt '(keymap "Choose one" (65 . cmd-a)))
                     ;; Keymap without prompt but with bindings
                     (keymap-prompt '(keymap (65 . cmd-a) (66 . cmd-b))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Select action\" \"Menu\" nil nil nil \"Choose one\" nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +158,12 @@ fn oracle_prop_keymap_parent_lookup_inheritance() {
                                               (lookup-key parent [?b])
                                               (lookup-key parent [?e]))))
                           (list before after parent-state)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((child-cmd-a nil nil child-cmd-e) (child-cmd-a parent-cmd-b parent-cmd-c parent-cmd-d child-cmd-e nil) (parent-cmd-a parent-cmd-b nil))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -202,7 +220,12 @@ fn oracle_prop_keymap_hierarchical_system() {
                       (eq (keymap-parent prog-mode) text-mode)
                       (eq (keymap-parent text-mode) fundamental)
                       (keymap-parent fundamental)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (eval-defun elisp-debug compile insert-text quit save prog-help prog-help text-help help nil t t t nil)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +274,12 @@ fn oracle_prop_keymap_introspection() {
                           (keymapp child)
                           (keymapp parent)
                           (eq (keymap-parent child) parent)))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (((97 . cmd-a) (98 . cmd-b) (99 . cmd-c) (99 . child-cmd-c) (100 . cmd-d) (101 . cmd-e)) ((97 . cmd-a) (98 . cmd-b) (99 . cmd-c)) (cmd-a cmd-b child-cmd-c cmd-d cmd-e) t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +340,12 @@ fn oracle_prop_keymap_prefix_with_prompts_and_parents() {
                       ;; Parent chain verification
                       (eq (keymap-parent ext-map) base-map)
                       (eq (keymap-parent ext-help) base-help)))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (\"Help commands\" \"Extended help\" nil nil apropos-help describe-key describe-function nil apropos-help describe-key describe-variable describe-package quit save reload t t t)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -358,5 +391,5 @@ fn oracle_prop_keymap_parent_reassignment() {
                                               (lookup-key child [?w]))))
                             (list phase1 phase2 phase3 phase4
                                   (keymap-parent child))))))"#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
 }

@@ -8,7 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_copy_to_register_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass register-snap ()
     ((step :initarg :step :accessor rgs-step :initform "")
@@ -58,6 +58,7 @@ fn combo_eieio_copy_to_register_with_props() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range #<buffer rg1> 6 15)""#]],
     );
 }
 
@@ -65,7 +66,7 @@ fn combo_eieio_copy_to_register_with_props() {
 fn combo_eieio_register_rectangle_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass reg-rect-snap ()
     ((step :initarg :step :accessor rrs-step :initform "")
@@ -123,6 +124,7 @@ fn combo_eieio_register_rectangle_with_markers() {
                 (marker-position m1) (marker-position m2)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -130,7 +132,7 @@ fn combo_eieio_register_rectangle_with_markers() {
 fn combo_eieio_register_narrow_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass reg-narrow-snap ()
     ((step :initarg :step :accessor rns-step :initform "")
@@ -191,6 +193,7 @@ fn combo_eieio_register_narrow_interaction() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -198,7 +201,7 @@ fn combo_eieio_register_narrow_interaction() {
 fn combo_eieio_register_marker_point_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass reg-point-snap ()
     ((step :initarg :step :accessor rp-step :initform "")
@@ -251,6 +254,7 @@ fn combo_eieio_register_marker_point_restore() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""OK t""#]],
     );
 }
 
@@ -258,7 +262,7 @@ fn combo_eieio_register_marker_point_restore() {
 fn combo_eieio_register_window_config_save_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass reg-wconf-snap ()
     ((step :initarg :step :accessor rw-step :initform "")
@@ -311,5 +315,6 @@ fn combo_eieio_register_window_config_save_restore() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
+        expect_test::expect![[r#""ERR (args-out-of-range #<buffer rg5> 3 5)""#]],
     );
 }

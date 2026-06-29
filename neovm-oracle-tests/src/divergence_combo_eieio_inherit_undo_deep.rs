@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_eieio_multilevel_inherit_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass shape nil\n\
          ((name :initarg :name :accessor shape-name)))\n\
@@ -68,6 +68,9 @@ fn deficiency_eieio_multilevel_inherit_dispatch() {
          h))\n\
          3))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[
+            r#""ERR (wrong-number-of-arguments (closure (t) (s buf) (progn (save-current-buffer (set-buffer buf) (insert (format \"Circle r=%.1f area=%.2f\" (circle-radius s) (area s)))))) 1)""#
+        ]],
     );
 }
 
@@ -75,7 +78,7 @@ fn deficiency_eieio_multilevel_inherit_dispatch() {
 fn deficiency_closure_capture_buflocal_undo_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar my-global-val 0)\n\
          (let ((buf (generate-new-buffer \"cbi\"))\n\
@@ -104,6 +107,7 @@ fn deficiency_closure_capture_buflocal_undo_interaction() {
          my-global-val\n\
          (length results)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -111,7 +115,7 @@ fn deficiency_closure_capture_buflocal_undo_interaction() {
 fn deficiency_overlay_evaporation_after_kill_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"oek\")))\n\
          (with-current-buffer buf\n\
@@ -142,6 +146,7 @@ fn deficiency_overlay_evaporation_after_kill_undo() {
          (overlay-get ov2 'face)\n\
          (overlay-get ov3 'face))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -149,7 +154,7 @@ fn deficiency_overlay_evaporation_after_kill_undo() {
 fn deficiency_text_property_rear_nonsticky_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"tpn\")))\n\
          (with-current-buffer buf\n\
@@ -174,6 +179,7 @@ fn deficiency_text_property_rear_nonsticky_insert() {
          (get-text-property 3 'face)\n\
          (get-text-property 7 'face))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -181,7 +187,7 @@ fn deficiency_text_property_rear_nonsticky_insert() {
 fn deficiency_marker_insertion_type_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mit\")))\n\
          (with-current-buffer buf\n\
@@ -218,6 +224,7 @@ fn deficiency_marker_insertion_type_undo_chain() {
          (marker-insertion-type m-before)\n\
          (marker-insertion-type m-after))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -225,7 +232,7 @@ fn deficiency_marker_insertion_type_undo_chain() {
 fn deficiency_replace_regexp_undo_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rru\")))\n\
          (with-current-buffer buf\n\
@@ -255,6 +262,7 @@ fn deficiency_replace_regexp_undo_with_props() {
          (get-text-property 16 'idx)\n\
          (get-text-property 21 'idx)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -262,7 +270,7 @@ fn deficiency_replace_regexp_undo_with_props() {
 fn deficiency_eieio_cl_defmethod_specializer_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass editable-item nil\n\
          ((text :initarg :text :accessor item-text)))\n\
@@ -301,6 +309,7 @@ fn deficiency_eieio_cl_defmethod_specializer_undo() {
          (get-text-property 7 'source)\n\
          (get-text-property 17 'source)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -308,7 +317,7 @@ fn deficiency_eieio_cl_defmethod_specializer_undo() {
 fn deficiency_buffer_substring_props_with_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"bsp\")))\n\
          (with-current-buffer buf\n\
@@ -337,6 +346,7 @@ fn deficiency_buffer_substring_props_with_narrow() {
          (get-text-property 10 'boundary)\n\
          (get-text-property 11 'half))))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range #<buffer bsp> 1 10)""#]],
     );
 }
 
@@ -344,7 +354,7 @@ fn deficiency_buffer_substring_props_with_narrow() {
 fn deficiency_propertize_replace_undo_intervals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"pri\")))\n\
          (with-current-buffer buf\n\
@@ -382,6 +392,7 @@ fn deficiency_propertize_replace_undo_intervals() {
          (get-text-property 9 'tag)\n\
          (get-text-property 13 'tag)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (void-variable buf)""#]],
     );
 }
 
@@ -389,7 +400,7 @@ fn deficiency_propertize_replace_undo_intervals() {
 fn deficiency_undo_in_read_only_with_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"uro\")))\n\
          (with-current-buffer buf\n\
@@ -418,5 +429,6 @@ fn deficiency_undo_in_read_only_with_narrow() {
          (get-text-property 6 'ro)\n\
          (get-text-property 12 'ro)))))\n\
          (kill-buffer buf)))",
+        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
     );
 }

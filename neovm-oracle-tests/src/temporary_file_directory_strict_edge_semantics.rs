@@ -42,5 +42,10 @@ fn oracle_temporary_file_directory_default_and_mounted_edges() {
     (delete-directory root t)))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (t t t (wrong-number-of-arguments ((0 . 0) 1)) (wrong-type-argument (stringp 42)))""#
+        ]],
+    );
 }

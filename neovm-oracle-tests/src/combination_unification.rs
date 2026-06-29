@@ -76,7 +76,10 @@ fn oracle_prop_unification_substitution_apply() {
     (fmakunbound 'neovm--unify-var-p)
     (fmakunbound 'neovm--unify-apply-subst)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 30 39)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +137,10 @@ fn oracle_prop_unification_occurs_check() {
     (fmakunbound 'neovm--unify-var-p)
     (fmakunbound 'neovm--unify-occurs-p)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""OK (t nil t t nil nil nil nil nil)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +260,12 @@ fn oracle_prop_unification_basic_unify() {
     (fmakunbound 'neovm--unify-var)
     (fmakunbound 'neovm--unify)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK (nil fail fail fail fail fail fail fail fail nil nil fail)""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -379,7 +390,12 @@ fn oracle_prop_unification_compound_recursive() {
     (fmakunbound 'neovm--unify-var)
     (fmakunbound 'neovm--unify)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[
+            r#""OK ((deep nil 120 121 122) (three-level nil (f (g (h 120)) 121)) (shared-var nil 120 121 nil) (conflict t) (multi-var 97 98 99))""#
+        ]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -513,7 +529,10 @@ fn oracle_prop_unification_equation_solving() {
     (fmakunbound 'neovm--unify)
     (fmakunbound 'neovm--unify-solve)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 102 31)""#]],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -632,5 +651,8 @@ fn oracle_prop_unification_query_answering() {
     (fmakunbound 'neovm--unify)
     (fmakunbound 'neovm--unify-query)))
 "#;
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 75 70)""#]],
+    );
 }

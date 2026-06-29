@@ -18,5 +18,8 @@ fn oracle_debug_timer_check_follows_gnu_checking_build_availability() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity(form);
+    crate::common::assert_oracle_parity_expect(
+        form,
+        expect_test::expect![r#""OK (nil (void-function debug-timer-check))""#],
+    );
 }

@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_make_tags_matcher_scan_properties_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -35,6 +35,9 @@ fn org_make_tags_matcher_scan_properties_combo() {
                   (org-entry-get nil "Effort")))
           matcher
           nil))))))"##,
+        expect_test::expect![[
+            r#""OK (\"+work+urgent+TODO=\\\"TODO\\\"+Effort>=1\" nil ((\"Alpha\" (\"urgent\") \"Ada\" \"1.5\")))""#
+        ]],
     );
 }
 
@@ -42,7 +45,7 @@ fn org_make_tags_matcher_scan_properties_combo() {
 fn org_scan_tags_sparse_tree_visibility_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (require 'org-fold)
@@ -67,6 +70,9 @@ fn org_scan_tags_sparse_tree_visibility_combo() {
          (nreverse out))
        (buffer-substring-no-properties
         (point-min) (point-max))))))"##,
+        expect_test::expect![[
+            r#""OK (((\"Alpha\" t) (\"Child A\" t) (\"Beta\" t) (\"Child B\" t) (\"Gamma\" t)) \"* TODO Alpha :work:\nBody A\n** TODO Child A :work:\nBody child A\n* TODO Beta :home:\nBody B\n** TODO Child B :work:\nBody child B\n* DONE Gamma :work:\nBody G\n\")""#
+        ]],
     );
 }
 
@@ -74,7 +80,7 @@ fn org_scan_tags_sparse_tree_visibility_combo() {
 fn org_global_tags_completion_table_files_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (let ((one (make-temp-file "org-tags-one" nil ".org"
@@ -99,6 +105,9 @@ fn org_global_tags_completion_table_files_combo() {
       (dolist (file (list one two))
         (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
         (when (file-exists-p file) (delete-file file))))))"##,
+        expect_test::expect![[
+            r#""OK (\"done\" \"home\" #(\"project\" 0 7 (inherited t)) \"urgent\" \"work\")""#
+        ]],
     );
 }
 
@@ -106,7 +115,7 @@ fn org_global_tags_completion_table_files_combo() {
 fn org_tags_group_inheritance_todo_property_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -176,6 +185,9 @@ fn org_tags_group_inheritance_todo_property_combo() {
          local-secret-hits
          (car level-two)
          level-two-hits)))))"##,
+        expect_test::expect![[
+            r#""OK (#(\"+project+{urg\\\\|lab}-ARCHIVE+TODO<>\\\"DONE\\\"+Score>=5/NEXT|TODO\" 9 19 (regexp t)) nil ((\"Alpha\" (\"urgent\" \"lab\") \"Ada\" \"8\" \"Mixed\" 2)) \"+secret\" ((\"Parent\" (\"project\" \"secret\"))) \"+project+Score>=6\" ((\"Alpha\" 2 \"8\") (\"Delta\" 2 \"6\")))""#
+        ]],
     );
 }
 
@@ -183,7 +195,7 @@ fn org_tags_group_inheritance_todo_property_combo() {
 fn org_tags_matcher_map_entries_inherited_property_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
   (with-temp-buffer
@@ -236,5 +248,8 @@ fn org_tags_matcher_map_entries_inherited_property_combo() {
               prop-hits
               (car tag-groups)
               urgent-hits)))))"##,
+        expect_test::expect![[
+            r#""OK (\"+work\" ((\"Alpha\" (\"work\") \"2:00\" \"Ada\" \"proj\" \"\") (\"Sub A1\" (\"urgent\") \"0:30\" \"Ada\" \"proj\" \"TODO\") (\"Sub A2\" nil nil \"Ada\" \"proj\" \"DONE\") (\"Sub B1\" (\"work\") nil \"Bob\" \"???\" \"TODO\") (\"Gamma\" (\"work\" \"urgent\") nil nil \"???\" \"\") (\"WAIT Sub G1\" nil \"1:30\" nil \"???\" \"\")) nil ((\"Alpha\" \"2:00\") (\"Sub A2\" nil) (\"Beta\" \"1:00\") (\"Sub B1\" nil) (\"WAIT Sub G1\" \"1:30\")) \"+urgent\" ((\"Sub A1\" (\"urgent\")) (\"Gamma\" (\"work\" \"urgent\")) (\"WAIT Sub G1\" nil)))""#
+        ]],
     );
 }

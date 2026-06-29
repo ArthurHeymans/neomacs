@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn giga_all_export_option_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -69,6 +69,7 @@ Body")
          (plist-get info :with-inlinetasks)
          (plist-get info :with-statistics-cookies)
          (plist-get info :with-title)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -79,7 +80,7 @@ Body")
 #[test]
 fn giga_all_export_headline_number_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -116,6 +117,7 @@ fn giga_all_export_headline_number_combinations() {
          ;; Low level?
          (mapcar (lambda (h) (org-export-low-level-p h info))
                  (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -126,7 +128,7 @@ fn giga_all_export_headline_number_combinations() {
 #[test]
 fn giga_all_export_footnote_number_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -156,6 +158,7 @@ Body[fn:5:nested[fn:6]].
          ;; First reference?
          (mapcar (lambda (ref) (org-export-footnote-first-reference-p ref info))
                  (org-element-map tree 'footnote-reference #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -166,7 +169,7 @@ Body[fn:5:nested[fn:6]].
 #[test]
 fn giga_all_export_tag_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -188,6 +191,7 @@ fn giga_all_export_tag_combinations() {
          ;; Tags.
          (mapcar (lambda (h) (org-export-get-tags h info))
                  (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -198,7 +202,7 @@ fn giga_all_export_tag_combinations() {
 #[test]
 fn giga_all_export_category_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -221,6 +225,7 @@ fn giga_all_export_category_combinations() {
          ;; Categories.
          (mapcar (lambda (h) (org-export-get-category h info))
                  (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -231,7 +236,7 @@ fn giga_all_export_category_combinations() {
 #[test]
 fn giga_all_export_date_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -253,6 +258,7 @@ Body")
          (plist-get info :title)
          ;; Author.
          (plist-get info :author)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -263,7 +269,7 @@ Body")
 #[test]
 fn giga_all_export_optional_title_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -282,6 +288,7 @@ Body")
         (list
          ;; Optional title.
          (org-export-get-optional-title headline info)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -292,7 +299,7 @@ Body")
 #[test]
 fn giga_all_export_first_last_sibling_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -310,6 +317,7 @@ fn giga_all_export_first_last_sibling_combinations() {
          (mapcar #'org-export-first-sibling-p headlines)
          ;; Last sibling?
          (mapcar #'org-export-last-sibling-p headlines)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -320,7 +328,7 @@ fn giga_all_export_first_last_sibling_combinations() {
 #[test]
 fn giga_all_export_node_property_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -344,6 +352,7 @@ Body")
          (org-export-get-node-property :KEY headline)
          ;; Non-existent property.
          (org-export-get-node-property :NONEXISTENT headline)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -354,7 +363,7 @@ Body")
 #[test]
 fn giga_all_export_caption_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -377,6 +386,7 @@ fn giga_all_export_caption_combinations() {
          (mapcar (lambda (t) (org-export-get-caption t)) tables)
          ;; Short captions.
          (mapcar (lambda (t) (org-export-get-caption t t)) tables)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -387,7 +397,7 @@ fn giga_all_export_caption_combinations() {
 #[test]
 fn giga_all_export_filter_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (list
@@ -407,6 +417,7 @@ fn giga_all_export_filter_combinations() {
     (list (lambda (_value &rest _) "")
           (lambda (value &rest _) (concat "2" value)))
     "0" nil)))"##,
+        expect_test::expect![[r#""OK (\"210\" \"20\" \"0\" \"\")""#]],
     );
 }
 
@@ -417,7 +428,7 @@ fn giga_all_export_filter_combinations() {
 #[test]
 fn giga_all_export_backend_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let (org-export-registered-backends)
@@ -439,6 +450,9 @@ fn giga_all_export_backend_combinations() {
      (let ((all (org-export-get-all-transcoders 'child)))
        (list (cdr (assq 'headline all))
              (cdr (assq 'section all)))))))"##,
+        expect_test::expect![[
+            r#""OK ((parent) t ((lambda (h c i) (format \"CHILD: %s\n%s\" (org-element-property :raw-value h) c)) (lambda (s c i) c)))""#
+        ]],
     );
 }
 
@@ -449,7 +463,7 @@ fn giga_all_export_backend_combinations() {
 #[test]
 fn giga_all_export_scope_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -476,6 +490,7 @@ Body 4")
                         tree (org-export-get-environment)))))
            (mapcar (lambda (h) (org-element-property :raw-value h))
                    (org-element-map tree 'headline #'identity)))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -486,7 +501,7 @@ Body 4")
 #[test]
 fn giga_all_export_block_snippet_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -514,6 +529,7 @@ fn giga_all_export_block_snippet_combinations() {
          ;; Snippet backends.
          (mapcar (lambda (s) (org-element-property :back-end s))
                  (org-element-map tree 'export-snippet #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -524,7 +540,7 @@ fn giga_all_export_block_snippet_combinations() {
 #[test]
 fn giga_all_export_comment_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -550,6 +566,7 @@ Body")
          (length (org-element-map tree 'comment-block #'identity))
          ;; Headlines (including commented).
          (length (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -560,7 +577,7 @@ Body")
 #[test]
 fn giga_all_export_include_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -576,6 +593,7 @@ Body")
                    (lambda (k) (when (equal (org-element-property :key k) "INCLUDE") k))))
          ;; Headlines.
          (length (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -586,7 +604,7 @@ Body")
 #[test]
 fn giga_all_export_setupfile_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -602,6 +620,7 @@ Body")
                    (lambda (k) (when (equal (org-element-property :key k) "SETUPFILE") k))))
          ;; Headlines.
          (length (org-element-map tree 'headline #'identity))))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -612,7 +631,7 @@ Body")
 #[test]
 fn giga_all_export_select_tags_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil)
@@ -636,6 +655,7 @@ Body 4")
         ;; Only selected headlines.
         (mapcar (lambda (h) (org-element-property :raw-value h))
                 (org-element-map tree 'headline #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -646,7 +666,7 @@ Body 4")
 #[test]
 fn giga_all_export_exclude_tags_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil)
@@ -670,6 +690,7 @@ Body 4")
         ;; Only non-excluded headlines.
         (mapcar (lambda (h) (org-element-property :raw-value h))
                 (org-element-map tree 'headline #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -680,7 +701,7 @@ Body 4")
 #[test]
 fn giga_all_export_body_only_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -700,6 +721,7 @@ Body 2")
         ;; Headlines in full document.
         (mapcar (lambda (h) (org-element-property :raw-value h))
                 (org-element-map tree 'headline #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }
 
@@ -710,7 +732,7 @@ Body 2")
 #[test]
 fn giga_all_export_visible_only_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
   (let ((org-mode-hook nil))
@@ -733,5 +755,6 @@ Body 4")
         ;; Headlines in full document.
         (mapcar (lambda (h) (org-element-property :raw-value h))
                 (org-element-map tree 'headline #'identity)))))"##,
+        expect_test::expect![[r#""OK nil""#]],
     );
 }

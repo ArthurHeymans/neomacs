@@ -7,12 +7,13 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_image_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'image-type-available-p)
   (fboundp 'image-type-from-file-name)
   (fboundp 'image-type-from-file-header)
   (listp image-types))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -20,12 +21,13 @@ fn divergence_image_types() {
 fn divergence_image_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'create-image)
   (fboundp 'find-image)
   (fboundp 'image-size)
   (fboundp 'image-mask-p))"#,
+        expect_test::expect![[r#""OK (t t t t)""#]],
     );
 }
 
@@ -33,12 +35,13 @@ fn divergence_image_create() {
 fn divergence_image_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'image-property)
   (fboundp 'setf)
   (fboundp 'image-plist)
   (fboundp 'image-multi-frame-p))"#,
+        expect_test::expect![[r#""OK (t t nil t)""#]],
     );
 }
 
@@ -46,12 +49,13 @@ fn divergence_image_properties() {
 fn divergence_image_transforms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'image-transforms-p)
   (fboundp 'image-compute-rotation)
   (fboundp 'image-compute-scaling)
   (featurep 'image))"#,
+        expect_test::expect![[r#""OK (t nil nil t)""#]],
     );
 }
 
@@ -59,12 +63,13 @@ fn divergence_image_transforms() {
 fn divergence_image_cache() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'image-cache-eviction-delay)
   (fboundp 'clear-image-cache)
   (fboundp 'image-cache-size)
   (boundp 'image-cache-size))"#,
+        expect_test::expect![[r#""OK (t t t nil)""#]],
     );
 }
 
@@ -72,7 +77,7 @@ fn divergence_image_cache() {
 fn divergence_svg_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'svg-create)
   (fboundp 'svg-image)
@@ -80,6 +85,7 @@ fn divergence_svg_functions() {
   (fboundp 'svg-circle)
   (fboundp 'svg-line)
   (featurep 'svg))"#,
+        expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]],
     );
 }
 
@@ -87,12 +93,13 @@ fn divergence_svg_functions() {
 fn divergence_svg_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'svg-text)
   (fboundp 'svg-node)
   (fboundp 'svg-gradient)
   (fboundp 'svg-embed))"#,
+        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
     );
 }
 
@@ -100,7 +107,7 @@ fn divergence_svg_text() {
 fn divergence_image_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'image-mode)
   (fboundp 'image-toggle-display)
@@ -108,6 +115,7 @@ fn divergence_image_mode() {
   (fboundp 'image-backward-hscroll)
   (fboundp 'image-scroll-up)
   (featurep 'image-mode))"#,
+        expect_test::expect![[r#""OK (t nil nil nil nil nil)""#]],
     );
 }
 
@@ -115,11 +123,12 @@ fn divergence_image_mode() {
 fn divergence_image_dired() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'image-dired-display-thumb)
   (fboundp 'image-dired-dired-display-image)
   (featurep 'image-dired))"#,
+        expect_test::expect![[r#""OK (t t nil)""#]],
     );
 }
 
@@ -127,11 +136,12 @@ fn divergence_image_dired() {
 fn divergence_image_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'imagemagick-types)
   (fboundp 'imagemagick-filter-types)
   (fboundp 'imagemagick-registered-p)
   (featurep 'imagemagick))"#,
+        expect_test::expect![[r#""OK (nil t nil nil)""#]],
     );
 }
