@@ -1682,7 +1682,11 @@ fn write_lisp_propertized_string_stateful(
 /// Print a `Value` as a Lisp string, with buffer-manager awareness for
 /// proper buffer name / killed-buffer rendering.
 pub fn print_value_with_buffers(value: &Value, buffers: &crate::buffer::BufferManager) -> String {
-    print_value_with_buffers_and_options(value, buffers, PrintOptions::default())
+    // String result -> escape unibyte high bytes, consistent with `print_value`
+    // (GNU `prin1-to-string` into a multibyte buffer); see `print_value`.
+    let mut options = PrintOptions::default();
+    options.print_escape_nonascii = true;
+    print_value_with_buffers_and_options(value, buffers, options)
 }
 
 pub fn print_value_with_buffers_and_options(
@@ -1781,7 +1785,17 @@ fn print_cons_with_buffers(
 
 /// Print a `Value` as a Lisp string.
 pub fn print_value(value: &Value) -> String {
-    print_value_with_options(value, PrintOptions::default())
+    // GNU renders a value to a String via `prin1-to-string`, which prints into a
+    // multibyte buffer; `print_prepare' (print.c:170-177) then binds
+    // `print-escape-nonascii' to t, so a unibyte string's raw 0x80..0xFF bytes come
+    // out octal-escaped (`\NNN`) instead of raw. A String result must escape them
+    // regardless: a raw eight-bit byte does not round-trip through UTF-8 (it
+    // lossily becomes U+FFFD). The byte sink `print_value_bytes` deliberately stays
+    // raw -- it mirrors `prin1' to stdout / a buffer, where the destination governs
+    // the encoding.
+    let mut options = PrintOptions::default();
+    options.print_escape_nonascii = true;
+    print_value_with_options(value, options)
 }
 
 pub fn print_value_with_options(value: &Value, options: PrintOptions) -> String {
