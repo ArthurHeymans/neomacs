@@ -4577,6 +4577,25 @@ fn make_network_process_datagram_udp_loopback_like_gnu() {
     assert_eq!(results[0], "OK (\"ping-udp\" open open t t)");
 }
 
+#[test]
+fn make_network_process_service_name_strings_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((p nil))
+             (unwind-protect
+                 (progn
+                   (setq p (make-network-process
+                            :name "svc-udp" :type 'datagram
+                            :host 'local :service "domain"
+                            :family 'ipv4 :noquery t))
+                   (list (process-status p)
+                         (aref (process-contact p :remote) 4)))
+               (when p (delete-process p))))"#,
+    );
+
+    assert_eq!(results[0], "OK (open 53)");
+}
+
 #[cfg(unix)]
 #[test]
 fn make_network_process_local_datagram_loopback_like_gnu() {

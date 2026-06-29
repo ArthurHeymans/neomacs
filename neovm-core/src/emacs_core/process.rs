@@ -26,6 +26,8 @@ use socket2::{Domain, Protocol, SockAddr, SockRef, Socket, Type};
 use std::collections::HashMap;
 #[cfg(not(target_os = "windows"))]
 use std::ffi::CStr;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs::OpenOptions;
 use std::io::{Read as IoRead, Write as IoWrite};
@@ -6252,18 +6254,51 @@ fn parse_network_host(
     }
 }
 
-fn parse_network_service_port(value: &Value, server: bool) -> Result<u16, Flow> {
+fn network_service_protocol(socket_type: NetworkSocketType) -> &'static str {
+    match socket_type {
+        NetworkSocketType::Datagram => "udp",
+        _ => "tcp",
+    }
+}
+
+#[cfg(unix)]
+fn lookup_network_service_port(service: &str, protocol: &str) -> Option<u16> {
+    let service = CString::new(service).ok()?;
+    let protocol = CString::new(protocol).ok()?;
+    let entry = unsafe { libc::getservbyname(service.as_ptr(), protocol.as_ptr()) };
+    if entry.is_null() {
+        None
+    } else {
+        Some(u16::from_be(unsafe { (*entry).s_port as u16 }))
+    }
+}
+
+#[cfg(not(unix))]
+fn lookup_network_service_port(_service: &str, _protocol: &str) -> Option<u16> {
+    None
+}
+
+fn parse_network_service_port(
+    value: &Value,
+    server: bool,
+    socket_type: NetworkSocketType,
+) -> Result<u16, Flow> {
     match value.kind() {
         ValueKind::T if server => Ok(0),
         ValueKind::Fixnum(port) if (0..(1 << 16)).contains(&port) => Ok(port as u16),
         ValueKind::String => {
             let service = process_owned_runtime_string(*value);
-            service.parse::<u16>().map_err(|_| {
-                signal(
-                    "error",
-                    vec![Value::string(format!("Unknown service: {}", service))],
-                )
-            })
+            if let Ok(port) = service.parse::<u16>() {
+                return Ok(port);
+            }
+            lookup_network_service_port(&service, network_service_protocol(socket_type)).ok_or_else(
+                || {
+                    signal(
+                        "error",
+                        vec![Value::string(format!("Unknown service: {}", service))],
+                    )
+                },
+            )
         }
         _ => Err(signal_wrong_type_string(*value)),
     }
@@ -9565,7 +9600,7 @@ pub(crate) fn builtin_make_network_process(
     }
 
     if socket_type == NetworkSocketType::Datagram {
-        let port = parse_network_service_port(&service, server)?;
+        let port = parse_network_service_port(&service, server, socket_type)?;
         let host_str = host
             .clone()
             .unwrap_or_else(|| network_loopback_host_for_family(family).to_string());
@@ -9721,7 +9756,7 @@ pub(crate) fn builtin_make_network_process(
     }
 
     if server {
-        let port = parse_network_service_port(&service, true)?;
+        let port = parse_network_service_port(&service, true, socket_type)?;
         let host_str = host
             .clone()
             .unwrap_or_else(|| network_loopback_host_for_family(family).to_string());
@@ -9797,7 +9832,7 @@ pub(crate) fn builtin_make_network_process(
 
     // ---- Client mode: establish TCP connection ----
     let host_str = host.unwrap_or_else(|| network_loopback_host_for_family(family).to_string());
-    let port = parse_network_service_port(&service, false)?;
+    let port = parse_network_service_port(&service, false, socket_type)?;
 
     if nowait {
         let addrs = resolve_tcp_socket_addrs(
