@@ -2403,6 +2403,28 @@ fn process_signal_functions_dispatch_hooks_like_gnu() {
 }
 
 #[test]
+fn signal_process_accepts_gnu_signal_name_symbols() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((pid 99999999))
+             (list
+              (internal-default-signal-process pid 'TERM)
+              (internal-default-signal-process pid 'SIGTERM)
+              (internal-default-signal-process pid 'term)
+              (internal-default-signal-process pid 'sigterm)
+              (internal-default-signal-process pid 'EXIT)
+              (car (condition-case err
+                       (internal-default-signal-process pid 'no-such-signal)
+                     (error err)))
+              (condition-case err
+                  (internal-default-signal-process pid "TERM")
+                (error (car err)))))"#,
+    );
+
+    assert_eq!(result, "OK (-1 -1 -1 -1 -1 error wrong-type-argument)");
+}
+
+#[test]
 fn process_stale_control_matrix_matches_oracle() {
     crate::test_utils::init_test_tracing();
     let cat = find_bin("cat");
