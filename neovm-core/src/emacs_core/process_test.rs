@@ -670,6 +670,23 @@ fn process_controls_accept_get_process_designators_like_gnu() {
         }
         other => panic!("expected error signal, got {other:?}"),
     }
+
+    let running_child_err = builtin_process_running_child_p_impl(
+        &pm,
+        &buffers,
+        vec![Value::string("*control-target*")],
+    )
+    .expect_err("process-running-child-p buffer name should reject connection process");
+    match running_child_err {
+        Flow::Signal(signal) => {
+            assert_eq!(signal.symbol_name(), "error");
+            assert_eq!(
+                signal.data,
+                vec![Value::string("Process control-pipe is not a subprocess")]
+            );
+        }
+        other => panic!("expected error signal, got {other:?}"),
+    }
 }
 
 #[test]

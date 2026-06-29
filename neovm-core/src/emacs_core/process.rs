@@ -5650,7 +5650,7 @@ fn resolve_optional_process_or_current_buffer_in_state(
 ) -> Result<ProcessId, Flow> {
     if let Some(v) = value {
         if !v.is_nil() {
-            return resolve_process_or_missing_error_in_manager(processes, v);
+            return resolve_get_process_designator_in_state(processes, buffers, v);
         }
     }
 
@@ -12689,8 +12689,16 @@ pub(crate) fn builtin_process_running_child_p_impl(
             }
         }
     }
-    let _id =
-        resolve_optional_process_or_current_buffer_in_state(processes, buffers, args.first())?;
+    let id = resolve_optional_process_or_current_buffer_in_state(processes, buffers, args.first())?;
+    let proc = processes
+        .get_any(id)
+        .ok_or_else(|| signal_process_not_active_in_manager(processes, id))?;
+    if proc.kind != ProcessKind::Real {
+        return Err(signal_process_not_subprocess(proc));
+    }
+    if processes.get(id).is_none() {
+        return Err(signal_process_not_active_in_manager(processes, id));
+    }
     Ok(Value::NIL)
 }
 
