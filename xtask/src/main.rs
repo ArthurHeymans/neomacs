@@ -3368,14 +3368,7 @@ fn compile_main_args_for_source(native_comp: bool, source: &Path) -> Vec<OsStrin
         OsString::from("--no-site-file"),
         OsString::from("--no-site-lisp"),
         OsString::from("--eval"),
-        // NOTE(diagnostic): byte-compile-debug + backtrace-on-error-noninteractive
-        // make a failing byte-compile emit a full backtrace instead of a one-line
-        // "FILE:LINE: Error" message. Temporary, to pinpoint a Windows-only org
-        // byte-compile failure; revert once the Windows build is green. Harmless
-        // when compilation succeeds (no error -> no backtrace).
-        OsString::from(
-            "(progn (setq load-prefer-newer t byte-compile-warnings 'all) (message \">>>WIN2 tfd=%S A=%S B=%S Bs=%S C=%S\" temporary-file-directory (ignore-errors (expand-file-name \"d-\" temporary-file-directory)) (ignore-errors (expand-file-name \"d-\" \"C:/X/Y/\")) (ignore-errors (expand-file-name \"d-\" \"C:/Users/RUNNER~1/AppData/Local/Temp/\")) (ignore-errors (make-temp-file \"d-\" t))))",
-        ),
+        OsString::from("(setq load-prefer-newer t byte-compile-warnings 'all)"),
         OsString::from("--eval"),
         OsString::from("(setq org--inhibit-version-check t)"),
     ];
@@ -3398,14 +3391,7 @@ fn preloaded_lisp_args_for_source(native_comp: bool, source: &Path) -> Vec<OsStr
         OsString::from("--no-site-file"),
         OsString::from("--no-site-lisp"),
         OsString::from("--eval"),
-        // NOTE(diagnostic): byte-compile-debug + backtrace-on-error-noninteractive
-        // make a failing byte-compile emit a full backtrace instead of a one-line
-        // "FILE:LINE: Error" message. Temporary, to pinpoint a Windows-only org
-        // byte-compile failure; revert once the Windows build is green. Harmless
-        // when compilation succeeds (no error -> no backtrace).
-        OsString::from(
-            "(progn (setq load-prefer-newer t byte-compile-warnings 'all) (message \">>>WIN2 tfd=%S A=%S B=%S Bs=%S C=%S\" temporary-file-directory (ignore-errors (expand-file-name \"d-\" temporary-file-directory)) (ignore-errors (expand-file-name \"d-\" \"C:/X/Y/\")) (ignore-errors (expand-file-name \"d-\" \"C:/Users/RUNNER~1/AppData/Local/Temp/\")) (ignore-errors (make-temp-file \"d-\" t))))",
-        ),
+        OsString::from("(setq load-prefer-newer t byte-compile-warnings 'all)"),
         OsString::from("--eval"),
         OsString::from("(setq org--inhibit-version-check t)"),
     ];
