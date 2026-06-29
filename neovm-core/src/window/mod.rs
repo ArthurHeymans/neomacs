@@ -526,6 +526,23 @@ pub enum Window {
         fixed_width: usize,
         /// Horizontal scroll offset (columns).
         hscroll: usize,
+        /// Lower bound for automatic horizontal scrolling (columns).
+        ///
+        /// Mirrors GNU `w->min_hscroll` (`src/window.h`). Set equal to the
+        /// current `hscroll` by `scroll-left`/`scroll-right` when their
+        /// SET-MINIMUM argument is non-nil; the auto-hscroll pass
+        /// (`hscroll_window_tree`, STEP 7) never scrolls below it. Reset to
+        /// 0 on buffer switch.
+        min_hscroll: usize,
+        /// Whether automatic horizontal scrolling is currently suspended for
+        /// this window.
+        ///
+        /// Mirrors GNU `w->suspend_auto_hscroll` (`src/window.h`). Set true by
+        /// `set-window-hscroll` and `scroll-left`/`scroll-right` so a manual
+        /// hscroll sticks instead of being recomputed every redisplay; cleared
+        /// by `hscroll_window_tree` STEP 4 once window point explicitly moves,
+        /// and reset to false on buffer switch.
+        suspend_auto_hscroll: bool,
         /// Raw GNU `w->vscroll` value in pixels: zero or negative.
         ///
         /// Lisp-visible `window-vscroll` reports `-vscroll`, either in pixels
@@ -620,6 +637,8 @@ impl Window {
             fixed_height: 0,
             fixed_width: 0,
             hscroll: 0,
+            min_hscroll: 0,
+            suspend_auto_hscroll: false,
             vscroll: 0,
             preserve_vscroll_p: false,
             margins: WindowMargins::ZERO,
@@ -755,6 +774,55 @@ impl Window {
     pub fn set_point(&mut self, pos: LispCharPos1) {
         if let Window::Leaf { point, .. } = self {
             *point = pos.max(LispCharPos1::ONE);
+        }
+    }
+
+    /// Horizontal scroll offset in columns (`w->hscroll`). 0 for internal
+    /// nodes.
+    pub fn hscroll(&self) -> usize {
+        match self {
+            Window::Leaf { hscroll, .. } => *hscroll,
+            Window::Internal { .. } => 0,
+        }
+    }
+
+    /// Lower bound for automatic horizontal scrolling (`w->min_hscroll`).
+    pub fn min_hscroll(&self) -> usize {
+        match self {
+            Window::Leaf { min_hscroll, .. } => *min_hscroll,
+            Window::Internal { .. } => 0,
+        }
+    }
+
+    /// Set the lower bound for automatic horizontal scrolling
+    /// (`w->min_hscroll`). No-op for internal nodes.
+    pub fn set_min_hscroll(&mut self, value: usize) {
+        if let Window::Leaf { min_hscroll, .. } = self {
+            *min_hscroll = value;
+        }
+    }
+
+    /// Whether automatic horizontal scrolling is currently suspended
+    /// (`w->suspend_auto_hscroll`).
+    pub fn suspend_auto_hscroll(&self) -> bool {
+        match self {
+            Window::Leaf {
+                suspend_auto_hscroll,
+                ..
+            } => *suspend_auto_hscroll,
+            Window::Internal { .. } => false,
+        }
+    }
+
+    /// Set the auto-hscroll suspend flag (`w->suspend_auto_hscroll`). No-op
+    /// for internal nodes.
+    pub fn set_suspend_auto_hscroll(&mut self, value: bool) {
+        if let Window::Leaf {
+            suspend_auto_hscroll,
+            ..
+        } = self
+        {
+            *suspend_auto_hscroll = value;
         }
     }
 
@@ -921,6 +989,8 @@ impl Window {
             point,
             point_marker_id,
             old_point_marker_id,
+            min_hscroll,
+            suspend_auto_hscroll,
             ..
         } = self
         {
@@ -934,6 +1004,12 @@ impl Window {
             *point = LispCharPos1::ONE;
             *point_marker_id = None;
             *old_point_marker_id = None;
+            // GNU resets the auto-hscroll lower bound and the suspend flag on
+            // every buffer switch (`unshow_buffer`, src/window.c:4368). The
+            // `hscroll` reset itself is handled by the caller's normal
+            // window-start/point reinitialization path.
+            *min_hscroll = 0;
+            *suspend_auto_hscroll = false;
         }
     }
 

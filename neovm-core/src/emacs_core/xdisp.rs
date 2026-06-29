@@ -4396,16 +4396,7 @@ pub(crate) fn builtin_line_number_display_width(
         }
         Window::Internal { .. } => 1,
     };
-    let total_lines = display_line_number_total_lines(buffer)
-        .max(visible_lines)
-        .max(1);
-    let digit_count = total_lines.to_string().len() as i64;
-    let min_width = buffer
-        .buffer_local_value("display-line-numbers-width")
-        .and_then(|value| value.as_fixnum())
-        .filter(|width| *width > 0)
-        .unwrap_or(1);
-    let digit_width = digit_count.max(min_width);
+    let digit_width = line_number_digit_width(buffer, visible_lines);
     let displayed_columns = digit_width + 2;
 
     match args.first() {
@@ -4415,6 +4406,49 @@ pub(crate) fn builtin_line_number_display_width(
         Some(value) if value.is_truthy() => Ok(Value::fixnum(displayed_columns * char_width)),
         _ => Ok(Value::fixnum(digit_width)),
     }
+}
+
+/// Number of digit columns a line-number gutter shows, before the two
+/// padding columns (one leading, one trailing).  Mirrors GNU
+/// `maybe_produce_line_number`'s `it->lnum_width` (`max(width, log10(max)+1)`,
+/// src/xdisp.c).  `visible_lines` is the floor of the window's visible row
+/// count; GNU widens to whichever is larger so the gutter never shrinks below
+/// what the visible rows need.
+fn line_number_digit_width(buffer: &Buffer, visible_lines: i64) -> i64 {
+    let total_lines = display_line_number_total_lines(buffer)
+        .max(visible_lines)
+        .max(1);
+    let digit_count = total_lines.to_string().len() as i64;
+    let min_width = buffer
+        .buffer_local_value("display-line-numbers-width")
+        .and_then(|value| value.as_fixnum())
+        .filter(|width| *width > 0)
+        .unwrap_or(1);
+    digit_count.max(min_width)
+}
+
+/// Width in display columns of this window's line-number gutter, or 0 when
+/// `display-line-numbers` is off for the buffer.
+///
+/// This is the column form of GNU's `x_offset` (`it->lnum_pixel_width`,
+/// src/xdisp.c STEP 3) that `hscroll_window_tree` subtracts from the text
+/// area: the gutter shows `digit_width` digits plus one leading and one
+/// trailing padding column, so the usable line-content width is
+/// `text_cols - (digit_width + 2)`.
+pub(crate) fn line_number_gutter_cols(
+    buffer: &Buffer,
+    window_bounds_height: f32,
+    char_height: f32,
+) -> i64 {
+    let enabled = buffer
+        .buffer_local_value("display-line-numbers")
+        .is_some_and(|value| value.is_truthy());
+    if !enabled {
+        return 0;
+    }
+    let char_height = char_height.max(1.0);
+    let visible_lines = ((window_bounds_height / char_height).floor() as i64).max(1);
+    line_number_digit_width(buffer, visible_lines) + 2
 }
 
 fn display_line_number_total_lines(buffer: &Buffer) -> i64 {

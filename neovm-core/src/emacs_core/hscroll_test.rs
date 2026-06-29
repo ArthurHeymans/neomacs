@@ -108,6 +108,16 @@ fn reset_respects_min_hscroll_lower_bound() {
 }
 
 #[test]
+fn eol_target_respects_min_hscroll_floor() {
+    // FOLLOW-UP A: when scroll-left set a min_hscroll higher than the natural
+    // EOL target, the floor wins. C-e on a 300-col line / 160-col window would
+    // compute 300 - 156 = 144, but min_hscroll = 200 floors it to 200.
+    let mut input = at_eol(300, 160, 5, 0);
+    input.min_hscroll = 200;
+    assert_eq!(compute_auto_hscroll(&input), Some(200));
+}
+
+#[test]
 fn at_min_hscroll_short_line_no_change() {
     // Already at min_hscroll and point fits -> case C does not fire
     // (cur_hscroll == min_hscroll), and point is left of the right edge so the

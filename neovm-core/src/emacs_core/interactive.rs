@@ -246,6 +246,11 @@ pub(crate) fn builtin_subr_interactive_form(name: &str) -> Option<Value> {
         "scroll-up-command" | "scroll-down-command" => {
             Some(interactive_form_from_string_spec("^P"))
         }
+        // GNU `scroll-left`/`scroll-right` use the spec "^P\np": the first arg
+        // is the raw prefix (columns) and the second is the numeric prefix,
+        // which is always non-nil interactively, so an interactive scroll
+        // becomes the auto-hscroll lower bound (SET-MINIMUM).
+        "scroll-left" | "scroll-right" => Some(interactive_form_from_string_spec("^P\np")),
         "set-mark-command" => Some(interactive_form_from_string_spec("P")),
         "narrow-to-region" => Some(interactive_form_from_string_spec("r")),
         "move-to-column" => Some(interactive_form_from_string_spec("NMove to column: ")),

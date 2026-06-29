@@ -2668,11 +2668,20 @@ pub(crate) fn builtin_set_window_hscroll(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
     let cols = expect_fixnum(&args[1])?.max(0) as usize;
-    if let Some(Window::Leaf { hscroll, .. }) = frames
+    if let Some(Window::Leaf {
+        hscroll,
+        suspend_auto_hscroll,
+        ..
+    }) = frames
         .get_mut(fid)
         .and_then(|frame| frame.find_window_mut(wid))
     {
         *hscroll = cols;
+        // GNU `set_window_hscroll` (src/window.c:1289) suspends auto hscroll
+        // so an explicit set-window-hscroll is not immediately overridden by
+        // the auto-hscroll redisplay pass; it is un-suspended once window
+        // point explicitly moves (hscroll_window_tree STEP 4).
+        *suspend_auto_hscroll = true;
     }
     Ok(Value::fixnum(cols as i64))
 }
@@ -2723,11 +2732,26 @@ pub(crate) fn builtin_scroll_left(eval: &mut super::eval::Context, args: Vec<Val
         next = 0;
     }
     let next = next.min(i64::MAX as i128) as i64;
-    if let Some(Window::Leaf { hscroll, .. }) = frames
+    // GNU `scroll-left` (src/window.c:7113): the optional second argument
+    // SET-MINIMUM (non-nil in an interactive call via the `\np` spec) makes
+    // the new scroll amount the lower bound for automatic hscrolling.
+    let set_minimum = args.get(1).is_some_and(|v| !v.is_nil());
+    if let Some(Window::Leaf {
+        hscroll,
+        min_hscroll,
+        suspend_auto_hscroll,
+        ..
+    }) = frames
         .get_mut(fid)
         .and_then(|frame| frame.find_window_mut(wid))
     {
         *hscroll = next as usize;
+        if set_minimum {
+            *min_hscroll = *hscroll;
+        }
+        // GNU suspends auto hscroll after any scroll-left/right so the manual
+        // scroll position is honored until window point explicitly moves.
+        *suspend_auto_hscroll = true;
     }
     Ok(Value::fixnum(next))
 }
@@ -2758,11 +2782,22 @@ pub(crate) fn builtin_scroll_right(
         next = 0;
     }
     let next = next.min(i64::MAX as i128) as i64;
-    if let Some(Window::Leaf { hscroll, .. }) = frames
+    // GNU `scroll-right` (src/window.c:7139): mirror of scroll-left.
+    let set_minimum = args.get(1).is_some_and(|v| !v.is_nil());
+    if let Some(Window::Leaf {
+        hscroll,
+        min_hscroll,
+        suspend_auto_hscroll,
+        ..
+    }) = frames
         .get_mut(fid)
         .and_then(|frame| frame.find_window_mut(wid))
     {
         *hscroll = next as usize;
+        if set_minimum {
+            *min_hscroll = *hscroll;
+        }
+        *suspend_auto_hscroll = true;
     }
     Ok(Value::fixnum(next))
 }

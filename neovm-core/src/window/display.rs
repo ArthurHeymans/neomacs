@@ -621,6 +621,8 @@ impl FrameManager {
             old_point,
             old_point_marker_id,
             hscroll,
+            min_hscroll,
+            suspend_auto_hscroll,
             vscroll,
             preserve_vscroll_p,
             margins,
@@ -638,6 +640,10 @@ impl FrameManager {
                 *old_point = point.max(LispCharPos1::ONE);
                 *old_point_marker_id = None;
                 *hscroll = 0;
+                // GNU resets the auto-hscroll lower bound and clears the
+                // suspend flag on buffer switch (src/window.c:4368).
+                *min_hscroll = 0;
+                *suspend_auto_hscroll = false;
                 *vscroll = 0;
                 *preserve_vscroll_p = false;
             }

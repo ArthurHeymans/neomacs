@@ -219,10 +219,23 @@ struct LeafHscrollSnapshot {
     /// Byte position of point in this window (selected -> buffer PT; otherwise
     /// the window's own `pointm`).
     point_byte: crate::buffer::EmacsBytePos,
+    /// Lisp char position of point in this window, used to drive the GNU
+    /// STEP 4 un-suspend comparison against the window's `old_point` and to
+    /// record the new `old_point` after the pass.
+    point_lisp: crate::buffer::LispCharPos1,
+    /// The window's stored `old_point` (`w->old_pointm`) at the start of this
+    /// pass.
+    old_point_lisp: crate::buffer::LispCharPos1,
+    /// Text-area width in columns, already reduced by the line-number gutter
+    /// (FOLLOW-UP B: GNU subtracts `x_offset`).  This is the usable
+    /// line-content width fed to the pure computation.
     text_cols: i64,
     h_margin: i64,
     cur_hscroll: i64,
+    /// The window's `min_hscroll` lower bound (`w->min_hscroll`).
     min_hscroll: i64,
+    /// The window's `suspend_auto_hscroll` flag at the start of this pass.
+    suspend_auto_hscroll: bool,
     line_truncated: bool,
     point_at_eol: bool,
     step: HscrollStep,
@@ -357,16 +370,34 @@ pub(crate) fn update_auto_hscroll_before_redisplay(ctx: &mut Context) {
             }
 
             let cur_hscroll = leaf_hscroll(window);
+            let min_hscroll = window.min_hscroll() as i64;
+            let suspend_auto_hscroll = window.suspend_auto_hscroll();
+            let old_point_lisp = leaf_old_point_lisp(window);
             let line_truncated = line_is_truncated(ctx, frame, window);
 
             // Text-area width in columns (matches window-body-width / layout).
             let char_width = frame.char_width.max(1.0);
+            let char_height = frame.char_height;
             let body_px = crate::emacs_core::window_cmds::window_body_width_pixels(
                 &ctx.frames,
                 *frame_id,
                 window,
             );
-            let text_cols = (body_px as f32 / char_width).floor() as i64;
+            // FOLLOW-UP B: when `display-line-numbers` is on, the gutter
+            // consumes columns at the left, so the usable line-content width is
+            // `body_cols - gutter_cols` — GNU subtracts the gutter pixel width
+            // (`x_offset`) in the same place (hscroll_window_tree STEP 3).
+            let body_cols = (body_px as f32 / char_width).floor() as i64;
+            let window_height = window.bounds().height;
+            let gutter_cols = match ctx.buffers.get(buffer_id) {
+                Some(buf) => crate::emacs_core::xdisp::line_number_gutter_cols(
+                    buf,
+                    window_height,
+                    char_height,
+                ),
+                None => 0,
+            };
+            let text_cols = body_cols - gutter_cols;
             if text_cols <= 0 {
                 continue;
             }
@@ -376,14 +407,19 @@ pub(crate) fn update_auto_hscroll_before_redisplay(ctx: &mut Context) {
             let selected_frame_id = ctx.frames.selected_frame().map(|f| f.id);
             let is_selected_window =
                 selected_frame_id == Some(*frame_id) && selected_window_id == win_id;
-            let point_byte =
+            let (point_byte, point_lisp) =
                 if is_selected_window && selected_buffer_pt.map(|(id, _)| id) == Some(buffer_id) {
-                    selected_buffer_pt.unwrap().1
+                    let byte = selected_buffer_pt.unwrap().1;
+                    let lisp = match ctx.buffers.get(buffer_id) {
+                        Some(buf) => buf.emacs_byte_pos_to_char_pos_clamped(byte).to_lisp(),
+                        None => continue,
+                    };
+                    (byte, lisp)
                 } else {
-                    let point_lisp = window_point_lisp(window);
-                    let char_pos = point_lisp.to_char_pos();
+                    let lisp = window_point_lisp(window);
+                    let char_pos = lisp.to_char_pos();
                     match ctx.buffers.get(buffer_id) {
-                        Some(buf) => buf.char_pos_to_emacs_byte_pos_clamped(char_pos),
+                        Some(buf) => (buf.char_pos_to_emacs_byte_pos_clamped(char_pos), lisp),
                         None => continue,
                     }
                 };
@@ -406,13 +442,13 @@ pub(crate) fn update_auto_hscroll_before_redisplay(ctx: &mut Context) {
                 window_id: win_id,
                 buffer_id,
                 point_byte,
+                point_lisp,
+                old_point_lisp,
                 text_cols,
                 h_margin: hscroll_margin_cols(ctx),
                 cur_hscroll,
-                // min_hscroll: neomacs does not yet track a per-window
-                // min_hscroll (set by scroll-left/right with SET-MINIMUM);
-                // treat it as 0. Documented as a deferred GNU-parity gap.
-                min_hscroll: 0,
+                min_hscroll,
+                suspend_auto_hscroll,
                 line_truncated,
                 point_at_eol,
                 step: HscrollStep::decode(ctx.obarray.symbol_value("hscroll-step")),
@@ -424,9 +460,42 @@ pub(crate) fn update_auto_hscroll_before_redisplay(ctx: &mut Context) {
         return;
     }
 
-    // Phase 2 + 3: compute point's true column (needs &mut Context) and write
-    // back any change. These borrow disjoint sub-state sequentially.
+    // Phase 2 + 3: run GNU `hscroll_window_tree` STEP 4 (un-suspend + record
+    // old point) and STEP 5/7/8 (trigger + compute + commit) per window. The
+    // un-suspend bookkeeping happens every pass regardless of whether a
+    // recompute fires, so it always writes back; the recompute needs
+    // `&mut Context` for point's true column and so runs in this phase.
     for snap in snapshots {
+        // STEP 4: if auto hscroll is suspended and window point has explicitly
+        // moved since the last pass, un-suspend. Record the new old point
+        // unconditionally (GNU's `Fset_marker (w->old_pointm, ...)`).
+        let effective_suspend = snap.suspend_auto_hscroll && snap.point_lisp == snap.old_point_lisp;
+        if snap.suspend_auto_hscroll != effective_suspend || snap.old_point_lisp != snap.point_lisp
+        {
+            if let Some(frame) = ctx.frames.get_mut(snap.frame_id) {
+                let window = frame.root_window.find_mut(snap.window_id).or_else(|| {
+                    frame
+                        .minibuffer_leaf
+                        .as_mut()
+                        .filter(|m| m.id() == snap.window_id)
+                });
+                if let Some(Window::Leaf {
+                    old_point,
+                    suspend_auto_hscroll,
+                    ..
+                }) = window
+                {
+                    *suspend_auto_hscroll = effective_suspend;
+                    *old_point = snap.point_lisp.max(crate::buffer::LispCharPos1::ONE);
+                }
+            }
+        }
+
+        // STEP 5 trigger requires auto hscroll not (still) suspended.
+        if effective_suspend {
+            continue;
+        }
+
         let point_col = match crate::emacs_core::indent::display_column_at_emacs_byte_pos(
             ctx,
             snap.buffer_id,
@@ -470,6 +539,14 @@ pub(crate) fn update_auto_hscroll_before_redisplay(ctx: &mut Context) {
                 *hscroll = new_hscroll.max(0) as usize;
             }
         }
+    }
+}
+
+/// Read a window's `old_point` (`w->old_pointm`) as a Lisp char position.
+fn leaf_old_point_lisp(window: &Window) -> crate::buffer::LispCharPos1 {
+    match window {
+        Window::Leaf { old_point, .. } => *old_point,
+        Window::Internal { .. } => crate::buffer::LispCharPos1::ONE,
     }
 }
 
