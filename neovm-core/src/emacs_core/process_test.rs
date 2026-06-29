@@ -2773,6 +2773,112 @@ fn make_serial_process_gnu_keywords_update_observable_state() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn serial_configuration_keywords_update_contact_state() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((p (make-serial-process
+                    :port "/tmp/neo-serial-config"
+                    :speed 9600
+                    :bytesize nil
+                    :parity 'even
+                    :stopbits 2
+                    :flowcontrol 'hw)))
+             (unwind-protect
+                 (let ((initial (list (process-contact p :speed)
+                                      (process-contact p :bytesize)
+                                      (process-contact p :parity)
+                                      (process-contact p :stopbits)
+                                      (process-contact p :flowcontrol)
+                                      (process-contact p :summary))))
+                   (serial-process-configure
+                    :process p
+                    :bytesize 7
+                    :parity 'odd
+                    :stopbits nil
+                    :flowcontrol 'sw)
+                   (list initial
+                         (list (process-contact p :speed)
+                               (process-contact p :bytesize)
+                               (process-contact p :parity)
+                               (process-contact p :stopbits)
+                               (process-contact p :flowcontrol)
+                               (process-contact p :summary))
+                         (process-contact p)))
+               (ignore-errors (delete-process p))))"#,
+    );
+    assert_eq!(
+        result,
+        "OK ((9600 8 even 2 hw \"8E2\") (9600 7 odd 1 sw \"7O1\") (\"/tmp/neo-serial-config\" 9600))"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn serial_configuration_validates_option_domains() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((p (make-serial-process
+                    :port "/tmp/neo-serial-invalid"
+                    :speed 9600)))
+             (unwind-protect
+                 (list
+                  (condition-case err
+                      (serial-process-configure :process p :bytesize 6)
+                    (error err))
+                  (condition-case err
+                      (serial-process-configure :process p :parity 'mark)
+                    (error err))
+                  (condition-case err
+                      (serial-process-configure :process p :stopbits 3)
+                    (error err))
+                  (condition-case err
+                      (serial-process-configure :process p :flowcontrol 'xon)
+                    (error err))
+                  (condition-case err
+                      (serial-process-configure :process p :speed nil)
+                    (error err))
+                  (condition-case err
+                      (serial-process-configure :process p :speed "fast")
+                    (error err)))
+               (ignore-errors (delete-process p))))"#,
+    );
+    assert_eq!(
+        result,
+        "OK ((error \":bytesize must be nil (8), 7, or 8\") (error \":parity must be nil (no parity), `even', or `odd'\") (error \":stopbits must be nil (1 stopbit), 1, or 2\") (error \":flowcontrol must be nil (no flowcontrol), `hw', or `sw'\") (wrong-type-argument fixnump nil) (wrong-type-argument fixnump \"fast\"))"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn serial_process_configure_resolves_buffer_and_port_designators() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((by-port (make-serial-process
+                           :port "/tmp/neo-serial-by-port"
+                           :speed 9600))
+                 (by-buffer (make-serial-process
+                             :port "/tmp/neo-serial-by-buffer"
+                             :name "neo-serial-by-buffer-process"
+                             :buffer "neo-serial-by-buffer"
+                             :speed 9600)))
+             (unwind-protect
+                 (progn
+                   (serial-process-configure
+                    :port "/tmp/neo-serial-by-port"
+                    :bytesize 7)
+                   (serial-process-configure
+                    :buffer "neo-serial-by-buffer"
+                    :parity 'even)
+                   (list (process-contact by-port :bytesize)
+                         (process-contact by-buffer :parity)))
+               (ignore-errors (delete-process by-port))
+               (ignore-errors (delete-process by-buffer))))"#,
+    );
+    assert_eq!(result, "OK (7 even)");
+}
+
 #[test]
 fn make_process_noquery_and_stop_match_gnu() {
     crate::test_utils::init_test_tracing();

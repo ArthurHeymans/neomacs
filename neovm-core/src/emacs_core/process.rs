@@ -1782,6 +1782,97 @@ fn apply_connection_process_flags(proc: &mut Process, noquery: bool, stop: bool)
     }
 }
 
+fn serial_contact_value(contact: Value, current: Value, keyword: ProcessKeyword) -> Value {
+    let key = keyword.value();
+    if !process_contact_plist_member(contact, key).is_nil() {
+        process_contact_plist_get(contact, key)
+    } else {
+        process_contact_plist_get(current, key)
+    }
+}
+
+fn serial_expect_fixnum(value: Value) -> Result<i64, Flow> {
+    value
+        .as_fixnum()
+        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("fixnump"), value]))
+}
+
+fn serial_value_eq_symbol(value: Value, symbol: &str) -> bool {
+    crate::emacs_core::value::eq_value(&value, &Value::symbol(symbol))
+}
+
+fn configure_serial_contact(current: Value, contact: Value) -> EvalResult {
+    let mut childp = copy_process_plist(current)?;
+
+    let speed = serial_contact_value(contact, current, ProcessKeyword::Speed);
+    serial_expect_fixnum(speed)?;
+    childp = process_contact_plist_put(childp, ProcessKeyword::Speed.value(), speed)?;
+
+    let mut bytesize = serial_contact_value(contact, current, ProcessKeyword::Bytesize);
+    if bytesize.is_nil() {
+        bytesize = Value::fixnum(8);
+    }
+    let bytesize_num = serial_expect_fixnum(bytesize)?;
+    if bytesize_num != 7 && bytesize_num != 8 {
+        return Err(signal(
+            "error",
+            vec![Value::string(":bytesize must be nil (8), 7, or 8")],
+        ));
+    }
+    childp = process_contact_plist_put(childp, ProcessKeyword::Bytesize.value(), bytesize)?;
+
+    let parity = serial_contact_value(contact, current, ProcessKeyword::Parity);
+    let parity_summary = if parity.is_nil() {
+        "N"
+    } else if serial_value_eq_symbol(parity, "even") {
+        "E"
+    } else if serial_value_eq_symbol(parity, "odd") {
+        "O"
+    } else {
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                ":parity must be nil (no parity), `even', or `odd'",
+            )],
+        ));
+    };
+    childp = process_contact_plist_put(childp, ProcessKeyword::Parity.value(), parity)?;
+
+    let mut stopbits = serial_contact_value(contact, current, ProcessKeyword::Stopbits);
+    if stopbits.is_nil() {
+        stopbits = Value::fixnum(1);
+    }
+    let stopbits_num = serial_expect_fixnum(stopbits)?;
+    if stopbits_num != 1 && stopbits_num != 2 {
+        return Err(signal(
+            "error",
+            vec![Value::string(":stopbits must be nil (1 stopbit), 1, or 2")],
+        ));
+    }
+    childp = process_contact_plist_put(childp, ProcessKeyword::Stopbits.value(), stopbits)?;
+
+    let flowcontrol = serial_contact_value(contact, current, ProcessKeyword::Flowcontrol);
+    if !flowcontrol.is_nil()
+        && !serial_value_eq_symbol(flowcontrol, "hw")
+        && !serial_value_eq_symbol(flowcontrol, "sw")
+    {
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                ":flowcontrol must be nil (no flowcontrol), `hw', or `sw'",
+            )],
+        ));
+    }
+    childp = process_contact_plist_put(childp, ProcessKeyword::Flowcontrol.value(), flowcontrol)?;
+
+    let summary = format!("{bytesize_num}{parity_summary}{stopbits_num}");
+    process_contact_plist_put(
+        childp,
+        ProcessKeyword::Summary.value(),
+        Value::string(&summary),
+    )
+}
+
 #[derive(Debug)]
 enum ProcessOutputRead {
     Data(LispString),
@@ -1916,6 +2007,10 @@ fn process_contact_plist_get(contact: Value, key: Value) -> Value {
 
 fn process_contact_plist_put(contact: Value, key: Value, value: Value) -> EvalResult {
     super::builtins::builtin_plist_put(vec![contact, key, value])
+}
+
+fn process_contact_plist_member(contact: Value, key: Value) -> Value {
+    crate::emacs_core::plist::plist_member(contact, &key)
 }
 
 fn process_contact_server_p(proc: &Process) -> bool {
@@ -10584,6 +10679,9 @@ pub(crate) fn builtin_make_serial_process_impl(
             set_explicit_process_coding(proc, coding);
         }
         apply_connection_process_flags(proc, noquery, stop);
+        if !process_contact_plist_get(proc.childp, ProcessKeyword::Speed.value()).is_nil() {
+            proc.childp = configure_serial_contact(proc.childp, contact)?;
+        }
     }
     Ok(Value::make_process(id))
 }
@@ -10593,61 +10691,38 @@ pub(crate) fn builtin_serial_process_configure(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_serial_process_configure_impl(&eval.processes, &eval.buffers, args)
+    builtin_serial_process_configure_impl(&mut eval.processes, &eval.buffers, args)
 }
 
 pub(crate) fn builtin_serial_process_configure_impl(
-    processes: &ProcessManager,
+    processes: &mut ProcessManager,
     buffers: &BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
     check_keyword_arg_pairs(&args)?;
 
-    let mut process_id: Option<ProcessId> = None;
-    let mut i = 0usize;
-    while i < args.len() {
-        let key = &args[i];
-        let Some(keyword) = ProcessKeyword::from_value(key) else {
-            i += 1;
-            continue;
-        };
-        let value = args.get(i + 1).cloned().unwrap_or(Value::NIL);
-        match keyword {
-            ProcessKeyword::Process => {
-                if value.is_nil() {
-                    process_id = None;
-                } else {
-                    process_id = Some(resolve_process_or_missing_error_in_manager(
-                        processes, &value,
-                    )?);
-                }
-            }
-            ProcessKeyword::Name => match value.kind() {
-                ValueKind::String => {
-                    let name_str = process_owned_runtime_string(value);
-                    process_id = Some(
-                        processes
-                            .find_by_name(&name_str)
-                            .ok_or_else(|| signal_process_does_not_exist(&name_str))?,
-                    );
-                }
-                _ => return Err(signal_wrong_type_processp(value)),
-            },
-            _ => {}
-        }
-        i += 2;
-    }
-
-    let id = match process_id {
-        Some(id) => id,
-        None => resolve_optional_process_or_current_buffer_in_state(processes, buffers, None)?,
-    };
+    let contact = Value::list(args);
+    let process_designator = [
+        ProcessKeyword::Process,
+        ProcessKeyword::Name,
+        ProcessKeyword::Buffer,
+        ProcessKeyword::Port,
+    ]
+    .into_iter()
+    .map(|keyword| process_contact_plist_get(contact, keyword.value()))
+    .find(|value| !value.is_nil())
+    .unwrap_or(Value::NIL);
+    let id = resolve_get_process_designator_in_state(processes, buffers, &process_designator)?;
     let proc = processes
-        .get(id)
+        .get_mut(id)
         .ok_or_else(|| signal_wrong_type_processp(Value::make_process(id)))?;
     if proc.kind != ProcessKind::Serial {
         return Err(signal("error", vec![Value::string("Not a serial process")]));
     }
+    if process_contact_plist_get(proc.childp, ProcessKeyword::Speed.value()).is_nil() {
+        return Ok(Value::NIL);
+    }
+    proc.childp = configure_serial_contact(proc.childp, contact)?;
     Ok(Value::NIL)
 }
 
