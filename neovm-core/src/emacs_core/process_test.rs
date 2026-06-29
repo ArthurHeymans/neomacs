@@ -673,6 +673,60 @@ fn process_controls_accept_get_process_designators_like_gnu() {
 }
 
 #[test]
+fn delete_process_accepts_get_process_designators_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut buffers = crate::buffer::BufferManager::new();
+    let object_buffer = buffers.create_buffer("*delete-object-target*");
+    let name_buffer = buffers.create_buffer("*delete-name-target*");
+    let nil_buffer = buffers.create_buffer("*delete-nil-target*");
+    let message_buffer = buffers.create_buffer("*delete-message-target*");
+    let mut pm = ProcessManager::new();
+    let object_id = pm.create_process(
+        "delete-object-proc".into(),
+        Value::make_buffer(object_buffer),
+        "prog".into(),
+        vec![],
+    );
+    let name_id = pm.create_process(
+        "delete-name-proc".into(),
+        Value::make_buffer(name_buffer),
+        "prog".into(),
+        vec![],
+    );
+    let nil_id = pm.create_process(
+        "delete-nil-proc".into(),
+        Value::make_buffer(nil_buffer),
+        "prog".into(),
+        vec![],
+    );
+    let message_id = pm.create_process(
+        "delete-message-proc".into(),
+        Value::make_buffer(message_buffer),
+        "prog".into(),
+        vec![],
+    );
+
+    builtin_delete_process_impl(&mut pm, &buffers, vec![Value::make_buffer(object_buffer)])
+        .expect("delete-process buffer");
+    builtin_delete_process_impl(
+        &mut pm,
+        &buffers,
+        vec![Value::string("*delete-name-target*")],
+    )
+    .expect("delete-process buffer name");
+    buffers.set_current(nil_buffer);
+    builtin_delete_process_impl(&mut pm, &buffers, vec![Value::NIL]).expect("delete-process nil");
+    buffers.set_current(message_buffer);
+    builtin_delete_process_impl(&mut pm, &buffers, vec![Value::symbol("message")])
+        .expect("delete-process message");
+
+    assert!(pm.get(object_id).is_none());
+    assert!(pm.get(name_id).is_none());
+    assert!(pm.get(nil_id).is_none());
+    assert!(pm.get(message_id).is_none());
+}
+
+#[test]
 fn process_manager_find_by_name() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();

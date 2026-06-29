@@ -10961,13 +10961,13 @@ pub(crate) fn builtin_delete_process_impl(
         ));
     }
     let id = if let Some(process) = args.first() {
-        if process.is_nil() {
-            resolve_optional_process_or_current_buffer_in_state(processes, buffers, args.first())?
+        if process.as_symbol_name() == Some("message") {
+            resolve_get_process_designator_in_state(processes, buffers, &Value::NIL)?
         } else {
-            resolve_process_or_missing_error_any_in_manager(processes, process)?
+            resolve_get_process_designator_in_state(processes, buffers, process)?
         }
     } else {
-        resolve_optional_process_or_current_buffer_in_state(processes, buffers, args.first())?
+        resolve_optional_process_or_current_buffer_in_state(processes, buffers, None)?
     };
     processes.delete_process(id);
     Ok(Value::NIL)
