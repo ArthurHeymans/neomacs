@@ -482,15 +482,61 @@ fn process_manager_send_input() {
 fn builtin_process_send_string_preserves_raw_unibyte_write_queue_entries() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
+    let buffers = crate::buffer::BufferManager::new();
     let id = pm.create_process("p".into(), Value::NIL, "prog".into(), vec![]);
     let raw = Value::heap_string(LispString::from_unibyte(vec![0xFF, b'A']));
-    builtin_process_send_string_impl(&mut pm, vec![Value::make_process(id), raw])
+    builtin_process_send_string_impl(&mut pm, &buffers, vec![Value::make_process(id), raw])
         .expect("process-send-string");
 
     let expected = Value::list(vec![Value::cons(
         Value::heap_string(LispString::from_unibyte(vec![0xFF, b'A'])),
         Value::cons(Value::fixnum(0), Value::fixnum(2)),
     )]);
+    assert!(crate::emacs_core::value::equal_value(
+        &pm.get(id).unwrap().write_queue,
+        &expected,
+        0,
+    ));
+}
+
+#[test]
+fn process_send_string_accepts_get_process_designators_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut buffers = crate::buffer::BufferManager::new();
+    let buffer_id = buffers.create_buffer("*send-string-target*");
+    buffers.set_current(buffer_id);
+    let mut pm = ProcessManager::new();
+    let id = pm.create_process(
+        "send-string-proc".into(),
+        Value::make_buffer(buffer_id),
+        "prog".into(),
+        vec![],
+    );
+
+    for (target, text) in [
+        (Value::make_buffer(buffer_id), "buf"),
+        (Value::string("*send-string-target*"), "name"),
+        (Value::NIL, "nil"),
+    ] {
+        builtin_process_send_string_impl(&mut pm, &buffers, vec![target, Value::string(text)])
+            .expect("process-send-string");
+    }
+
+    let expected = Value::list(vec![
+        Value::cons(
+            Value::heap_string(LispString::from_utf8("buf")),
+            Value::cons(Value::fixnum(0), Value::fixnum(3)),
+        ),
+        Value::cons(
+            Value::heap_string(LispString::from_utf8("name")),
+            Value::cons(Value::fixnum(0), Value::fixnum(4)),
+        ),
+        Value::cons(
+            Value::heap_string(LispString::from_utf8("nil")),
+            Value::cons(Value::fixnum(0), Value::fixnum(3)),
+        ),
+    ]);
+    assert_eq!(pm.find_by_buffer_id(buffer_id), Some(id));
     assert!(crate::emacs_core::value::equal_value(
         &pm.get(id).unwrap().write_queue,
         &expected,

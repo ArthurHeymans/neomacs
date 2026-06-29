@@ -11838,19 +11838,18 @@ pub(crate) fn builtin_process_send_string(
     args: Vec<Value>,
 ) -> EvalResult {
     if args.len() == 2 {
-        if let Some(id) = process_value_to_id(&args[0]) {
-            eval.wait_while_network_process_connecting(id)?;
-        } else if let Ok(id) =
-            resolve_process_or_missing_error_in_manager(&eval.processes, &args[0])
+        if let Ok(id) =
+            resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, &args[0])
         {
             eval.wait_while_network_process_connecting(id)?;
         }
     }
-    builtin_process_send_string_impl(&mut eval.processes, args)
+    builtin_process_send_string_impl(&mut eval.processes, &eval.buffers, args)
 }
 
 pub(crate) fn builtin_process_send_string_impl(
     processes: &mut ProcessManager,
+    buffers: &BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-send-string", &args, 2)?;
@@ -11863,7 +11862,7 @@ pub(crate) fn builtin_process_send_string_impl(
             return Err(signal_process_not_running_in_manager(processes, id));
         }
     }
-    let id = resolve_process_or_missing_error_in_manager(processes, &args[0])?;
+    let id = resolve_get_process_designator_in_state(processes, buffers, &args[0])?;
     if processes
         .get(id)
         .is_some_and(|proc| !process_status_allows_send(&proc.status))
