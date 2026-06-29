@@ -2758,7 +2758,10 @@ fn process_service_accepts_wait_request_boundary() {
         .poll_process_output_for_service_request(&request)
         .expect("poll process output should not throw");
     let ready = ev
-        .poll_ready_process_output_for_service_request(Vec::new(), &request)
+        .poll_ready_process_output_for_service_request(
+            ProcessWaitEvents::ready_processes(Vec::new()),
+            &request,
+        )
         .expect("poll ready process output should not throw");
     let _: ProcessOutputServiceOutcome = poll;
     let _: ProcessOutputServiceOutcome = ready;
@@ -4023,10 +4026,10 @@ fn make_network_process_feature_advertisement_is_conservative() {
            (get 'make-network-process 'subfeatures)"#,
     );
 
-    assert_eq!(results[0], "OK (t t t t t t nil t nil t t t t t t t t t)");
+    assert_eq!(results[0], "OK (t t t t t t t t nil t t t t t t t t t)");
     assert_eq!(
         results[1],
-        "OK (:nodelay :reuseaddr :priority :oobinline :linger :keepalive :dontroute :broadcast :bindtodevice (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:type datagram))"
+        "OK (:nodelay :reuseaddr :priority :oobinline :linger :keepalive :dontroute :broadcast :bindtodevice (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:nowait t) (:type datagram))"
     );
 }
 
@@ -4137,7 +4140,15 @@ fn make_network_process_validates_gnu_keyword_domains() {
                   (ignore-errors (delete-file path))))
              (error err))
            (condition-case err
-              (make-network-process :name "np-nowait-client" :service 0 :nowait t)
+              (let* ((srv (make-network-process
+                           :name "np-nowait-srv" :server t :service 0 :host 'local))
+                     (port (process-contact srv :service))
+                     (cli (make-network-process
+                           :name "np-nowait-client" :host 'local
+                           :service port :nowait t)))
+                (prog1 (process-status cli)
+                  (delete-process cli)
+                  (delete-process srv)))
              (error err))
            (condition-case err
               (make-network-process :name "np-family" :server t :service 0 :family 'bogus)
@@ -4151,8 +4162,122 @@ fn make_network_process_validates_gnu_keyword_domains() {
     assert_eq!(results[1], "OK (error \"Unsupported connection type\")");
     assert_eq!(results[2], "OK open");
     assert_eq!(results[3], "OK listen");
-    assert_eq!(results[4], "OK (error \"`:nowait' is not supported yet\")");
+    assert_eq!(results[4], "OK connect");
     assert_eq!(results[5], "OK (error \"Unknown address family\")");
+}
+
+#[test]
+fn make_network_process_nowait_tcp_loopback_opens_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((events nil) (srv nil) (cli nil))
+             (unwind-protect
+                 (progn
+                   (setq srv (make-network-process
+                              :name "nowait-srv" :server t :service 0
+                              :host 'local :noquery t))
+                   (setq cli (make-network-process
+                              :name "nowait-cli" :host 'local
+                              :service (process-contact srv :service)
+                              :nowait t :noquery t
+                              :sentinel (lambda (p e)
+                                          (push (list :cli (substring e 0 -1)
+                                                      (process-status p))
+                                                events))))
+                   (let ((initial (list (process-status cli)
+                                        (process-live-p cli)
+                                        (vectorp (process-contact cli :remote))
+                                        (vectorp (process-contact cli :local)))))
+                     (dotimes (_ 20)
+                       (accept-process-output nil 0.05))
+                     (list initial
+                           (process-status cli)
+                           (process-live-p cli)
+                           events
+                           (vectorp (process-contact cli :remote))
+                           (vectorp (process-contact cli :local)))))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))))"#,
+    );
+
+    assert_eq!(
+        results[0],
+        "OK ((connect (connect stop) t t) open (open listen connect stop) ((:cli \"open\" open)) t t)"
+    );
+}
+
+#[test]
+fn process_send_string_waits_for_nowait_tcp_connect_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((events nil) (recv nil) (srv nil) (cli nil))
+             (unwind-protect
+                 (progn
+                   (setq srv (make-network-process
+                              :name "nowait-send-srv" :server t :service 0
+                              :host 'local :noquery t
+                              :filter (lambda (_p s) (setq recv s))))
+                   (setq cli (make-network-process
+                              :name "nowait-send-cli" :host 'local
+                              :service (process-contact srv :service)
+                              :nowait t :noquery t
+                              :sentinel (lambda (p e)
+                                          (push (list :cli (substring e 0 -1)
+                                                      (process-status p))
+                                                events))))
+                   (process-send-string cli "ping-nowait")
+                   (dotimes (_ 20)
+                     (accept-process-output nil 0.05))
+                   (list (process-status cli) recv events))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))))"#,
+    );
+
+    assert_eq!(
+        results[0],
+        "OK (open \"ping-nowait\" ((:cli \"open\" open)))"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn make_network_process_nowait_tcp_refusal_fails_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((events nil) (srv nil) (cli nil) (port nil))
+             (unwind-protect
+                 (progn
+                   (setq srv (make-network-process
+                              :name "nowait-fail-srv" :server t :service 0
+                              :host 'local :noquery t))
+                   (setq port (process-contact srv :service))
+                   (delete-process srv)
+                   (setq srv nil)
+                   (setq cli (make-network-process
+                              :name "nowait-fail-cli" :host 'local
+                              :service port :nowait t :noquery t
+                              :sentinel (lambda (p e)
+                                          (push (list :cli (substring e 0 -1)
+                                                      (process-status p)
+                                                      (process-exit-status p))
+                                                events))))
+                   (let ((initial (list (process-status cli)
+                                        (process-live-p cli))))
+                     (dotimes (_ 20)
+                       (accept-process-output cli 0.05))
+                     (list initial
+                           (process-status cli)
+                           (process-live-p cli)
+                           (process-exit-status cli)
+                           events)))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))))"#,
+    );
+
+    assert_eq!(
+        results[0],
+        "OK ((connect (connect stop)) failed nil 111 ((:cli \"failed with code 111\" failed 111)))"
+    );
 }
 
 #[test]

@@ -137,6 +137,34 @@ impl NetworkSocket {
         }
     }
 
+    fn register_writable(&self, poller: &polling::Poller, id: ProcessId) -> Result<(), String> {
+        match self {
+            Self::TcpStream(stream) => ProcessManager::register_writable_source(poller, stream, id),
+            Self::TcpListener(_) => Err("Listener sockets are not writable process sources".into()),
+            Self::UdpSocket(socket) => ProcessManager::register_writable_source(poller, socket, id),
+            #[cfg(unix)]
+            Self::SeqpacketStream(socket) => {
+                ProcessManager::register_writable_source(poller, socket, id)
+            }
+            #[cfg(unix)]
+            Self::SeqpacketListener(_) => {
+                Err("Listener sockets are not writable process sources".into())
+            }
+            #[cfg(unix)]
+            Self::UnixStream(stream) => {
+                ProcessManager::register_writable_source(poller, stream, id)
+            }
+            #[cfg(unix)]
+            Self::UnixListener(_) => {
+                Err("Listener sockets are not writable process sources".into())
+            }
+            #[cfg(unix)]
+            Self::UnixDatagram(socket) => {
+                ProcessManager::register_writable_source(poller, socket, id)
+            }
+        }
+    }
+
     fn unregister_readable(&self, poller: &polling::Poller) {
         match self {
             Self::TcpStream(stream) => {
@@ -206,6 +234,13 @@ impl NetworkSocket {
             Self::UnixListener(_) => None,
             #[cfg(unix)]
             Self::UnixDatagram(_) => None,
+        }
+    }
+
+    fn take_pending_connect_error(&self) -> Option<std::io::Result<Option<std::io::Error>>> {
+        match self {
+            Self::TcpStream(stream) => Some(stream.take_error()),
+            _ => None,
         }
     }
 }
@@ -410,6 +445,14 @@ impl ProcessOutputServiceOutcome {
         self.activity = self.activity.record(target);
     }
 
+    pub(crate) fn absorb(&mut self, other: Self) {
+        if other.has_target_process_activity() {
+            self.record_activity(true);
+        } else if other.has_any_process_activity() {
+            self.record_activity(false);
+        }
+    }
+
     pub(crate) fn has_any_process_activity(self) -> bool {
         self.activity.any()
     }
@@ -423,13 +466,23 @@ impl ProcessOutputServiceOutcome {
 pub(crate) struct ProcessWaitEvents {
     input_wakeup: bool,
     ready_processes: Vec<ProcessId>,
+    writable_processes: Vec<ProcessId>,
 }
 
 impl ProcessWaitEvents {
     pub(crate) fn from_sources(input_wakeup: bool, ready_processes: Vec<ProcessId>) -> Self {
+        Self::from_sources_with_writable(input_wakeup, ready_processes, Vec::new())
+    }
+
+    pub(crate) fn from_sources_with_writable(
+        input_wakeup: bool,
+        ready_processes: Vec<ProcessId>,
+        writable_processes: Vec<ProcessId>,
+    ) -> Self {
         Self {
             input_wakeup,
             ready_processes,
+            writable_processes,
         }
     }
 
@@ -441,7 +494,12 @@ impl ProcessWaitEvents {
         Self {
             input_wakeup: false,
             ready_processes: processes,
+            writable_processes: Vec::new(),
         }
+    }
+
+    pub(crate) fn writable_processes(processes: Vec<ProcessId>) -> Self {
+        Self::from_sources_with_writable(false, Vec::new(), processes)
     }
 
     pub(crate) fn has_input_wakeup(&self) -> bool {
@@ -452,16 +510,32 @@ impl ProcessWaitEvents {
         !self.ready_processes.is_empty()
     }
 
+    pub(crate) fn has_writable_processes(&self) -> bool {
+        !self.writable_processes.is_empty()
+    }
+
     pub(crate) fn has_ready_process(&self, process: ProcessId) -> bool {
         self.ready_processes.contains(&process)
     }
 
+    pub(crate) fn has_writable_process(&self, process: ProcessId) -> bool {
+        self.writable_processes.contains(&process)
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
-        !self.input_wakeup && self.ready_processes.is_empty()
+        !self.input_wakeup && self.ready_processes.is_empty() && self.writable_processes.is_empty()
     }
 
     pub(crate) fn into_ready_processes(self) -> Vec<ProcessId> {
         self.ready_processes
+    }
+
+    pub(crate) fn ready_processes_ref(&self) -> &[ProcessId] {
+        &self.ready_processes
+    }
+
+    pub(crate) fn writable_processes_ref(&self) -> &[ProcessId] {
+        &self.writable_processes
     }
 }
 
@@ -688,6 +762,7 @@ pub struct Process {
     #[cfg(unix)]
     pub datagram_unix_path: Option<PathBuf>,
     pub network_socket: Option<NetworkSocket>,
+    pending_network_connect: Option<PendingNetworkConnect>,
     /// TLS-wrapped stream for encrypted network connections.
     /// When `Some`, reads/writes go through this instead of `socket`.
     pub(crate) tls_stream: Option<TlsStream>,
@@ -869,6 +944,7 @@ impl ProcessWaitBackend {
                     Ok(_) => {
                         let mut input_wakeup = false;
                         let mut ready_processes = Vec::new();
+                        let mut writable_processes = Vec::new();
                         for event in events.iter() {
                             if event.key == INPUT_WAKEUP_EVENT_KEY {
                                 if interest.wants_input_wakeup() {
@@ -878,10 +954,16 @@ impl ProcessWaitBackend {
                             }
                             if interest.wants_processes() {
                                 let id = event.key as ProcessId;
-                                if processes.get(&id).is_some_and(|process| {
-                                    process_status_has_readable_process_io(&process.status)
-                                }) {
+                                let Some(process) = processes.get(&id) else {
+                                    continue;
+                                };
+                                if event.readable
+                                    && process_status_has_readable_process_io(&process.status)
+                                {
                                     ready_processes.push(id);
+                                }
+                                if event.writable && process.pending_network_connect.is_some() {
+                                    writable_processes.push(id);
                                 }
                             }
                         }
@@ -893,10 +975,14 @@ impl ProcessWaitBackend {
                         if interest.wants_input_wakeup() {
                             input_wakeup = true;
                         }
-                        let backend =
-                            ProcessWaitEvents::from_sources(input_wakeup, ready_processes);
+                        let backend = ProcessWaitEvents::from_sources_with_writable(
+                            input_wakeup,
+                            ready_processes,
+                            writable_processes,
+                        );
                         if backend.has_input_wakeup()
                             || backend.has_ready_processes()
+                            || backend.has_writable_processes()
                             || timeout.is_zero()
                             || Instant::now() >= deadline
                         {
@@ -1336,6 +1422,10 @@ fn process_status_run_value() -> Value {
     Value::symbol("run")
 }
 
+fn process_status_connect_value() -> Value {
+    Value::symbol("connect")
+}
+
 fn write_queue_push(queue: Value, input_obj: Value, front: bool) -> Value {
     let len = input_obj
         .as_lisp_string()
@@ -1371,6 +1461,10 @@ fn process_status_stop_value(signal_num: i64) -> Value {
 
 fn process_status_exit_value(code: i32) -> Value {
     Value::list(vec![Value::symbol("exit"), Value::fixnum(code as i64)])
+}
+
+fn process_status_failed_value(code: i32) -> Value {
+    Value::list(vec![Value::symbol("failed"), Value::fixnum(code as i64)])
 }
 
 /// Convert a finished `std::process::ExitStatus` to an Emacs process status:
@@ -1458,6 +1552,10 @@ fn gnu_process_status_message(status: Value) -> String {
             } else {
                 format!("exited abnormally with code {code}\n")
             }
+        }
+        Some(ProcessStatusSymbol::Failed) => {
+            let code = process_status_code_value(status);
+            format!("failed with code {code}\n")
         }
         Some(ProcessStatusSymbol::Signal) | Some(ProcessStatusSymbol::Stop) => {
             let code = process_status_code_value(status);
@@ -1689,6 +1787,17 @@ fn process_status_is_run(status: &Value) -> bool {
     ProcessStatusSymbol::from_status_value(*status) == Some(ProcessStatusSymbol::Run)
 }
 
+fn process_status_allows_send(status: &Value) -> bool {
+    matches!(
+        ProcessStatusSymbol::from_status_value(*status),
+        Some(ProcessStatusSymbol::Run | ProcessStatusSymbol::Open)
+    )
+}
+
+fn process_status_is_connect(status: &Value) -> bool {
+    ProcessStatusSymbol::from_status_value(*status) == Some(ProcessStatusSymbol::Connect)
+}
+
 fn process_status_has_readable_process_io(status: &Value) -> bool {
     matches!(
         ProcessStatusSymbol::from_status_value(*status),
@@ -1699,6 +1808,22 @@ fn process_status_has_readable_process_io(status: &Value) -> bool {
                 | ProcessStatusSymbol::Connect
         )
     )
+}
+
+impl super::eval::Context {
+    fn wait_while_network_process_connecting(&mut self, id: ProcessId) -> Result<(), Flow> {
+        while self.processes.get(id).is_some_and(|proc| {
+            proc.kind == ProcessKind::Network && process_status_is_connect(&proc.status)
+        }) {
+            let _ = self.wait_for_process_output(ProcessOutputWaitRequest::new(
+                ProcessOutputWaitTiming::For(Duration::from_millis(20)),
+                Some(id),
+                false,
+                true,
+            ))?;
+        }
+        Ok(())
+    }
 }
 
 fn process_uses_contact_plist(proc: &Process) -> bool {
@@ -1738,6 +1863,33 @@ struct NetworkSocketOptionSpec {
     keyword: ProcessKeyword,
     option: NetworkSocketOption,
     value: Value,
+}
+
+#[derive(Clone, Debug)]
+struct PendingNetworkConnect {
+    remaining_addrs: Vec<SocketAddr>,
+    socket_options: Vec<NetworkSocketOptionSpec>,
+}
+
+#[derive(Debug)]
+struct PendingNetworkConnectStarted {
+    stream: TcpStream,
+    remote_addr: SocketAddr,
+    remaining_addrs: Vec<SocketAddr>,
+}
+
+#[derive(Debug)]
+enum PendingNetworkConnectStart {
+    Started(PendingNetworkConnectStarted),
+    Failed(i32),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PendingNetworkConnectCompletion {
+    None,
+    Retrying,
+    Connected { sentinel: Value },
+    Failed { sentinel: Value, code: i32 },
 }
 
 impl NetworkSocketOption {
@@ -2035,6 +2187,73 @@ fn connect_tcp_stream_socket(
         .set_nonblocking(true)
         .map_err(|err| network_socket_io_error("set_nonblocking", err))?;
     Ok(socket.into())
+}
+
+fn nonblocking_connect_is_pending(err: &std::io::Error) -> bool {
+    if err.kind() == std::io::ErrorKind::WouldBlock {
+        return true;
+    }
+    #[cfg(unix)]
+    {
+        matches!(
+            err.raw_os_error(),
+            Some(code)
+                if code == libc::EINPROGRESS
+                    || code == libc::EWOULDBLOCK
+                    || code == libc::EALREADY
+        )
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
+fn io_error_status_code(err: &std::io::Error) -> i32 {
+    err.raw_os_error().unwrap_or(1)
+}
+
+fn start_nonblocking_tcp_stream_socket(
+    addr: SocketAddr,
+    options: &[NetworkSocketOptionSpec],
+) -> Result<Result<TcpStream, std::io::Error>, Flow> {
+    let socket = Socket::new(tcp_socket_domain(addr), Type::STREAM, Some(Protocol::TCP))
+        .map_err(|err| network_socket_io_error("Cannot create client socket", err))?;
+    apply_network_socket_options(&socket, options)?;
+    socket
+        .set_nonblocking(true)
+        .map_err(|err| network_socket_io_error("set_nonblocking", err))?;
+    let sock_addr = SockAddr::from(addr);
+    match socket.connect(&sock_addr) {
+        Ok(()) => Ok(Ok(socket.into())),
+        Err(err) if nonblocking_connect_is_pending(&err) => Ok(Ok(socket.into())),
+        Err(err) => Ok(Err(err)),
+    }
+}
+
+fn start_pending_tcp_stream_connect(
+    addrs: Vec<SocketAddr>,
+    options: &[NetworkSocketOptionSpec],
+) -> Result<PendingNetworkConnectStart, Flow> {
+    let mut last_error_code = libc::ECONNREFUSED;
+    let mut iter = addrs.into_iter();
+    while let Some(addr) = iter.next() {
+        match start_nonblocking_tcp_stream_socket(addr, options)? {
+            Ok(stream) => {
+                return Ok(PendingNetworkConnectStart::Started(
+                    PendingNetworkConnectStarted {
+                        stream,
+                        remote_addr: addr,
+                        remaining_addrs: iter.collect(),
+                    },
+                ));
+            }
+            Err(err) => {
+                last_error_code = io_error_status_code(&err);
+            }
+        }
+    }
+    Ok(PendingNetworkConnectStart::Failed(last_error_code))
 }
 
 fn bind_udp_socket(
@@ -2345,6 +2564,26 @@ impl ProcessManager {
         }
     }
 
+    fn register_writable_source(
+        poller: &polling::Poller,
+        source: impl polling::AsRawSource,
+        id: ProcessId,
+    ) -> Result<(), String> {
+        // SAFETY: ProcessManager only registers descriptors owned by the
+        // corresponding Process record.  `unregister_process_poll_sources`
+        // removes every registered descriptor from this poller before the
+        // Process drops or replaces the descriptor.
+        unsafe {
+            poller
+                .add_with_mode(
+                    source,
+                    polling::Event::writable(id as usize),
+                    polling::PollMode::Level,
+                )
+                .map_err(|e| format!("Failed to register socket: {e}"))
+        }
+    }
+
     #[cfg(unix)]
     fn register_readable_raw_fd(
         poller: &polling::Poller,
@@ -2632,6 +2871,7 @@ impl ProcessManager {
             #[cfg(unix)]
             datagram_unix_path: None,
             network_socket: None,
+            pending_network_connect: None,
             tls_stream: None,
             gnutls_initstage: GnutlsInitStage::Empty,
             gnutls_boot_parameters: Value::NIL,
@@ -3669,6 +3909,148 @@ impl ProcessManager {
         Ok(())
     }
 
+    pub fn register_socket_writable_fd(&self, id: ProcessId) -> Result<(), String> {
+        let proc = self.processes.get(&id).ok_or("Process not found")?;
+        if let Some(poller) = self.wait_backend.poller() {
+            let socket = proc.network_socket.as_ref().ok_or("No socket")?;
+            socket.register_writable(poller, id)?;
+        }
+        Ok(())
+    }
+
+    fn update_tcp_client_contact(
+        proc: &mut Process,
+        remote_addr: SocketAddr,
+        local_addr: Option<SocketAddr>,
+    ) -> Result<(), Flow> {
+        proc.childp = process_contact_plist_put(
+            proc.childp,
+            ProcessKeyword::Remote.value(),
+            socket_addr_to_lisp_value(remote_addr),
+        )?;
+        if let Some(local_addr) = local_addr {
+            proc.childp = process_contact_plist_put(
+                proc.childp,
+                ProcessKeyword::Local.value(),
+                socket_addr_to_lisp_value(local_addr),
+            )?;
+        }
+        Ok(())
+    }
+
+    fn start_next_pending_network_connect(
+        &mut self,
+        id: ProcessId,
+        addrs: Vec<SocketAddr>,
+        options: &[NetworkSocketOptionSpec],
+    ) -> Result<Option<i32>, Flow> {
+        let start = start_pending_tcp_stream_connect(addrs, options)?;
+        let started = match start {
+            PendingNetworkConnectStart::Started(started) => started,
+            PendingNetworkConnectStart::Failed(code) => return Ok(Some(code)),
+        };
+        let local_addr = started.stream.local_addr().ok();
+        if let Some(proc) = self.processes.get_mut(&id) {
+            proc.network_socket = Some(NetworkSocket::TcpStream(started.stream));
+            proc.pending_network_connect = Some(PendingNetworkConnect {
+                remaining_addrs: started.remaining_addrs,
+                socket_options: options.to_vec(),
+            });
+            proc.status = process_status_connect_value();
+            Self::update_tcp_client_contact(proc, started.remote_addr, local_addr)?;
+        }
+        self.register_socket_writable_fd(id).ok();
+        Ok(None)
+    }
+
+    fn complete_pending_network_connect(
+        &mut self,
+        id: ProcessId,
+    ) -> Result<PendingNetworkConnectCompletion, Flow> {
+        let Some(proc) = self.processes.get(&id) else {
+            return Ok(PendingNetworkConnectCompletion::None);
+        };
+        if proc.pending_network_connect.is_none() {
+            return Ok(PendingNetworkConnectCompletion::None);
+        }
+        let connect_error = proc
+            .network_socket
+            .as_ref()
+            .and_then(NetworkSocket::take_pending_connect_error)
+            .transpose()
+            .map_err(|err| signal_process_io("Checking network connection", None, err))?
+            .flatten();
+
+        if let Some(err) = connect_error {
+            let pending = self
+                .processes
+                .get_mut(&id)
+                .and_then(|proc| proc.pending_network_connect.take());
+            let Some(pending) = pending else {
+                return Ok(PendingNetworkConnectCompletion::None);
+            };
+            if let Some(proc) = self.processes.get(&id)
+                && let Some(socket) = proc.network_socket.as_ref()
+                && let Some(poller) = self.wait_backend.poller()
+            {
+                socket.unregister_readable(poller);
+            }
+            let code = io_error_status_code(&err);
+            if !pending.remaining_addrs.is_empty() {
+                return match self.start_next_pending_network_connect(
+                    id,
+                    pending.remaining_addrs,
+                    &pending.socket_options,
+                )? {
+                    None => Ok(PendingNetworkConnectCompletion::Retrying),
+                    Some(code) => {
+                        let sentinel = self
+                            .processes
+                            .get(&id)
+                            .map(|proc| proc.sentinel)
+                            .unwrap_or(Value::NIL);
+                        if let Some(proc) = self.processes.get_mut(&id) {
+                            proc.status = process_status_failed_value(code);
+                            proc.network_socket = None;
+                            proc.pending_network_connect = None;
+                        }
+                        Ok(PendingNetworkConnectCompletion::Failed { sentinel, code })
+                    }
+                };
+            }
+
+            let sentinel = self
+                .processes
+                .get(&id)
+                .map(|proc| proc.sentinel)
+                .unwrap_or(Value::NIL);
+            if let Some(proc) = self.processes.get_mut(&id) {
+                proc.status = process_status_failed_value(code);
+                proc.network_socket = None;
+                proc.pending_network_connect = None;
+            }
+            return Ok(PendingNetworkConnectCompletion::Failed { sentinel, code });
+        }
+
+        let sentinel = self
+            .processes
+            .get(&id)
+            .map(|proc| proc.sentinel)
+            .unwrap_or(Value::NIL);
+        if let Some(proc) = self.processes.get(&id)
+            && let Some(socket) = proc.network_socket.as_ref()
+            && let Some(poller) = self.wait_backend.poller()
+        {
+            socket.unregister_readable(poller);
+        }
+        if let Some(proc) = self.processes.get_mut(&id) {
+            proc.pending_network_connect = None;
+            proc.status = process_status_run_value();
+        }
+        self.register_socket_fd(id).ok();
+        Ok(PendingNetworkConnectCompletion::Connected { sentinel })
+    }
+
     fn accept_network_server_connections(
         &mut self,
         id: ProcessId,
@@ -4267,13 +4649,39 @@ impl super::eval::Context {
 
     pub(crate) fn poll_ready_process_output_for_service_request(
         &mut self,
-        ready_processes: Vec<ProcessId>,
+        events: ProcessWaitEvents,
         request: &ProcessOutputServiceRequest,
     ) -> Result<ProcessOutputServiceOutcome, Flow> {
         let target_process = request.target_process();
-        let proc_ids = request.ready_processes(ready_processes);
+        let mut outcome = ProcessOutputServiceOutcome::default();
 
-        self.poll_process_output_for_ids(proc_ids, target_process)
+        let writable_processes = request.ready_processes(events.writable_processes_ref().to_vec());
+        for pid in writable_processes {
+            let is_target = target_process.map_or(true, |target| target == pid);
+            match self.processes.complete_pending_network_connect(pid)? {
+                PendingNetworkConnectCompletion::None => {}
+                PendingNetworkConnectCompletion::Retrying => {
+                    outcome.record_activity(is_target);
+                }
+                PendingNetworkConnectCompletion::Connected { sentinel } => {
+                    outcome.record_activity(is_target);
+                    self.run_process_sentinel_callback(pid, sentinel, "open\n")?;
+                }
+                PendingNetworkConnectCompletion::Failed { sentinel, code } => {
+                    outcome.record_activity(is_target);
+                    self.run_process_sentinel_callback(
+                        pid,
+                        sentinel,
+                        &format!("failed with code {code}\n"),
+                    )?;
+                }
+            }
+        }
+
+        let proc_ids = request.ready_processes(events.ready_processes_ref().to_vec());
+        outcome.absorb(self.poll_process_output_for_ids(proc_ids, target_process)?);
+
+        Ok(outcome)
     }
 
     fn poll_process_output_for_ids(
@@ -4295,6 +4703,12 @@ impl super::eval::Context {
                 .get(pid)
                 .is_some_and(|process| !process_status_has_readable_process_io(&process.status))
             {
+                continue;
+            }
+            if self.processes.get(pid).is_some_and(|process| {
+                ProcessStatusSymbol::from_status_value(process.status)
+                    == Some(ProcessStatusSymbol::Connect)
+            }) {
                 continue;
             }
 
@@ -7559,12 +7973,6 @@ pub(crate) fn builtin_make_network_process(
             vec![Value::string("`:server' is incompatible with `:nowait'")],
         ));
     }
-    if nowait && network_socket_type_uses_stream_connect(socket_type) {
-        return Err(signal(
-            "error",
-            vec![Value::string("`:nowait' is not supported yet")],
-        ));
-    }
     validate_process_coding_value(Some(&eval.coding_systems), coding_val)?;
     let plist_val = copy_process_plist(plist_val)?;
     let stop = stop_val.is_truthy();
@@ -7855,6 +8263,81 @@ pub(crate) fn builtin_make_network_process(
                         apply_connection_process_flags(proc, noquery, stop);
                     }
                     eval.processes.register_socket_fd(id).ok();
+                    return Ok(Value::make_process(id));
+                }
+
+                if nowait {
+                    let start = start_pending_tcp_stream_connect(vec![addr], &socket_options)?;
+                    let id = eval.processes.create_process_with_kind_lisp(
+                        name,
+                        buffer,
+                        LispString::from_utf8("network"),
+                        Vec::new(),
+                        ProcessKind::Network,
+                    );
+                    eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+                    if let Some(proc) = eval.processes.get_mut(id) {
+                        proc.status = process_status_connect_value();
+                        proc.childp = contact;
+                        proc.plist = plist_val;
+                        set_network_process_coding(
+                            proc,
+                            coding_val,
+                            default_process_coding,
+                            network_buffer_multibyte,
+                        );
+                        proc.thread = current_thread_handle(&eval.threads);
+                        if !filter_val.is_nil() {
+                            proc.filter = filter_val;
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Filter.value(),
+                                proc.filter,
+                            )?;
+                        }
+                        if !sentinel_val.is_nil() {
+                            proc.sentinel = sentinel_val;
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Sentinel.value(),
+                                proc.sentinel,
+                            )?;
+                        }
+                        if !buffer.is_nil() {
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Buffer.value(),
+                                buffer,
+                            )?;
+                        }
+                        match start {
+                            PendingNetworkConnectStart::Started(started) => {
+                                let local_addr = started.stream.local_addr().ok();
+                                proc.network_socket =
+                                    Some(NetworkSocket::TcpStream(started.stream));
+                                proc.pending_network_connect = Some(PendingNetworkConnect {
+                                    remaining_addrs: started.remaining_addrs,
+                                    socket_options: socket_options.clone(),
+                                });
+                                ProcessManager::update_tcp_client_contact(
+                                    proc,
+                                    started.remote_addr,
+                                    local_addr,
+                                )?;
+                            }
+                            PendingNetworkConnectStart::Failed(code) => {
+                                proc.status = process_status_failed_value(code);
+                            }
+                        }
+                        apply_connection_process_flags(proc, noquery, stop);
+                    }
+                    if eval
+                        .processes
+                        .get(id)
+                        .is_some_and(|proc| proc.pending_network_connect.is_some())
+                    {
+                        eval.processes.register_socket_writable_fd(id).ok();
+                    }
                     return Ok(Value::make_process(id));
                 }
 
@@ -8314,6 +8797,12 @@ pub(crate) fn builtin_make_network_process(
                     return Ok(Value::make_process(id));
                 }
 
+                if nowait {
+                    return Err(signal(
+                        "error",
+                        vec![Value::string("`:nowait' is not supported yet")],
+                    ));
+                }
                 let stream = connect_unix_stream_socket(&path, &socket_options)?;
                 contact = process_contact_plist_put(
                     contact,
@@ -8796,6 +9285,12 @@ pub(crate) fn builtin_make_network_process(
                 return Ok(Value::make_process(id));
             }
 
+            if nowait {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("`:nowait' is not supported yet")],
+                ));
+            }
             let stream = connect_unix_stream_socket(&service_path, &socket_options)?;
             contact = process_contact_plist_put(
                 contact,
@@ -9105,6 +9600,85 @@ pub(crate) fn builtin_make_network_process(
     // ---- Client mode: establish TCP connection ----
     let host_str = host.unwrap_or_else(|| network_loopback_host_for_family(family).to_string());
     let port = parse_network_service_port(&service, false)?;
+
+    if nowait {
+        let addrs = resolve_tcp_socket_addrs(
+            host_str.as_str(),
+            port,
+            family,
+            "make client process failed",
+        )?;
+        let start = start_pending_tcp_stream_connect(addrs, &socket_options)?;
+
+        let id = eval.processes.create_process_with_kind_lisp(
+            name,
+            buffer,
+            LispString::from_utf8("network"),
+            Vec::new(),
+            ProcessKind::Network,
+        );
+        eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+        if let Some(proc) = eval.processes.get_mut(id) {
+            proc.status = process_status_connect_value();
+            proc.childp = contact;
+            proc.plist = plist_val;
+            set_network_process_coding(
+                proc,
+                coding_val,
+                default_process_coding,
+                network_buffer_multibyte,
+            );
+            proc.thread = current_thread_handle(&eval.threads);
+            if !filter_val.is_nil() {
+                proc.filter = filter_val;
+                proc.childp = process_contact_plist_put(
+                    proc.childp,
+                    ProcessKeyword::Filter.value(),
+                    proc.filter,
+                )?;
+            }
+            if !sentinel_val.is_nil() {
+                proc.sentinel = sentinel_val;
+                proc.childp = process_contact_plist_put(
+                    proc.childp,
+                    ProcessKeyword::Sentinel.value(),
+                    proc.sentinel,
+                )?;
+            }
+            if !buffer.is_nil() {
+                proc.childp =
+                    process_contact_plist_put(proc.childp, ProcessKeyword::Buffer.value(), buffer)?;
+            }
+            match start {
+                PendingNetworkConnectStart::Started(started) => {
+                    let local_addr = started.stream.local_addr().ok();
+                    proc.network_socket = Some(NetworkSocket::TcpStream(started.stream));
+                    proc.pending_network_connect = Some(PendingNetworkConnect {
+                        remaining_addrs: started.remaining_addrs,
+                        socket_options: socket_options.clone(),
+                    });
+                    ProcessManager::update_tcp_client_contact(
+                        proc,
+                        started.remote_addr,
+                        local_addr,
+                    )?;
+                }
+                PendingNetworkConnectStart::Failed(code) => {
+                    proc.status = process_status_failed_value(code);
+                }
+            }
+            apply_connection_process_flags(proc, noquery, stop);
+        }
+
+        if eval
+            .processes
+            .get(id)
+            .is_some_and(|proc| proc.pending_network_connect.is_some())
+        {
+            eval.processes.register_socket_writable_fd(id).ok();
+        }
+        return Ok(Value::make_process(id));
+    }
 
     let stream = connect_tcp_stream_host(host_str.as_str(), port, family, &socket_options)?;
     let remote_addr = stream.peer_addr().ok();
@@ -10662,6 +11236,15 @@ pub(crate) fn builtin_process_send_string(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    if args.len() == 2 {
+        if let Some(id) = process_value_to_id(&args[0]) {
+            eval.wait_while_network_process_connecting(id)?;
+        } else if let Ok(id) =
+            resolve_process_or_missing_error_in_manager(&eval.processes, &args[0])
+        {
+            eval.wait_while_network_process_connecting(id)?;
+        }
+    }
     builtin_process_send_string_impl(&mut eval.processes, args)
 }
 
@@ -10680,6 +11263,12 @@ pub(crate) fn builtin_process_send_string_impl(
         }
     }
     let id = resolve_process_or_missing_error_in_manager(processes, &args[0])?;
+    if processes
+        .get(id)
+        .is_some_and(|proc| !process_status_allows_send(&proc.status))
+    {
+        return Err(signal_process_not_running_in_manager(processes, id));
+    }
     // GNU `send_process` (src/process.c) encodes the data through the process's
     // ENCODE coding system before writing it to the child's fd, applying both
     // character-code and EOL conversion.  Encode the input here so a process
@@ -10753,6 +11342,9 @@ pub(crate) fn builtin_process_exit_status_impl(
         .ok_or_else(|| signal_wrong_type_processp(args[0]))?;
     match ProcessStatusSymbol::from_status_value(proc.status) {
         Some(ProcessStatusSymbol::Exit) => {
+            Ok(Value::fixnum(process_status_code_value(proc.status)))
+        }
+        Some(ProcessStatusSymbol::Failed) => {
             Ok(Value::fixnum(process_status_code_value(proc.status)))
         }
         Some(ProcessStatusSymbol::Signal) => {
@@ -11331,6 +11923,15 @@ pub(crate) fn builtin_process_send_region(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    if args.len() == 3 {
+        if let Some(id) = process_value_to_id(&args[0]) {
+            eval.wait_while_network_process_connecting(id)?;
+        } else if let Ok(id) =
+            resolve_process_or_missing_error_in_manager(&eval.processes, &args[0])
+        {
+            eval.wait_while_network_process_connecting(id)?;
+        }
+    }
     builtin_process_send_region_impl(&mut eval.processes, &mut eval.buffers, args)
 }
 
@@ -11350,6 +11951,12 @@ pub(crate) fn builtin_process_send_region_impl(
 
     let id =
         resolve_optional_process_or_current_buffer_in_state(processes, buffers, Some(&args[0]))?;
+    if processes
+        .get(id)
+        .is_some_and(|proc| !process_status_allows_send(&proc.status))
+    {
+        return Err(signal_process_not_running_in_manager(processes, id));
+    }
     let region_args = super::position::LispRegionArgs::from_values(&*buffers, args[1], args[2])?;
 
     let region_text = {
@@ -12111,9 +12718,9 @@ fn getenv_from_list(varname: &LispString, env_list: Value) -> EnvLookup {
 
 pub(crate) fn make_network_process_subfeatures() -> Value {
     // Advertise only behavior that this runtime actually implements.  GNU's
-    // surface is still broader (`:nowait` and full inet `:type seqpacket`), but
-    // packages use `featurep' to choose code paths.  Keep this list tied to
-    // backed behavior, not parser acceptance.
+    // surface is still broader (full inet `:type seqpacket`), but packages use
+    // `featurep' to choose code paths.  Keep this list tied to backed behavior,
+    // not parser acceptance.
     Value::list(vec![
         Value::keyword("nodelay"),
         Value::keyword("reuseaddr"),
@@ -12129,6 +12736,7 @@ pub(crate) fn make_network_process_subfeatures() -> Value {
         Value::list(vec![Value::keyword("family"), Value::symbol("ipv6")]),
         Value::list(vec![Value::keyword("service"), Value::T]),
         Value::list(vec![Value::keyword("server"), Value::T]),
+        Value::list(vec![Value::keyword("nowait"), Value::T]),
         Value::list(vec![Value::keyword("type"), Value::symbol("datagram")]),
     ])
 }

@@ -604,7 +604,7 @@ impl WaitServiceOutcome {
 #[derive(Debug, PartialEq, Eq)]
 enum WaitProcessService {
     Poll,
-    Ready(Vec<ProcessId>),
+    Ready(ProcessWaitEvents),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -624,14 +624,16 @@ impl WaitBlockActivity {
     fn ready_processes(processes: Vec<ProcessId>) -> Self {
         Self {
             input_wakeup: false,
-            process_service: WaitProcessService::Ready(processes),
+            process_service: WaitProcessService::Ready(ProcessWaitEvents::ready_processes(
+                processes,
+            )),
         }
     }
 
     fn from_source_events(events: ProcessWaitEvents) -> Self {
         Self {
             input_wakeup: events.has_input_wakeup(),
-            process_service: WaitProcessService::Ready(events.into_ready_processes()),
+            process_service: WaitProcessService::Ready(events),
         }
     }
 
@@ -806,8 +808,9 @@ impl super::eval::Context {
             WaitProcessService::Poll => {
                 self.poll_process_output_for_service_request(&process_request)?
             }
-            WaitProcessService::Ready(ready_processes) => self
-                .poll_ready_process_output_for_service_request(ready_processes, &process_request)?,
+            WaitProcessService::Ready(events) => {
+                self.poll_ready_process_output_for_service_request(events, &process_request)?
+            }
         };
         outcome.absorb_process_activity(process_outcome);
 
@@ -1121,7 +1124,7 @@ mod tests {
 
         assert_eq!(
             activity.into_process_service(),
-            WaitProcessService::Ready(vec![7])
+            WaitProcessService::Ready(ProcessWaitEvents::ready_processes(vec![7]))
         );
     }
 
@@ -1134,7 +1137,7 @@ mod tests {
         assert!(activity.has_input_wakeup());
         assert_eq!(
             activity.into_process_service(),
-            WaitProcessService::Ready(vec![3])
+            WaitProcessService::Ready(ProcessWaitEvents::from_sources(true, vec![3]))
         );
     }
 
@@ -1145,7 +1148,7 @@ mod tests {
         assert!(!activity.has_input_wakeup());
         assert_eq!(
             activity.into_process_service(),
-            WaitProcessService::Ready(vec![4, 9])
+            WaitProcessService::Ready(ProcessWaitEvents::ready_processes(vec![4, 9]))
         );
     }
 
