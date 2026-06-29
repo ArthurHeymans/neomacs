@@ -165,6 +165,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globali
 
 # Dev / test
 proptest = "1.6"
+expect-test = "1.5.1"
 tempfile = "3.27.0"
 colored = "3"
 

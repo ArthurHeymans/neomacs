@@ -1,96 +1,75 @@
 //! Oracle parity tests for `type-of`.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use expect_test::expect;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use super::common::{assert_oracle_parity_expect, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_type_of_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(type-of 42)");
-    assert_ok_eq("integer", &o, &n);
-
-    let (o, n) = eval_oracle_and_neovm("(type-of 0)");
-    assert_ok_eq("integer", &o, &n);
-
-    let (o, n) = eval_oracle_and_neovm("(type-of -1)");
-    assert_ok_eq("integer", &o, &n);
+    assert_oracle_parity_expect("(type-of 42)", expect![[r#"OK integer"#]]);
+    assert_oracle_parity_expect("(type-of 0)", expect![[r#"OK integer"#]]);
+    assert_oracle_parity_expect("(type-of -1)", expect![[r#"OK integer"#]]);
 }
 
 #[test]
 fn oracle_prop_type_of_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(type-of 3.14)");
-    assert_ok_eq("float", &o, &n);
-
-    let (o, n) = eval_oracle_and_neovm("(type-of 0.0)");
-    assert_ok_eq("float", &o, &n);
-
-    let (o, n) = eval_oracle_and_neovm("(type-of -1.5)");
-    assert_ok_eq("float", &o, &n);
+    assert_oracle_parity_expect("(type-of 3.14)", expect![[r#"OK float"#]]);
+    assert_oracle_parity_expect("(type-of 0.0)", expect![[r#"OK float"#]]);
+    assert_oracle_parity_expect("(type-of -1.5)", expect![[r#"OK float"#]]);
 }
 
 #[test]
 fn oracle_prop_type_of_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm(r#"(type-of "hello")"#);
-    assert_ok_eq("string", &o, &n);
-
-    let (o, n) = eval_oracle_and_neovm(r#"(type-of "")"#);
-    assert_ok_eq("string", &o, &n);
+    assert_oracle_parity_expect(r#"(type-of "hello")"#, expect![[r#"OK string"#]]);
+    assert_oracle_parity_expect(r#"(type-of "")"#, expect![[r#"OK string"#]]);
 }
 
 #[test]
 fn oracle_prop_type_of_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(type-of 'foo)");
-    assert_ok_eq("symbol", &o, &n);
-
-    let (o, n) = eval_oracle_and_neovm("(type-of t)");
-    assert_ok_eq("symbol", &o, &n);
-
-    let (o, n) = eval_oracle_and_neovm("(type-of nil)");
-    assert_ok_eq("symbol", &o, &n);
+    assert_oracle_parity_expect("(type-of 'foo)", expect![[r#"OK symbol"#]]);
+    assert_oracle_parity_expect("(type-of t)", expect![[r#"OK symbol"#]]);
+    assert_oracle_parity_expect("(type-of nil)", expect![[r#"OK symbol"#]]);
 }
 
 #[test]
 fn oracle_prop_type_of_cons() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(type-of '(1 2 3))");
-    assert_ok_eq("cons", &o, &n);
-
-    let (o, n) = eval_oracle_and_neovm("(type-of (cons 'a 'b))");
-    assert_ok_eq("cons", &o, &n);
+    assert_oracle_parity_expect("(type-of '(1 2 3))", expect![[r#"OK cons"#]]);
+    assert_oracle_parity_expect("(type-of (cons 'a 'b))", expect![[r#"OK cons"#]]);
 }
 
 #[test]
 fn oracle_prop_type_of_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(type-of [1 2 3])");
-    assert_ok_eq("vector", &o, &n);
-
-    let (o, n) = eval_oracle_and_neovm("(type-of [])");
-    assert_ok_eq("vector", &o, &n);
+    assert_oracle_parity_expect("(type-of [1 2 3])", expect![[r#"OK vector"#]]);
+    assert_oracle_parity_expect("(type-of [])", expect![[r#"OK vector"#]]);
 }
 
 #[test]
 fn oracle_prop_type_of_hash_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(type-of (make-hash-table))");
+    assert_oracle_parity_expect("(type-of (make-hash-table))", expect![[r#"OK hash-table"#]]);
 }
 
 #[test]
 fn oracle_prop_type_of_char_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity("(type-of (make-char-table 'foo))");
+    assert_oracle_parity_expect(
+        "(type-of (make-char-table 'foo))",
+        expect![[r#"OK char-table"#]],
+    );
 }
 
 #[test]
@@ -104,8 +83,7 @@ fn oracle_prop_type_of_in_conditional() {
                     ((eq (type-of val) 'cons) 'list)
                     ((eq (type-of val) 'string) 'str)
                     (t 'other)))";
-    let (o, n) = eval_oracle_and_neovm(form);
-    assert_ok_eq("list", &o, &n);
+    assert_oracle_parity_expect(form, expect![[r#"OK list"#]]);
 }
 
 #[test]
@@ -113,5 +91,8 @@ fn oracle_prop_type_of_mapped_over_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(mapcar 'type-of (list 1 "s" 'sym '(a) [v] 3.0))"####;
-    assert_oracle_parity(form);
+    assert_oracle_parity_expect(
+        form,
+        expect![[r#"OK (integer string symbol cons vector float)"#]],
+    );
 }

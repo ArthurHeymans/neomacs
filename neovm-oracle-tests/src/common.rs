@@ -45,6 +45,42 @@ fn oracle_timing_enabled() -> bool {
     std::env::var_os("NEOVM_ORACLE_TIMING").is_some()
 }
 
+/// Execution strategy for oracle tests that embed GNU Emacs expectations in
+/// the Rust test source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OracleMode {
+    /// Fast path: run only Neomacs and compare its result with the checked-in
+    /// inline GNU expectation.
+    Snapshot,
+    /// Consistency check: run GNU Emacs, compare it with the inline
+    /// expectation, then require Neomacs to match the same live GNU result.
+    Verify,
+    /// Maintenance path: run GNU Emacs and compare it with the inline
+    /// expectation; with `UPDATE_EXPECT=1`, `expect-test` rewrites the source.
+    Refresh,
+    /// Legacy parity path: run GNU Emacs and Neomacs directly, ignoring the
+    /// inline expectation.
+    Live,
+}
+
+impl OracleMode {
+    fn from_env() -> Self {
+        match std::env::var("NEOVM_ORACLE_MODE")
+            .unwrap_or_else(|_| "snapshot".to_string())
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "snapshot" | "snap" | "expected" => Self::Snapshot,
+            "verify" => Self::Verify,
+            "refresh" | "bless" | "update" => Self::Refresh,
+            "live" => Self::Live,
+            other => panic!(
+                "unknown NEOVM_ORACLE_MODE={other:?}; expected snapshot, verify, refresh, or live"
+            ),
+        }
+    }
+}
+
 macro_rules! return_if_neovm_enable_oracle_proptest_not_set {
     () => {
         if !$crate::common::oracle_prop_enabled() {
@@ -575,6 +611,104 @@ pub(crate) fn assert_oracle_parity(form: &str) {
     }
     eprintln!("total: {:.3?}", t0.elapsed());
     assert_neovm_oracle_parity(&neovm, &oracle, form);
+}
+
+fn assert_oracle_parity_expect_with_runners<N, O>(
+    form: &str,
+    expected: expect_test::Expect,
+    run_neomacs: N,
+    run_oracle: O,
+) where
+    N: FnOnce() -> Result<String, String>,
+    O: FnOnce() -> Result<String, String>,
+{
+    ensure_nonempty_form(form).expect("form should not be empty");
+
+    match OracleMode::from_env() {
+        OracleMode::Snapshot => {
+            let neovm = run_neomacs().expect("neomacs binary eval should run");
+            expected.assert_eq(&neovm);
+        }
+        OracleMode::Verify => {
+            let oracle = run_oracle().expect("oracle eval should run");
+            let neovm = run_neomacs().expect("neomacs binary eval should run");
+            expected.assert_eq(&oracle);
+            assert_neovm_oracle_parity(&neovm, &oracle, form);
+        }
+        OracleMode::Refresh => {
+            let oracle = run_oracle().expect("oracle eval should run");
+            expected.assert_eq(&oracle);
+        }
+        OracleMode::Live => {
+            let oracle = run_oracle().expect("oracle eval should run");
+            let neovm = run_neomacs().expect("neomacs binary eval should run");
+            assert_neovm_oracle_parity(&neovm, &oracle, form);
+        }
+    }
+}
+
+pub(crate) fn assert_oracle_parity_expect(form: &str, expected: expect_test::Expect) {
+    assert_oracle_parity_expect_with_runners(
+        form,
+        expected,
+        || run_neomacs_binary_eval_inner(form, &[]),
+        || run_oracle_eval(form),
+    );
+}
+
+pub(crate) fn assert_oracle_parity_with_shared_tempdir_expect(
+    form: &str,
+    expected: expect_test::Expect,
+) {
+    let tmpdir = tempfile::Builder::new()
+        .prefix("neovm-oracle-case-")
+        .tempdir()
+        .expect("shared oracle tempdir should be created");
+    assert_oracle_parity_expect_with_runners(
+        form,
+        expected,
+        || run_neomacs_binary_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()), &[]),
+        || run_oracle_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()), &[]),
+    );
+}
+
+pub(crate) fn assert_oracle_parity_with_env_expect(
+    form: &str,
+    extra_env: &[(&str, &str)],
+    expected: expect_test::Expect,
+) {
+    assert_oracle_parity_expect_with_runners(
+        form,
+        expected,
+        || run_neomacs_binary_eval_inner_with_tmpdir(form, &[], None, extra_env),
+        || run_oracle_eval_inner_with_tmpdir(form, &[], None, extra_env),
+    );
+}
+
+pub(crate) fn assert_oracle_parity_with_load_expect(
+    form: &str,
+    load_files: &[&str],
+    expected: expect_test::Expect,
+) {
+    assert_oracle_parity_expect_with_runners(
+        form,
+        expected,
+        || run_neomacs_binary_eval_inner(form, load_files),
+        || run_oracle_eval_with_load(form, load_files),
+    );
+}
+
+pub(crate) fn assert_oracle_parity_with_load_raw_expect(
+    form: &str,
+    load_files: &[&str],
+    expected: expect_test::Expect,
+) {
+    assert_oracle_parity_expect_with_runners(
+        form,
+        expected,
+        || run_neomacs_binary_eval_inner_raw(form, load_files),
+        || run_oracle_eval_with_load_raw(form, load_files),
+    );
 }
 
 pub(crate) fn assert_oracle_parity_with_shared_tempdir(form: &str) {
