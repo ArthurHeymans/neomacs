@@ -6570,6 +6570,51 @@ fn validate_network_process_family(value: &Value) -> Result<(), Flow> {
     }
 }
 
+fn parse_network_process_family(value: &Value) -> Result<Option<NetworkProcessFamilySymbol>, Flow> {
+    if value.is_nil() {
+        return Ok(None);
+    }
+    if let Some(family) = NetworkProcessFamilySymbol::from_symbol_value(value) {
+        return Ok(Some(family));
+    }
+    if let ValueKind::Fixnum(raw) = value.kind() {
+        return network_process_family_from_raw(raw)
+            .ok_or_else(|| signal("error", vec![Value::string("Unknown address family")]));
+    }
+    Err(signal(
+        "error",
+        vec![Value::string("Unknown address family")],
+    ))
+}
+
+#[cfg(unix)]
+fn network_process_family_from_raw(raw: i64) -> Option<Option<NetworkProcessFamilySymbol>> {
+    match raw {
+        raw if raw == libc::AF_UNSPEC as i64 => Some(None),
+        raw if raw == libc::AF_INET as i64 => Some(Some(NetworkProcessFamilySymbol::Ipv4)),
+        raw if raw == libc::AF_INET6 as i64 => Some(Some(NetworkProcessFamilySymbol::Ipv6)),
+        raw if raw == libc::AF_UNIX as i64 => Some(Some(NetworkProcessFamilySymbol::Local)),
+        _ => None,
+    }
+}
+
+#[cfg(windows)]
+fn network_process_family_from_raw(raw: i64) -> Option<Option<NetworkProcessFamilySymbol>> {
+    use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6, AF_UNSPEC};
+
+    match raw {
+        raw if raw == AF_UNSPEC as i64 => Some(None),
+        raw if raw == AF_INET as i64 => Some(Some(NetworkProcessFamilySymbol::Ipv4)),
+        raw if raw == AF_INET6 as i64 => Some(Some(NetworkProcessFamilySymbol::Ipv6)),
+        _ => None,
+    }
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn network_process_family_from_raw(_raw: i64) -> Option<Option<NetworkProcessFamilySymbol>> {
+    None
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 enum NetworkLookupHint {
@@ -9205,10 +9250,7 @@ pub(crate) fn builtin_make_network_process(
         }
     }
 
-    if !family_value.is_nil() {
-        validate_network_process_family(&family_value)?;
-    }
-    let family = NetworkProcessFamilySymbol::from_symbol_value(&family_value);
+    let family = parse_network_process_family(&family_value)?;
     let host = parse_network_host(&host_value, family)?;
 
     let service = service.unwrap_or(Value::NIL);

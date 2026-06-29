@@ -4248,6 +4248,37 @@ fn make_network_process_validates_gnu_keyword_domains() {
     assert_eq!(results[5], "OK (error \"Unknown address family\")");
 }
 
+#[cfg(unix)]
+#[test]
+fn make_network_process_numeric_family_constants_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let af_inet6 = libc::AF_INET6;
+    let af_unix = libc::AF_UNIX;
+    let result = eval_one(&format!(
+        r#"(list
+            (let ((p (make-network-process
+                      :name "np-family6" :server t :service 0 :family {af_inet6})))
+              (unwind-protect
+                  (let ((local (process-contact p :local)))
+                    (list (process-status p)
+                          (vectorp local)
+                          (= (length local) 9)
+                          (= (aref local 8) (process-contact p :service))
+                          (= (process-contact p :family) {af_inet6})))
+                (delete-process p)))
+            (condition-case err
+                (make-network-process
+                 :name "np-family-local-int" :server t :service 0 :family {af_unix})
+              (error (car err)))
+            (condition-case err
+                (make-network-process
+                 :name "np-family-bad-int" :server t :service 0 :family 424242)
+              (error (car err))))"#
+    ));
+
+    assert_eq!(result, "OK ((listen t t t t) wrong-type-argument error)");
+}
+
 #[test]
 fn make_network_process_nowait_tcp_loopback_opens_like_gnu() {
     crate::test_utils::init_test_tracing();
