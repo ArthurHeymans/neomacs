@@ -4624,6 +4624,36 @@ fn make_network_process_empty_service_string_means_port_zero_like_gnu() {
     assert_eq!(results[0], "OK (listen t t open 0)");
 }
 
+#[test]
+fn make_network_process_numeric_service_wraps_like_gnu_getaddrinfo() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((a nil) (b nil) (c nil))
+             (unwind-protect
+                 (progn
+                   (setq a (make-network-process
+                            :name "svc-fixnum-wrap" :type 'datagram
+                            :host 'local :service 70000 :family 'ipv4
+                            :noquery t))
+                   (setq b (make-network-process
+                            :name "svc-string-wrap" :type 'datagram
+                            :host 'local :service " 70000" :family 'ipv4
+                            :noquery t))
+                   (setq c (make-network-process
+                            :name "svc-zero-wrap" :type 'datagram
+                            :host 'local :service 65536 :family 'ipv4
+                            :noquery t))
+                   (list (aref (process-contact a :remote) 4)
+                         (aref (process-contact b :remote) 4)
+                         (aref (process-contact c :remote) 4)))
+               (when a (delete-process a))
+               (when b (delete-process b))
+               (when c (delete-process c))))"#,
+    );
+
+    assert_eq!(results[0], "OK (4464 4464 0)");
+}
+
 #[cfg(unix)]
 #[test]
 fn make_network_process_local_datagram_loopback_like_gnu() {

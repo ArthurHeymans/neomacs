@@ -6278,6 +6278,18 @@ fn lookup_network_service_port(_service: &str, _protocol: &str) -> Option<u16> {
     None
 }
 
+fn parse_network_numeric_service_port(service: &str) -> Option<u16> {
+    let service = service.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
+    let service = service.strip_prefix('+').unwrap_or(service);
+    if service.is_empty() || !service.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    service
+        .parse::<u128>()
+        .ok()
+        .map(|port| (port % (1 << 16)) as u16)
+}
+
 fn parse_network_service_port(
     value: &Value,
     server: bool,
@@ -6285,13 +6297,13 @@ fn parse_network_service_port(
 ) -> Result<u16, Flow> {
     match value.kind() {
         ValueKind::T if server => Ok(0),
-        ValueKind::Fixnum(port) if (0..(1 << 16)).contains(&port) => Ok(port as u16),
+        ValueKind::Fixnum(port) if port >= 0 => Ok((port as u64 % (1 << 16)) as u16),
         ValueKind::String => {
             let service = process_owned_runtime_string(*value);
             if service.is_empty() {
                 return Ok(0);
             }
-            if let Ok(port) = service.parse::<u16>() {
+            if let Some(port) = parse_network_numeric_service_port(&service) {
                 return Ok(port);
             }
             lookup_network_service_port(&service, network_service_protocol(socket_type)).ok_or_else(
