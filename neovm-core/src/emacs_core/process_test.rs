@@ -4725,6 +4725,116 @@ fn process_keyword_arg_lists_match_gnu_malformed_pair_handling() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn process_constructors_duplicate_keywords_use_first_value_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(list
+            (let ((p (make-process
+                      :name "neo-dup-make"
+                      :name 1
+                      :buffer nil
+                      :buffer "bad-buffer"
+                      :command nil
+                      :command (list "sh" "-c" "printf bad")
+                      :noquery t
+                      :noquery nil
+                      :stop nil
+                      :stop t)))
+              (unwind-protect
+                  (list (process-name p)
+                        (process-buffer p)
+                        (process-command p)
+                        (process-query-on-exit-flag p))
+                (ignore-errors (delete-process p))))
+            (let ((p (make-pipe-process
+                      :name "neo-dup-pipe"
+                      :name 1
+                      :buffer nil
+                      :buffer 1
+                      :noquery t
+                      :noquery nil
+                      :stop t
+                      :stop nil
+                      :filter 'ignore
+                      :filter nil
+                      :plist (list :a 1)
+                      :plist (list :a 2))))
+              (unwind-protect
+                  (list (process-name p)
+                        (process-buffer p)
+                        (process-query-on-exit-flag p)
+                        (process-status p)
+                        (process-filter p)
+                        (process-plist p))
+                (ignore-errors (delete-process p))))
+            (let ((p (make-serial-process
+                      :port "/tmp/neo-dup-serial"
+                      :port 1
+                      :speed 9600
+                      :speed "bad"
+                      :bytesize 7
+                      :bytesize 6
+                      :parity 'even
+                      :parity 'mark
+                      :stopbits 2
+                      :stopbits 3
+                      :flowcontrol 'hw
+                      :flowcontrol 'bad)))
+              (unwind-protect
+                  (list (process-contact p)
+                        (process-contact p :bytesize)
+                        (process-contact p :parity)
+                        (process-contact p :stopbits)
+                        (process-contact p :flowcontrol)
+                        (process-contact p :summary))
+                (ignore-errors (delete-process p))))
+            (let ((p (make-network-process
+                      :name "neo-dup-network"
+                      :name 1
+                      :server t
+                      :server nil
+                      :service 0
+                      :service "bad"
+                      :noquery t
+                      :noquery nil
+                      :stop t
+                      :stop nil
+                      :log 'ignore
+                      :log nil
+                      :plist (list :n 1)
+                      :plist (list :n 2))))
+              (unwind-protect
+                  (list (process-name p)
+                        (process-query-on-exit-flag p)
+                        (process-status p)
+                        (process-contact p :server)
+                        (integerp (process-contact p :service))
+                        (process-contact p :log)
+                        (process-plist p))
+                (ignore-errors (delete-process p))))
+            (condition-case err
+                (make-pipe-process :name 1 :name "neo-dup-pipe-late")
+              (error (car err)))
+            (condition-case err
+                (make-process :name 1 :name "neo-dup-make-late" :command nil)
+              (error (car err)))
+            (condition-case err
+                (make-network-process
+                 :name 1 :name "neo-dup-network-late" :server t :service 0)
+              (error (car err)))
+            (condition-case err
+                (make-serial-process
+                 :port 1 :port "/tmp/neo-dup-serial-late" :speed 9600)
+              (error (car err))))"#,
+    );
+    assert_eq!(
+        result,
+        "OK ((\"neo-dup-make\" nil nil nil) (\"neo-dup-pipe\" nil nil stop ignore (:a 1)) ((\"/tmp/neo-dup-serial\" 9600) 7 even 2 hw \"7E2\") (\"neo-dup-network\" nil stop t t ignore (:n 1)) error error error wrong-type-argument)"
+    );
+}
+
 #[test]
 fn make_process_file_handler_dispatches_like_gnu() {
     crate::test_utils::init_test_tracing();

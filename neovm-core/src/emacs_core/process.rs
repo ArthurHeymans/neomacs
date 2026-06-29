@@ -708,6 +708,15 @@ impl ProcessKeyword {
     }
 }
 
+fn process_keyword_already_seen(seen: &mut Vec<ProcessKeyword>, keyword: ProcessKeyword) -> bool {
+    if seen.contains(&keyword) {
+        true
+    } else {
+        seen.push(keyword);
+        false
+    }
+}
+
 /// A tracked process record.
 pub struct Process {
     pub id: ProcessId,
@@ -8475,14 +8484,19 @@ pub(crate) fn builtin_make_network_process(
     let mut stop_val = Value::NIL;
     let socket_options = collect_network_socket_options(&args);
 
+    let mut seen_keywords = Vec::new();
     let mut i = 0usize;
     while i < args.len() {
         let key = &args[i];
         let value = args.get(i + 1).cloned().unwrap_or(Value::NIL);
         let Some(keyword) = ProcessKeyword::from_value(key) else {
-            i += 1;
+            i += 2;
             continue;
         };
+        if process_keyword_already_seen(&mut seen_keywords, keyword) {
+            i += 2;
+            continue;
+        }
         match keyword {
             ProcessKeyword::Name => name = Some(expect_process_name_lisp_string(&value)?),
             ProcessKeyword::Host => host_value = value,
@@ -10463,14 +10477,19 @@ pub(crate) fn builtin_make_pipe_process_impl(
     let mut stop = false;
     let mut plist = Value::NIL;
 
+    let mut seen_keywords = Vec::new();
     let mut i = 0usize;
     while i < args.len() {
         let key = &args[i];
         let value = args.get(i + 1).cloned().unwrap_or(Value::NIL);
         let Some(keyword) = ProcessKeyword::from_value(key) else {
-            i += 1;
+            i += 2;
             continue;
         };
+        if process_keyword_already_seen(&mut seen_keywords, keyword) {
+            i += 2;
+            continue;
+        }
         match keyword {
             ProcessKeyword::Name => {
                 name = Some(expect_process_name_lisp_string(&value)?);
@@ -10583,14 +10602,19 @@ pub(crate) fn builtin_make_serial_process_impl(
     let mut stop = false;
     let mut plist = Value::NIL;
 
+    let mut seen_keywords = Vec::new();
     let mut i = 0usize;
     while i < args.len() {
         let key = &args[i];
         let value = args.get(i + 1).cloned().unwrap_or(Value::NIL);
         let Some(keyword) = ProcessKeyword::from_value(key) else {
-            i += 1;
+            i += 2;
             continue;
         };
+        if process_keyword_already_seen(&mut seen_keywords, keyword) {
+            i += 2;
+            continue;
+        }
         match keyword {
             ProcessKeyword::Name => {
                 name = Some(expect_process_name_lisp_string(&value)?);
@@ -11601,23 +11625,32 @@ fn builtin_make_process_impl_with_environment(
     let mut noquery = false;
     let mut stop_val = Value::NIL;
 
+    let mut seen_keywords = Vec::new();
     let mut i = 0usize;
     while i < args.len() {
         let key = &args[i];
         let value = args.get(i + 1).cloned().unwrap_or(Value::NIL);
-        match ProcessKeyword::from_value(key) {
-            Some(ProcessKeyword::Name) => name = Some(expect_process_name_lisp_string(&value)?),
-            Some(ProcessKeyword::Buffer) => {
+        let Some(keyword) = ProcessKeyword::from_value(key) else {
+            i += 2;
+            continue;
+        };
+        if process_keyword_already_seen(&mut seen_keywords, keyword) {
+            i += 2;
+            continue;
+        }
+        match keyword {
+            ProcessKeyword::Name => name = Some(expect_process_name_lisp_string(&value)?),
+            ProcessKeyword::Buffer => {
                 buffer = Some(parse_make_process_buffer_in_state(buffers, &value)?)
             }
-            Some(ProcessKeyword::Command) => command = Some(parse_make_process_command(&value)?),
-            Some(ProcessKeyword::Filter) => filter = value,
-            Some(ProcessKeyword::Sentinel) => sentinel = value,
-            Some(ProcessKeyword::ConnectionType) => connection_type = Some(value),
-            Some(ProcessKeyword::Stderr) => stderr_target = value,
-            Some(ProcessKeyword::Coding) => coding_val = Some(value),
-            Some(ProcessKeyword::Noquery) => noquery = value.is_truthy(),
-            Some(ProcessKeyword::Stop) => stop_val = value,
+            ProcessKeyword::Command => command = Some(parse_make_process_command(&value)?),
+            ProcessKeyword::Filter => filter = value,
+            ProcessKeyword::Sentinel => sentinel = value,
+            ProcessKeyword::ConnectionType => connection_type = Some(value),
+            ProcessKeyword::Stderr => stderr_target = value,
+            ProcessKeyword::Coding => coding_val = Some(value),
+            ProcessKeyword::Noquery => noquery = value.is_truthy(),
+            ProcessKeyword::Stop => stop_val = value,
             _ => {}
         }
         i += 2;
