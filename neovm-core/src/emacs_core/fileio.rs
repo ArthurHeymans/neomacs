@@ -1789,15 +1789,31 @@ fn lisp_file_name_directory(
         return (!bytes.is_empty())
             .then(|| lisp_file_name_normalize_directory_separators(filename));
     }
-    bytes
+    if let Some(pos) = bytes
         .iter()
         .rposition(|&byte| file_name_directory_separator_byte(byte))
-        .map(|pos| {
-            lisp_file_name_normalize_directory_separators(&file_name_lisp_from_bytes(
-                bytes[..=pos].to_vec(),
-                filename.is_multibyte(),
-            ))
-        })
+    {
+        return Some(lisp_file_name_normalize_directory_separators(
+            &file_name_lisp_from_bytes(bytes[..=pos].to_vec(), filename.is_multibyte()),
+        ));
+    }
+    // GNU `file_name_directory` (fileio.c) treats the drive `:` as a directory
+    // boundary under DOS_NT: the directory of a drive-relative name (`c:` or
+    // `c:foo`, with no slash) is the drive `c:`, so it never returns nil for one.
+    // Without this, walking such a path up to the bare drive -- e.g.
+    // `org-persist--check-write-access`'s parent loop -- evaluates
+    // `(directory-file-name (file-name-directory "c:"))` and signals
+    // `wrong-type-argument stringp,nil`, which broke byte-compiling org on
+    // Windows.  Mirrors the windows drive branch already in
+    // `lisp_directory_file_name`.
+    #[cfg(windows)]
+    if matches!(bytes, [drive, b':', ..] if drive.is_ascii_alphabetic()) {
+        return Some(file_name_lisp_from_bytes(
+            bytes[..2].to_vec(),
+            filename.is_multibyte(),
+        ));
+    }
+    None
 }
 
 #[cfg(windows)]
