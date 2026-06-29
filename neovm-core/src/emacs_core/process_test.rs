@@ -5164,10 +5164,13 @@ fn make_network_process_numeric_family_constants_match_gnu() {
             (condition-case err
                 (make-network-process
                  :name "np-family-bad-int" :server t :service 0 :family 424242)
-              (error (car err))))"#
+              (error err)))"#
     ));
 
-    assert_eq!(result, "OK ((listen t t t t) wrong-type-argument error)");
+    assert_eq!(
+        result,
+        "OK ((listen t t t t) wrong-type-argument (error \"127.0.0.1/0 ai_family not supported\"))"
+    );
 }
 
 #[test]

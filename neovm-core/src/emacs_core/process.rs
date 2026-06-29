@@ -32,8 +32,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs::OpenOptions;
 use std::io::{Read as IoRead, Write as IoWrite};
 use std::net::{
-    IpAddr, Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs,
-    UdpSocket,
+    IpAddr, Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr, TcpListener, TcpStream, UdpSocket,
 };
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, RawFd};
@@ -2488,29 +2487,61 @@ fn bind_udp_client_socket(
     bind_udp_socket(udp_unspecified_addr_for(remote), options)
 }
 
-fn resolve_tcp_socket_addrs(
+fn network_socket_type_addrinfo_socktype(socket_type: NetworkSocketType) -> i32 {
+    use dns_lookup::SockType;
+
+    match socket_type {
+        NetworkSocketType::Stream => SockType::Stream.into(),
+        NetworkSocketType::Datagram => SockType::DGram.into(),
+        #[cfg(unix)]
+        NetworkSocketType::Seqpacket => libc::SOCK_SEQPACKET,
+    }
+}
+
+fn network_addrinfo_error(host: &str, port: u16, err: dns_lookup::LookupError) -> Flow {
+    let io_error: std::io::Error = err.into();
+    let detail = io_error.to_string();
+    let detail = detail
+        .strip_prefix("failed to lookup address information: ")
+        .unwrap_or(&detail);
+    signal(
+        "error",
+        vec![Value::string(format!("{host}/{port} {detail}"))],
+    )
+}
+
+fn network_addrinfo_item_error(host: &str, port: u16, err: std::io::Error) -> Flow {
+    signal("error", vec![Value::string(format!("{host}/{port} {err}"))])
+}
+
+fn resolve_network_socket_addrs(
     host: &str,
     port: u16,
-    family: Option<NetworkProcessFamilySymbol>,
-    operation: &str,
+    family: NetworkProcessFamily,
+    socket_type: NetworkSocketType,
 ) -> Result<Vec<SocketAddr>, Flow> {
-    let addrs = (host, port)
-        .to_socket_addrs()
-        .map_err(|err| network_socket_io_error(operation, err))?;
-    let addrs: Vec<_> = addrs
-        .filter(|addr| match family {
-            Some(NetworkProcessFamilySymbol::Ipv4) => addr.is_ipv4(),
-            Some(NetworkProcessFamilySymbol::Ipv6) => addr.is_ipv6(),
-            _ => true,
-        })
-        .collect();
+    use dns_lookup::AddrInfoHints;
+
+    let normalized_host = host.split('\0').next().unwrap_or_default();
+    let service = port.to_string();
+    let hints = AddrInfoHints {
+        address: family.addrinfo_family(),
+        socktype: network_socket_type_addrinfo_socktype(socket_type),
+        ..AddrInfoHints::default()
+    };
+    let iter = dns_lookup::getaddrinfo(Some(normalized_host), Some(&service), Some(hints))
+        .map_err(|err| network_addrinfo_error(normalized_host, port, err))?;
+    let mut addrs = Vec::new();
+    for info in iter {
+        let info = info.map_err(|err| network_addrinfo_item_error(normalized_host, port, err))?;
+        addrs.push(info.sockaddr);
+    }
     if addrs.is_empty() {
         Err(signal(
-            "file-error",
-            vec![
-                Value::string(operation),
-                Value::string("No address associated with hostname"),
-            ],
+            "error",
+            vec![Value::string(format!(
+                "{normalized_host}/{port} No address associated with hostname"
+            ))],
         ))
     } else {
         Ok(addrs)
@@ -2520,11 +2551,11 @@ fn resolve_tcp_socket_addrs(
 fn bind_udp_socket_host(
     host: &str,
     port: u16,
-    family: Option<NetworkProcessFamilySymbol>,
+    family: NetworkProcessFamily,
     options: &[NetworkSocketOptionSpec],
 ) -> Result<UdpSocket, Flow> {
     let mut last_error = None;
-    for addr in resolve_tcp_socket_addrs(host, port, family, "Cannot bind datagram socket")? {
+    for addr in resolve_network_socket_addrs(host, port, family, NetworkSocketType::Datagram)? {
         match bind_udp_socket(addr, options) {
             Ok(socket) => return Ok(socket),
             Err(err) => last_error = Some(err),
@@ -2541,11 +2572,11 @@ fn bind_udp_socket_host(
 fn connect_udp_socket_host(
     host: &str,
     port: u16,
-    family: Option<NetworkProcessFamilySymbol>,
+    family: NetworkProcessFamily,
     options: &[NetworkSocketOptionSpec],
 ) -> Result<(UdpSocket, SocketAddr), Flow> {
     let mut last_error = None;
-    for addr in resolve_tcp_socket_addrs(host, port, family, "make datagram process failed")? {
+    for addr in resolve_network_socket_addrs(host, port, family, NetworkSocketType::Datagram)? {
         match bind_udp_client_socket(addr, options) {
             Ok(socket) => return Ok((socket, addr)),
             Err(err) => last_error = Some(err),
@@ -2562,12 +2593,12 @@ fn connect_udp_socket_host(
 fn bind_tcp_listener_host(
     host: &str,
     port: u16,
-    family: Option<NetworkProcessFamilySymbol>,
+    family: NetworkProcessFamily,
     backlog: i32,
     options: &[NetworkSocketOptionSpec],
 ) -> Result<TcpListener, Flow> {
     let mut last_error = None;
-    for addr in resolve_tcp_socket_addrs(host, port, family, "Cannot bind server socket")? {
+    for addr in resolve_network_socket_addrs(host, port, family, NetworkSocketType::Stream)? {
         match bind_tcp_listener_socket(addr, backlog, options) {
             Ok(listener) => return Ok(listener),
             Err(err) => last_error = Some(err),
@@ -2584,11 +2615,11 @@ fn bind_tcp_listener_host(
 fn connect_tcp_stream_host(
     host: &str,
     port: u16,
-    family: Option<NetworkProcessFamilySymbol>,
+    family: NetworkProcessFamily,
     options: &[NetworkSocketOptionSpec],
 ) -> Result<TcpStream, Flow> {
     let mut last_error = None;
-    for addr in resolve_tcp_socket_addrs(host, port, family, "make client process failed")? {
+    for addr in resolve_network_socket_addrs(host, port, family, NetworkSocketType::Stream)? {
         match connect_tcp_stream_socket(addr, options) {
             Ok(stream) => return Ok(stream),
             Err(err) => last_error = Some(err),
@@ -6628,6 +6659,78 @@ impl NetworkAddressFamily {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NetworkProcessFamily {
+    Unspecified,
+    Local,
+    Ipv4,
+    Ipv6,
+    Raw(i32),
+}
+
+impl NetworkProcessFamily {
+    fn is_local(self) -> bool {
+        self == Self::Local
+    }
+
+    fn loopback_host(self) -> &'static str {
+        match self {
+            Self::Ipv6 => "::1",
+            _ => "127.0.0.1",
+        }
+    }
+
+    fn addrinfo_family(self) -> i32 {
+        match self {
+            Self::Unspecified => 0,
+            Self::Local => network_process_local_family_raw(),
+            Self::Ipv4 => network_process_ipv4_family_raw(),
+            Self::Ipv6 => network_process_ipv6_family_raw(),
+            Self::Raw(raw) => raw,
+        }
+    }
+}
+
+#[cfg(unix)]
+fn network_process_local_family_raw() -> i32 {
+    libc::AF_UNIX
+}
+
+#[cfg(not(unix))]
+fn network_process_local_family_raw() -> i32 {
+    0
+}
+
+#[cfg(unix)]
+fn network_process_ipv4_family_raw() -> i32 {
+    libc::AF_INET
+}
+
+#[cfg(windows)]
+fn network_process_ipv4_family_raw() -> i32 {
+    windows_sys::Win32::Networking::WinSock::AF_INET as i32
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn network_process_ipv4_family_raw() -> i32 {
+    0
+}
+
+#[cfg(unix)]
+fn network_process_ipv6_family_raw() -> i32 {
+    libc::AF_INET6
+}
+
+#[cfg(windows)]
+fn network_process_ipv6_family_raw() -> i32 {
+    windows_sys::Win32::Networking::WinSock::AF_INET6 as i32
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn network_process_ipv6_family_raw() -> i32 {
+    0
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 enum NetworkProcessFamilySymbol {
@@ -6647,22 +6750,12 @@ impl NetworkProcessFamilySymbol {
     }
 }
 
-fn network_loopback_host_for_family(family: Option<NetworkProcessFamilySymbol>) -> &'static str {
-    match family {
-        Some(NetworkProcessFamilySymbol::Ipv6) => "::1",
-        _ => "127.0.0.1",
-    }
-}
-
-fn parse_network_host(
-    value: &Value,
-    family: Option<NetworkProcessFamilySymbol>,
-) -> Result<Option<String>, Flow> {
+fn parse_network_host(value: &Value, family: NetworkProcessFamily) -> Result<Option<String>, Flow> {
     if value.is_nil() {
         return Ok(None);
     }
     if value.as_symbol_name() == Some("local") {
-        return Ok(Some(network_loopback_host_for_family(family).to_string()));
+        return Ok(Some(family.loopback_host().to_string()));
     }
     match value.kind() {
         ValueKind::String => Ok(Some(process_owned_runtime_string(*value))),
@@ -6855,12 +6948,15 @@ fn validate_network_process_family(value: &Value) -> Result<(), Flow> {
     }
 }
 
-fn parse_network_process_family(value: &Value) -> Result<Option<NetworkProcessFamilySymbol>, Flow> {
+fn parse_network_process_family(value: &Value) -> Result<NetworkProcessFamily, Flow> {
     if value.is_nil() {
-        return Ok(None);
+        return Ok(NetworkProcessFamily::Unspecified);
     }
-    if let Some(family) = NetworkProcessFamilySymbol::from_symbol_value(value) {
-        return Ok(Some(family));
+    match NetworkProcessFamilySymbol::from_symbol_value(value) {
+        Some(NetworkProcessFamilySymbol::Local) => return Ok(NetworkProcessFamily::Local),
+        Some(NetworkProcessFamilySymbol::Ipv4) => return Ok(NetworkProcessFamily::Ipv4),
+        Some(NetworkProcessFamilySymbol::Ipv6) => return Ok(NetworkProcessFamily::Ipv6),
+        None => {}
     }
     if let ValueKind::Fixnum(raw) = value.kind() {
         return network_process_family_from_raw(raw)
@@ -6873,31 +6969,34 @@ fn parse_network_process_family(value: &Value) -> Result<Option<NetworkProcessFa
 }
 
 #[cfg(unix)]
-fn network_process_family_from_raw(raw: i64) -> Option<Option<NetworkProcessFamilySymbol>> {
+fn network_process_family_from_raw(raw: i64) -> Option<NetworkProcessFamily> {
+    let raw = i32::try_from(raw).ok()?;
     match raw {
-        raw if raw == libc::AF_UNSPEC as i64 => Some(None),
-        raw if raw == libc::AF_INET as i64 => Some(Some(NetworkProcessFamilySymbol::Ipv4)),
-        raw if raw == libc::AF_INET6 as i64 => Some(Some(NetworkProcessFamilySymbol::Ipv6)),
-        raw if raw == libc::AF_UNIX as i64 => Some(Some(NetworkProcessFamilySymbol::Local)),
-        _ => None,
+        raw if raw == libc::AF_UNSPEC => Some(NetworkProcessFamily::Unspecified),
+        raw if raw == libc::AF_INET => Some(NetworkProcessFamily::Ipv4),
+        raw if raw == libc::AF_INET6 => Some(NetworkProcessFamily::Ipv6),
+        raw if raw == libc::AF_UNIX => Some(NetworkProcessFamily::Local),
+        raw => Some(NetworkProcessFamily::Raw(raw)),
     }
 }
 
 #[cfg(windows)]
-fn network_process_family_from_raw(raw: i64) -> Option<Option<NetworkProcessFamilySymbol>> {
+fn network_process_family_from_raw(raw: i64) -> Option<NetworkProcessFamily> {
     use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6, AF_UNSPEC};
 
+    let raw = i32::try_from(raw).ok()?;
     match raw {
-        raw if raw == AF_UNSPEC as i64 => Some(None),
-        raw if raw == AF_INET as i64 => Some(Some(NetworkProcessFamilySymbol::Ipv4)),
-        raw if raw == AF_INET6 as i64 => Some(Some(NetworkProcessFamilySymbol::Ipv6)),
-        _ => None,
+        raw if raw == AF_UNSPEC as i32 => Some(NetworkProcessFamily::Unspecified),
+        raw if raw == AF_INET as i32 => Some(NetworkProcessFamily::Ipv4),
+        raw if raw == AF_INET6 as i32 => Some(NetworkProcessFamily::Ipv6),
+        raw => Some(NetworkProcessFamily::Raw(raw)),
     }
 }
 
 #[cfg(all(not(unix), not(windows)))]
-fn network_process_family_from_raw(_raw: i64) -> Option<Option<NetworkProcessFamilySymbol>> {
-    None
+fn network_process_family_from_raw(raw: i64) -> Option<NetworkProcessFamily> {
+    let raw = i32::try_from(raw).ok()?;
+    Some(NetworkProcessFamily::Raw(raw))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
@@ -9566,7 +9665,7 @@ pub(crate) fn builtin_make_network_process(
         return Err(signal_wrong_type_string(Value::NIL));
     }
 
-    if family == Some(NetworkProcessFamilySymbol::Local) {
+    if family.is_local() {
         #[cfg(not(unix))]
         {
             return Err(signal(
@@ -10107,7 +10206,7 @@ pub(crate) fn builtin_make_network_process(
         let port = parse_network_service_port(&service, server, socket_type)?;
         let host_str = host
             .clone()
-            .unwrap_or_else(|| network_loopback_host_for_family(family).to_string());
+            .unwrap_or_else(|| family.loopback_host().to_string());
         if server {
             let effective_options = tcp_server_socket_options(&socket_options);
             let socket = bind_udp_socket_host(host_str.as_str(), port, family, &effective_options)?;
@@ -10263,7 +10362,7 @@ pub(crate) fn builtin_make_network_process(
         let port = parse_network_service_port(&service, true, socket_type)?;
         let host_str = host
             .clone()
-            .unwrap_or_else(|| network_loopback_host_for_family(family).to_string());
+            .unwrap_or_else(|| family.loopback_host().to_string());
         let effective_options = tcp_server_socket_options(&socket_options);
         let listener = bind_tcp_listener_host(
             host_str.as_str(),
@@ -10335,15 +10434,15 @@ pub(crate) fn builtin_make_network_process(
     }
 
     // ---- Client mode: establish TCP connection ----
-    let host_str = host.unwrap_or_else(|| network_loopback_host_for_family(family).to_string());
+    let host_str = host.unwrap_or_else(|| family.loopback_host().to_string());
     let port = parse_network_service_port(&service, false, socket_type)?;
 
     if nowait {
-        let addrs = resolve_tcp_socket_addrs(
+        let addrs = resolve_network_socket_addrs(
             host_str.as_str(),
             port,
             family,
-            "make client process failed",
+            NetworkSocketType::Stream,
         )?;
         let start = start_pending_tcp_stream_connect(addrs, &socket_options)?;
 
