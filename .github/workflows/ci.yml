@@ -109,8 +109,11 @@ jobs:
       - *install_rust
       - *cache_cargo
 
-      - name: fresh release build
-        run: cargo xtask fresh-build --release
+      - name: release cargo build
+        run: cargo build --release -p neomacs --verbose
+
+      - name: fresh release runtime generation
+        run: cargo xtask fresh-build --release --skip-build
 
       - name: Package release runtime for oracle tests
         run: |
