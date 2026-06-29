@@ -61,6 +61,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain-file: rust-toolchain.toml
+          components: rustfmt
 
       - &cache_cargo
         name: Cache cargo registry & target
