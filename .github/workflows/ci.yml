@@ -60,7 +60,7 @@ jobs:
         name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain-file: rust-toolchain.toml
+          toolchain: 1.95.0
           components: rustfmt
 
       - &cache_cargo
