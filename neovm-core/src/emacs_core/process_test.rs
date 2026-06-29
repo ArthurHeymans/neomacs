@@ -2121,6 +2121,35 @@ fn process_status_wrong_arg_type() {
 }
 
 #[test]
+fn process_status_accepts_buffer_and_nil_designators_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let cat = find_bin("cat");
+    let result = eval_one(&format!(
+        r#"(let* ((buf (generate-new-buffer "ps-status-buffer"))
+                  (p (start-process "ps-buffer-proc" buf "{cat}")))
+             (unwind-protect
+                 (list
+                  (process-status p)
+                  (process-status buf)
+                  (with-current-buffer buf (process-status nil))
+                  (process-status "ps-status-buffer")
+                  (condition-case err
+                      (let ((empty (generate-new-buffer "ps-empty")))
+                        (unwind-protect
+                            (process-status empty)
+                          (ignore-errors (kill-buffer empty))))
+                    (error err)))
+               (ignore-errors (delete-process p))
+               (ignore-errors (kill-buffer buf))))"#
+    ));
+
+    assert_eq!(
+        result,
+        "OK (run run run nil (error \"Buffer ps-empty has no process\"))"
+    );
+}
+
+#[test]
 fn start_process_multiple_args() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");

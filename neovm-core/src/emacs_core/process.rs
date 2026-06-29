@@ -5273,6 +5273,19 @@ fn signal_process_does_not_exist(name: &str) -> Flow {
     )
 }
 
+fn signal_buffer_has_no_process(buffers: &BufferManager, buffer_id: BufferId) -> Flow {
+    signal(
+        "error",
+        vec![Value::string(format!(
+            "Buffer {} has no process",
+            buffers
+                .get(buffer_id)
+                .map(|buffer| buffer.name_runtime_string_owned())
+                .unwrap_or_else(|| "<deleted buffer>".to_string())
+        ))],
+    )
+}
+
 fn signal_process_not_active(eval: &super::eval::Context, id: ProcessId) -> Flow {
     signal_process_not_active_in_manager(&eval.processes, id)
 }
@@ -5450,12 +5463,13 @@ fn resolve_process_or_missing_error_any_in_manager(
     }
 }
 
-fn resolve_process_for_status(
-    eval: &super::eval::Context,
+fn resolve_process_for_status_in_state(
+    processes: &ProcessManager,
+    buffers: &BufferManager,
     value: &Value,
 ) -> Result<Option<ProcessId>, Flow> {
     if let Some(id) = process_value_to_id(value) {
-        return if eval.processes.get_any(id).is_some() {
+        return if processes.get_any(id).is_some() {
             Ok(Some(id))
         } else {
             Err(signal_wrong_type_processp(*value))
@@ -5464,7 +5478,29 @@ fn resolve_process_for_status(
     match value.kind() {
         ValueKind::String => {
             let name = process_owned_runtime_string(*value);
-            Ok(eval.processes.find_by_name(&name))
+            Ok(processes.find_by_name(&name))
+        }
+        ValueKind::Nil => {
+            let current_buffer = buffers
+                .current_buffer_id()
+                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+            processes
+                .find_by_buffer_id(current_buffer)
+                .map(Some)
+                .ok_or_else(|| signal_buffer_has_no_process(buffers, current_buffer))
+        }
+        ValueKind::Veclike(VecLikeType::Buffer) => {
+            let buffer_id = value.as_buffer_id().unwrap();
+            if buffers.get(buffer_id).is_none() {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Attempt to get process for a dead buffer")],
+                ));
+            }
+            processes
+                .find_by_buffer_id(buffer_id)
+                .map(Some)
+                .ok_or_else(|| signal_buffer_has_no_process(buffers, buffer_id))
         }
         _ => Err(signal_wrong_type_processp(*value)),
     }
@@ -5572,18 +5608,9 @@ fn resolve_optional_process_or_current_buffer_in_state(
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    processes.find_by_buffer_id(current_buffer).ok_or_else(|| {
-        signal(
-            "error",
-            vec![Value::string(format!(
-                "Buffer {} has no process",
-                buffers
-                    .get(current_buffer)
-                    .map(|buffer| buffer.name_runtime_string_owned())
-                    .unwrap_or_else(|| "<deleted buffer>".to_string())
-            ))],
-        )
-    })
+    processes
+        .find_by_buffer_id(current_buffer)
+        .ok_or_else(|| signal_buffer_has_no_process(buffers, current_buffer))
 }
 
 fn process_live_status_value(process: &Process) -> Value {
@@ -11811,31 +11838,17 @@ pub(crate) fn builtin_process_status(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_process_status_impl(&mut eval.processes, args)
+    builtin_process_status_impl(&eval.processes, &eval.buffers, args)
 }
 
 pub(crate) fn builtin_process_status_impl(
-    processes: &mut ProcessManager,
+    processes: &ProcessManager,
+    buffers: &BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-status", &args, 1)?;
-    let id = if let Some(id) = process_value_to_id(&args[0]) {
-        if processes.get_any(id).is_some() {
-            id
-        } else {
-            return Err(signal_wrong_type_processp(args[0]));
-        }
-    } else {
-        match args[0].kind() {
-            ValueKind::String => {
-                let name = process_owned_runtime_string(args[0]);
-                match processes.find_by_name(&name) {
-                    Some(id) => id,
-                    None => return Ok(Value::NIL),
-                }
-            }
-            _ => return Err(signal_wrong_type_processp(args[0])),
-        }
+    let Some(id) = resolve_process_for_status_in_state(processes, buffers, &args[0])? else {
+        return Ok(Value::NIL);
     };
     // Match GNU `Fprocess_status` (`src/process.c`): this reports the stored
     // process status and does not synchronously reap the child. Short-lived
