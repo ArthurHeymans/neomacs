@@ -11449,6 +11449,37 @@ pub(crate) fn builtin_make_process(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    if !args.is_empty() {
+        check_keyword_arg_pairs(&args)?;
+        if make_process_file_handler_arg(&args).is_truthy() {
+            let default_directory = eval
+                .visible_variable_value_or_nil("default-directory")
+                .as_lisp_string()
+                .cloned()
+                .or_else(|| {
+                    super::fileio::default_directory_lisp_in_state(
+                        &eval.obarray,
+                        &[],
+                        &eval.buffers,
+                    )
+                });
+            if let Some(default_directory) = default_directory {
+                let operation = Value::symbol("make-process");
+                let handler = super::fileio::find_file_name_handler_lisp_for_eval(
+                    eval,
+                    &default_directory,
+                    operation,
+                );
+                if !handler.is_nil() {
+                    let mut call_args = Vec::with_capacity(args.len() + 1);
+                    call_args.push(operation);
+                    call_args.extend_from_slice(&args);
+                    return eval.funcall_general(handler, call_args);
+                }
+            }
+        }
+    }
+
     let use_pty = process_connection_type_is_pty(&eval.obarray);
     let default_directory =
         super::fileio::default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers);
@@ -11470,6 +11501,17 @@ pub(crate) fn builtin_make_process(
         subprocess_cwd,
         Some(&eval.coding_systems),
     )
+}
+
+fn make_process_file_handler_arg(args: &[Value]) -> Value {
+    let mut i = 0usize;
+    while i + 1 < args.len() {
+        if ProcessKeyword::from_value(&args[i]) == Some(ProcessKeyword::FileHandler) {
+            return args[i + 1];
+        }
+        i += 2;
+    }
+    Value::NIL
 }
 
 pub(crate) fn builtin_make_process_impl(

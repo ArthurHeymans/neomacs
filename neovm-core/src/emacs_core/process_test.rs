@@ -4527,6 +4527,29 @@ fn process_keyword_arg_lists_match_gnu_malformed_pair_handling() {
 }
 
 #[test]
+fn make_process_file_handler_dispatches_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (defvar neo-make-process-handler-calls nil)
+             (defun neo-make-process-handler (operation &rest args)
+               (setq neo-make-process-handler-calls (list operation args))
+               (list :handled operation args))
+             (let ((default-directory "/mock:/tmp/")
+                   (file-name-handler-alist
+                    '(("\\`/mock:" . neo-make-process-handler))))
+               (list
+                (make-process :name "fh" :command nil :file-handler t)
+                neo-make-process-handler-calls)))"#,
+    );
+
+    assert_eq!(
+        result,
+        "OK ((:handled make-process (:name \"fh\" :command nil :file-handler t)) (make-process (:name \"fh\" :command nil :file-handler t)))"
+    );
+}
+
+#[test]
 fn make_network_process_feature_advertisement_is_conservative() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(
