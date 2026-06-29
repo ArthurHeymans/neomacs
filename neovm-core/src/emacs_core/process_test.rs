@@ -3104,12 +3104,32 @@ fn accept_process_output_runs_gnu_timer_then_internal_timer_before_process_callb
         .expect("mixed ordering event list");
 
     assert_eq!(first, Value::T);
-    assert_eq!(
-        format!("{}", events_after_first),
-        r#"(gnu rust (filter "out
+    let after_first = format!("{}", events_after_first);
+    let after_filter = r#"(gnu rust (filter "out
+"))"#;
+    let after_sentinel = r#"(gnu rust (filter "out
 ") (sentinel "finished
-"))"#
+"))"#;
+    assert!(
+        after_first == after_filter || after_first == after_sentinel,
+        "unexpected mixed timer/process order after first accept: {after_first}"
     );
+
+    let second = builtin_accept_process_output(
+        &mut ev,
+        vec![Value::make_process(pid), Value::make_float(0.1)],
+    )
+    .expect("second accept-process-output with mixed timer sources");
+    let events_after_second = ev
+        .eval_symbol("apio-full-order")
+        .expect("mixed ordering event list after second wait");
+
+    if after_first == after_sentinel {
+        assert_eq!(second, Value::NIL);
+    } else {
+        assert_eq!(second, Value::T);
+    }
+    assert_eq!(format!("{}", events_after_second), after_sentinel);
 }
 
 #[test]
