@@ -5288,6 +5288,26 @@ fn signal_process_not_active_in_manager(processes: &ProcessManager, id: ProcessI
     )
 }
 
+fn signal_process_not_subprocess(proc: &Process) -> Flow {
+    signal(
+        "error",
+        vec![Value::string(format!(
+            "Process {} is not a subprocess",
+            process_name_runtime(proc.name)
+        ))],
+    )
+}
+
+fn signal_cannot_signal_process(proc: &Process) -> Flow {
+    signal(
+        "error",
+        vec![Value::string(format!(
+            "Cannot signal process {}",
+            process_name_runtime(proc.name)
+        ))],
+    )
+}
+
 fn stale_process_not_running_reason(status: &Value) -> &'static str {
     match ProcessStatusSymbol::from_status_value(*status) {
         Some(ProcessStatusSymbol::Signal) => "killed",
@@ -7166,6 +7186,9 @@ pub(crate) fn builtin_internal_default_interrupt_process_impl(
     let (id, ret) =
         resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
     if let Some(proc) = processes.get_mut(id) {
+        if proc.kind != ProcessKind::Real {
+            return Err(signal_process_not_subprocess(proc));
+        }
         #[cfg(unix)]
         if let Some(ref child) = proc.child {
             unsafe {
@@ -7205,6 +7228,9 @@ pub(crate) fn builtin_internal_default_signal_process_impl(
     match resolve_signal_process_target_in_state(processes, buffers, args.first())? {
         SignalProcessTarget::Process(id) => {
             if let Some(proc) = processes.get_mut(id) {
+                if proc.kind != ProcessKind::Real {
+                    return Err(signal_cannot_signal_process(proc));
+                }
                 proc.status = process_status_signal_value(signal_num);
             }
             Ok(Value::fixnum(0))
@@ -10956,6 +10982,9 @@ pub(crate) fn builtin_interrupt_process_impl(
     let (id, ret) =
         resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
     if let Some(proc) = processes.get_mut(id) {
+        if proc.kind != ProcessKind::Real {
+            return Err(signal_process_not_subprocess(proc));
+        }
         // Send SIGINT to actual child process.
         #[cfg(unix)]
         if let Some(ref child) = proc.child {
@@ -10993,6 +11022,9 @@ pub(crate) fn builtin_kill_process_impl(
     let (id, ret) =
         resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
     if let Some(proc) = processes.get_mut(id) {
+        if proc.kind != ProcessKind::Real {
+            return Err(signal_process_not_subprocess(proc));
+        }
         // Kill the actual child process.
         if let Some(child) = proc.child.as_mut() {
             let _ = child.kill();
@@ -11054,6 +11086,9 @@ pub(crate) fn builtin_signal_process_impl(
     match resolve_signal_process_target_in_state(processes, buffers, args.first())? {
         SignalProcessTarget::Process(id) => {
             if let Some(proc) = processes.get_mut(id) {
+                if proc.kind != ProcessKind::Real {
+                    return Err(signal_cannot_signal_process(proc));
+                }
                 // Send actual OS signal to child process.
                 #[cfg(unix)]
                 if let Some(ref child) = proc.child {
@@ -11150,6 +11185,9 @@ pub(crate) fn builtin_quit_process_impl(
     let (id, ret) =
         resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
     if let Some(proc) = processes.get_mut(id) {
+        if proc.kind != ProcessKind::Real {
+            return Err(signal_process_not_subprocess(proc));
+        }
         // Send SIGQUIT to the child process.
         #[cfg(unix)]
         if let Some(ref child) = proc.child {

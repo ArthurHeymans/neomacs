@@ -2425,6 +2425,44 @@ fn signal_process_accepts_gnu_signal_name_symbols() {
 }
 
 #[test]
+fn connection_process_signal_controls_match_gnu_errors() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(list
+            (let ((p (make-network-process
+                      :name "ctrl-net" :server t :service 0)))
+              (unwind-protect
+                  (list
+                   (condition-case err (kill-process p) (error err))
+                   (condition-case err (quit-process p) (error err))
+                   (condition-case err (interrupt-process p) (error err))
+                   (condition-case err (signal-process p 'TERM) (error err))
+                   (eq (stop-process p) p)
+                   (process-status p)
+                   (eq (continue-process p) p)
+                   (process-status p))
+                (ignore-errors (delete-process p))))
+            (let ((p (make-pipe-process :name "ctrl-pipe")))
+              (unwind-protect
+                  (list
+                   (condition-case err (kill-process p) (error err))
+                   (condition-case err (quit-process p) (error err))
+                   (condition-case err (interrupt-process p) (error err))
+                   (condition-case err (signal-process p 'TERM) (error err))
+                   (eq (stop-process p) p)
+                   (process-status p)
+                   (eq (continue-process p) p)
+                   (process-status p))
+                (ignore-errors (delete-process p)))))"#,
+    );
+
+    assert_eq!(
+        result,
+        "OK (((error \"Process ctrl-net is not a subprocess\") (error \"Process ctrl-net is not a subprocess\") (error \"Process ctrl-net is not a subprocess\") (error \"Cannot signal process ctrl-net\") t stop t listen) ((error \"Process ctrl-pipe is not a subprocess\") (error \"Process ctrl-pipe is not a subprocess\") (error \"Process ctrl-pipe is not a subprocess\") (error \"Cannot signal process ctrl-pipe\") t stop t open))"
+    );
+}
+
+#[test]
 fn process_stale_control_matrix_matches_oracle() {
     crate::test_utils::init_test_tracing();
     let cat = find_bin("cat");
