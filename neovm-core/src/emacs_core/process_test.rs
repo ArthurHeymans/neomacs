@@ -2496,6 +2496,37 @@ fn check_process_extended_builtins_reject_name_strings_like_gnu() {
 }
 
 #[test]
+fn check_process_internal_and_gnutls_builtins_reject_name_strings_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((p (make-pipe-process :name "strict-tls")))
+             (unwind-protect
+                 (let* ((bad "strict-tls")
+                        (forms
+                         '((internal-default-process-filter "strict-tls" 1)
+                           (internal-default-process-sentinel "strict-tls" "finished\n")
+                           (gnutls-asynchronous-parameters "strict-tls" nil)
+                           (gnutls-get-initstage "strict-tls")
+                           (gnutls-deinit "strict-tls")
+                           (gnutls-peer-status "strict-tls")
+                           (gnutls-boot "strict-tls" 1 2)
+                           (gnutls-bye "strict-tls" nil))))
+                   (mapcar
+                    (lambda (form)
+                      (condition-case err
+                          (progn (eval form) :no-error)
+                        (error
+                         (and (eq (car err) 'wrong-type-argument)
+                              (eq (cadr err) 'processp)
+                              (equal (caddr err) bad)))))
+                    forms))
+               (ignore-errors (delete-process p))))"#,
+    );
+
+    assert_eq!(result, "OK (t t t t t t t t)");
+}
+
+#[test]
 fn start_process_multiple_args() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");

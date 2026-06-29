@@ -3811,7 +3811,7 @@ impl ProcessManager {
     }
 
     pub(crate) fn open_channel_for_module(&self, process: Value) -> Result<std::ffi::c_int, Flow> {
-        let id = resolve_process_or_wrong_type_any_in_manager(self, &process)?;
+        let id = resolve_process_object_or_wrong_type_any_in_manager(self, &process)?;
         let proc = self
             .get_any(id)
             .ok_or_else(|| signal_wrong_type_processp(process))?;
@@ -7367,7 +7367,7 @@ pub(crate) fn builtin_internal_default_process_filter(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("internal-default-process-filter", &args, 2)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let text = match args[1].as_lisp_string() {
         Some(text) => text.clone(),
         None => return Err(signal_wrong_type_string(args[1])),
@@ -7448,7 +7448,7 @@ pub(crate) fn builtin_internal_default_process_sentinel(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("internal-default-process-sentinel", &args, 2)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let msg = expect_string_strict(&args[1])?;
 
     let (buffer, mark, name, status_symbol) = match eval.processes.get_any(id) {
@@ -7531,7 +7531,7 @@ pub(crate) fn builtin_internal_default_process_sentinel(
 /// supplies SNI and certificate hostname validation.
 pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-boot", &args, 3)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let parameters = parse_gnutls_boot_parameters(args[1], args[2])?;
     upgrade_process_to_tls::<RustlsBackend>(
         eval,
@@ -7549,7 +7549,7 @@ pub(crate) fn builtin_gnutls_asynchronous_parameters(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("gnutls-asynchronous-parameters", &args, 2)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let proc = eval
         .processes
         .get_mut(id)
@@ -7560,7 +7560,7 @@ pub(crate) fn builtin_gnutls_asynchronous_parameters(
 
 pub(crate) fn builtin_gnutls_bye(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-bye", &args, 2)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let proc = eval
         .processes
         .get_mut(id)
@@ -7579,7 +7579,7 @@ pub(crate) fn builtin_gnutls_deinit(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("gnutls-deinit", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let proc = eval
         .processes
         .get_mut(id)
@@ -7598,7 +7598,7 @@ pub(crate) fn builtin_gnutls_get_initstage(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("gnutls-get-initstage", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let proc = eval
         .processes
         .get(id)
@@ -7611,7 +7611,7 @@ pub(crate) fn builtin_gnutls_peer_status(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("gnutls-peer-status", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let proc = eval
         .processes
         .get(id)
