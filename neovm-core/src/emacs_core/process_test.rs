@@ -5380,3 +5380,27 @@ fn process_adaptive_read_buffering_is_a_bound_nil_variable() {
     );
     assert_eq!(result, "OK (t nil t nil nil)");
 }
+
+#[test]
+fn process_defvars_match_gnu_defaults() {
+    crate::test_utils::init_test_tracing();
+    let result = runtime_startup_eval_one(
+        r#"(list
+           delete-exited-processes
+           process-prioritize-lower-fds
+           interrupt-process-functions
+           signal-process-functions
+           internal--daemon-sockname
+           read-process-output-max
+           fast-read-process-output
+           process-error-pause-time
+           (default-boundp 'interrupt-process-functions)
+           (default-boundp 'signal-process-functions)
+           (default-boundp 'fast-read-process-output))"#,
+    );
+
+    assert_eq!(
+        result,
+        "OK (t nil (internal-default-interrupt-process) (internal-default-signal-process) nil 65536 t 1 t t t)"
+    );
+}

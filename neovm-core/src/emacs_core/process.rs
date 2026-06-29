@@ -5648,6 +5648,8 @@ fn default_process_tty_name() -> String {
 pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
     obarray.set_symbol_value("process-connection-type", Value::T);
     obarray.make_special("process-connection-type");
+    obarray.set_symbol_value("delete-exited-processes", Value::T);
+    obarray.make_special("delete-exited-processes");
     // GNU `process.c` `syms_of_process` DEFVAR_LISPs
     // `process-adaptive-read-buffering` (default nil); it controls the
     // short-read delay heuristic in `read_process_output` and is set per
@@ -5660,6 +5662,26 @@ pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
     // helper sees `void-variable` instead of reaching the real error.
     obarray.set_symbol_value("process-adaptive-read-buffering", Value::NIL);
     obarray.make_special("process-adaptive-read-buffering");
+    obarray.set_symbol_value("process-prioritize-lower-fds", Value::NIL);
+    obarray.make_special("process-prioritize-lower-fds");
+    obarray.set_symbol_value(
+        "interrupt-process-functions",
+        Value::list(vec![Value::symbol("internal-default-interrupt-process")]),
+    );
+    obarray.make_special("interrupt-process-functions");
+    obarray.set_symbol_value(
+        "signal-process-functions",
+        Value::list(vec![Value::symbol("internal-default-signal-process")]),
+    );
+    obarray.make_special("signal-process-functions");
+    obarray.set_symbol_value("internal--daemon-sockname", Value::NIL);
+    obarray.make_special("internal--daemon-sockname");
+    obarray.set_symbol_value("read-process-output-max", Value::fixnum(65536));
+    obarray.make_special("read-process-output-max");
+    obarray.set_symbol_value("fast-read-process-output", Value::T);
+    obarray.make_special("fast-read-process-output");
+    obarray.set_symbol_value("process-error-pause-time", Value::fixnum(1));
+    obarray.make_special("process-error-pause-time");
     // GNU `gnutls.c` provides this via `DEFVAR_INT ("gnutls-log-level",
     // global_gnutls_log_level)` (default 0).  `gnutls.el` only forward-declares
     // it (`(defvar gnutls-log-level)  ; gnutls.c`), so without the C-side
