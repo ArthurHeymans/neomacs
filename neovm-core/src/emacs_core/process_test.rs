@@ -545,6 +545,51 @@ fn process_send_string_accepts_get_process_designators_like_gnu() {
 }
 
 #[test]
+fn process_send_region_accepts_get_process_designators_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut buffers = crate::buffer::BufferManager::new();
+    let buffer_id = buffers.create_buffer("*send-region-target*");
+    buffers.set_current(buffer_id);
+    buffers
+        .insert_into_buffer(buffer_id, "abc")
+        .expect("insert region text");
+    let mut pm = ProcessManager::new();
+    let id = pm.create_process(
+        "send-region-proc".into(),
+        Value::make_buffer(buffer_id),
+        "prog".into(),
+        vec![],
+    );
+
+    for target in [
+        Value::make_buffer(buffer_id),
+        Value::string("*send-region-target*"),
+        Value::NIL,
+    ] {
+        builtin_process_send_region_impl(
+            &mut pm,
+            &mut buffers,
+            vec![target, Value::fixnum(1), Value::fixnum(4)],
+        )
+        .expect("process-send-region");
+    }
+
+    let entry = || {
+        Value::cons(
+            Value::heap_string(LispString::from_utf8("abc")),
+            Value::cons(Value::fixnum(0), Value::fixnum(3)),
+        )
+    };
+    let expected = Value::list(vec![entry(), entry(), entry()]);
+    assert_eq!(pm.find_by_buffer_id(buffer_id), Some(id));
+    assert!(crate::emacs_core::value::equal_value(
+        &pm.get(id).unwrap().write_queue,
+        &expected,
+        0,
+    ));
+}
+
+#[test]
 fn process_manager_find_by_name() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();

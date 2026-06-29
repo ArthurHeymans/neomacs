@@ -12523,10 +12523,8 @@ pub(crate) fn builtin_process_send_region(
     args: Vec<Value>,
 ) -> EvalResult {
     if args.len() == 3 {
-        if let Some(id) = process_value_to_id(&args[0]) {
-            eval.wait_while_network_process_connecting(id)?;
-        } else if let Ok(id) =
-            resolve_process_or_missing_error_in_manager(&eval.processes, &args[0])
+        if let Ok(id) =
+            resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, &args[0])
         {
             eval.wait_while_network_process_connecting(id)?;
         }
@@ -12548,8 +12546,7 @@ pub(crate) fn builtin_process_send_region_impl(
         }
     }
 
-    let id =
-        resolve_optional_process_or_current_buffer_in_state(processes, buffers, Some(&args[0]))?;
+    let id = resolve_get_process_designator_in_state(processes, buffers, &args[0])?;
     if processes
         .get(id)
         .is_some_and(|proc| !process_status_allows_send(&proc.status))
