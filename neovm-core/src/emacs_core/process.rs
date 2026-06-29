@@ -240,6 +240,8 @@ impl NetworkSocket {
     fn take_pending_connect_error(&self) -> Option<std::io::Result<Option<std::io::Error>>> {
         match self {
             Self::TcpStream(stream) => Some(stream.take_error()),
+            #[cfg(unix)]
+            Self::UnixStream(stream) => Some(stream.take_error()),
             _ => None,
         }
     }
@@ -1866,9 +1868,13 @@ struct NetworkSocketOptionSpec {
 }
 
 #[derive(Clone, Debug)]
-struct PendingNetworkConnect {
-    remaining_addrs: Vec<SocketAddr>,
-    socket_options: Vec<NetworkSocketOptionSpec>,
+enum PendingNetworkConnect {
+    Tcp {
+        remaining_addrs: Vec<SocketAddr>,
+        socket_options: Vec<NetworkSocketOptionSpec>,
+    },
+    #[cfg(unix)]
+    Local,
 }
 
 #[derive(Debug)]
@@ -2469,6 +2475,26 @@ fn connect_unix_stream_socket(
         .set_nonblocking(true)
         .map_err(|err| network_socket_io_error("set_nonblocking", err))?;
     Ok(socket.into())
+}
+
+#[cfg(unix)]
+fn start_nonblocking_unix_stream_socket(
+    path: &Path,
+    options: &[NetworkSocketOptionSpec],
+) -> Result<Result<UnixStream, std::io::Error>, Flow> {
+    let socket = Socket::new(Domain::UNIX, Type::STREAM, None)
+        .map_err(|err| network_socket_io_error("Cannot create client socket", err))?;
+    apply_network_socket_options(&socket, options)?;
+    socket
+        .set_nonblocking(true)
+        .map_err(|err| network_socket_io_error("set_nonblocking", err))?;
+    let sock_addr = SockAddr::unix(path)
+        .map_err(|err| network_socket_io_error("make client process failed", err))?;
+    match socket.connect(&sock_addr) {
+        Ok(()) => Ok(Ok(socket.into())),
+        Err(err) if nonblocking_connect_is_pending(&err) => Ok(Ok(socket.into())),
+        Err(err) => Ok(Err(err)),
+    }
 }
 
 #[cfg(unix)]
@@ -3952,7 +3978,7 @@ impl ProcessManager {
         let local_addr = started.stream.local_addr().ok();
         if let Some(proc) = self.processes.get_mut(&id) {
             proc.network_socket = Some(NetworkSocket::TcpStream(started.stream));
-            proc.pending_network_connect = Some(PendingNetworkConnect {
+            proc.pending_network_connect = Some(PendingNetworkConnect::Tcp {
                 remaining_addrs: started.remaining_addrs,
                 socket_options: options.to_vec(),
             });
@@ -3996,27 +4022,33 @@ impl ProcessManager {
                 socket.unregister_readable(poller);
             }
             let code = io_error_status_code(&err);
-            if !pending.remaining_addrs.is_empty() {
-                return match self.start_next_pending_network_connect(
-                    id,
-                    pending.remaining_addrs,
-                    &pending.socket_options,
-                )? {
-                    None => Ok(PendingNetworkConnectCompletion::Retrying),
-                    Some(code) => {
-                        let sentinel = self
-                            .processes
-                            .get(&id)
-                            .map(|proc| proc.sentinel)
-                            .unwrap_or(Value::NIL);
-                        if let Some(proc) = self.processes.get_mut(&id) {
-                            proc.status = process_status_failed_value(code);
-                            proc.network_socket = None;
-                            proc.pending_network_connect = None;
+            match pending {
+                PendingNetworkConnect::Tcp {
+                    remaining_addrs,
+                    socket_options,
+                } if !remaining_addrs.is_empty() => {
+                    return match self.start_next_pending_network_connect(
+                        id,
+                        remaining_addrs,
+                        &socket_options,
+                    )? {
+                        None => Ok(PendingNetworkConnectCompletion::Retrying),
+                        Some(code) => {
+                            let sentinel = self
+                                .processes
+                                .get(&id)
+                                .map(|proc| proc.sentinel)
+                                .unwrap_or(Value::NIL);
+                            if let Some(proc) = self.processes.get_mut(&id) {
+                                proc.status = process_status_failed_value(code);
+                                proc.network_socket = None;
+                                proc.pending_network_connect = None;
+                            }
+                            Ok(PendingNetworkConnectCompletion::Failed { sentinel, code })
                         }
-                        Ok(PendingNetworkConnectCompletion::Failed { sentinel, code })
-                    }
-                };
+                    };
+                }
+                _ => {}
             }
 
             let sentinel = self
@@ -8315,7 +8347,7 @@ pub(crate) fn builtin_make_network_process(
                                 let local_addr = started.stream.local_addr().ok();
                                 proc.network_socket =
                                     Some(NetworkSocket::TcpStream(started.stream));
-                                proc.pending_network_connect = Some(PendingNetworkConnect {
+                                proc.pending_network_connect = Some(PendingNetworkConnect::Tcp {
                                     remaining_addrs: started.remaining_addrs,
                                     socket_options: socket_options.clone(),
                                 });
@@ -8797,13 +8829,6 @@ pub(crate) fn builtin_make_network_process(
                     return Ok(Value::make_process(id));
                 }
 
-                if nowait {
-                    return Err(signal(
-                        "error",
-                        vec![Value::string("`:nowait' is not supported yet")],
-                    ));
-                }
-                let stream = connect_unix_stream_socket(&path, &socket_options)?;
                 contact = process_contact_plist_put(
                     contact,
                     ProcessKeyword::Remote.value(),
@@ -8815,6 +8840,66 @@ pub(crate) fn builtin_make_network_process(
                     Value::string(""),
                 )?;
 
+                if nowait {
+                    let start = start_nonblocking_unix_stream_socket(&path, &socket_options)?;
+                    let id = eval.processes.create_process_with_kind_lisp(
+                        name,
+                        buffer,
+                        LispString::from_utf8("network"),
+                        Vec::new(),
+                        ProcessKind::Network,
+                    );
+                    eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+                    if let Some(proc) = eval.processes.get_mut(id) {
+                        proc.status = process_status_connect_value();
+                        proc.childp = contact;
+                        proc.plist = plist_val;
+                        set_network_process_coding(
+                            proc,
+                            coding_val,
+                            default_process_coding,
+                            network_buffer_multibyte,
+                        );
+                        proc.thread = current_thread_handle(&eval.threads);
+                        if !filter_val.is_nil() {
+                            proc.filter = filter_val;
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Filter.value(),
+                                proc.filter,
+                            )?;
+                        }
+                        if !sentinel_val.is_nil() {
+                            proc.sentinel = sentinel_val;
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Sentinel.value(),
+                                proc.sentinel,
+                            )?;
+                        }
+                        match start {
+                            Ok(stream) => {
+                                proc.network_socket = Some(NetworkSocket::UnixStream(stream));
+                                proc.pending_network_connect = Some(PendingNetworkConnect::Local);
+                            }
+                            Err(err) => {
+                                proc.status =
+                                    process_status_failed_value(io_error_status_code(&err));
+                            }
+                        }
+                        apply_connection_process_flags(proc, noquery, stop);
+                    }
+                    if eval
+                        .processes
+                        .get(id)
+                        .is_some_and(|proc| proc.pending_network_connect.is_some())
+                    {
+                        eval.processes.register_socket_writable_fd(id).ok();
+                    }
+                    return Ok(Value::make_process(id));
+                }
+
+                let stream = connect_unix_stream_socket(&path, &socket_options)?;
                 let id = eval.processes.create_process_with_kind_lisp(
                     name,
                     buffer,
@@ -9285,13 +9370,6 @@ pub(crate) fn builtin_make_network_process(
                 return Ok(Value::make_process(id));
             }
 
-            if nowait {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("`:nowait' is not supported yet")],
-                ));
-            }
-            let stream = connect_unix_stream_socket(&service_path, &socket_options)?;
             contact = process_contact_plist_put(
                 contact,
                 ProcessKeyword::Remote.value(),
@@ -9305,6 +9383,72 @@ pub(crate) fn builtin_make_network_process(
                 Value::string(""),
             )?;
 
+            if nowait {
+                let start = start_nonblocking_unix_stream_socket(&service_path, &socket_options)?;
+                let id = eval.processes.create_process_with_kind_lisp(
+                    name,
+                    buffer,
+                    LispString::from_utf8("network"),
+                    Vec::new(),
+                    ProcessKind::Network,
+                );
+                eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+                if let Some(proc) = eval.processes.get_mut(id) {
+                    proc.status = process_status_connect_value();
+                    proc.childp = contact;
+                    proc.plist = plist_val;
+                    set_network_process_coding(
+                        proc,
+                        coding_val,
+                        default_process_coding,
+                        network_buffer_multibyte,
+                    );
+                    proc.thread = current_thread_handle(&eval.threads);
+                    if !filter_val.is_nil() {
+                        proc.filter = filter_val;
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Filter.value(),
+                            proc.filter,
+                        )?;
+                    }
+                    if !sentinel_val.is_nil() {
+                        proc.sentinel = sentinel_val;
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Sentinel.value(),
+                            proc.sentinel,
+                        )?;
+                    }
+                    if !buffer.is_nil() {
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Buffer.value(),
+                            buffer,
+                        )?;
+                    }
+                    match start {
+                        Ok(stream) => {
+                            proc.network_socket = Some(NetworkSocket::UnixStream(stream));
+                            proc.pending_network_connect = Some(PendingNetworkConnect::Local);
+                        }
+                        Err(err) => {
+                            proc.status = process_status_failed_value(io_error_status_code(&err));
+                        }
+                    }
+                    apply_connection_process_flags(proc, noquery, stop);
+                }
+                if eval
+                    .processes
+                    .get(id)
+                    .is_some_and(|proc| proc.pending_network_connect.is_some())
+                {
+                    eval.processes.register_socket_writable_fd(id).ok();
+                }
+                return Ok(Value::make_process(id));
+            }
+
+            let stream = connect_unix_stream_socket(&service_path, &socket_options)?;
             let id = eval.processes.create_process_with_kind_lisp(
                 name,
                 buffer,
@@ -9653,7 +9797,7 @@ pub(crate) fn builtin_make_network_process(
                 PendingNetworkConnectStart::Started(started) => {
                     let local_addr = started.stream.local_addr().ok();
                     proc.network_socket = Some(NetworkSocket::TcpStream(started.stream));
-                    proc.pending_network_connect = Some(PendingNetworkConnect {
+                    proc.pending_network_connect = Some(PendingNetworkConnect::Tcp {
                         remaining_addrs: started.remaining_addrs,
                         socket_options: socket_options.clone(),
                     });

@@ -4239,6 +4239,53 @@ fn process_send_string_waits_for_nowait_tcp_connect_like_gnu() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn process_send_string_waits_for_nowait_local_stream_connect_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((events nil) (recv nil) (srv nil) (cli nil)
+                 (path (make-temp-file "neomacs-nowait-local-")))
+             (delete-file path)
+             (unwind-protect
+                 (progn
+                   (setq srv (make-network-process
+                              :name "nowait-local-srv" :server t
+                              :family 'local :service path :noquery t
+                              :filter (lambda (_p s) (setq recv s))))
+                   (setq cli (make-network-process
+                              :name "nowait-local-cli"
+                              :family 'local :service path
+                              :nowait t :noquery t
+                              :sentinel (lambda (p e)
+                                          (push (list :cli (substring e 0 -1)
+                                                      (process-status p))
+                                                events))))
+                   (let ((initial (list (process-status cli)
+                                        (process-live-p cli)
+                                        (stringp (process-contact cli :remote))
+                                        (equal (process-contact cli :local) ""))))
+                     (process-send-string cli "ping-local-nowait")
+                     (dotimes (_ 20)
+                       (accept-process-output nil 0.05))
+                     (list initial
+                           (process-status cli)
+                           (process-live-p cli)
+                           recv
+                           events
+                           (stringp (process-contact cli :remote))
+                           (equal (process-contact cli :local) ""))))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))
+               (ignore-errors (delete-file path))))"#,
+    );
+
+    assert_eq!(
+        results[0],
+        "OK ((connect (connect stop) t t) open (open listen connect stop) \"ping-local-nowait\" ((:cli \"open\" open)) t t)"
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn make_network_process_nowait_tcp_refusal_fails_like_gnu() {
