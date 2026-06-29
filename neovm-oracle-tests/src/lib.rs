@@ -890,6 +890,7 @@ mod prin1_comprehensive_patterns;
 mod prin1_to_string_advanced;
 mod print_eval_strict_edge_semantics;
 mod process_environment_semantics;
+mod process_feature_advertisement_semantics;
 mod process_lines_semantics;
 mod process_property_semantics;
 mod process_string_comprehensive;

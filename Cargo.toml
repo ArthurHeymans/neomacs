@@ -154,6 +154,7 @@ os_pipe = "1.1"
 
 # I/O multiplexing (epoll/kqueue/wepoll)
 polling = "3"
+socket2 = { version = "0.6", features = ["all"] }
 
 # TLS
 rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }

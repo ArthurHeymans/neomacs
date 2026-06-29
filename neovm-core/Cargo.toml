@@ -42,6 +42,7 @@ bytemuck.workspace = true
 memmap2.workspace = true
 tempfile.workspace = true
 polling.workspace = true
+socket2.workspace = true
 portable-pty.workspace = true
 smallvec.workspace = true
 rustls.workspace = true

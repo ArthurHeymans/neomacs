@@ -63,6 +63,15 @@ fn process_finite_domains_match_gnu_symbols() {
         (":tls-parameters", ProcessKeyword::TlsParameters),
         (":use-external-socket", ProcessKeyword::UseExternalSocket),
         (":plist", ProcessKeyword::Plist),
+        (":bindtodevice", ProcessKeyword::Bindtodevice),
+        (":broadcast", ProcessKeyword::Broadcast),
+        (":dontroute", ProcessKeyword::Dontroute),
+        (":keepalive", ProcessKeyword::Keepalive),
+        (":linger", ProcessKeyword::Linger),
+        (":oobinline", ProcessKeyword::Oobinline),
+        (":priority", ProcessKeyword::Priority),
+        (":reuseaddr", ProcessKeyword::Reuseaddr),
+        (":nodelay", ProcessKeyword::Nodelay),
         (":port", ProcessKeyword::Port),
         (":speed", ProcessKeyword::Speed),
         (":process", ProcessKeyword::Process),
@@ -175,15 +184,9 @@ fn process_finite_domains_match_gnu_symbols() {
         NumProcessorsQuery::from_symbol_value(&Value::symbol("default")),
         None
     );
-    assert_eq!(
-        NetworkSocketType::from_symbol_value(&Value::symbol("datagram")),
-        Some(NetworkSocketType::Datagram)
-    );
-    assert_eq!(
-        NetworkSocketType::from_symbol_value(&Value::symbol("seqpacket")),
-        Some(NetworkSocketType::Seqpacket)
-    );
-    assert_eq!(NetworkSocketType::Datagram.name(), "datagram");
+    assert!(validate_network_socket_type(&Value::NIL).is_ok());
+    assert!(validate_network_socket_type(&Value::symbol("datagram")).is_ok());
+    assert!(validate_network_socket_type(&Value::symbol("seqpacket")).is_ok());
     assert!(validate_network_socket_type(&Value::symbol("bogus")).is_err());
 
     assert_eq!(
@@ -1045,6 +1048,7 @@ fn make_process_accepts_existing_pipe_process_for_stderr() {
         &mut pm,
         &mut buffers,
         &threads,
+        None,
         vec![
             Value::keyword(":name"),
             Value::string("proc-existing-stderr"),
@@ -2198,6 +2202,143 @@ fn process_contact_keyword_matrix_for_network_and_pipe() {
                 (ignore-errors (delete-process p)))))"#,
     );
     assert_eq!(result, "OK ((t t t t t t t t) (t t t t t t t))");
+}
+
+#[test]
+fn make_pipe_process_gnu_keywords_update_observable_state() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((pl (list :a 1)))
+             (let ((p (make-pipe-process
+                       :name "neo-pipe-keywords"
+                       :buffer nil
+                       :noquery t
+                       :stop t
+                       :filter 'ignore
+                       :sentinel 'ignore
+                       :plist pl
+                       :coding (cons 'raw-text-unix 'utf-8-unix))))
+               (setcar (cdr pl) 2)
+               (unwind-protect
+                   (list (process-status p)
+                         (process-query-on-exit-flag p)
+                         (process-filter p)
+                         (process-sentinel p)
+                         (process-coding-system p)
+                         (process-plist p)
+                         (plist-get (process-contact p t) :plist)
+                         (process-contact p)
+                         (process-buffer p))
+                 (ignore-errors (delete-process p)))))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (stop nil ignore ignore (raw-text-unix . utf-8-unix) (:a 1) (:a 2) t nil)"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn make_serial_process_gnu_keywords_update_observable_state() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((pl (list :a 1)))
+             (let ((p (make-serial-process
+                       :port "/dev/null"
+                       :speed nil
+                       :name "neo-serial-keywords"
+                       :buffer nil
+                       :noquery t
+                       :stop t
+                       :filter 'ignore
+                       :sentinel 'ignore
+                       :plist pl
+                       :coding (cons 'raw-text-unix 'utf-8-unix))))
+               (setcar (cdr pl) 2)
+               (unwind-protect
+                   (list (process-status p)
+                         (process-live-p p)
+                         (process-query-on-exit-flag p)
+                         (process-filter p)
+                         (process-sentinel p)
+                         (process-coding-system p)
+                         (process-plist p)
+                         (plist-get (process-contact p t) :plist)
+                         (buffer-name (process-buffer p))
+                         (process-contact p))
+                 (ignore-errors (delete-process p)))))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (stop (stop) nil ignore ignore (raw-text-unix . utf-8-unix) (:a 1) (:a 2) \"neo-serial-keywords\" (\"/dev/null\" nil))"
+    );
+}
+
+#[test]
+fn make_process_noquery_and_stop_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((p (make-process :name "neo-make-process-noquery"
+                                  :command (list "sh" "-c" "sleep 0.1")
+                                  :noquery t)))
+             (unwind-protect
+                 (list (process-status p) (process-query-on-exit-flag p))
+               (ignore-errors (delete-process p))))
+           (condition-case err
+               (make-process :name "neo-make-process-stop" :command nil :stop "x")
+             (error err))"#,
+    );
+
+    assert_eq!(results[0], "OK (run nil)");
+    assert_eq!(results[1], "OK (wrong-type-argument null \"x\")");
+}
+
+#[test]
+fn process_constructors_validate_coding_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(condition-case err
+              (make-pipe-process :name "neo-bad-pipe-coding" :coding 1)
+            (error err))
+           (condition-case err
+              (make-network-process :name "neo-bad-network-coding"
+                                    :server t :service 0 :coding 1)
+            (error err))
+           (condition-case err
+              (make-process :name "neo-bad-make-process-coding"
+                            :command nil :coding 1)
+            (error err))"#,
+    );
+
+    assert_eq!(results[0], "OK (wrong-type-argument symbolp 1)");
+    assert_eq!(results[1], "OK (wrong-type-argument symbolp 1)");
+    assert_eq!(results[2], "OK (wrong-type-argument symbolp 1)");
+}
+
+#[test]
+fn stopped_network_client_suppresses_open_sentinel_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((events nil))
+             (condition-case err
+                 (let* ((srv (make-network-process
+                              :name "neo-stop-srv" :server t :service t :host 'local))
+                        (port (process-contact srv :service))
+                        (cli (make-network-process
+                              :name "neo-stop-cli"
+                              :host 'local
+                              :service port
+                              :stop t
+                              :sentinel (lambda (_p msg) (push msg events)))))
+                   (accept-process-output nil 0.1)
+                   (prog1
+                       (list (process-status cli) (process-live-p cli) events)
+                     (delete-process cli)
+                     (delete-process srv)))
+               (error err)))"#,
+    );
+
+    assert_eq!(results[0], "OK (stop (stop) nil)");
 }
 
 #[test]
@@ -3857,6 +3998,116 @@ fn process_list_network_serial_runtime_surface() {
 }
 
 #[test]
+fn make_network_process_feature_advertisement_is_conservative() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(list
+            (featurep 'make-network-process)
+            (featurep 'make-network-process '(:family local))
+            (featurep 'make-network-process '(:family ipv4))
+            (featurep 'make-network-process '(:family ipv6))
+            (featurep 'make-network-process '(:service t))
+            (featurep 'make-network-process '(:server t))
+            (featurep 'make-network-process '(:nowait t))
+            (featurep 'make-network-process '(:type datagram))
+            (featurep 'make-network-process '(:type seqpacket))
+            (featurep 'make-network-process :reuseaddr)
+            (featurep 'make-network-process :keepalive)
+            (featurep 'make-network-process :bindtodevice)
+            (featurep 'make-network-process :nodelay)
+            (featurep 'make-network-process :priority)
+            (featurep 'make-network-process :oobinline)
+            (featurep 'make-network-process :linger)
+            (featurep 'make-network-process :dontroute)
+            (featurep 'make-network-process :broadcast))
+           (get 'make-network-process 'subfeatures)"#,
+    );
+
+    assert_eq!(results[0], "OK (t t t t t t nil t nil t t t t t t t t t)");
+    assert_eq!(
+        results[1],
+        "OK (:nodelay :reuseaddr :priority :oobinline :linger :keepalive :dontroute :broadcast :bindtodevice (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:type datagram))"
+    );
+}
+
+#[test]
+fn set_network_process_option_applies_known_options_and_updates_contact_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((p (make-network-process :name "netopt-known" :server t :service 0)))
+             (unwind-protect
+                 (list
+                  (set-network-process-option p :reuseaddr nil)
+                  (set-network-process-option p :nodelay t)
+                  (set-network-process-option p :priority 0)
+                  (set-network-process-option p :linger 0)
+                  (set-network-process-option p :bindtodevice nil)
+                  (not (null (memq :reuseaddr (process-contact p t))))
+                  (process-contact p :reuseaddr)
+                  (process-contact p :nodelay)
+                  (process-contact p :priority)
+                  (process-contact p :linger)
+                  (not (null (memq :bindtodevice (process-contact p t))))
+                  (process-contact p :bindtodevice))
+               (ignore-errors (delete-process p))))"#,
+    );
+
+    assert_eq!(results[0], "OK (t t t t t t nil t 0 0 t nil)");
+}
+
+#[test]
+fn make_network_process_constructor_socket_options_are_applied_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((p (make-network-process
+                    :name "netopt-ctor" :server 2 :service 0
+                    :reuseaddr nil :nodelay t :priority 0 :linger 0
+                    :bindtodevice nil)))
+             (unwind-protect
+                 (list
+                  (process-status p)
+                  (process-contact p :server)
+                  (integerp (process-contact p :service))
+                  (not (null (memq :reuseaddr (process-contact p t))))
+                  (process-contact p :reuseaddr)
+                  (process-contact p :nodelay)
+                  (process-contact p :priority)
+                  (process-contact p :linger)
+                  (not (null (memq :bindtodevice (process-contact p t))))
+                  (process-contact p :bindtodevice))
+               (ignore-errors (delete-process p))))"#,
+    );
+
+    assert_eq!(results[0], "OK (listen 2 t t nil t 0 0 t nil)");
+}
+
+#[test]
+fn set_network_process_option_rejects_bad_values_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((p (make-network-process :name "netopt-bad" :server t :service 0)))
+             (unwind-protect
+                 (list
+                  (condition-case err
+                      (set-network-process-option p :priority t)
+                    (error err))
+                  (condition-case err
+                      (set-network-process-option p :bindtodevice 1)
+                    (error err))
+                  (set-network-process-option p :bogus 1 t)
+                  (condition-case err
+                      (set-network-process-option p :bogus 1)
+                    (error err)))
+               (ignore-errors (delete-process p))))"#,
+    );
+
+    assert_eq!(
+        results[0],
+        "OK ((error \"Bad option value for :priority\") (error \"Bad option value for :bindtodevice\") nil (error \"Unknown or unsupported option\"))"
+    );
+}
+
+#[test]
 fn make_network_process_validates_gnu_keyword_domains() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
@@ -3865,10 +4116,32 @@ fn make_network_process_validates_gnu_keyword_domains() {
             (error err))
            (condition-case err
               (make-network-process :name "np-type" :server t :service 0 :type 'bogus)
-            (error err))
+             (error err))
+           (condition-case err
+              (let ((p (make-network-process
+                        :name "np-datagram" :server t :service 0 :type 'datagram)))
+                (prog1 (process-status p)
+                  (delete-process p)))
+             (error err))
+           (condition-case err
+              (let ((path (make-temp-file "neomacs-seqpacket-domain-"))
+                    (p nil))
+                (delete-file path)
+                (unwind-protect
+                    (progn
+                      (setq p (make-network-process
+                               :name "np-seqpacket" :server t :service path
+                               :type 'seqpacket :family 'local))
+                      (process-status p))
+                  (when p (delete-process p))
+                  (ignore-errors (delete-file path))))
+             (error err))
+           (condition-case err
+              (make-network-process :name "np-nowait-client" :service 0 :nowait t)
+             (error err))
            (condition-case err
               (make-network-process :name "np-family" :server t :service 0 :family 'bogus)
-            (error err))"#,
+             (error err))"#,
     );
 
     assert_eq!(
@@ -3876,7 +4149,130 @@ fn make_network_process_validates_gnu_keyword_domains() {
         "OK (error \"`:server' is incompatible with `:nowait'\")"
     );
     assert_eq!(results[1], "OK (error \"Unsupported connection type\")");
-    assert_eq!(results[2], "OK (error \"Unknown address family\")");
+    assert_eq!(results[2], "OK open");
+    assert_eq!(results[3], "OK listen");
+    assert_eq!(results[4], "OK (error \"`:nowait' is not supported yet\")");
+    assert_eq!(results[5], "OK (error \"Unknown address family\")");
+}
+
+#[test]
+fn make_network_process_datagram_udp_loopback_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((srv nil) (cli nil) (recv nil))
+             (unwind-protect
+                 (progn
+                   (setq srv
+                         (make-network-process
+                          :name "udp-srv" :type 'datagram :server t
+                          :host 'local :service t :family 'ipv4 :noquery t
+                          :filter (lambda (_p s) (setq recv s))))
+                   (let* ((local (process-contact srv :local))
+                          (port (aref local (1- (length local)))))
+                     (setq cli
+                           (make-network-process
+                            :name "udp-cli" :type 'datagram
+                            :host 'local :service port :family 'ipv4 :noquery t))
+                     (process-send-string cli "ping-udp")
+                     (let ((k 0))
+                       (while (and (null recv) (< k 100))
+                         (accept-process-output nil 0.02)
+                         (setq k (1+ k))))
+                     (list recv
+                           (process-status srv)
+                           (process-status cli)
+                           (vectorp (process-datagram-address srv))
+                           (vectorp (process-datagram-address cli)))))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))))"#,
+    );
+
+    assert_eq!(results[0], "OK (\"ping-udp\" open open t t)");
+}
+
+#[cfg(unix)]
+#[test]
+fn make_network_process_local_datagram_loopback_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((path (make-temp-file "neomacs-local-dgram-"))
+                 (srv nil) (cli nil) (recv nil))
+             (delete-file path)
+             (unwind-protect
+                 (progn
+                   (setq srv
+                         (make-network-process
+                          :name "uds-srv" :type 'datagram :family 'local
+                          :server t :service path :noquery t
+                          :filter (lambda (_p s) (setq recv s))))
+                   (setq cli
+                         (make-network-process
+                          :name "uds-cli" :type 'datagram :family 'local
+                          :service path :noquery t))
+                   (process-send-string cli "ping-local")
+                   (let ((k 0))
+                     (while (and (null recv) (< k 100))
+                       (accept-process-output nil 0.02)
+                       (setq k (1+ k))))
+                   (list recv
+                         (process-status srv)
+                         (process-status cli)
+                         (equal (process-contact cli :local) "")
+                         (equal (process-contact cli :remote) path)
+                         (equal (process-datagram-address cli) path)
+                         (consp (process-datagram-address srv))
+                         (equal (set-process-datagram-address cli path) path)))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))
+               (ignore-errors (delete-file path))))"#,
+    );
+
+    assert_eq!(results[0], "OK (\"ping-local\" open open t t t t t)");
+}
+
+#[cfg(unix)]
+#[test]
+fn make_network_process_local_seqpacket_loopback_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((path (make-temp-file "neomacs-local-seqpacket-"))
+                 (srv nil) (cli nil) (recv nil) (events nil))
+             (delete-file path)
+             (unwind-protect
+                 (progn
+                   (setq srv
+                         (make-network-process
+                          :name "seq-local-srv" :type 'seqpacket :family 'local
+                          :server t :service path :noquery t
+                          :log (lambda (_server client msg)
+                                 (push (list (process-name client) msg) events)
+                                 (set-process-filter
+                                  client
+                                  (lambda (_p s) (setq recv s))))))
+                   (setq cli
+                         (make-network-process
+                          :name "seq-local-cli" :type 'seqpacket :family 'local
+                          :service path :noquery t))
+                   (accept-process-output nil 0.2)
+                   (process-send-string cli "ping-seq-local")
+                   (let ((k 0))
+                     (while (and (null recv) (< k 100))
+                       (accept-process-output nil 0.02)
+                       (setq k (1+ k))))
+                   (list recv
+                         (process-status srv)
+                         (process-status cli)
+                         (length events)
+                         (equal (process-contact cli :local) "")
+                         (equal (process-contact cli :remote) path)
+                         (null (process-datagram-address srv))
+                         (null (process-datagram-address cli))))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))
+               (ignore-errors (delete-file path))))"#,
+    );
+
+    assert_eq!(results[0], "OK (\"ping-seq-local\" listen open 1 t t t t)");
 }
 
 #[test]
@@ -3988,6 +4384,41 @@ fn make_network_process_local_stream_server_accepts_client_like_gnu() {
     );
 
     assert_eq!(results[0], "OK (listen t t open t t 1 t t t t)");
+}
+
+#[cfg(unix)]
+#[test]
+fn make_network_process_server_plist_is_inherited_by_accepted_local_client() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((path (make-temp-file "neomacs-local-plist-"))
+                 (events nil))
+             (delete-file path)
+             (unwind-protect
+                 (condition-case err
+                     (let* ((srv (make-network-process
+                                  :name "srv" :server t :family 'local :service path
+                                  :plist '(:authenticated t :foo bar)
+                                  :log (lambda (server client msg)
+                                         (push (list (process-get server :authenticated)
+                                                     (process-get client :authenticated)
+                                                     (process-get client :foo))
+                                               events))))
+                            (cli (make-network-process
+                                  :name "cli" :family 'local :service path)))
+                       (accept-process-output nil 0.2)
+                       (prog1
+                           (list (process-get srv :authenticated)
+                                 (process-get srv :foo)
+                                 (length events)
+                                 (car events))
+                         (delete-process cli)
+                         (delete-process srv)))
+                   (error err))
+               (ignore-errors (delete-file path))))"#,
+    );
+
+    assert_eq!(results[0], "OK (t bar 1 (t t bar))");
 }
 
 #[cfg(unix)]
