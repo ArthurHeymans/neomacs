@@ -73,8 +73,9 @@ windows-sys.workspace = true
 default = ["jit"]
 sound = ["rodio"]
 # Tiered JIT execution subsystem (src/emacs_core/jit.rs +
-# bytecode/ELISP_VM_MODERNIZATION.md). Under construction; default OFF so
-# production is byte-for-byte unchanged. Build/test with `--features jit`.
+# bytecode/ELISP_VM_MODERNIZATION.md). DEFAULT-ON (see `default` above): the
+# baseline JIT ships enabled. Toggle it at runtime with `NEOVM_JIT=0` (no
+# recompile); build the interpreter-only engine with `--no-default-features`.
 jit = [
     "dep:cranelift-codegen",
     "dep:cranelift-frontend",
