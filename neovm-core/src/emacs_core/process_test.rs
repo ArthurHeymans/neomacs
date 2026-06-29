@@ -527,6 +527,7 @@ fn builtin_process_name_uses_lisp_value_storage() {
 fn process_type_and_contact_use_stored_lisp_fields() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
+    let buffers = crate::buffer::BufferManager::new();
     let network = pm.create_process_with_kind(
         "net-proc".into(),
         Value::NIL,
@@ -549,7 +550,8 @@ fn process_type_and_contact_use_stored_lisp_fields() {
     }
 
     assert_eq!(
-        builtin_process_type_impl(&pm, vec![Value::make_process(network)]).expect("process-type"),
+        builtin_process_type_impl(&pm, &buffers, vec![Value::make_process(network)])
+            .expect("process-type"),
         Value::symbol("network")
     );
     assert_eq!(
@@ -2146,6 +2148,30 @@ fn process_status_accepts_buffer_and_nil_designators_like_gnu() {
     assert_eq!(
         result,
         "OK (run run run nil (error \"Buffer ps-empty has no process\"))"
+    );
+}
+
+#[test]
+fn process_type_accepts_get_process_designators_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let cat = find_bin("cat");
+    let result = eval_one(&format!(
+        r#"(let* ((buf (generate-new-buffer "pt-status-buffer"))
+                  (p (start-process "pt-proc" buf "{cat}")))
+             (unwind-protect
+                 (list
+                  (process-type p)
+                  (process-type buf)
+                  (with-current-buffer buf (process-type nil))
+                  (process-type "pt-status-buffer")
+                  (condition-case err (process-type "pt-missing") (error err)))
+               (ignore-errors (delete-process p))
+               (ignore-errors (kill-buffer buf))))"#
+    ));
+
+    assert_eq!(
+        result,
+        "OK (real real real real (error \"Process pt-missing does not exist\"))"
     );
 }
 

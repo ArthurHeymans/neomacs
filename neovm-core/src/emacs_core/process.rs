@@ -5506,6 +5506,56 @@ fn resolve_process_for_status_in_state(
     }
 }
 
+fn resolve_get_process_designator_in_state(
+    processes: &ProcessManager,
+    buffers: &BufferManager,
+    value: &Value,
+) -> Result<ProcessId, Flow> {
+    if let Some(id) = process_value_to_id(value) {
+        return if processes.get_any(id).is_some() {
+            Ok(id)
+        } else {
+            Err(signal_wrong_type_processp(*value))
+        };
+    }
+
+    match value.kind() {
+        ValueKind::String => {
+            let name = process_owned_runtime_string(*value);
+            if let Some(id) = processes.find_by_name(&name) {
+                return Ok(id);
+            }
+            if let Some(buffer_id) = buffers.find_buffer_by_name(&name) {
+                return processes
+                    .find_by_buffer_id(buffer_id)
+                    .ok_or_else(|| signal_buffer_has_no_process(buffers, buffer_id));
+            }
+            Err(signal_process_does_not_exist(&name))
+        }
+        ValueKind::Nil => {
+            let current_buffer = buffers
+                .current_buffer_id()
+                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+            processes
+                .find_by_buffer_id(current_buffer)
+                .ok_or_else(|| signal_buffer_has_no_process(buffers, current_buffer))
+        }
+        ValueKind::Veclike(VecLikeType::Buffer) => {
+            let buffer_id = value.as_buffer_id().unwrap();
+            if buffers.get(buffer_id).is_none() {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Attempt to get process for a dead buffer")],
+                ));
+            }
+            processes
+                .find_by_buffer_id(buffer_id)
+                .ok_or_else(|| signal_buffer_has_no_process(buffers, buffer_id))
+        }
+        _ => Err(signal_wrong_type_processp(*value)),
+    }
+}
+
 fn resolve_buffer_for_process_lookup_in_state(
     frames: &FrameManager,
     buffers: &BufferManager,
@@ -12426,15 +12476,16 @@ pub(crate) fn builtin_process_type(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_process_type_impl(&eval.processes, args)
+    builtin_process_type_impl(&eval.processes, &eval.buffers, args)
 }
 
 pub(crate) fn builtin_process_type_impl(
     processes: &ProcessManager,
+    buffers: &BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-type", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_get_process_designator_in_state(processes, buffers, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
