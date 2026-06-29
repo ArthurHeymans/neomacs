@@ -78,10 +78,10 @@ jobs:
       - name: cargo check workspace
         run: cargo check --workspace
 
-  neovm-core-tests:
-    name: neovm-core tests (linux x86_64)
+  neovm-core-test-archive:
+    name: neovm-core test archive (linux x86_64)
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
     env: *linux_env
     steps:
       - *checkout
@@ -95,8 +95,46 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: neovm-core tests
-        run: cargo nextest run -p neovm-core --no-fail-fast
+      - name: Build and archive neovm-core tests
+        run: cargo nextest archive -p neovm-core --archive-file neovm-core-nextest.tar.zst
+
+      - name: Upload neovm-core test archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: neovm-core-nextest-archive-linux-x86_64
+          path: neovm-core-nextest.tar.zst
+          if-no-files-found: error
+          retention-days: 1
+
+  neovm-core-tests:
+    name: neovm-core tests shard ${{ matrix.partition }}/2 (linux x86_64)
+    needs: neovm-core-test-archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env: *linux_env
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2]
+    steps:
+      - *checkout
+      - *install_linux_deps
+      - *install_rust
+      - *install_nextest
+
+      - name: Download neovm-core test archive
+        uses: actions/download-artifact@v5
+        with:
+          name: neovm-core-nextest-archive-linux-x86_64
+          path: .
+
+      - name: Run neovm-core test shard
+        run: |
+          cargo nextest run \
+            --archive-file neovm-core-nextest.tar.zst \
+            --workspace-remap "$GITHUB_WORKSPACE" \
+            --partition slice:${{ matrix.partition }}/2 \
+            --no-fail-fast
 
   fresh-release-build:
     name: fresh release build (linux x86_64)
