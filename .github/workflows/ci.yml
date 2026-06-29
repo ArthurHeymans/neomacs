@@ -9,18 +9,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  linux-x86_64:
-    name: required checks (linux x86_64)
+  fmt-check:
+    name: fmt and check (linux x86_64)
     runs-on: ubuntu-latest
-    timeout-minutes: 180
-    env:
+    timeout-minutes: 60
+    env: &linux_env
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
     steps:
-      - name: Checkout
+      - &checkout
+        name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install system dependencies
+      - &install_linux_deps
+        name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -54,23 +56,20 @@ jobs:
             gnutls-bin \
             libgnutls28-dev
 
-      - name: Install Rust toolchain
+      - &install_rust
+        name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain-file: rust-toolchain.toml
 
-      - name: Cache cargo registry & target
+      - &cache_cargo
+        name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-linux-x86_64
           cache-bin: false
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' && github.job == 'fmt-check' }}
           cache-on-failure: true
-
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
 
       - name: cargo fmt
         run: cargo fmt --all --check
@@ -78,11 +77,79 @@ jobs:
       - name: cargo check workspace
         run: cargo check --workspace
 
+  neovm-core-tests:
+    name: neovm-core tests (linux x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env: *linux_env
+    steps:
+      - *checkout
+      - *install_linux_deps
+      - *install_rust
+      - *cache_cargo
+
+      - &install_nextest
+        name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
       - name: neovm-core tests
         run: cargo nextest run -p neovm-core --no-fail-fast
 
+  fresh-release-build:
+    name: fresh release build (linux x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env: *linux_env
+    steps:
+      - *checkout
+      - *install_linux_deps
+      - *install_rust
+      - *cache_cargo
+
       - name: fresh release build
         run: cargo xtask fresh-build --release
+
+      - name: Package release runtime for oracle tests
+        run: |
+          tar czf neomacs-release-runtime-linux-x86_64.tar.gz \
+            target/release/neomacs \
+            target/release/neomacs.pdump \
+            lisp \
+            etc
+
+      - name: Upload release runtime for oracle tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: neomacs-release-runtime-linux-x86_64
+          path: neomacs-release-runtime-linux-x86_64.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  neovm-oracle-tests:
+    name: neovm-oracle-tests (linux x86_64)
+    needs: fresh-release-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env: *linux_env
+    steps:
+      - *checkout
+      - *install_linux_deps
+      - *install_rust
+      - *cache_cargo
+      - *install_nextest
+
+      - name: Download release runtime
+        uses: actions/download-artifact@v5
+        with:
+          name: neomacs-release-runtime-linux-x86_64
+          path: .
+
+      - name: Unpack release runtime
+        run: |
+          tar xzf neomacs-release-runtime-linux-x86_64.tar.gz
+          chmod +x target/release/neomacs
 
       - name: neovm-oracle-tests
         run: cargo nextest run -p neovm-oracle-tests --no-fail-fast
