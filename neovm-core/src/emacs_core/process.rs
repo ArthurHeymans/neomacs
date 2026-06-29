@@ -12479,6 +12479,19 @@ pub(crate) fn builtin_process_contact(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    if (1..=3).contains(&args.len()) {
+        let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+        let no_block = args.get(2).is_some_and(|value| value.is_truthy());
+        let connecting = eval.processes.get(id).is_some_and(|proc| {
+            proc.kind == ProcessKind::Network && proc.pending_network_connect.is_some()
+        });
+        if connecting {
+            if no_block {
+                return Ok(Value::NIL);
+            }
+            eval.wait_while_network_process_connecting(id)?;
+        }
+    }
     builtin_process_contact_impl(&eval.processes, args)
 }
 

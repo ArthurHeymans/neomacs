@@ -4328,6 +4328,59 @@ fn make_network_process_nowait_tcp_refusal_fails_like_gnu() {
 }
 
 #[test]
+fn process_contact_no_block_returns_nil_for_pending_nowait_network_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let id = eval.processes.create_process_with_kind_lisp(
+        LispString::from_utf8("pending-contact"),
+        Value::NIL,
+        LispString::from_utf8("network"),
+        Vec::new(),
+        ProcessKind::Network,
+    );
+    let proc = eval.processes.get_mut(id).expect("network process");
+    proc.status = process_status_connect_value();
+    proc.childp = Value::list(vec![
+        ProcessKeyword::Host.value(),
+        Value::string("192.0.2.1"),
+        ProcessKeyword::Service.value(),
+        Value::fixnum(9),
+        ProcessKeyword::Remote.value(),
+        Value::vector(vec![
+            Value::fixnum(192),
+            Value::fixnum(0),
+            Value::fixnum(2),
+            Value::fixnum(1),
+            Value::fixnum(9),
+        ]),
+    ]);
+    proc.pending_network_connect = Some(PendingNetworkConnect::Tcp {
+        remaining_addrs: Vec::new(),
+        socket_options: Vec::new(),
+    });
+    let process = Value::make_process(id);
+
+    assert_eq!(
+        builtin_process_contact(&mut eval, vec![process, Value::NIL, Value::T])
+            .expect("process-contact"),
+        Value::NIL
+    );
+    assert_eq!(
+        builtin_process_contact(
+            &mut eval,
+            vec![process, ProcessKeyword::Remote.value(), Value::T],
+        )
+        .expect("process-contact :remote"),
+        Value::NIL
+    );
+    assert_eq!(
+        builtin_process_contact(&mut eval, vec![process, Value::T, Value::T])
+            .expect("process-contact t"),
+        Value::NIL
+    );
+}
+
+#[test]
 fn make_network_process_stop_server_defers_accept_until_continue_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
