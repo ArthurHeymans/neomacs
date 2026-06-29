@@ -1834,6 +1834,19 @@ impl super::eval::Context {
     }
 }
 
+fn pending_network_connect_id(
+    processes: &ProcessManager,
+    process: Value,
+) -> Result<Option<ProcessId>, Flow> {
+    let id = resolve_process_or_wrong_type_any_in_manager(processes, &process)?;
+    Ok(processes
+        .get(id)
+        .is_some_and(|proc| {
+            proc.kind == ProcessKind::Network && proc.pending_network_connect.is_some()
+        })
+        .then_some(id))
+}
+
 fn process_uses_contact_plist(proc: &Process) -> bool {
     matches!(
         proc.kind,
@@ -10246,6 +10259,11 @@ pub(crate) fn builtin_set_network_process_option(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    if (3..=4).contains(&args.len())
+        && let Some(id) = pending_network_connect_id(&eval.processes, args[0])?
+    {
+        eval.wait_while_network_process_connecting(id)?;
+    }
     builtin_set_network_process_option_impl(&mut eval.processes, args)
 }
 
@@ -11615,6 +11633,11 @@ pub(crate) fn builtin_process_datagram_address(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    if args.len() == 1
+        && let Some(id) = pending_network_connect_id(&eval.processes, args[0])?
+    {
+        eval.wait_while_network_process_connecting(id)?;
+    }
     builtin_process_datagram_address_impl(&eval.processes, args)
 }
 
@@ -11781,6 +11804,11 @@ pub(crate) fn builtin_set_process_datagram_address(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    if args.len() == 2
+        && let Some(id) = pending_network_connect_id(&eval.processes, args[0])?
+    {
+        eval.wait_while_network_process_connecting(id)?;
+    }
     builtin_set_process_datagram_address_impl(&mut eval.processes, args)
 }
 
@@ -12480,12 +12508,8 @@ pub(crate) fn builtin_process_contact(
     args: Vec<Value>,
 ) -> EvalResult {
     if (1..=3).contains(&args.len()) {
-        let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
         let no_block = args.get(2).is_some_and(|value| value.is_truthy());
-        let connecting = eval.processes.get(id).is_some_and(|proc| {
-            proc.kind == ProcessKind::Network && proc.pending_network_connect.is_some()
-        });
-        if connecting {
+        if let Some(id) = pending_network_connect_id(&eval.processes, args[0])? {
             if no_block {
                 return Ok(Value::NIL);
             }

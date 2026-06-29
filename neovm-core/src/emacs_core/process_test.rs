@@ -4381,6 +4381,53 @@ fn process_contact_no_block_returns_nil_for_pending_nowait_network_like_gnu() {
 }
 
 #[test]
+fn network_accessors_wait_for_pending_nowait_connects_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((srv nil) (cli1 nil) (cli2 nil) (cli3 nil))
+             (unwind-protect
+                 (progn
+                   (setq srv (make-network-process
+                              :name "wait-accessor-srv" :server t
+                              :service 0 :host 'local :noquery t))
+                   (let ((port (process-contact srv :service)))
+                     (setq cli1 (make-network-process
+                                 :name "wait-accessor-cli1"
+                                 :host 'local :service port
+                                 :nowait t :noquery t))
+                     (let ((part1 (list (process-status cli1)
+                                        (process-datagram-address cli1)
+                                        (process-status cli1))))
+                       (setq cli2 (make-network-process
+                                   :name "wait-accessor-cli2"
+                                   :host 'local :service port
+                                   :nowait t :noquery t))
+                       (let ((part2 (list (process-status cli2)
+                                          (set-network-process-option
+                                           cli2 :nodelay t)
+                                          (process-status cli2))))
+                         (setq cli3 (make-network-process
+                                     :name "wait-accessor-cli3"
+                                     :host 'local :service port
+                                     :nowait t :noquery t))
+                         (let ((part3 (list (process-status cli3)
+                                            (set-process-datagram-address
+                                             cli3 [127 0 0 1 9])
+                                            (process-status cli3))))
+                           (list part1 part2 part3))))))
+               (when cli1 (delete-process cli1))
+               (when cli2 (delete-process cli2))
+               (when cli3 (delete-process cli3))
+               (when srv (delete-process srv))))"#,
+    );
+
+    assert_eq!(
+        results[0],
+        "OK ((connect nil open) (connect t open) (connect nil open))"
+    );
+}
+
+#[test]
 fn make_network_process_stop_server_defers_accept_until_continue_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
