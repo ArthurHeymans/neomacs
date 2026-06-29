@@ -1163,7 +1163,24 @@ pub fn encode_lisp_string(s: &crate::heap_types::LispString, coding_system: &str
                 out.push(b'?');
             }
         }
-        _ => {}
+        // Single-byte / codepage coding systems we do not fully model -- notably
+        // the Windows ANSI codepages (windows-1252/cp1252/cp437), which
+        // `default-file-name-coding-system` is set to on Windows. GNU round-trips
+        // ASCII unchanged. The previous empty arm dropped the WHOLE string, so a
+        // pure-ASCII input encoded to "" (e.g. make-temp-file-internal returned a
+        // bare nonce because its encoded PREFIX came back empty, leaving
+        // `org-persist-directory' separator-less and crashing org's load on
+        // Windows). Pass ASCII and raw byte8 through; substitute `?` for
+        // characters this codec does not model (matching the us-ascii fallback).
+        _ => {
+            if code <= 0x7F {
+                out.push(code as u8);
+            } else if crate::emacs_core::emacs_char::char_byte8_p(code) {
+                out.push(crate::emacs_core::emacs_char::char_to_byte8(code));
+            } else {
+                out.push(b'?');
+            }
+        }
     };
 
     if s.is_multibyte() {
