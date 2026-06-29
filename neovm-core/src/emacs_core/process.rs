@@ -8266,9 +8266,21 @@ pub(crate) fn builtin_signal_names_impl(args: Vec<Value>) -> EvalResult {
 
 /// (list-system-processes) -> process-id-list
 pub(crate) fn builtin_list_system_processes(
-    _eval: &mut super::eval::Context,
+    eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_args("list-system-processes", &args, 0)?;
+    if let Some(default_directory) = visible_default_directory_lisp(eval) {
+        let operation = Value::symbol("list-system-processes");
+        let handler = super::fileio::find_file_name_handler_lisp_for_eval(
+            eval,
+            &default_directory,
+            operation,
+        );
+        if !handler.is_nil() {
+            return eval.funcall_general(handler, vec![operation]);
+        }
+    }
     builtin_list_system_processes_impl(args)
 }
 
@@ -11364,9 +11376,21 @@ pub(crate) fn builtin_quit_process_impl(
 
 /// (process-attributes PID) -> alist-or-nil
 pub(crate) fn builtin_process_attributes(
-    _eval: &mut super::eval::Context,
+    eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_args("process-attributes", &args, 1)?;
+    if let Some(default_directory) = visible_default_directory_lisp(eval) {
+        let operation = Value::symbol("process-attributes");
+        let handler = super::fileio::find_file_name_handler_lisp_for_eval(
+            eval,
+            &default_directory,
+            operation,
+        );
+        if !handler.is_nil() {
+            return eval.funcall_general(handler, vec![operation, args[0]]);
+        }
+    }
     builtin_process_attributes_impl(args)
 }
 

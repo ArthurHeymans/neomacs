@@ -4882,6 +4882,36 @@ fn start_file_process_file_handler_dispatches_like_gnu() {
 }
 
 #[test]
+fn system_process_file_handlers_dispatch_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (defvar neo-system-process-handler-calls nil)
+             (defun neo-system-process-handler (operation &rest args)
+               (setq neo-system-process-handler-calls
+                     (cons (list operation args)
+                           neo-system-process-handler-calls))
+               (cond
+                ((eq operation 'list-system-processes)
+                 (list 10 20))
+                ((eq operation 'process-attributes)
+                 (list (cons 'pid (car args))))))
+             (let ((default-directory "/mock:/tmp/")
+                   (file-name-handler-alist
+                    '(("\\`/mock:" . neo-system-process-handler))))
+               (list
+                (list-system-processes)
+                (process-attributes "remote-pid")
+                (nreverse neo-system-process-handler-calls))))"#,
+    );
+
+    assert_eq!(
+        result,
+        "OK ((10 20) ((pid . \"remote-pid\")) ((list-system-processes nil) (process-attributes (\"remote-pid\"))))"
+    );
+}
+
+#[test]
 fn make_network_process_feature_advertisement_is_conservative() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(
