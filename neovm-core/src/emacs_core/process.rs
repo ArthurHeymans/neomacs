@@ -1267,6 +1267,19 @@ fn visible_default_directory_lisp(eval: &super::eval::Context) -> Option<LispStr
     super::fileio::default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers)
 }
 
+fn visible_lisp_string_variable(
+    eval: &super::eval::Context,
+    name: &str,
+    fallback: &str,
+) -> Result<LispString, Flow> {
+    let value = eval.visible_variable_value_or_nil(name);
+    if value.is_nil() {
+        Ok(LispString::from_utf8(fallback))
+    } else {
+        Ok(super::builtins::expect_lisp_string(&value)?.clone())
+    }
+}
+
 fn os_str_to_lisp_string(value: &OsStr) -> LispString {
     #[cfg(unix)]
     {
@@ -10782,33 +10795,19 @@ pub(crate) fn builtin_start_process_shell_command(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("start-process-shell-command", &args, 3)?;
-    let name = expect_process_name_lisp_string(&args[0])?;
-    let buffer = parse_make_process_buffer(eval, &args[1])?;
     let command = super::builtins::expect_lisp_string(&args[2])?.clone();
-    let use_pty = process_connection_type_is_pty(&eval.obarray);
-    let id = eval.processes.create_process_lisp(
-        name,
-        buffer,
-        LispString::from_utf8("sh"),
-        vec![LispString::from_utf8("-c"), command],
-    );
-    eval.processes.sync_process_mark(&mut eval.buffers, id)?;
-
-    // Honor the dynamically-bound `process-environment` (let-bindings), not
-    // just the global value, matching GNU's `make_environment_block`.
-    let process_environment = Some(eval.visible_variable_value_or_nil("process-environment"));
-    // Actually spawn the OS process.
-    if let Err(e) = eval
-        .processes
-        .spawn_child_with_environment(id, use_pty, process_environment)
-    {
-        return Err(signal(
-            "file-error",
-            vec![Value::string("Searching for program"), Value::string(e)],
-        ));
-    }
-
-    Ok(Value::make_process(id))
+    let shell_program = visible_lisp_string_variable(eval, "shell-file-name", "sh")?;
+    let shell_switch = visible_lisp_string_variable(eval, "shell-command-switch", "-c")?;
+    builtin_start_process(
+        eval,
+        vec![
+            args[0],
+            args[1],
+            Value::heap_string(shell_program),
+            Value::heap_string(shell_switch),
+            Value::heap_string(command),
+        ],
+    )
 }
 
 /// (start-file-process NAME BUFFER PROGRAM &rest PROGRAM-ARGS) -> process-id
@@ -10817,38 +10816,21 @@ pub(crate) fn builtin_start_file_process(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("start-file-process", &args, 3)?;
-    let name = expect_process_name_lisp_string(&args[0])?;
-    let buffer = parse_make_process_buffer(eval, &args[1])?;
-    let program = if args[2].is_nil() {
-        LispString::from_utf8("nil")
-    } else {
-        super::builtins::expect_lisp_string(&args[2])?.clone()
-    };
-    let proc_args = parse_lisp_string_args_strict(&args[3..])?;
-    let use_pty = process_connection_type_is_pty(&eval.obarray);
-    let id = eval
-        .processes
-        .create_process_lisp(name, buffer, program, proc_args);
-    eval.processes.sync_process_mark(&mut eval.buffers, id)?;
-
-    // Honor the dynamically-bound `process-environment` (let-bindings).
-    let process_environment = Some(eval.visible_variable_value_or_nil("process-environment"));
-    // NeoVM has no Tramp/remote support, so behave like start-process.
-    if let Err(e) = eval
-        .processes
-        .spawn_child_with_environment(id, use_pty, process_environment)
-    {
-        return Err(signal(
-            "file-error",
-            vec![
-                Value::string("Searching for program"),
-                Value::string(e),
-                args[2],
-            ],
-        ));
+    if let Some(default_directory) = visible_default_directory_lisp(eval) {
+        let operation = Value::symbol("start-file-process");
+        let handler = super::fileio::find_file_name_handler_lisp_for_eval(
+            eval,
+            &default_directory,
+            operation,
+        );
+        if !handler.is_nil() {
+            let mut call_args = Vec::with_capacity(args.len() + 1);
+            call_args.push(operation);
+            call_args.extend_from_slice(&args);
+            return eval.funcall_general(handler, call_args);
+        }
     }
-
-    Ok(Value::make_process(id))
+    builtin_start_process(eval, args)
 }
 
 /// (start-file-process-shell-command NAME BUFFER COMMAND) -> process-id
@@ -10857,32 +10839,19 @@ pub(crate) fn builtin_start_file_process_shell_command(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("start-file-process-shell-command", &args, 3)?;
-    let name = expect_process_name_lisp_string(&args[0])?;
-    let buffer = parse_make_process_buffer(eval, &args[1])?;
     let command = super::builtins::expect_lisp_string(&args[2])?.clone();
-    let use_pty = process_connection_type_is_pty(&eval.obarray);
-    let id = eval.processes.create_process_lisp(
-        name,
-        buffer,
-        LispString::from_utf8("sh"),
-        vec![LispString::from_utf8("-c"), command],
-    );
-    eval.processes.sync_process_mark(&mut eval.buffers, id)?;
-
-    // Honor the dynamically-bound `process-environment` (let-bindings).
-    let process_environment = Some(eval.visible_variable_value_or_nil("process-environment"));
-    // NeoVM has no Tramp/remote support, so behave like start-process-shell-command.
-    if let Err(e) = eval
-        .processes
-        .spawn_child_with_environment(id, use_pty, process_environment)
-    {
-        return Err(signal(
-            "file-error",
-            vec![Value::string("Searching for program"), Value::string(e)],
-        ));
-    }
-
-    Ok(Value::make_process(id))
+    let shell_program = visible_lisp_string_variable(eval, "shell-file-name", "sh")?;
+    let shell_switch = visible_lisp_string_variable(eval, "shell-command-switch", "-c")?;
+    builtin_start_file_process(
+        eval,
+        vec![
+            args[0],
+            args[1],
+            Value::heap_string(shell_program),
+            Value::heap_string(shell_switch),
+            Value::heap_string(command),
+        ],
+    )
 }
 
 /// (call-process PROGRAM &optional INFILE DESTINATION DISPLAY &rest ARGS)

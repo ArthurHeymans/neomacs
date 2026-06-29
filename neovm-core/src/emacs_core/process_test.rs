@@ -431,7 +431,7 @@ fn async_process_lookup_uses_dynamic_default_directory_like_gnu() {
                             (with-current-buffer buf
                               (not (null (string-match-p "rel-ok" (buffer-string)))))))
                   (ignore-errors (kill-buffer buf))))
-              (let ((buf (generate-new-buffer "rel-make-out")))
+             (let ((buf (generate-new-buffer "rel-make-out")))
                 (unwind-protect
                     (let ((p (make-process :name "rel-make"
                                            :buffer buf
@@ -441,10 +441,60 @@ fn async_process_lookup_uses_dynamic_default_directory_like_gnu() {
                       (list (process-status p)
                             (with-current-buffer buf
                               (not (null (string-match-p "rel-ok" (buffer-string)))))))
+                  (ignore-errors (kill-buffer buf))))
+              (let ((buf (generate-new-buffer "rel-file-out")))
+                (unwind-protect
+                    (let ((p (start-file-process "rel-file" buf "neo-rel-script")))
+                      (while (process-live-p p)
+                        (accept-process-output p 0.1))
+                      (list (process-status p)
+                            (with-current-buffer buf
+                              (not (null (string-match-p "rel-ok" (buffer-string)))))))
                   (ignore-errors (kill-buffer buf))))))"#
     ));
 
-    assert_eq!(result, "OK ((exit t) (exit t))");
+    assert_eq!(result, "OK ((exit t) (exit t) (exit t))");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn async_shell_command_wrappers_use_dynamic_shell_variables_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tmp_dir("async-shell-wrapper");
+    let script = format!("{dir}/neo-shell");
+    std::fs::write(&script, "#!/bin/sh\necho $1:$2\n").expect("write shell script");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+        .expect("chmod executable");
+    let dir_with_slash = format!("{dir}/");
+
+    let result = eval_one(&format!(
+        r#"(let ((default-directory "{dir_with_slash}")
+                 (exec-path nil)
+                 (shell-file-name "neo-shell")
+                 (shell-command-switch "--switch"))
+             (list
+              (let ((buf (generate-new-buffer "shell-start-out")))
+                (unwind-protect
+                    (let ((p (start-process-shell-command "shell-start" buf "payload")))
+                      (while (process-live-p p)
+                        (accept-process-output p 0.1))
+                      (with-current-buffer buf
+                        (not (null (string-match-p "--switch:payload" (buffer-string))))))
+                  (ignore-errors (kill-buffer buf))))
+              (let ((buf (generate-new-buffer "shell-file-out")))
+                (unwind-protect
+                    (let ((p (start-file-process-shell-command "shell-file" buf "payload")))
+                      (while (process-live-p p)
+                        (accept-process-output p 0.1))
+                      (with-current-buffer buf
+                        (not (null (string-match-p "--switch:payload" (buffer-string))))))
+                  (ignore-errors (kill-buffer buf))))))"#
+    ));
+
+    assert_eq!(result, "OK (t t)");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -4589,6 +4639,29 @@ fn make_process_file_handler_dispatches_like_gnu() {
     assert_eq!(
         result,
         "OK ((:handled make-process (:name \"fh\" :command nil :file-handler t)) (make-process (:name \"fh\" :command nil :file-handler t)))"
+    );
+}
+
+#[test]
+fn start_file_process_file_handler_dispatches_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (defvar neo-start-file-process-handler-calls nil)
+             (defun neo-start-file-process-handler (operation &rest args)
+               (setq neo-start-file-process-handler-calls (list operation args))
+               (list :handled operation args))
+             (let ((default-directory "/mock:/tmp/")
+                   (file-name-handler-alist
+                    '(("\\`/mock:" . neo-start-file-process-handler))))
+               (list
+                (start-file-process "sfp" nil "prog" "arg")
+                neo-start-file-process-handler-calls)))"#,
+    );
+
+    assert_eq!(
+        result,
+        "OK ((:handled start-file-process (\"sfp\" nil \"prog\" \"arg\")) (start-file-process (\"sfp\" nil \"prog\" \"arg\")))"
     );
 }
 
