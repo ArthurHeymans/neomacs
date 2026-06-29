@@ -3368,7 +3368,14 @@ fn compile_main_args_for_source(native_comp: bool, source: &Path) -> Vec<OsStrin
         OsString::from("--no-site-file"),
         OsString::from("--no-site-lisp"),
         OsString::from("--eval"),
-        OsString::from("(setq load-prefer-newer t byte-compile-warnings 'all)"),
+        // NOTE(diagnostic): byte-compile-debug + backtrace-on-error-noninteractive
+        // make a failing byte-compile emit a full backtrace instead of a one-line
+        // "FILE:LINE: Error" message. Temporary, to pinpoint a Windows-only org
+        // byte-compile failure; revert once the Windows build is green. Harmless
+        // when compilation succeeds (no error -> no backtrace).
+        OsString::from(
+            "(setq load-prefer-newer t byte-compile-warnings 'all byte-compile-debug t backtrace-on-error-noninteractive t)",
+        ),
         OsString::from("--eval"),
         OsString::from("(setq org--inhibit-version-check t)"),
     ];
@@ -3391,7 +3398,14 @@ fn preloaded_lisp_args_for_source(native_comp: bool, source: &Path) -> Vec<OsStr
         OsString::from("--no-site-file"),
         OsString::from("--no-site-lisp"),
         OsString::from("--eval"),
-        OsString::from("(setq load-prefer-newer t byte-compile-warnings 'all)"),
+        // NOTE(diagnostic): byte-compile-debug + backtrace-on-error-noninteractive
+        // make a failing byte-compile emit a full backtrace instead of a one-line
+        // "FILE:LINE: Error" message. Temporary, to pinpoint a Windows-only org
+        // byte-compile failure; revert once the Windows build is green. Harmless
+        // when compilation succeeds (no error -> no backtrace).
+        OsString::from(
+            "(setq load-prefer-newer t byte-compile-warnings 'all byte-compile-debug t backtrace-on-error-noninteractive t)",
+        ),
         OsString::from("--eval"),
         OsString::from("(setq org--inhibit-version-check t)"),
     ];
