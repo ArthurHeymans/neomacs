@@ -100,6 +100,7 @@ pub mod hit_test;
 pub mod incremental_layout;
 pub mod mock_frame;
 pub mod neovm_bridge;
+pub mod pixel_scroll;
 pub mod tty_menu_bar;
 pub mod types;
 pub mod unicode;
