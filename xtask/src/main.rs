@@ -3374,7 +3374,7 @@ fn compile_main_args_for_source(native_comp: bool, source: &Path) -> Vec<OsStrin
         // byte-compile failure; revert once the Windows build is green. Harmless
         // when compilation succeeds (no error -> no backtrace).
         OsString::from(
-            "(progn (setq load-prefer-newer t byte-compile-warnings 'all) (message \">>>WINDIAG tfd=%S mtf=%S\" temporary-file-directory (ignore-errors (make-temp-file \"d-\" t))) (advice-add 'directory-file-name :before (lambda (d &rest _) (unless (stringp d) (message \">>>WINDFN nil-arg opd=%S\" (bound-and-true-p org-persist-directory))))))",
+            "(progn (setq load-prefer-newer t byte-compile-warnings 'all) (message \">>>WIN2 tfd=%S A=%S B=%S Bs=%S C=%S\" temporary-file-directory (ignore-errors (expand-file-name \"d-\" temporary-file-directory)) (ignore-errors (expand-file-name \"d-\" \"C:/X/Y/\")) (ignore-errors (expand-file-name \"d-\" \"C:/Users/RUNNER~1/AppData/Local/Temp/\")) (ignore-errors (make-temp-file \"d-\" t))))",
         ),
         OsString::from("--eval"),
         OsString::from("(setq org--inhibit-version-check t)"),
@@ -3404,7 +3404,7 @@ fn preloaded_lisp_args_for_source(native_comp: bool, source: &Path) -> Vec<OsStr
         // byte-compile failure; revert once the Windows build is green. Harmless
         // when compilation succeeds (no error -> no backtrace).
         OsString::from(
-            "(progn (setq load-prefer-newer t byte-compile-warnings 'all) (message \">>>WINDIAG tfd=%S mtf=%S\" temporary-file-directory (ignore-errors (make-temp-file \"d-\" t))) (advice-add 'directory-file-name :before (lambda (d &rest _) (unless (stringp d) (message \">>>WINDFN nil-arg opd=%S\" (bound-and-true-p org-persist-directory))))))",
+            "(progn (setq load-prefer-newer t byte-compile-warnings 'all) (message \">>>WIN2 tfd=%S A=%S B=%S Bs=%S C=%S\" temporary-file-directory (ignore-errors (expand-file-name \"d-\" temporary-file-directory)) (ignore-errors (expand-file-name \"d-\" \"C:/X/Y/\")) (ignore-errors (expand-file-name \"d-\" \"C:/Users/RUNNER~1/AppData/Local/Temp/\")) (ignore-errors (make-temp-file \"d-\" t))))",
         ),
         OsString::from("--eval"),
         OsString::from("(setq org--inhibit-version-check t)"),
