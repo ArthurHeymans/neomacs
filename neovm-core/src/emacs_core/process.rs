@@ -7026,6 +7026,12 @@ pub(crate) fn builtin_internal_default_interrupt_process_impl(
     let (id, ret) =
         resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
     if let Some(proc) = processes.get_mut(id) {
+        #[cfg(unix)]
+        if let Some(ref child) = proc.child {
+            unsafe {
+                libc::kill(child.id() as i32, libc::SIGINT);
+            }
+        }
         proc.status = process_status_signal_value(2);
     }
     Ok(ret)
@@ -10772,7 +10778,23 @@ pub(crate) fn builtin_interrupt_process(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_interrupt_process_impl(&mut eval.processes, &eval.buffers, args)
+    if args.len() > 2 {
+        return Err(signal(
+            "wrong-number-of-arguments",
+            vec![
+                Value::symbol("interrupt-process"),
+                Value::fixnum(args.len() as i64),
+            ],
+        ));
+    }
+    eval.funcall_general(
+        Value::symbol("run-hook-with-args-until-success"),
+        vec![
+            Value::symbol("interrupt-process-functions"),
+            args.first().copied().unwrap_or(Value::NIL),
+            args.get(1).copied().unwrap_or(Value::NIL),
+        ],
+    )
 }
 
 pub(crate) fn builtin_interrupt_process_impl(
@@ -10843,7 +10865,25 @@ pub(crate) fn builtin_signal_process(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_signal_process_impl(&mut eval.processes, &eval.buffers, args)
+    expect_min_args("signal-process", &args, 2)?;
+    if args.len() > 3 {
+        return Err(signal(
+            "wrong-number-of-arguments",
+            vec![
+                Value::symbol("signal-process"),
+                Value::fixnum(args.len() as i64),
+            ],
+        ));
+    }
+    eval.funcall_general(
+        Value::symbol("run-hook-with-args-until-success"),
+        vec![
+            Value::symbol("signal-process-functions"),
+            args[0],
+            args[1],
+            args.get(2).copied().unwrap_or(Value::NIL),
+        ],
+    )
 }
 
 pub(crate) fn builtin_signal_process_impl(

@@ -2371,6 +2371,38 @@ fn process_stale_mutator_matrix_matches_oracle() {
 }
 
 #[test]
+fn process_signal_functions_dispatch_hooks_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(list
+            (let ((seen-i nil) (seen-s nil))
+              (let ((interrupt-process-functions
+                     (list (lambda (proc group)
+                             (setq seen-i (list proc group))
+                             'custom-interrupt)
+                           'internal-default-interrupt-process))
+                    (signal-process-functions
+                     (list (lambda (proc sig remote)
+                             (setq seen-s (list proc sig remote))
+                             77)
+                           'internal-default-signal-process)))
+                (list (interrupt-process 'not-a-real-process 'lambda)
+                      seen-i
+                      (signal-process "not-a-real-process" 'TERM 'remote-host)
+                      seen-s)))
+            (let ((interrupt-process-functions nil)
+                  (signal-process-functions nil))
+              (list (interrupt-process 'ignored)
+                    (signal-process "ignored" 1))))"#,
+    );
+
+    assert_eq!(
+        result,
+        "OK ((custom-interrupt (not-a-real-process lambda) 77 (\"not-a-real-process\" TERM remote-host)) (nil nil))"
+    );
+}
+
+#[test]
 fn process_stale_control_matrix_matches_oracle() {
     crate::test_utils::init_test_tracing();
     let cat = find_bin("cat");
