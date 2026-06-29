@@ -7645,14 +7645,15 @@ pub(crate) fn builtin_format_network_address_impl(args: Vec<Value>) -> EvalResul
             Ok(Value::NIL)
         }
         ValueKind::Cons => {
-            let first = list_to_vec(&args[0])
-                .and_then(|items| items.first().cloned())
-                .and_then(|v| value_as_nonnegative_integer(&v));
-            if let Some(family) = first {
-                Ok(Value::string(format!("<Family {family}>")))
-            } else {
-                Ok(Value::NIL)
+            if let ValueKind::Fixnum(family) = args[0].cons_car().kind() {
+                return Ok(Value::string(format!("<Family {family}>")));
             }
+            Err(signal(
+                "error",
+                vec![Value::string(
+                    "Format specifier doesn't match argument type",
+                )],
+            ))
         }
         _ => Ok(Value::NIL),
     }

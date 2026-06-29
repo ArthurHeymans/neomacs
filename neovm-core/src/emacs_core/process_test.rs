@@ -5324,6 +5324,21 @@ fn process_network_interface_and_signal_runtime_surface() {
 }
 
 #[test]
+fn format_network_address_cons_family_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(list
+            (format-network-address (cons 17 [1 2 3]))
+            (format-network-address (cons -1 [1 2 3]))
+            (car (condition-case err
+                     (format-network-address (cons 'x [1 2 3]))
+                   (error err))))"#,
+    );
+
+    assert_eq!(results[0], "OK (\"<Family 17>\" \"<Family -1>\" error)");
+}
+
+#[test]
 fn gnutls_log_level_is_defined_for_tls_negotiation() {
     // GNU `gnutls.c` DEFVAR_INTs `gnutls-log-level` (default 0); `gnutls.el`
     // only forward-declares it (`(defvar gnutls-log-level)  ; gnutls.c`).
