@@ -10771,7 +10771,7 @@ pub(crate) fn builtin_serial_process_configure_impl(
     Ok(Value::NIL)
 }
 
-/// (set-network-process-option PROCESS OPTION VALUE &optional NO-ERROR) -> nil
+/// (set-network-process-option PROCESS OPTION VALUE &optional NO-ERROR) -> t-or-nil
 pub(crate) fn builtin_set_network_process_option(
     eval: &mut super::eval::Context,
     args: Vec<Value>,

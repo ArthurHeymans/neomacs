@@ -2667,6 +2667,37 @@ fn process_runtime_introspection_controls() {
 }
 
 #[test]
+fn process_primitive_arities_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_all(
+        r#"(mapcar (lambda (s)
+                     (list s (subr-arity (symbol-function s))))
+                   '(process-filter
+                     set-process-filter
+                     process-sentinel
+                     set-process-sentinel
+                     process-coding-system
+                     process-datagram-address
+                     set-process-datagram-address
+                     set-process-thread
+                     process-thread
+                     process-plist
+                     set-process-plist
+                     process-mark
+                     process-exit-status
+                     process-query-on-exit-flag
+                     set-process-query-on-exit-flag
+                     process-inherit-coding-system-flag
+                     set-process-inherit-coding-system-flag))"#,
+    );
+
+    assert_eq!(
+        result[0],
+        "OK ((process-filter (1 . 1)) (set-process-filter (2 . 2)) (process-sentinel (1 . 1)) (set-process-sentinel (2 . 2)) (process-coding-system (1 . 1)) (process-datagram-address (1 . 1)) (set-process-datagram-address (2 . 2)) (set-process-thread (2 . 2)) (process-thread (1 . 1)) (process-plist (1 . 1)) (set-process-plist (2 . 2)) (process-mark (1 . 1)) (process-exit-status (1 . 1)) (process-query-on-exit-flag (1 . 1)) (set-process-query-on-exit-flag (2 . 2)) (process-inherit-coding-system-flag (1 . 1)) (set-process-inherit-coding-system-flag (2 . 2)))"
+    );
+}
+
+#[test]
 fn process_contact_keyword_matrix_for_network_and_pipe() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(

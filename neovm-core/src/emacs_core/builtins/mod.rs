@@ -2091,8 +2091,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "process-filter",
         super::process::builtin_process_filter,
-        0,
-        None,
+        1,
+        Some(1),
     );
     ctx.defsubr(
         "set-process-filter",
@@ -2103,26 +2103,26 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "process-sentinel",
         super::process::builtin_process_sentinel,
-        0,
-        None,
+        1,
+        Some(1),
     );
     ctx.defsubr(
         "set-process-sentinel",
         super::process::builtin_set_process_sentinel,
-        0,
-        None,
+        2,
+        Some(2),
     );
     ctx.defsubr(
         "process-coding-system",
         super::process::builtin_process_coding_system,
-        0,
-        None,
+        1,
+        Some(1),
     );
     ctx.defsubr(
         "process-datagram-address",
         super::process::builtin_process_datagram_address,
-        0,
-        None,
+        1,
+        Some(1),
     );
     ctx.defsubr(
         "set-process-buffer",
@@ -2133,8 +2133,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "set-process-thread",
         super::process::builtin_set_process_thread,
-        0,
-        None,
+        2,
+        Some(2),
     );
     ctx.defsubr(
         "set-process-window-size",
@@ -2151,20 +2151,20 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "process-plist",
         super::process::builtin_process_plist,
-        0,
-        None,
+        1,
+        Some(1),
     );
     ctx.defsubr(
         "set-process-plist",
         super::process::builtin_set_process_plist,
-        0,
-        None,
+        2,
+        Some(2),
     );
     ctx.defsubr(
         "process-mark",
         super::process::builtin_process_mark,
-        0,
-        None,
+        1,
+        Some(1),
     );
     ctx.defsubr(
         "process-type",
@@ -2175,8 +2175,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "process-thread",
         super::process::builtin_process_thread,
-        0,
-        None,
+        1,
+        Some(1),
     );
     ctx.defsubr(
         "process-running-child-p",
@@ -2211,8 +2211,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "process-exit-status",
         super::process::builtin_process_exit_status,
-        0,
-        None,
+        1,
+        Some(1),
     );
     ctx.defsubr(
         "process-list",
@@ -4280,8 +4280,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "set-process-inherit-coding-system-flag",
         super::process::builtin_set_process_inherit_coding_system_flag,
-        0,
-        None,
+        2,
+        Some(2),
     );
     ctx.defsubr(
         "compute-motion",
@@ -7292,20 +7292,20 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "process-query-on-exit-flag",
         super::process::builtin_process_query_on_exit_flag,
-        0,
-        None,
+        1,
+        Some(1),
     );
     ctx.defsubr(
         "set-process-query-on-exit-flag",
         super::process::builtin_set_process_query_on_exit_flag,
-        0,
-        None,
+        2,
+        Some(2),
     );
     ctx.defsubr(
         "process-inherit-coding-system-flag",
         super::process::builtin_process_inherit_coding_system_flag,
-        0,
-        None,
+        1,
+        Some(1),
     );
     ctx.defsubr(
         "set-process-coding-system",
@@ -7316,8 +7316,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "set-process-datagram-address",
         super::process::builtin_set_process_datagram_address,
-        0,
-        None,
+        2,
+        Some(2),
     );
     ctx.defsubr(
         "remove-list-of-text-properties",
