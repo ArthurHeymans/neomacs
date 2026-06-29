@@ -1,6 +1,7 @@
 name: ci
 
 on:
+  push: {}
   workflow_dispatch:
 
 concurrency:
@@ -8,7 +9,86 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  linux-x86_64:
+    name: required checks (linux x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            git \
+            pkg-config \
+            cmake \
+            m4 \
+            libssl-dev \
+            fontconfig \
+            libfontconfig1-dev \
+            libfreetype-dev \
+            libharfbuzz-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libwayland-dev \
+            wayland-protocols \
+            libxcb1-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxi-dev \
+            libxcursor-dev \
+            mesa-vulkan-drivers \
+            libvulkan-dev \
+            libdbus-1-dev \
+            libsystemd-dev \
+            libsqlite3-dev \
+            libxml2-dev \
+            gnutls-bin \
+            libgnutls28-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain-file: rust-toolchain.toml
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-linux-x86_64
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: cargo fmt
+        run: cargo fmt --all --check
+
+      - name: cargo check workspace
+        run: cargo check --workspace
+
+      - name: neovm-core tests
+        run: cargo nextest run -p neovm-core --no-fail-fast
+
+      - name: fresh release build
+        run: cargo xtask fresh-build --release
+
+      - name: neovm-oracle-tests
+        run: cargo nextest run -p neovm-oracle-tests --no-fail-fast
+
   check-unix:
+    if: github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -58,6 +138,7 @@ jobs:
         run: cargo check --no-default-features -p neomacs -p neovm-core
 
   check-windows-msvc:
+    if: github.event_name == 'workflow_dispatch'
     name: cargo check (windows-msvc-x86_64)
     runs-on: windows-latest
     timeout-minutes: 30
