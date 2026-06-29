@@ -6592,6 +6592,16 @@ fn expect_integer(value: &Value) -> Result<i64, Flow> {
     }
 }
 
+fn expect_ushort_dimension(value: &Value) -> Result<u16, Flow> {
+    let n = expect_integer(value)?;
+    u16::try_from(n).map_err(|_| {
+        signal(
+            "args-out-of-range",
+            vec![*value, Value::fixnum(0), Value::fixnum(i64::from(u16::MAX))],
+        )
+    })
+}
+
 fn value_as_nonnegative_integer(value: &Value) -> Option<i64> {
     match value.kind() {
         ValueKind::Fixnum(n) if n >= 0 => Some(n),
@@ -12514,7 +12524,7 @@ pub(crate) fn builtin_set_process_thread_impl(
     Ok(value)
 }
 
-/// (set-process-window-size PROCESS COLS ROWS) -> t
+/// (set-process-window-size PROCESS HEIGHT WIDTH) -> t-or-nil
 pub(crate) fn builtin_set_process_window_size(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -12528,8 +12538,8 @@ pub(crate) fn builtin_set_process_window_size_impl(
 ) -> EvalResult {
     expect_args("set-process-window-size", &args, 3)?;
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
-    let cols = expect_integer(&args[1])?;
-    let rows = expect_integer(&args[2])?;
+    let height = expect_ushort_dimension(&args[1])?;
+    let width = expect_ushort_dimension(&args[2])?;
     let is_live = processes.get(id).is_some();
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
@@ -12537,19 +12547,21 @@ pub(crate) fn builtin_set_process_window_size_impl(
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
-    proc.window_cols = Some(cols);
-    proc.window_rows = Some(rows);
-    // If the process has a PTY master, resize it.
+    proc.window_rows = Some(i64::from(height));
+    proc.window_cols = Some(i64::from(width));
+    if !is_live {
+        return Ok(Value::NIL);
+    }
     if let Some(ref pty_master) = proc.pty_master {
         let pty_size = portable_pty::PtySize {
-            rows: rows as u16,
-            cols: cols as u16,
+            rows: height,
+            cols: width,
             pixel_width: 0,
             pixel_height: 0,
         };
-        let _ = pty_master.resize(pty_size);
+        return Ok(Value::bool_val(pty_master.resize(pty_size).is_ok()));
     }
-    Ok(if is_live { Value::T } else { Value::NIL })
+    Ok(Value::NIL)
 }
 
 /// (process-kill-buffer-query-function) -> bool

@@ -3007,6 +3007,30 @@ fn process_stale_mutator_matrix_matches_oracle() {
 }
 
 #[test]
+fn set_process_window_size_pipe_return_and_bounds_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((p (make-pipe-process :name "proc-window-size-pipe")))
+             (unwind-protect
+                 (list
+                  (set-process-window-size p 10 20)
+                  (set-process-window-size p 0 0)
+                  (set-process-window-size p 65535 65535)
+                  (condition-case err (set-process-window-size p "x" 20) (error err))
+                  (condition-case err (set-process-window-size p 10 "x") (error err))
+                  (condition-case err (set-process-window-size p -1 20) (error err))
+                  (condition-case err (set-process-window-size p 10 -1) (error err))
+                  (condition-case err (set-process-window-size p 70000 20) (error err))
+                  (condition-case err (set-process-window-size p 10 70000) (error err)))
+               (ignore-errors (delete-process p))))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (nil nil nil (wrong-type-argument integerp \"x\") (wrong-type-argument integerp \"x\") (args-out-of-range -1 0 65535) (args-out-of-range -1 0 65535) (args-out-of-range 70000 0 65535) (args-out-of-range 70000 0 65535))"
+    );
+}
+
+#[test]
 fn process_signal_functions_dispatch_hooks_like_gnu() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
