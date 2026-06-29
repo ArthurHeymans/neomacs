@@ -2421,6 +2421,29 @@ fn process_type_accepts_get_process_designators_like_gnu() {
 }
 
 #[test]
+fn check_process_introspection_rejects_name_strings_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((p (make-pipe-process :name "strict-proc")))
+             (unwind-protect
+                 (list
+                  (condition-case err (process-name "strict-proc") (error err))
+                  (condition-case err (process-buffer "strict-proc") (error err))
+                  (condition-case err (process-command "strict-proc") (error err))
+                  (condition-case err (process-contact "strict-proc") (error err))
+                  (process-name p)
+                  (process-command p)
+                  (process-contact p))
+               (ignore-errors (delete-process p))))"#,
+    );
+
+    assert_eq!(
+        result,
+        "OK ((wrong-type-argument processp \"strict-proc\") (wrong-type-argument processp \"strict-proc\") (wrong-type-argument processp \"strict-proc\") (wrong-type-argument processp \"strict-proc\") \"strict-proc\" nil t)"
+    );
+}
+
+#[test]
 fn start_process_multiple_args() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");

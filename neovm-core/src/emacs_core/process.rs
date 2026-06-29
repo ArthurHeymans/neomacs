@@ -5419,6 +5419,15 @@ fn resolve_process_or_wrong_type_any_in_manager(
     }
 }
 
+fn resolve_process_object_or_wrong_type_any_in_manager(
+    processes: &ProcessManager,
+    value: &Value,
+) -> Result<ProcessId, Flow> {
+    process_value_to_id(value)
+        .filter(|id| processes.get_any(*id).is_some())
+        .ok_or_else(|| signal_wrong_type_processp(*value))
+}
+
 fn resolve_process_or_missing_error(
     eval: &super::eval::Context,
     value: &Value,
@@ -11977,7 +11986,7 @@ pub(crate) fn builtin_process_name_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-name", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     match processes.get_any(id) {
         Some(proc) => Ok(proc.name),
         None => Err(signal_wrong_type_processp(args[0])),
@@ -11997,7 +12006,7 @@ pub(crate) fn builtin_process_buffer_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-buffer", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     match processes.get_any(id) {
         Some(proc) => Ok(proc.buffer),
         None => Err(signal_wrong_type_processp(args[0])),
@@ -12935,7 +12944,7 @@ pub(crate) fn builtin_process_command_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-command", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -12976,7 +12985,7 @@ pub(crate) fn builtin_process_contact_impl(
             ],
         ));
     }
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
