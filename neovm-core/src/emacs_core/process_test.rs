@@ -4328,6 +4328,79 @@ fn make_network_process_nowait_tcp_refusal_fails_like_gnu() {
 }
 
 #[test]
+fn make_network_process_stop_server_defers_accept_until_continue_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((recv nil) (srv nil) (cli nil))
+             (unwind-protect
+                 (progn
+                   (setq srv (make-network-process
+                              :name "stop-srv" :server t :service 0
+                              :host 'local :stop t :noquery t
+                              :filter (lambda (_p s) (setq recv s))))
+                   (setq cli (make-network-process
+                              :name "stop-cli" :host 'local
+                              :service (process-contact srv :service)
+                              :noquery t))
+                   (process-send-string cli "hello-stop-server")
+                   (accept-process-output nil 0.2)
+                   (let ((before (list (process-status srv)
+                                       (process-live-p srv)
+                                       recv)))
+                     (continue-process srv)
+                     (dotimes (_ 20)
+                       (accept-process-output nil 0.05))
+                     (list before
+                           (process-status srv)
+                           (process-live-p srv)
+                           recv)))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))))"#,
+    );
+
+    assert_eq!(
+        results[0],
+        "OK ((stop (stop) nil) listen (listen connect stop) \"hello-stop-server\")"
+    );
+}
+
+#[test]
+fn make_network_process_stop_client_still_allows_send_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((recv nil) (srv nil) (cli nil))
+             (unwind-protect
+                 (progn
+                   (setq srv (make-network-process
+                              :name "stop-client-srv" :server t :service 0
+                              :host 'local :noquery t
+                              :filter (lambda (_p s) (setq recv s))))
+                   (setq cli (make-network-process
+                              :name "stop-client" :host 'local
+                              :service (process-contact srv :service)
+                              :stop t :noquery t))
+                   (process-send-string cli "hello-stop-client")
+                   (dotimes (_ 20)
+                     (accept-process-output nil 0.05))
+                   (let ((before (list (process-status cli)
+                                       (process-live-p cli)
+                                       recv)))
+                     (continue-process cli)
+                     (list before
+                           (process-status cli)
+                           (process-live-p cli)
+                           recv)))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))))"#,
+    );
+
+    assert_eq!(
+        results[0],
+        "OK ((stop (stop) \"hello-stop-client\") open (open listen connect stop) \"hello-stop-client\")"
+    );
+}
+
+#[test]
 fn make_network_process_datagram_udp_loopback_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

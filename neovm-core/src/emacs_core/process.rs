@@ -959,9 +959,7 @@ impl ProcessWaitBackend {
                                 let Some(process) = processes.get(&id) else {
                                     continue;
                                 };
-                                if event.readable
-                                    && process_status_has_readable_process_io(&process.status)
-                                {
+                                if event.readable && process_has_readable_process_io(process) {
                                     ready_processes.push(id);
                                 }
                                 if event.writable && process.pending_network_connect.is_some() {
@@ -1724,7 +1722,7 @@ fn apply_connection_process_flags(proc: &mut Process, noquery: bool, stop: bool)
         proc.query_on_exit_flag = false;
     }
     if stop {
-        proc.status = process_status_stop_value(0);
+        proc.command = Value::T;
     }
 }
 
@@ -1810,6 +1808,14 @@ fn process_status_has_readable_process_io(status: &Value) -> bool {
                 | ProcessStatusSymbol::Connect
         )
     )
+}
+
+fn process_stopped_for_io(proc: &Process) -> bool {
+    proc.command == Value::T
+}
+
+fn process_has_readable_process_io(proc: &Process) -> bool {
+    !process_stopped_for_io(proc) && process_status_has_readable_process_io(&proc.status)
 }
 
 impl super::eval::Context {
@@ -3813,7 +3819,7 @@ impl ProcessManager {
         self.processes
             .iter()
             .filter(|(_, p)| {
-                if !process_status_has_readable_process_io(&p.status) {
+                if !process_has_readable_process_io(p) {
                     return false;
                 }
                 if p.child.is_some() || p.pty_child.is_some() {
@@ -4733,7 +4739,7 @@ impl super::eval::Context {
             if self
                 .processes
                 .get(pid)
-                .is_some_and(|process| !process_status_has_readable_process_io(&process.status))
+                .is_some_and(|process| !process_has_readable_process_io(process))
             {
                 continue;
             }
@@ -5499,8 +5505,13 @@ fn resolve_optional_process_or_current_buffer_in_state(
     })
 }
 
-fn process_live_status_value(status: &Value, kind: &ProcessKind) -> Value {
-    match ProcessStatusSymbol::from_status_value(*status) {
+fn process_live_status_value(process: &Process) -> Value {
+    if process_stopped_for_io(process) {
+        return Value::list(vec![Value::symbol("stop")]);
+    }
+    let status = process.status;
+    let kind = process.kind;
+    match ProcessStatusSymbol::from_status_value(status) {
         Some(ProcessStatusSymbol::Run) => match kind {
             ProcessKind::Network => Value::list(vec![
                 Value::symbol("listen"),
@@ -5539,6 +5550,9 @@ fn process_live_status_value(status: &Value, kind: &ProcessKind) -> Value {
 }
 
 pub(crate) fn process_public_status_symbol(process: &Process) -> Value {
+    if process_stopped_for_io(process) {
+        return ProcessStatusSymbol::Stop.value();
+    }
     match ProcessStatusSymbol::from_status_value(process.status) {
         Some(ProcessStatusSymbol::Run) => match process.kind {
             ProcessKind::Network => {
@@ -10599,18 +10613,24 @@ pub(crate) fn builtin_continue_process_impl(
     let (id, ret) =
         resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
     if let Some(proc) = processes.get_mut(id) {
-        // Send SIGCONT to resume the child process.
-        #[cfg(unix)]
-        if let Some(ref child) = proc.child {
-            unsafe {
-                libc::kill(child.id() as i32, libc::SIGCONT);
+        if matches!(
+            proc.kind,
+            ProcessKind::Network | ProcessKind::Pipe | ProcessKind::Serial
+        ) {
+            proc.command = Value::NIL;
+            if proc.kind == ProcessKind::Serial {
+                proc.status = ProcessStatusSymbol::Open.value();
             }
-        }
-        proc.status = if proc.kind == ProcessKind::Serial {
-            ProcessStatusSymbol::Open.value()
         } else {
-            process_status_run_value()
-        };
+            // Send SIGCONT to resume the child process.
+            #[cfg(unix)]
+            if let Some(ref child) = proc.child {
+                unsafe {
+                    libc::kill(child.id() as i32, libc::SIGCONT);
+                }
+            }
+            proc.status = process_status_run_value();
+        }
     }
     Ok(ret)
 }
@@ -10772,14 +10792,21 @@ pub(crate) fn builtin_stop_process_impl(
     let (id, ret) =
         resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
     if let Some(proc) = processes.get_mut(id) {
-        // Send SIGTSTP to stop the child process.
-        #[cfg(unix)]
-        if let Some(ref child) = proc.child {
-            unsafe {
-                libc::kill(child.id() as i32, libc::SIGTSTP);
+        if matches!(
+            proc.kind,
+            ProcessKind::Network | ProcessKind::Pipe | ProcessKind::Serial
+        ) {
+            proc.command = Value::T;
+        } else {
+            // Send SIGTSTP to stop the child process.
+            #[cfg(unix)]
+            if let Some(ref child) = proc.child {
+                unsafe {
+                    libc::kill(child.id() as i32, libc::SIGTSTP);
+                }
             }
+            proc.status = process_status_stop_value(0);
         }
-        proc.status = process_status_stop_value(0);
     }
     Ok(ret)
 }
@@ -12253,7 +12280,7 @@ fn accept_process_output_run_target_follow_up(
         let target_still_running = eval
             .processes
             .get(target_id)
-            .is_some_and(|process| process_status_has_readable_process_io(&process.status));
+            .is_some_and(process_has_readable_process_io);
         if !target_still_running {
             break;
         }
@@ -12348,7 +12375,7 @@ pub(crate) fn builtin_process_live_p_impl(
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
-    Ok(process_live_status_value(&proc.status, &proc.kind))
+    Ok(process_live_status_value(proc))
 }
 
 /// (process-id PROCESS) -> integer
