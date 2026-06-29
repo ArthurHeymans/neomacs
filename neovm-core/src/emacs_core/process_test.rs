@@ -4428,6 +4428,48 @@ fn network_accessors_wait_for_pending_nowait_connects_like_gnu() {
 }
 
 #[test]
+fn process_send_eof_half_closes_network_stream_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((srv nil) (cli nil) (accepted nil) (events nil))
+             (unwind-protect
+                 (progn
+                   (setq srv (make-network-process
+                              :name "eof-srv" :server t :service 0
+                              :host 'local :noquery t
+                              :log (lambda (_server client _msg)
+                                     (setq accepted client)
+                                     (set-process-sentinel
+                                      client
+                                      (lambda (p e)
+                                        (push (list (process-status p)
+                                                    (substring e 0 -1))
+                                              events))))))
+                   (setq cli (make-network-process
+                              :name "eof-cli" :host 'local
+                              :service (process-contact srv :service)
+                              :nowait t :noquery t))
+                   (let ((before (process-status cli))
+                         (ret (process-send-eof cli)))
+                     (dotimes (_ 30)
+                       (accept-process-output nil 0.05))
+                     (list before
+                           (processp ret)
+                           (process-status cli)
+                           (and accepted (process-status accepted))
+                           events)))
+               (when cli (delete-process cli))
+               (when accepted (delete-process accepted))
+               (when srv (delete-process srv))))"#,
+    );
+
+    assert_eq!(
+        results[0],
+        "OK (connect t closed closed ((closed \"connection broken by remote peer\") (open \"open from 127.0.0.1\")))"
+    );
+}
+
+#[test]
 fn make_network_process_stop_server_defers_accept_until_continue_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

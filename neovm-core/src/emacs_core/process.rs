@@ -30,7 +30,8 @@ use std::ffi::{OsStr, OsString};
 use std::fs::OpenOptions;
 use std::io::{Read as IoRead, Write as IoWrite};
 use std::net::{
-    IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs, UdpSocket,
+    IpAddr, Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs,
+    UdpSocket,
 };
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, RawFd};
@@ -230,6 +231,24 @@ impl NetworkSocket {
             Self::SeqpacketListener(_) => None,
             #[cfg(unix)]
             Self::UnixStream(stream) => Some(stream.write_all(bytes).and_then(|_| stream.flush())),
+            #[cfg(unix)]
+            Self::UnixListener(_) => None,
+            #[cfg(unix)]
+            Self::UnixDatagram(_) => None,
+        }
+    }
+
+    fn shutdown_write(&self) -> Option<std::io::Result<()>> {
+        match self {
+            Self::TcpStream(stream) => Some(stream.shutdown(Shutdown::Write)),
+            Self::TcpListener(_) => None,
+            Self::UdpSocket(_) => None,
+            #[cfg(unix)]
+            Self::SeqpacketStream(socket) => Some(socket.shutdown(Shutdown::Write)),
+            #[cfg(unix)]
+            Self::SeqpacketListener(_) => None,
+            #[cfg(unix)]
+            Self::UnixStream(stream) => Some(stream.shutdown(Shutdown::Write)),
             #[cfg(unix)]
             Self::UnixListener(_) => None,
             #[cfg(unix)]
@@ -4773,9 +4792,14 @@ impl super::eval::Context {
                     event.client_id,
                     &event.log_message,
                 )?;
+                let sentinel = self
+                    .processes
+                    .get(event.client_id)
+                    .map(|process| process.sentinel)
+                    .unwrap_or(event.sentinel);
                 self.run_process_sentinel_callback(
                     event.client_id,
-                    event.sentinel,
+                    sentinel,
                     &event.sentinel_message,
                 )?;
             }
@@ -5579,7 +5603,10 @@ pub(crate) fn process_public_status_symbol(process: &Process) -> Value {
             _ => Value::symbol("run"),
         },
         Some(ProcessStatusSymbol::Stop) => ProcessStatusSymbol::Stop.value(),
-        Some(ProcessStatusSymbol::Exit) => ProcessStatusSymbol::Exit.value(),
+        Some(ProcessStatusSymbol::Exit) => match process.kind {
+            ProcessKind::Real => ProcessStatusSymbol::Exit.value(),
+            _ => ProcessStatusSymbol::Closed.value(),
+        },
         Some(ProcessStatusSymbol::Signal) => match process.kind {
             ProcessKind::Real => Value::symbol("signal"),
             _ => Value::symbol("closed"),
@@ -12180,7 +12207,48 @@ pub(crate) fn builtin_process_send_eof(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    if args.len() <= 1 {
+        let maybe_id = match args.first() {
+            Some(process) if !process.is_nil() => {
+                resolve_process_or_missing_error_in_manager(&eval.processes, process).ok()
+            }
+            _ => resolve_optional_process_or_current_buffer_in_state(
+                &eval.processes,
+                &eval.buffers,
+                args.first(),
+            )
+            .ok(),
+        };
+        if let Some(id) = maybe_id
+            && eval.processes.get(id).is_some_and(|proc| {
+                proc.kind == ProcessKind::Network && proc.pending_network_connect.is_some()
+            })
+        {
+            eval.wait_while_network_process_connecting(id)?;
+        }
+    }
     builtin_process_send_eof_impl(&mut eval.processes, &eval.buffers, args)
+}
+
+fn send_eof_to_process(proc: &mut Process) -> EvalResult {
+    if let Some(tls) = proc.tls_stream.as_mut() {
+        tls.send_close_notify(false)
+            .map(|_| ())
+            .map_err(|err| signal_process_io("Sending EOF to process", None, err))?;
+        return Ok(Value::NIL);
+    }
+
+    if let Some(socket) = proc.network_socket.as_ref() {
+        if let Some(result) = socket.shutdown_write() {
+            result.map_err(|err| signal_process_io("Sending EOF to process", None, err))?;
+        }
+        return Ok(Value::NIL);
+    }
+
+    if let Some(ref mut child) = proc.child {
+        drop(child.stdin.take());
+    }
+    Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_process_send_eof_impl(
@@ -12205,22 +12273,15 @@ pub(crate) fn builtin_process_send_eof_impl(
                 }
             }
             let id = resolve_process_or_missing_error_in_manager(processes, process)?;
-            // Close stdin to send EOF to the child process.
             if let Some(proc) = processes.get_mut(id) {
-                if let Some(ref mut child) = proc.child {
-                    // Drop stdin to close the pipe, sending EOF.
-                    drop(child.stdin.take());
-                }
+                send_eof_to_process(proc)?;
             }
             return Ok(*process);
         }
     }
     let id = resolve_optional_process_or_current_buffer_in_state(processes, buffers, args.first())?;
-    // Close stdin to send EOF.
     if let Some(proc) = processes.get_mut(id) {
-        if let Some(ref mut child) = proc.child {
-            drop(child.stdin.take());
-        }
+        send_eof_to_process(proc)?;
     }
     Ok(Value::NIL)
 }
