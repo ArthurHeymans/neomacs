@@ -4565,16 +4565,24 @@ fn make_network_process_datagram_udp_loopback_like_gnu() {
                        (while (and (null recv) (< k 100))
                          (accept-process-output nil 0.02)
                          (setq k (1+ k))))
-                     (list recv
-                           (process-status srv)
-                           (process-status cli)
-                           (vectorp (process-datagram-address srv))
-                           (vectorp (process-datagram-address cli)))))
+                     (let ((new [127 0 0 1 9])
+                           (v6 [0 0 0 0 0 0 0 0 9]))
+                       (list recv
+                             (process-status srv)
+                             (process-status cli)
+                             (vectorp (process-datagram-address srv))
+                             (vectorp (process-datagram-address cli))
+                             (equal (set-process-datagram-address cli new) new)
+                             (equal (process-datagram-address cli) new)
+                             (equal (process-contact cli :remote) new)
+                             (equal (plist-get (process-contact cli t) :remote) new)
+                             (null (set-process-datagram-address cli v6))
+                             (equal (process-datagram-address cli) new)))))
                (when cli (delete-process cli))
                (when srv (delete-process srv))))"#,
     );
 
-    assert_eq!(results[0], "OK (\"ping-udp\" open open t t)");
+    assert_eq!(results[0], "OK (\"ping-udp\" open open t t t t t t t t)");
 }
 
 #[test]

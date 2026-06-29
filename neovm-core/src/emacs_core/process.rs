@@ -1067,6 +1067,20 @@ fn process_name_runtime(name: Value) -> String {
         .unwrap_or_else(|| "<invalid-process-name>".to_string())
 }
 
+fn process_is_datagram_network(proc: &Process) -> bool {
+    let is_datagram = matches!(
+        proc.network_socket.as_ref(),
+        Some(NetworkSocket::UdpSocket(_))
+    );
+    #[cfg(unix)]
+    let is_datagram = is_datagram
+        || matches!(
+            proc.network_socket.as_ref(),
+            Some(NetworkSocket::UnixDatagram(_))
+        );
+    is_datagram
+}
+
 fn process_type_value(kind: &ProcessKind) -> Value {
     Value::symbol(kind.name())
 }
@@ -11730,17 +11744,7 @@ pub(crate) fn builtin_process_datagram_address_impl(
             vec![Value::symbol("processp"), args[0]],
         ));
     };
-    let is_datagram = matches!(
-        proc.network_socket.as_ref(),
-        Some(NetworkSocket::UdpSocket(_))
-    );
-    #[cfg(unix)]
-    let is_datagram = is_datagram
-        || matches!(
-            proc.network_socket.as_ref(),
-            Some(NetworkSocket::UnixDatagram(_))
-        );
-    if is_datagram {
+    if process_is_datagram_network(proc) {
         Ok(proc.datagram_address)
     } else {
         Ok(Value::NIL)
@@ -11902,12 +11906,24 @@ pub(crate) fn builtin_set_process_datagram_address_impl(
         ));
     };
     match proc.network_socket.as_ref() {
-        Some(NetworkSocket::UdpSocket(_)) => {
+        Some(NetworkSocket::UdpSocket(socket)) => {
             let Ok(NetworkAddressSpec::Inet(addr)) = parse_network_address_spec(&args[1]) else {
                 return Ok(Value::NIL);
             };
+            let family_matches = socket
+                .local_addr()
+                .ok()
+                .map(|local_addr| local_addr.is_ipv4() == addr.is_ipv4())
+                .or_else(|| {
+                    proc.datagram_socket_addr
+                        .map(|remote_addr| remote_addr.is_ipv4() == addr.is_ipv4())
+                })
+                .unwrap_or(true);
+            if !family_matches {
+                return Ok(Value::NIL);
+            }
             proc.datagram_socket_addr = Some(addr);
-            proc.datagram_address = args[1];
+            proc.datagram_address = socket_addr_to_lisp_value(addr);
             Ok(args[1])
         }
         #[cfg(unix)]
@@ -12652,9 +12668,18 @@ pub(crate) fn builtin_process_contact_impl(
         )
     })?;
     let key = args.get(1).copied().unwrap_or(Value::NIL);
-    let contact = proc.childp;
+    let mut contact = proc.childp;
     match proc.proc_type.as_symbol_name() {
         Some("network") => {
+            if process_is_datagram_network(proc)
+                && (key == Value::T || key == ProcessKeyword::Remote.value())
+            {
+                contact = process_contact_plist_put(
+                    contact,
+                    ProcessKeyword::Remote.value(),
+                    proc.datagram_address,
+                )?;
+            }
             if key == Value::T {
                 Ok(contact)
             } else if key.is_nil() {
