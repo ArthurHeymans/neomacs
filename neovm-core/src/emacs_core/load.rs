@@ -439,8 +439,14 @@ fn log_streaming_load_form_error(
                 .take(4)
                 .map(|a| {
                     let s = super::print::print_value(a);
-                    if s.len() > 40 {
-                        format!("{}...", &s[..37])
+                    // Truncate by CHARACTERS, not bytes: a backtrace arg's printed
+                    // form can contain multi-byte UTF-8 (e.g. a bytecode/raw-byte
+                    // string prints with `�`), so a raw byte slice `&s[..37]`
+                    // panics with "not a char boundary" when 37 lands inside a
+                    // multi-byte char.
+                    if s.chars().count() > 40 {
+                        let truncated: String = s.chars().take(37).collect();
+                        format!("{truncated}...")
                     } else {
                         s
                     }
@@ -2384,6 +2390,18 @@ fn runtime_project_root() -> PathBuf {
     panic!(
         "Neomacs runtime root not found. Set {RUNTIME_ROOT_ENV} to a directory containing lisp/ and etc/."
     );
+}
+
+/// Directory holding the charset `.map` files (`JISX0201.map`, ...). Resolved at
+/// RUNTIME under the install data dir (`<runtime_root>/etc/charsets`) -- the
+/// neomacs equivalent of GNU's `charset-map-path`
+/// (`(expand-file-name "charsets" data-directory)`), reusing the same
+/// `runtime_project_root()` resolver that backs `data-directory` and locates
+/// `lisp/`. MUST NOT use `env!("CARGO_MANIFEST_DIR")`: that compile-time path is
+/// the build machine's source tree, absent in an installed release, so charset
+/// maps would silently fail to load (decode-char -> nil -> "Invalid code(s)").
+pub(crate) fn charset_map_directory() -> PathBuf {
+    runtime_project_root().join("etc").join("charsets")
 }
 
 fn bootstrap_cache_dir(runtime_root: &Path) -> PathBuf {

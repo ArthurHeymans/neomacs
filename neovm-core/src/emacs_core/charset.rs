@@ -44,7 +44,16 @@ fn charset_map_cache() -> &'static RwLock<HashMap<CharsetMapCacheKey, Option<Arc
 }
 
 fn charset_map_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../etc/charsets")
+    // Resolve at RUNTIME, never via the compile-time `env!("CARGO_MANIFEST_DIR")`:
+    // that path is the build machine's source tree, which is absent in an
+    // installed release, so every charset-map load (e.g. `make-char
+    // 'latin-jisx0201` from kinsoku.el during normal startup) would silently
+    // fail -> `decode-char` returns nil -> "Invalid code(s)".
+    // `charset_map_directory()` resolves under the install data dir
+    // (`<runtime_root>/etc/charsets`), the neomacs equivalent of GNU's
+    // `charset-map-path`. Memoized: the runtime root does not change mid-process.
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(super::load::charset_map_directory).clone()
 }
 
 fn parse_hex_i64(value: &str) -> Option<i64> {

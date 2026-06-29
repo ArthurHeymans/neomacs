@@ -430,8 +430,12 @@ pub(crate) fn builtin_view_register(
     match eval.registers.get(reg) {
         Some(RegisterContent::Text(s)) => {
             let rendered = super::emacs_char::to_utf8_lossy(s.as_bytes());
-            let desc = if rendered.len() > 60 {
-                format!("Register {} contains text: {}...", reg, &rendered[..60])
+            // Truncate by characters, not bytes: register text is arbitrary and can
+            // contain multi-byte UTF-8, so `&rendered[..60]` would panic when byte
+            // 60 lands inside a char ("not a char boundary").
+            let desc = if rendered.chars().count() > 60 {
+                let truncated: String = rendered.chars().take(60).collect();
+                format!("Register {} contains text: {}...", reg, truncated)
             } else {
                 format!("Register {} contains text: {}", reg, rendered)
             };
