@@ -12578,17 +12578,19 @@ pub(crate) fn builtin_process_send_eof(
     args: Vec<Value>,
 ) -> EvalResult {
     if args.len() <= 1 {
-        let maybe_id = match args.first() {
-            Some(process) if !process.is_nil() => {
-                resolve_process_or_missing_error_in_manager(&eval.processes, process).ok()
-            }
-            _ => resolve_optional_process_or_current_buffer_in_state(
-                &eval.processes,
-                &eval.buffers,
-                args.first(),
-            )
-            .ok(),
-        };
+        let maybe_id = args
+            .first()
+            .map(|process| {
+                resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, process)
+            })
+            .unwrap_or_else(|| {
+                resolve_optional_process_or_current_buffer_in_state(
+                    &eval.processes,
+                    &eval.buffers,
+                    None,
+                )
+            })
+            .ok();
         if let Some(id) = maybe_id
             && eval.processes.get(id).is_some_and(|proc| {
                 proc.kind == ProcessKind::Network && proc.pending_network_connect.is_some()
@@ -12642,7 +12644,7 @@ pub(crate) fn builtin_process_send_eof_impl(
                     return Err(signal_process_not_running_in_manager(processes, id));
                 }
             }
-            let id = resolve_process_or_missing_error_in_manager(processes, process)?;
+            let id = resolve_get_process_designator_in_state(processes, buffers, process)?;
             if let Some(proc) = processes.get_mut(id) {
                 send_eof_to_process(proc)?;
             }

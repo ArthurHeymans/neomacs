@@ -590,6 +590,39 @@ fn process_send_region_accepts_get_process_designators_like_gnu() {
 }
 
 #[test]
+fn process_send_eof_accepts_get_process_designators_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut buffers = crate::buffer::BufferManager::new();
+    let buffer_id = buffers.create_buffer("*send-eof-target*");
+    buffers.set_current(buffer_id);
+    let mut pm = ProcessManager::new();
+    let _id = pm.create_process(
+        "send-eof-proc".into(),
+        Value::make_buffer(buffer_id),
+        "prog".into(),
+        vec![],
+    );
+
+    let buffer_value = Value::make_buffer(buffer_id);
+    let name_value = Value::string("*send-eof-target*");
+    assert_eq!(
+        builtin_process_send_eof_impl(&mut pm, &buffers, vec![buffer_value])
+            .expect("process-send-eof buffer"),
+        buffer_value
+    );
+    assert_eq!(
+        builtin_process_send_eof_impl(&mut pm, &buffers, vec![name_value])
+            .expect("process-send-eof buffer name"),
+        name_value
+    );
+    assert_eq!(
+        builtin_process_send_eof_impl(&mut pm, &buffers, vec![Value::NIL])
+            .expect("process-send-eof nil"),
+        Value::NIL
+    );
+}
+
+#[test]
 fn process_manager_find_by_name() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
