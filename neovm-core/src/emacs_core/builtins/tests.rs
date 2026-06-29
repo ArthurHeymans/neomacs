@@ -10854,6 +10854,36 @@ fn dispatch_builtin_pure_handles_gnutls_query_and_error_placeholders() {
 }
 
 #[test]
+fn gnutls_error_helpers_honor_gnu_symbol_code_properties() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval.eval_str(
+        r#"(let ((custom 'custom-gnutls-error)
+                 (bad-string 'custom-gnutls-bad-string)
+                 (bad-float 'custom-gnutls-bad-float))
+             (put custom 'gnutls-code -1)
+             (put bad-string 'gnutls-code "x")
+             (put bad-float 'gnutls-code 1.5)
+             (list
+              (get 'gnutls-e-again 'gnutls-code)
+              (get 'gnutls-e-interrupted 'gnutls-code)
+              (get 'gnutls-e-invalid-session 'gnutls-code)
+              (get 'gnutls-e-not-ready-for-handshake 'gnutls-code)
+              (gnutls-errorp custom)
+              (gnutls-error-string custom)
+              (gnutls-error-fatalp custom)
+              (gnutls-error-string bad-string)
+              (condition-case err (gnutls-error-fatalp bad-string) (error err))
+              (gnutls-error-string bad-float)
+              (condition-case err (gnutls-error-fatalp bad-float) (error err))))"#,
+    );
+    assert_eq!(
+        format_eval_result(&result),
+        "OK (-28 -52 -10 -65500 t \"(unknown error code)\" t \"Symbol has no numeric gnutls-code property\" (error \"Symbol has no numeric gnutls-code property\") \"Not an error symbol or code\" (error \"Not an error symbol or code\"))"
+    );
+}
+
+#[test]
 fn dispatch_builtin_pure_handles_gnutls_runtime_placeholders() {
     crate::test_utils::init_test_tracing();
     let peer_warning =

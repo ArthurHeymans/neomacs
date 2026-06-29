@@ -5937,6 +5937,16 @@ pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
     // libgnutls version.  `nsm.el` reads this during HTTPS package refresh.
     obarray.set_symbol_value("libgnutls-version", Value::fixnum(-1));
     obarray.make_special("libgnutls-version");
+    for (symbol, code) in [
+        ("gnutls-e-interrupted", -52),
+        ("gnutls-e-again", -28),
+        ("gnutls-e-invalid-session", -10),
+        ("gnutls-e-not-ready-for-handshake", -65500),
+    ] {
+        obarray
+            .put_property(symbol, "gnutls-code", Value::fixnum(code))
+            .expect("bootstrap gnutls-code plist should be well formed");
+    }
 }
 
 /// Check whether `process-connection-type` is truthy (non-nil).

@@ -5251,13 +5251,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "gnutls-error-fatalp",
-        |_ctx, args| gnutls::builtin_gnutls_error_fatalp(args),
+        gnutls::builtin_gnutls_error_fatalp_with_ctx,
         1,
         Some(1),
     );
     ctx.defsubr(
         "gnutls-error-string",
-        |_ctx, args| gnutls::builtin_gnutls_error_string(args),
+        gnutls::builtin_gnutls_error_string_with_ctx,
         1,
         Some(1),
     );

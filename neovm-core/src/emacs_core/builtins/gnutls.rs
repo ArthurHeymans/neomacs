@@ -1,8 +1,10 @@
 use super::{
     EvalResult, Value, ValueKind, expect_args, expect_lisp_string, expect_range_args, signal,
 };
+use crate::emacs_core::eval::Context;
+use crate::emacs_core::intern::intern;
 use crate::emacs_core::tls::format_x509_certificate_pem;
-use crate::emacs_core::value::list_to_vec;
+use crate::emacs_core::value::{VecLikeType, list_to_vec};
 use aes::Aes256;
 use aes::cipher::{BlockModeDecrypt, BlockModeEncrypt, KeyIvInit, block_padding::NoPadding};
 use hmac::{KeyInit, Mac, SimpleHmac};
@@ -60,7 +62,19 @@ pub(crate) fn builtin_gnutls_errorp(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_gnutls_error_string(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-error-string", &args, 1)?;
-    let message = match gnutls_error_code(args[0]) {
+    gnutls_error_string_impl(None, args[0])
+}
+
+pub(crate) fn builtin_gnutls_error_string_with_ctx(
+    eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("gnutls-error-string", &args, 1)?;
+    gnutls_error_string_impl(Some(eval), args[0])
+}
+
+fn gnutls_error_string_impl(eval: Option<&Context>, error: Value) -> EvalResult {
+    let message = match gnutls_error_code(eval, error) {
         GnutlsErrorCode::SuccessSentinel => "Not an error",
         GnutlsErrorCode::Code(code) => gnutls_error_code_string(code),
         GnutlsErrorCode::SymbolWithoutCode => "Symbol has no numeric gnutls-code property",
@@ -71,7 +85,19 @@ pub(crate) fn builtin_gnutls_error_string(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_gnutls_error_fatalp(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-error-fatalp", &args, 1)?;
-    match gnutls_error_code(args[0]) {
+    gnutls_error_fatalp_impl(None, args[0])
+}
+
+pub(crate) fn builtin_gnutls_error_fatalp_with_ctx(
+    eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("gnutls-error-fatalp", &args, 1)?;
+    gnutls_error_fatalp_impl(Some(eval), args[0])
+}
+
+fn gnutls_error_fatalp_impl(eval: Option<&Context>, error: Value) -> EvalResult {
+    match gnutls_error_code(eval, error) {
         GnutlsErrorCode::SuccessSentinel | GnutlsErrorCode::Code(0) => Ok(Value::NIL),
         GnutlsErrorCode::Code(-28 | -52) => Ok(Value::NIL),
         GnutlsErrorCode::Code(code) if code < 0 => Ok(Value::T),
@@ -94,21 +120,40 @@ enum GnutlsErrorCode {
     InvalidObject,
 }
 
-fn gnutls_error_code(value: Value) -> GnutlsErrorCode {
+fn gnutls_error_code(eval: Option<&Context>, value: Value) -> GnutlsErrorCode {
     if value == Value::T {
         return GnutlsErrorCode::SuccessSentinel;
     }
     match value.kind() {
         ValueKind::Fixnum(code) => GnutlsErrorCode::Code(code),
         ValueKind::Nil => GnutlsErrorCode::SymbolWithoutCode,
-        ValueKind::Symbol(_) => match value.as_symbol_name() {
-            Some("gnutls-e-again") => GnutlsErrorCode::Code(-28),
-            Some("gnutls-e-interrupted") => GnutlsErrorCode::Code(-52),
-            Some("gnutls-e-invalid-session") => GnutlsErrorCode::Code(-10),
-            Some("gnutls-e-not-ready-for-handshake") => GnutlsErrorCode::Code(-65500),
-            _ => GnutlsErrorCode::SymbolWithoutCode,
-        },
+        ValueKind::Symbol(_) => gnutls_symbol_error_code(eval, value),
         _ => GnutlsErrorCode::InvalidObject,
+    }
+}
+
+fn gnutls_symbol_error_code(eval: Option<&Context>, value: Value) -> GnutlsErrorCode {
+    if let Some(eval) = eval
+        && let Some(symbol) = value.as_symbol_id()
+        && let Some(code) = eval
+            .obarray()
+            .get_property_id(symbol, intern("gnutls-code"))
+    {
+        return match code.kind() {
+            ValueKind::Fixnum(code) => GnutlsErrorCode::Code(code),
+            ValueKind::Float | ValueKind::Veclike(VecLikeType::Bignum) => {
+                GnutlsErrorCode::InvalidObject
+            }
+            _ => GnutlsErrorCode::SymbolWithoutCode,
+        };
+    }
+
+    match value.as_symbol_name() {
+        Some("gnutls-e-again") => GnutlsErrorCode::Code(-28),
+        Some("gnutls-e-interrupted") => GnutlsErrorCode::Code(-52),
+        Some("gnutls-e-invalid-session") => GnutlsErrorCode::Code(-10),
+        Some("gnutls-e-not-ready-for-handshake") => GnutlsErrorCode::Code(-65500),
+        _ => GnutlsErrorCode::SymbolWithoutCode,
     }
 }
 
