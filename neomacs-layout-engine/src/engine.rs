@@ -1259,6 +1259,33 @@ impl LayoutEngine {
         prev.cursor_only_replay(&curr_key)
     }
 
+    /// Smooth scroll (Phase 1): the laid-out body rows of `window_id` from the
+    /// retained matrix, as `(start_charpos, height_px)` metrics in top-to-bottom
+    /// order, for resolving a pixel scroll via
+    /// [`crate::pixel_scroll::resolve_pixel_scroll`]. `None` if the window has no
+    /// retained matrix yet or no body (non-chrome, text-displaying) rows.
+    pub fn current_body_row_metrics(
+        &self,
+        window_id: DisplayWindowId,
+    ) -> Option<Vec<crate::pixel_scroll::ScrollRowMetric>> {
+        let retained = self.retained_window_matrices.get(&window_id)?;
+        let rows: Vec<crate::pixel_scroll::ScrollRowMetric> = retained
+            .matrix
+            .rows
+            .iter()
+            .filter(|row| {
+                row.enabled
+                    && row.displays_text
+                    && !RetainedWindowMatrix::is_chrome_role(row.role)
+            })
+            .map(|row| crate::pixel_scroll::ScrollRowMetric {
+                start_charpos: row.start_charpos as i64,
+                height_px: row.height_px.round() as i32,
+            })
+            .collect();
+        if rows.is_empty() { None } else { Some(rows) }
+    }
+
     /// Phase 2: if this window's previous-frame matrix can be reused after a
     /// whole-row scroll (overlapping rows shifted, only newly-exposed rows
     /// walked), return the scroll replay; else `None`. Selected window only, for

@@ -2743,6 +2743,57 @@ fn layout_trace_with_buffer_and_window_setup(
 }
 
 #[test]
+fn current_body_row_metrics_reads_retained_matrix_rows() {
+    // Smooth scroll P1-T2: after a layout, the engine exposes the selected window's
+    // body rows as (start_charpos, height_px) metrics for the pixel-scroll mapper.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    insert_fragmented_current_buffer_text(&mut eval, &text);
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("p1-metrics", 800, 600, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+            *window_start = LispCharPos1::ONE;
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let metrics = engine
+        .current_body_row_metrics(neomacs_display_protocol::types::DisplayWindowId::new(
+            selected_window.0 as i64,
+        ))
+        .expect("body row metrics after a layout populates the retained matrix");
+    assert!(!metrics.is_empty(), "expected some body rows");
+    assert!(
+        metrics.iter().all(|m| m.height_px > 0),
+        "every body row has a positive pixel height: {metrics:?}"
+    );
+    for pair in metrics.windows(2) {
+        assert!(
+            pair[1].start_charpos >= pair[0].start_charpos,
+            "body rows ascend by start_charpos: {metrics:?}"
+        );
+    }
+}
+
+#[test]
 fn layout_frame_rust_lays_out_plain_text() {
     let text = "Hello, world!\nThis is a test.\n";
     let trace = layout_trace_for_plain_text(text);
