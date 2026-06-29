@@ -2444,6 +2444,58 @@ fn check_process_introspection_rejects_name_strings_like_gnu() {
 }
 
 #[test]
+fn check_process_extended_builtins_reject_name_strings_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((p (make-pipe-process :name "strict-more")))
+             (unwind-protect
+                 (let* ((bad "strict-more")
+                        (forms
+                         '((process-id "strict-more")
+                           (process-exit-status "strict-more")
+                           (process-coding-system "strict-more")
+                           (process-datagram-address "strict-more")
+                           (process-inherit-coding-system-flag "strict-more")
+                           (set-process-buffer "strict-more" nil)
+                           (set-process-coding-system "strict-more" nil nil)
+                           (set-process-datagram-address "strict-more" nil)
+                           (set-process-inherit-coding-system-flag "strict-more" t)
+                           (set-process-thread "strict-more" nil)
+                           (set-process-window-size "strict-more" 10 20)
+                           (process-tty-name "strict-more")
+                           (process-mark "strict-more")
+                           (process-thread "strict-more")
+                           (process-query-on-exit-flag "strict-more")
+                           (set-process-query-on-exit-flag "strict-more" nil)
+                           (process-filter "strict-more")
+                           (set-process-filter "strict-more" nil)
+                           (process-sentinel "strict-more")
+                           (set-process-sentinel "strict-more" nil)
+                           (process-plist "strict-more")
+                           (set-process-plist "strict-more" 1)
+                           (process-get "strict-more" :k)
+                           (process-put "strict-more" :k 1)
+                           (clone-process "strict-more")
+                           (set-network-process-option "strict-more" :keepalive t))))
+                   (mapcar
+                    (lambda (form)
+                      (condition-case err
+                          (progn (eval form) :no-error)
+                        (error
+                         (and (eq (car err) 'wrong-type-argument)
+                              (eq (cadr err) 'processp)
+                              (equal (caddr err) bad)))))
+                    forms))
+               (ignore-errors (delete-process p))))"#,
+    );
+
+    assert_eq!(
+        result,
+        "OK (t t t t t t t t t t t t t t t t t t t t t t t t t t)"
+    );
+}
+
+#[test]
 fn start_process_multiple_args() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");

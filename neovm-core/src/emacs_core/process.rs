@@ -1873,7 +1873,7 @@ fn pending_network_connect_id(
     processes: &ProcessManager,
     process: Value,
 ) -> Result<Option<ProcessId>, Flow> {
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &process)?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &process)?;
     Ok(processes
         .get(id)
         .is_some_and(|proc| {
@@ -7245,7 +7245,7 @@ pub(crate) fn builtin_clone_process(
             ],
         ));
     }
-    let id = resolve_process_or_wrong_type_any(eval, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     Ok(Value::make_process(id))
 }
 
@@ -11933,7 +11933,7 @@ pub(crate) fn builtin_process_exit_status_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-exit-status", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes
         .get_any(id)
         .ok_or_else(|| signal_wrong_type_processp(args[0]))?;
@@ -12026,7 +12026,7 @@ pub(crate) fn builtin_process_coding_system_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-coding-system", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -12054,7 +12054,7 @@ pub(crate) fn builtin_process_datagram_address_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-datagram-address", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let Some(proc) = processes.get_any(id) else {
         return Err(signal(
             "wrong-type-argument",
@@ -12081,7 +12081,7 @@ pub(crate) fn builtin_process_inherit_coding_system_flag_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-inherit-coding-system-flag", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -12105,7 +12105,7 @@ pub(crate) fn builtin_set_process_buffer_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set-process-buffer", &args, 2)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     match args[1].kind() {
         ValueKind::Nil => {}
         ValueKind::Veclike(VecLikeType::Buffer) => {
@@ -12161,7 +12161,7 @@ pub(crate) fn builtin_set_process_coding_system_impl(
     // ENCODING (only) is passed through `coding_inherit_eol_type` so a
     // nil/undecided-EOL encode coding normalizes (e.g. nil -> raw-text-unix,
     // utf-8 -> utf-8-unix). DECODING is stored as-is (nil stays nil).
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let decoding = args.get(1).cloned().unwrap_or(Value::NIL);
     let encoding = args.get(2).cloned().unwrap_or(Value::NIL);
     super::coding::builtin_check_coding_system(coding_systems, vec![decoding])?;
@@ -12215,7 +12215,7 @@ pub(crate) fn builtin_set_process_datagram_address_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set-process-datagram-address", &args, 2)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let Some(proc) = processes.get_any_mut(id) else {
         return Err(signal(
             "wrong-type-argument",
@@ -12269,7 +12269,7 @@ pub(crate) fn builtin_set_process_inherit_coding_system_flag_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set-process-inherit-coding-system-flag", &args, 2)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -12294,7 +12294,7 @@ pub(crate) fn builtin_set_process_thread_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set-process-thread", &args, 2)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let value = if args[1].is_nil() {
         Value::NIL
     } else if threads.thread_id_from_handle(&args[1]).is_some() {
@@ -12325,7 +12325,7 @@ pub(crate) fn builtin_set_process_window_size_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set-process-window-size", &args, 3)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let cols = expect_integer(&args[1])?;
     let rows = expect_integer(&args[2])?;
     let is_live = processes.get(id).is_some();
@@ -12417,7 +12417,7 @@ pub(crate) fn builtin_process_tty_name_impl(
             ],
         ));
     }
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -12471,7 +12471,7 @@ pub(crate) fn builtin_process_mark_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-mark", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -12518,7 +12518,7 @@ pub(crate) fn builtin_process_thread_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-thread", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -12896,7 +12896,7 @@ pub(crate) fn builtin_process_query_on_exit_flag_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-query-on-exit-flag", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -12919,7 +12919,7 @@ pub(crate) fn builtin_set_process_query_on_exit_flag_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set-process-query-on-exit-flag", &args, 2)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let flag = args[1].is_truthy();
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
@@ -13054,7 +13054,7 @@ pub(crate) fn builtin_process_filter_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-filter", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -13077,7 +13077,7 @@ pub(crate) fn builtin_set_process_filter_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set-process-filter", &args, 2)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let stored = if args[1].is_nil() {
         Value::symbol(DEFAULT_PROCESS_FILTER_SYMBOL)
     } else {
@@ -13110,7 +13110,7 @@ pub(crate) fn builtin_process_sentinel_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-sentinel", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -13133,7 +13133,7 @@ pub(crate) fn builtin_set_process_sentinel_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set-process-sentinel", &args, 2)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let stored = if args[1].is_nil() {
         Value::symbol(DEFAULT_PROCESS_SENTINEL_SYMBOL)
     } else {
@@ -13166,7 +13166,7 @@ pub(crate) fn builtin_process_plist_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-plist", &args, 1)?;
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -13189,13 +13189,13 @@ pub(crate) fn builtin_set_process_plist_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set-process-plist", &args, 2)?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     if !args[1].is_list() {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("listp"), args[1]],
         ));
     }
-    let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -13209,7 +13209,7 @@ pub(crate) fn builtin_set_process_plist_impl(
 /// (process-put PROCESS PROP VALUE) -> plist
 pub(crate) fn builtin_process_put(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("process-put", &args, 3)?;
-    let id = resolve_process_or_wrong_type_any(eval, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let current_plist = eval
         .processes
         .get_any(id)
@@ -13234,7 +13234,7 @@ pub(crate) fn builtin_process_put(eval: &mut super::eval::Context, args: Vec<Val
 /// (process-get PROCESS PROP) -> value
 pub(crate) fn builtin_process_get(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("process-get", &args, 2)?;
-    let id = resolve_process_or_wrong_type_any(eval, &args[0])?;
+    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let plist = eval
         .processes
         .get_any(id)
