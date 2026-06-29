@@ -430,32 +430,42 @@ fn log_streaming_load_form_error(
         })
         .collect();
     if !bt_frames.is_empty() {
+        // Bounds that keep the logged backtrace readable.
+        const MAX_BACKTRACE_FRAMES: usize = 20; // frames before the rest is summarized
+        const MAX_ARGS_PER_FRAME: usize = 4; // args shown per frame
+        const MAX_ARG_CHARS: usize = 40; // chars per arg before truncation
+        const ELLIPSIS: &str = "...";
         tracing::error!("  Lisp backtrace:");
         for (j, (function, frame_args)) in bt_frames.iter().enumerate() {
             let func_name = super::print::print_value(function);
             let args = eval.backtrace_args_values(frame_args);
             let args_str = args
                 .iter()
-                .take(4)
+                .take(MAX_ARGS_PER_FRAME)
                 .map(|a| {
+                    // A longer arg is shown as its first (MAX_ARG_CHARS - ELLIPSIS) chars
+                    // plus ELLIPSIS, so the displayed width never exceeds MAX_ARG_CHARS.
+                    // Count and truncate by CHARACTERS, never bytes: a printed arg can
+                    // contain multi-byte UTF-8 (e.g. a bytecode/raw-byte string prints
+                    // with `�`), so a byte slice would panic ("not a char boundary")
+                    // when the cut lands inside a multi-byte char.
                     let s = super::print::print_value(a);
-                    // Truncate by CHARACTERS, not bytes: a backtrace arg's printed
-                    // form can contain multi-byte UTF-8 (e.g. a bytecode/raw-byte
-                    // string prints with `�`), so a raw byte slice `&s[..37]`
-                    // panics with "not a char boundary" when 37 lands inside a
-                    // multi-byte char.
-                    if s.chars().count() > 40 {
-                        let truncated: String = s.chars().take(37).collect();
-                        format!("{truncated}...")
+                    if s.chars().count() > MAX_ARG_CHARS {
+                        let kept: String = s.chars().take(MAX_ARG_CHARS - ELLIPSIS.len()).collect();
+                        format!("{kept}{ELLIPSIS}")
                     } else {
                         s
                     }
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
-            let ellipsis = if args.len() > 4 { " ..." } else { "" };
+            let ellipsis = if args.len() > MAX_ARGS_PER_FRAME {
+                " ..."
+            } else {
+                ""
+            };
             tracing::error!("    {j}: ({func_name} {args_str}{ellipsis})");
-            if j >= 20 {
+            if j >= MAX_BACKTRACE_FRAMES {
                 tracing::error!("    ... ({} more frames)", bt_frames.len() - j - 1);
                 break;
             }
