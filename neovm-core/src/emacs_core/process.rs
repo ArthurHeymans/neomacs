@@ -5351,6 +5351,29 @@ pub(crate) fn expect_string_strict(value: &Value) -> Result<String, Flow> {
     }
 }
 
+fn expect_network_lookup_hostname(value: &Value) -> Result<String, Flow> {
+    let string = match value.kind() {
+        ValueKind::String => value
+            .as_lisp_string()
+            .expect("ValueKind::String must carry LispString payload"),
+        _ => return Err(signal_wrong_type_string(*value)),
+    };
+
+    if string.is_multibyte() && string.sbytes() != string.schars() {
+        let hostname = crate::emacs_core::emacs_char::to_utf8_lossy(string.as_bytes());
+        return Err(signal(
+            "error",
+            vec![Value::string(format!(
+                "Non-ASCII hostname {hostname} detected, please use \u{2018}puny-encode-domain\u{2019}"
+            ))],
+        ));
+    }
+
+    Ok(crate::emacs_core::emacs_char::to_utf8_lossy(
+        string.as_bytes(),
+    ))
+}
+
 fn expect_process_name_lisp_string(value: &Value) -> Result<LispString, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value
@@ -8234,7 +8257,7 @@ pub(crate) fn builtin_network_lookup_address_info_impl(args: Vec<Value>) -> Eval
             ],
         ));
     }
-    let name = expect_string_strict(&args[0])?;
+    let name = expect_network_lookup_hostname(&args[0])?;
 
     let family = args.get(1).cloned().unwrap_or(Value::NIL);
     let hint_value = args.get(2).cloned().unwrap_or(Value::NIL);

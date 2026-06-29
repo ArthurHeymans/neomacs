@@ -6280,6 +6280,16 @@ fn process_network_interface_and_signal_runtime_surface() {
                      (network-lookup-address-info "abc"))
               (equal (network-lookup-address-info (string 0))
                      (network-lookup-address-info ""))
+              (equal (network-lookup-address-info (string-to-multibyte "abc"))
+                     (network-lookup-address-info "abc"))
+              (let ((err (condition-case err
+                             (network-lookup-address-info "é")
+                           (error err))))
+                (and (consp err)
+                     (eq (car err) 'error)
+                     (stringp (cadr err))
+                     (numberp (string-match-p "Non-ASCII hostname .*puny-encode-domain"
+                                              (cadr err)))))
               (condition-case err (network-lookup-address-info "localhost" t) (error err))
               (equal (network-lookup-address-info "127.0.0.1" 'ipv4 'numeric)
                      '([127 0 0 1 0]))
@@ -6299,7 +6309,7 @@ fn process_network_interface_and_signal_runtime_surface() {
     );
     assert_eq!(
         results[1],
-        "OK (\"127.0.0.1:80\" \"127.0.0.1\" \"[0:0:0:0:0:0:0:1]:80\" \"0:0:0:0:0:0:0:1\" \"x\" nil nil nil nil (wrong-number-of-arguments format-network-address 0) t t t t t t t (wrong-number-of-arguments network-interface-list 3) (error \"Unsupported address family\") t t t t t t t t t t (wrong-type-argument stringp nil) (error \"interface name too long\") (error \"interface name too long\") (error \"interface name too long\") t t t t t t t t t t t t t (error \"Unsupported family\") t t (error \"Unsupported hints value\") (wrong-type-argument stringp 1) t t t (wrong-number-of-arguments signal-names 1) (void-function process-connection))"
+        "OK (\"127.0.0.1:80\" \"127.0.0.1\" \"[0:0:0:0:0:0:0:1]:80\" \"0:0:0:0:0:0:0:1\" \"x\" nil nil nil nil (wrong-number-of-arguments format-network-address 0) t t t t t t t (wrong-number-of-arguments network-interface-list 3) (error \"Unsupported address family\") t t t t t t t t t t (wrong-type-argument stringp nil) (error \"interface name too long\") (error \"interface name too long\") (error \"interface name too long\") t t t t t t t t t t t t t t t (error \"Unsupported family\") t t (error \"Unsupported hints value\") (wrong-type-argument stringp 1) t t t (wrong-number-of-arguments signal-names 1) (void-function process-connection))"
     );
 }
 
