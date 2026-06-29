@@ -405,6 +405,49 @@ fn process_file_expands_tilde_in_default_directory_like_gnu() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn async_process_lookup_uses_dynamic_default_directory_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tmp_dir("async-default-directory");
+    let script = format!("{dir}/neo-rel-script");
+    std::fs::write(&script, "#!/bin/sh\necho rel-ok\n").expect("write test script");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+        .expect("chmod executable");
+    let dir_with_slash = format!("{dir}/");
+
+    let result = eval_one(&format!(
+        r#"(let ((default-directory "{dir_with_slash}")
+                 (exec-path nil))
+             (list
+              (let ((buf (generate-new-buffer "rel-start-out")))
+                (unwind-protect
+                    (let ((p (start-process "rel-start" buf "neo-rel-script")))
+                      (while (process-live-p p)
+                        (accept-process-output p 0.1))
+                      (list (process-status p)
+                            (with-current-buffer buf
+                              (not (null (string-match-p "rel-ok" (buffer-string)))))))
+                  (ignore-errors (kill-buffer buf))))
+              (let ((buf (generate-new-buffer "rel-make-out")))
+                (unwind-protect
+                    (let ((p (make-process :name "rel-make"
+                                           :buffer buf
+                                           :command '("neo-rel-script"))))
+                      (while (process-live-p p)
+                        (accept-process-output p 0.1))
+                      (list (process-status p)
+                            (with-current-buffer buf
+                              (not (null (string-match-p "rel-ok" (buffer-string)))))))
+                  (ignore-errors (kill-buffer buf))))))"#
+    ));
+
+    assert_eq!(result, "OK ((exit t) (exit t))");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // -- ProcessManager unit tests ------------------------------------------
 
 #[test]

@@ -1214,7 +1214,7 @@ fn resolve_async_process_program(
     }
 
     let path_entries = if lookup.exec_path.is_nil() {
-        Vec::new()
+        vec![Value::NIL]
     } else {
         list_to_vec(&lookup.exec_path).ok_or_else(|| process_lookup_error(program))?
     };
@@ -1257,6 +1257,14 @@ fn resolve_async_process_program(
     }
 
     Err(process_lookup_error(program))
+}
+
+fn visible_default_directory_lisp(eval: &super::eval::Context) -> Option<LispString> {
+    let visible = eval.visible_variable_value_or_nil("default-directory");
+    if let Some(string) = visible.as_lisp_string() {
+        return Some(string.clone());
+    }
+    super::fileio::default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers)
 }
 
 fn os_str_to_lisp_string(value: &OsStr) -> LispString {
@@ -10723,8 +10731,7 @@ pub(crate) fn builtin_start_process(
         super::builtins::expect_lisp_string(&args[2])?.clone()
     };
     let proc_args = parse_lisp_string_args_strict(&args[3..])?;
-    let default_directory =
-        super::fileio::default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers);
+    let default_directory = visible_default_directory_lisp(eval);
     let lookup = ProcessExecLookup {
         exec_path: eval.visible_variable_value_or_nil("exec-path"),
         exec_suffixes: eval.visible_variable_value_or_nil("exec-suffixes"),
@@ -11452,17 +11459,7 @@ pub(crate) fn builtin_make_process(
     if !args.is_empty() {
         check_keyword_arg_pairs(&args)?;
         if make_process_file_handler_arg(&args).is_truthy() {
-            let default_directory = eval
-                .visible_variable_value_or_nil("default-directory")
-                .as_lisp_string()
-                .cloned()
-                .or_else(|| {
-                    super::fileio::default_directory_lisp_in_state(
-                        &eval.obarray,
-                        &[],
-                        &eval.buffers,
-                    )
-                });
+            let default_directory = visible_default_directory_lisp(eval);
             if let Some(default_directory) = default_directory {
                 let operation = Value::symbol("make-process");
                 let handler = super::fileio::find_file_name_handler_lisp_for_eval(
@@ -11481,8 +11478,7 @@ pub(crate) fn builtin_make_process(
     }
 
     let use_pty = process_connection_type_is_pty(&eval.obarray);
-    let default_directory =
-        super::fileio::default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers);
+    let default_directory = visible_default_directory_lisp(eval);
     let lookup = ProcessExecLookup {
         exec_path: eval.visible_variable_value_or_nil("exec-path"),
         exec_suffixes: eval.visible_variable_value_or_nil("exec-suffixes"),
