@@ -6288,6 +6288,9 @@ fn parse_network_service_port(
         ValueKind::Fixnum(port) if (0..(1 << 16)).contains(&port) => Ok(port as u16),
         ValueKind::String => {
             let service = process_owned_runtime_string(*value);
+            if service.is_empty() {
+                return Ok(0);
+            }
             if let Ok(port) = service.parse::<u16>() {
                 return Ok(port);
             }

@@ -4596,6 +4596,34 @@ fn make_network_process_service_name_strings_like_gnu() {
     assert_eq!(results[0], "OK (open 53)");
 }
 
+#[test]
+fn make_network_process_empty_service_string_means_port_zero_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((srv nil) (udp nil))
+             (unwind-protect
+                 (progn
+                   (setq srv (make-network-process
+                              :name "empty-svc-server" :server t
+                              :host 'local :service "" :family 'ipv4
+                              :noquery t))
+                   (setq udp (make-network-process
+                              :name "empty-svc-udp" :type 'datagram
+                              :host 'local :service "" :family 'ipv4
+                              :noquery t))
+                   (list (process-status srv)
+                         (integerp (process-contact srv :service))
+                         (= (process-contact srv :service)
+                            (aref (process-contact srv :local) 4))
+                         (process-status udp)
+                         (aref (process-contact udp :remote) 4)))
+               (when udp (delete-process udp))
+               (when srv (delete-process srv))))"#,
+    );
+
+    assert_eq!(results[0], "OK (listen t t open 0)");
+}
+
 #[cfg(unix)]
 #[test]
 fn make_network_process_local_datagram_loopback_like_gnu() {
